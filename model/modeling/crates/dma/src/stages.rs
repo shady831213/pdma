@@ -2,24 +2,23 @@ mod candidate;
 mod execution;
 mod fetch;
 mod publish;
+mod service;
 
+use crate::{ChunkInput, Dma, Error, ExecutionContext, ResetControl, Responses, RoundRobin};
 pub use candidate::{Candidate, CommandRequest};
-pub use execution::{CheckRanges, NextChunk, ReadCopy, WriteCopy};
+pub use execution::{CheckRanges, ExecutionError, PrepareChunk, ReadCopy, WriteCopy};
 pub use fetch::Fetch;
-pub use publish::Publish;
-
-use crate::{Dma, Error, ResetControl, Responses, RoundRobin, Work};
 use hardware_interface_pipeline::{
-    Arbitrate, FanIn, RunError, Stage, StepOutcome, StepResult, Then,
+    Arbitrate, FanIn, MapError, Stage, StepOutcome, StepResult, Then,
 };
-use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::dma::ChannelId;
+pub use publish::Publish;
+pub use service::Service;
 use std::convert::Infallible;
 
 /// Refreshes every channel's visible interrupt causes from hardware state.
 #[derive(Debug, Default)]
 pub struct UpdateIrq;
-
 impl<M, SB> Stage<Dma<M, SB>> for UpdateIrq {
     type Input = ();
     type Output = ();
@@ -34,78 +33,39 @@ impl<M, SB> Stage<Dma<M, SB>> for UpdateIrq {
     }
 }
 
-/// One bounded chunk preparation, read and write composition.
-pub type CopyChunk = Then<Then<NextChunk, ReadCopy>, WriteCopy>;
-/// Range validation followed by one bounded payload chunk.
-pub type Execution = Then<CheckRanges, CopyChunk>;
+/// One concrete chunk transferred through preparation, read and write.
+pub type CopyChunk = Then<PrepareChunk, Then<ReadCopy, WriteCopy>>;
+/// Execution of one bounded chunk of already validated hardware traversal.
+pub type Execution = CopyChunk;
 /// Shared execution followed by response dispatch.
-pub type Pipeline = Then<Execution, Responses>;
+pub type Pipeline = Then<ReadPipeline, WritePipeline>;
+/// Preparation and payload read before optional custom transformation.
+pub type ReadPipeline = Then<PrepareChunk, ReadCopy>;
+/// Payload write and response publication, shared by fresh and resumed writes.
+pub type WritePipeline = Then<WriteCopy, Responses>;
+type Commands = FanIn<Candidate, Arbitrate<RoundRobin>, SelectedRequest>;
+type Fresh = Then<MapError<Fetch, fn(Error) -> ExecutionError>, CheckRanges>;
 
-type Commands<S> = FanIn<Candidate, Arbitrate<RoundRobin>, Then<Fetch, S>>;
-
-/// Finite command arbitration with independently stepped IRQ and reset hardware.
 #[derive(Debug)]
-pub struct Service<S = Pipeline> {
-    command: Commands<S>,
-    count: usize,
-    reset: ResetControl,
-    irq: UpdateIrq,
-}
-
-/// Invocation-local fan state; persistent command state belongs to channels.
-#[derive(Debug)]
-pub struct ServiceState<T> {
-    command: Option<T>,
-}
-
-impl<M: MemoryAccess<SB>, SB, S> Stage<Dma<M, SB>> for Service<S>
-where
-    S: Stage<Dma<M, SB>, Input = Option<Work>, Output = (), Error = Error>,
-{
-    type Input = ();
-    type Output = ();
+struct SelectedRequest;
+impl<M, SB> Stage<Dma<M, SB>> for SelectedRequest {
+    type Input = Option<CommandRequest>;
+    type Output = Option<CommandRequest>;
     type Error = Error;
-    type State = Option<ServiceState<<Commands<S> as Stage<Dma<M, SB>>>::State>>;
-    fn start((): ()) -> Self::State {
-        Some(ServiceState { command: None })
+    type State = Option<Self::Input>;
+    fn start(input: Self::Input) -> Self::State {
+        Some(input)
     }
-
-    fn step(&mut self, device: &mut Dma<M, SB>, state: &mut Self::State) -> StepResult<(), Error> {
-        let retained = state.as_mut().ok_or(RunError::Exhausted)?;
-        device.retire_stopped_work();
-        let command = retained
-            .command
-            .get_or_insert_with(|| <Commands<S> as Stage<Dma<M, SB>>>::start(vec![(); self.count]));
-        let outcome = if device.discard_aborted() {
-            Ok(StepOutcome::Complete(Ok(Vec::new())))
-        } else {
-            self.command.step(device, command)
-        };
-        device.retire_stopped_work();
-        device.refresh_maintenance();
-        let irq = self.irq.step(device, &mut ());
-        let reset = self.reset.step(device, &mut ());
-        let (StepOutcome::Complete(Ok(())), StepOutcome::Complete(Ok(()))) = (irq?, reset?) else {
-            return Err(RunError::Exhausted);
-        };
-        match outcome {
-            Ok(StepOutcome::InProgress) => Ok(StepOutcome::InProgress),
-            Ok(StepOutcome::Complete(result)) => {
-                *state = None;
-                let result = result.map(|_| ()).map_err(Error::from);
-                Ok(StepOutcome::Complete(match result {
-                    Err(Error::Reset | Error::Halted | Error::ChannelFatal(_)) | Ok(()) => Ok(()),
-                    Err(error) => Err(error),
-                }))
-            }
-            Err(error) => {
-                *state = None;
-                Err(error)
-            }
-        }
+    fn step(
+        &mut self,
+        _: &mut Dma<M, SB>,
+        state: &mut Self::State,
+    ) -> StepResult<Self::Output, Error> {
+        Ok(StepOutcome::Complete(Ok(state.take().ok_or(
+            hardware_interface_pipeline::RunError::Exhausted,
+        )?)))
     }
 }
-
 impl<M, SB> Dma<M, SB> {
     /// Builds response dispatch ports bound to this instance's channels.
     pub fn responses(&self) -> Responses {
@@ -115,11 +75,25 @@ impl<M, SB> Dma<M, SB> {
                 .collect(),
         )
     }
-
-    /// Wires a custom finite shared graph after descriptor acceptance.
-    pub fn service_with<S>(&self, pipeline: S) -> Service<S>
+    /// Wires a finite chunk graph over a selected execution context.
+    /// The outer Then splits at Payload: preparation/read/transforms are upstream;
+    /// downstream starts with write and is reused directly for write-fault recovery.
+    pub fn service_with<A, B, T, R>(&self, pipeline: Then<A, Then<WriteCopy, B>>) -> Service<A, B>
     where
-        S: Stage<Self, Input = Option<Work>, Output = (), Error = Error>,
+        for<'a> A: Stage<
+                ExecutionContext<'a, M, SB>,
+                Input = Option<ChunkInput>,
+                Output = Option<crate::Payload>,
+                Error = ExecutionError,
+                State = T,
+            >,
+        for<'a> B: Stage<
+                ExecutionContext<'a, M, SB>,
+                Input = Option<crate::Completion>,
+                Output = (),
+                Error = ExecutionError,
+                State = R,
+            >,
     {
         Service {
             command: FanIn::new(
@@ -127,7 +101,15 @@ impl<M, SB> Dma<M, SB> {
                     .map(|index| Candidate::new(ChannelId::new(index)))
                     .collect(),
                 Arbitrate::snapshots(RoundRobin::default()),
-                Then::new(Fetch, pipeline),
+                SelectedRequest,
+            ),
+            execution: pipeline,
+            fresh: Then::new(
+                MapError::new(
+                    Fetch,
+                    ExecutionError::Rejected as fn(Error) -> ExecutionError,
+                ),
+                CheckRanges,
             ),
             count: self.channels.len(),
             reset: ResetControl,
@@ -135,19 +117,15 @@ impl<M, SB> Dma<M, SB> {
         }
     }
 }
-
-impl<M: MemoryAccess<SB>, SB> Dma<M, SB> {
-    /// Builds the default finite command service and maintenance wiring.
+impl<M: hardware_interface_runtime::MemoryAccess<SB>, SB> Dma<M, SB> {
+    /// Builds admission, bounded chunk execution and independent maintenance wiring.
     pub fn service(&self) -> Service
     where
         M::Error: Into<crate::MemoryFailure>,
     {
         self.service_with(Then::new(
-            Then::new(
-                CheckRanges,
-                Then::new(Then::new(NextChunk, ReadCopy), WriteCopy),
-            ),
-            self.responses(),
+            Then::new(PrepareChunk, ReadCopy),
+            Then::new(WriteCopy, self.responses()),
         ))
     }
 }

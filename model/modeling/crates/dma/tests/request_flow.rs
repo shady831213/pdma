@@ -8,7 +8,9 @@ use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, CompletionFlagsValues,
     Endpoint, ResponseRegisters,
 };
-use pdma_model_dma::{Candidate, Dma, Error, Fetch, RoundRobin, Work};
+use pdma_model_dma::{
+    Candidate, CommandRequest, Dma, Error, ExecutionContext, Fetch, FetchedCommand, RoundRobin,
+};
 use std::cell::RefCell;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -142,7 +144,11 @@ fn arbitration_hands_only_the_selected_request_to_fetch() -> TestResult {
         .flatten()
         .ok_or("request")?;
     assert!(device.memory.reads.borrow().is_empty());
-    let result = Operation::new(Some(request)).step(&mut Fetch, &mut device)?;
+    let result = Operation::new(match request {
+        CommandRequest::Fetch(snapshot) => Some(snapshot),
+        CommandRequest::Resume(_) => return Err("unexpected resume".into()),
+    })
+    .step(&mut Fetch, &mut device.execution_context(expected_channel)?)?;
     // Then: only the selected descriptor is read and its identity crosses the boundary.
     let StepOutcome::Complete(Ok(Some(task))) = result else {
         return Err("fetch did not complete".into());
@@ -155,19 +161,19 @@ fn arbitration_hands_only_the_selected_request_to_fetch() -> TestResult {
 
 struct WorkChannel;
 
-impl<M, SB> Stage<Dma<M, SB>> for WorkChannel {
-    type Input = Option<Work>;
+impl<M, SB> Stage<ExecutionContext<'_, M, SB>> for WorkChannel {
+    type Input = Option<FetchedCommand>;
     type Output = Option<ChannelId>;
     type Error = Error;
     type State = Option<ChannelId>;
 
     fn start(task: Self::Input) -> Self::State {
-        task.map(Work::channel)
+        task.as_ref().map(FetchedCommand::channel)
     }
 
     fn step(
         &mut self,
-        _: &mut Dma<M, SB>,
+        _: &mut ExecutionContext<'_, M, SB>,
         channel: &mut Self::State,
     ) -> StepResult<Self::Output, Error> {
         Ok(StepOutcome::Complete(Ok(*channel)))
@@ -181,13 +187,17 @@ fn then_transfers_fetched_command_to_downstream_without_an_engine_driver() -> Te
     let selected = ChannelId::new(1);
     let expected = 0x1000 + u64::try_from(selected.index())? * 0x100;
     let mut pipeline = Then::new(Fetch, WorkChannel);
-    let mut operation = Operation::new(device.command_request(selected)?);
+    let Some(CommandRequest::Fetch(snapshot)) = device.command_request(selected)? else {
+        return Err("fresh snapshot".into());
+    };
+    let mut operation = Operation::new(Some(snapshot));
+    let mut context = device.execution_context(selected)?;
     // When: each side of the connection is advanced through the composition.
     assert_eq!(
-        operation.step(&mut pipeline, &mut device)?,
+        operation.step(&mut pipeline, &mut context)?,
         StepOutcome::InProgress
     );
-    let result = operation.step(&mut pipeline, &mut device)?;
+    let result = operation.step(&mut pipeline, &mut context)?;
     // Then: downstream receives the fetched command without any other descriptor read.
     assert_eq!(result, StepOutcome::Complete(Ok(Some(selected))));
     assert_eq!(device.memory.reads.borrow().as_slice(), &[expected]);

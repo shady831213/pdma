@@ -2,19 +2,52 @@ use hardware_interface_pipeline::{Operation, StepOutcome, Then};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
+use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::dma::{
     ChannelRegisters, Command, CommandRegisters, Endpoint, ResponseRegisters,
 };
-use pdma_model_dma::{CheckRanges, Dma, Fetch, NextChunk, Pipeline, ReadCopy, WriteCopy};
+use pdma_model_dma::{
+    CheckRanges, ChunkInput, CommandRequest, Dma, Fetch, FetchedCommand, Pipeline, PrepareChunk,
+    ReadCopy, WriteCopy,
+};
 
 /// Test harness error propagation.
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
-/// Assemble one finite chunk for tests inspecting primitive stage boundaries.
-pub fn single_chunk<M>(device: &Dma<M>) -> Then<Fetch, Pipeline> {
-    let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
-    let execution = Then::new(CheckRanges, chunk);
-    Then::new(Fetch, Then::new(execution, device.responses()))
+/// Assembles one typed chunk pass through response publication.
+pub fn chunk_pipeline<M>(device: &Dma<M>) -> Pipeline {
+    Then::new(
+        Then::new(PrepareChunk, ReadCopy),
+        Then::new(WriteCopy, device.responses()),
+    )
+}
+
+/// Fetches a fresh descriptor through the public selected-channel interface.
+pub fn fetch<M: MemoryAccess>(device: &mut Dma<M>, id: ChannelId) -> TestResult<FetchedCommand> {
+    let Some(CommandRequest::Fetch(request)) = device.command_request(id)? else {
+        return Err("no fresh command request".into());
+    };
+    let mut context = device.execution_context(id)?;
+    match Operation::new(Some(request)).step(&mut Fetch, &mut context)? {
+        StepOutcome::Complete(Ok(Some(command))) => Ok(command),
+        StepOutcome::Complete(Err(error)) => Err(error.into()),
+        StepOutcome::Complete(Ok(None)) | StepOutcome::InProgress => {
+            Err("descriptor was not accepted".into())
+        }
+    }
+}
+
+/// Validates one accepted descriptor and installs its hardware traversal.
+pub fn accept<M: MemoryAccess>(device: &mut Dma<M>, id: ChannelId) -> TestResult<ChunkInput> {
+    let fetched = fetch(device, id)?;
+    let mut context = device.execution_context(id)?;
+    let mut operation = Operation::new(Some(fetched));
+    for _ in 0..1024 {
+        if let StepOutcome::Complete(result) = operation.step(&mut CheckRanges, &mut context)? {
+            return Ok(context.install_progress(result?.ok_or("no validated command")?)?);
+        }
+    }
+    Err("validation exceeded interaction bound".into())
 }
 
 /// Configure mapped test memory and one enabled channel.

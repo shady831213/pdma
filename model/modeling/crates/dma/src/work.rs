@@ -1,5 +1,4 @@
-use crate::channel::Action;
-use crate::{Channel, Dma, Error};
+use crate::Dma;
 use pdma_model_contract::dma::{ChannelId, FaultStatusValues};
 
 /// Non-owning channel identity and reset generation for one hardware work snapshot.
@@ -13,47 +12,6 @@ impl Work {
     /// Channel whose accepted hardware state the snapshot addresses.
     pub const fn channel(self) -> ChannelId {
         self.channel
-    }
-}
-
-impl<M, SB> Dma<M, SB> {
-    pub(crate) fn work_ready(&mut self, work: Work) -> Result<bool, Error> {
-        let channel = self.work_channel(work)?;
-        Ok(channel.enabled() && !channel.registers.values.fault_status.faulted())
-    }
-    pub(crate) fn work_channel(&mut self, work: Work) -> Result<&mut Channel, Error> {
-        let halted = self.halted();
-        let channel = self
-            .channels
-            .get_mut(work.channel.index())
-            .ok_or(Error::Unmapped)?;
-        if channel.generation != work.generation || channel.resetting() {
-            return Err(Error::Reset);
-        }
-        if halted || channel.halted() {
-            return Err(Error::Halted);
-        }
-        Ok(channel)
-    }
-
-    /// Borrows the active payload prefix only while transformation is requested.
-    /// A resumed write returns `None`, retaining its already transformed bytes.
-    ///
-    /// # Errors
-    /// Rejects a stale reset generation or halted channel.
-    pub fn work_scratch_mut(&mut self, work: &Work) -> Result<Option<&mut [u8]>, Error> {
-        let channel = self.work_channel(*work)?;
-        Ok(match channel.work.as_mut().map(|work| &mut work.action) {
-            Some(Action::Transform(transfer)) => transfer.bytes.get_mut(..transfer.length),
-            Some(
-                Action::Check(_)
-                | Action::Next(_)
-                | Action::Read(_)
-                | Action::Write(_)
-                | Action::Respond(_),
-            )
-            | None => None,
-        })
     }
 }
 

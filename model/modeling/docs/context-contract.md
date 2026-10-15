@@ -209,8 +209,10 @@ Interlock conflicting configuration/lifecycle changes while the operation is pen
 HW-07: Consumer progress proves descriptor consumption, not execution completion.
 Register accepted task ownership without an observable gap when advancing consumer,
 and keep it until the accepted hardware task retires. Successful completion of a
-finite service does not release these references: the Channel owns the descriptor,
-next hardware action, cursors and scratch until completion or cancellation cleanup.
+finite service does not release these references: the Channel retains the accepted
+descriptor ledger until publication or cancellation cleanup. Typed stage values
+may own validation, current chunk bytes or completion while that ledger remains
+present; moving data out of Channel must not make accepted_command disappear.
 A fault ends the current finite execution path while preserving that task. Do not
 equate Rust invocation completion or disposal with hardware retirement. Payload
 completion alone does not retire a task awaiting response publication. Deduplicate
@@ -218,6 +220,10 @@ multiple uses of the same context within a
 task when using reference counts. Parking releases shared engine capacity without
 retiring ownership; count all retained parked tasks alongside the single executing
 command. This requires no additional execution engine.
+
+Healthy chunk passes may complete while the command remains in hardware context.
+They neither release accepted references nor restart candidate selection. A fault
+releases the execution grant, not the retained Channel task or its context references.
 
 Successful maintenance requires all of:
 
@@ -290,7 +296,7 @@ preserve this distinction when the external transport is implemented.
   channel-owned task registration in one synchronous Fetch step. There is no externally
   visible interval between those effects. The retained descriptor identifies all
   accepted references until whole-command retirement. Suspension releases the shared
-  grant but retains the task, next action and scratch in Channel until resumed
+  grant but retains the task, traversal and concrete read/write checkpoint in Channel until resumed
   completion or cancellation cleanup; no generic continuation stores ownership.
   It cleans parked reset/Abort targets before stepping active shared work; a disabled
   peer cannot prevent that cleanup.

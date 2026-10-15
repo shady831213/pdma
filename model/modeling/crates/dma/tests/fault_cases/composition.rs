@@ -1,30 +1,31 @@
 use super::*;
 use hardware_interface_pipeline::{RunError, Stage, StepResult, Then};
-use pdma_model_dma::{CheckRanges, Error, NextChunk, ReadCopy, Work, WriteCopy};
+use pdma_model_dma::{
+    CheckRanges, ExecutionContext, ExecutionError, Payload, PrepareChunk, ReadCopy, WriteCopy,
+};
 
-struct InvertPayload;
+pub(super) struct InvertPayload;
 
-impl Stage<Dma<Paged>> for InvertPayload {
-    type Input = Option<Work>;
-    type Output = Option<Work>;
-    type Error = Error;
-    type State = Option<Option<Work>>;
+impl Stage<ExecutionContext<'_, Paged>> for InvertPayload {
+    type Input = Option<Payload>;
+    type Output = Option<Payload>;
+    type Error = ExecutionError;
+    type State = Option<Option<Payload>>;
     fn start(input: Self::Input) -> Self::State {
         Some(input)
     }
     fn step(
         &mut self,
-        device: &mut Dma<Paged>,
+        _: &mut ExecutionContext<'_, Paged>,
         state: &mut Self::State,
-    ) -> StepResult<Self::Output, Error> {
-        let Some(work) = state.take() else {
+    ) -> StepResult<Self::Output, ExecutionError> {
+        let Some(mut work) = state.take() else {
             return Err(RunError::Exhausted);
         };
-        if let Some(work) = work {
-            match device.work_scratch_mut(&work) {
-                Ok(Some(bytes)) => bytes.iter_mut().for_each(|byte| *byte = !*byte),
-                Ok(None) => {}
-                Err(error) => return Ok(StepOutcome::Complete(Err(error))),
+        if let Some(payload) = &mut work {
+            match payload.bytes_mut() {
+                Ok(bytes) => bytes.iter_mut().for_each(|byte| *byte = !*byte),
+                Err(error) => return Ok(StepOutcome::Complete(Err(error.into()))),
             }
         }
         Ok(StepOutcome::Complete(Ok(work)))
@@ -47,12 +48,9 @@ fn transformed_resume(replace_service: bool) -> TestResult {
     let command = streams(&device)?;
     device.memory.missing.set(Some((0x1343, true)));
     submit(&mut device, command, 0)?;
-    let chunk = Then::new(
-        Then::new(Then::new(NextChunk, ReadCopy), InvertPayload),
-        WriteCopy,
-    );
-    let execution = Then::new(CheckRanges, chunk);
-    let pipeline = Then::new(execution, device.responses());
+    let chunk = Then::new(PrepareChunk, Then::new(ReadCopy, InvertPayload));
+    let execution = chunk;
+    let pipeline = Then::new(execution, Then::new(WriteCopy, device.responses()));
     let mut engine = device.service_with(pipeline);
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..256 {
@@ -79,11 +77,8 @@ fn transformed_resume(replace_service: bool) -> TestResult {
     assert_eq!(fault_status(&mut device)?, 1);
     device.memory.missing.set(None);
     if replace_service {
-        let chunk = Then::new(
-            Then::new(Then::new(NextChunk, ReadCopy), InvertPayload),
-            WriteCopy,
-        );
-        engine = device.service_with(Then::new(Then::new(CheckRanges, chunk), device.responses()));
+        let chunk = Then::new(PrepareChunk, Then::new(ReadCopy, InvertPayload));
+        engine = device.service_with(Then::new(chunk, Then::new(WriteCopy, device.responses())));
         operation = hardware_interface_pipeline::HardwareDriver::new();
         device.memory.memory.write(
             0x1000.into(),
@@ -130,10 +125,15 @@ fn standalone_range_validation_cannot_consume_parked_work() -> TestResult {
     submit(&mut device, command, 0)?;
     device.until(|dma| Ok(fault_status(dma)? == 1))?;
     // When: an empty standalone invocation has no accepted work.
-    let mut operation = Operation::new(None);
+    let mut state = <CheckRanges as Stage<ExecutionContext<'_, Paged>>>::start(None);
     let mut complete = false;
     for _ in 0..16 {
-        if let StepOutcome::Complete(result) = operation.step(&mut CheckRanges, &mut device.dma)? {
+        if let StepOutcome::Complete(result) = CheckRanges.step(
+            &mut device
+                .dma
+                .execution_context(pdma_model_contract::dma::ChannelId::new(0))?,
+            &mut state,
+        )? {
             let _progress = result?;
             complete = true;
             break;

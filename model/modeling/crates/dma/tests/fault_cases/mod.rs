@@ -1,10 +1,12 @@
 mod boundaries;
+mod chunks;
 mod composition;
 mod control;
 mod lifecycle;
 mod memory;
 mod peers;
 mod resume;
+mod tail;
 mod termination;
 
 use self::memory::Paged;
@@ -77,6 +79,8 @@ fn setup() -> TestResult<Fixture> {
             memory,
             missing: std::cell::Cell::new(None),
             faults: std::cell::Cell::new(0),
+            accesses: std::cell::Cell::new(0),
+            reads: std::cell::RefCell::new(Vec::new()),
         },
         0x1100,
         2,

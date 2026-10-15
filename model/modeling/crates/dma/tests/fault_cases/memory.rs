@@ -2,7 +2,7 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
 };
 use pdma_model_dma::MemoryFailure;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 #[derive(Debug)]
 pub(super) enum BackendError {
@@ -30,6 +30,8 @@ pub(super) struct Paged {
     pub memory: SharedMemory,
     pub missing: Cell<Option<(u64, bool)>>,
     pub faults: Cell<u32>,
+    pub accesses: Cell<usize>,
+    pub reads: RefCell<Vec<u64>>,
 }
 
 impl Paged {
@@ -66,6 +68,7 @@ impl MemoryAccess for Paged {
         alignment: MemoryAlignment,
         length: u64,
     ) -> Result<(), BackendError> {
+        self.accesses.set(self.accesses.get() + 1);
         self.memory
             .validate(address, alignment, length)
             .map_err(Into::into)
@@ -77,6 +80,8 @@ impl MemoryAccess for Paged {
         alignment: MemoryAlignment,
         out: &mut [u8],
     ) -> Result<(), BackendError> {
+        self.accesses.set(self.accesses.get() + 1);
+        self.reads.borrow_mut().push(address.raw());
         self.fault(address, out.len(), false)?;
         self.memory
             .read(address, alignment, out)
@@ -89,6 +94,7 @@ impl MemoryAccess for Paged {
         alignment: MemoryAlignment,
         bytes: &[u8],
     ) -> Result<(), BackendError> {
+        self.accesses.set(self.accesses.get() + 1);
         self.fault(address, bytes.len(), true)?;
         self.memory
             .write(address, alignment, bytes)

@@ -79,7 +79,7 @@ async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestRe
     let device = Dma::new(SharedMemory::new(), 1)?;
     let mut hardware = pdma_model_dma::Fetch;
     let mut model = Model::new(device);
-    {
+    let outcome = {
         let mut device = model.device.lock().await;
         for offset in [
             IRQ_ENABLE,
@@ -98,20 +98,28 @@ async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestRe
         ] {
             device.write(offset, &1_u32.to_le_bytes())?;
         }
-        let mut operation =
-            Operation::new(device.command_request(pdma_model_contract::dma::ChannelId::new(0))?);
-        let outcome = (0..256).find_map(|_| match operation.step(&mut hardware, &mut device) {
-            Ok(StepOutcome::InProgress) => None,
-            terminal => Some(terminal),
-        });
+        let id = pdma_model_contract::dma::ChannelId::new(0);
+        let Some(pdma_model_dma::CommandRequest::Fetch(snapshot)) = device.command_request(id)?
+        else {
+            return Err("no command request".into());
+        };
+        let mut operation = Operation::new(Some(snapshot));
+        let outcome = {
+            let mut context = device.execution_context(id)?;
+            (0..256).find_map(|_| match operation.step(&mut hardware, &mut context) {
+                Ok(StepOutcome::InProgress) => None,
+                terminal => Some(terminal),
+            })
+        };
         drop(device);
-        assert!(matches!(
-            outcome,
-            Some(Ok(StepOutcome::Complete(Err(Error::ChannelFatal(
-                ChannelFatal::CommandRead
-            )))))
-        ));
-    }
+        outcome
+    };
+    assert!(matches!(
+        outcome,
+        Some(Ok(StepOutcome::Complete(Err(Error::ChannelFatal(
+            ChannelFatal::CommandRead
+        )))))
+    ));
     assert!(!model.irq());
     // When: a read finishes the transport interaction boundary.
     model.read(u32::try_from(IRQ_ENABLE)?, &mut [0; 4]).await?;

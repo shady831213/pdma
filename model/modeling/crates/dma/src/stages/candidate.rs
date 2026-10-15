@@ -1,4 +1,4 @@
-use crate::{Dma, Error, Work};
+use crate::{CommandSnapshot, Dma, Error, Work};
 use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::ring::Ring;
@@ -7,20 +7,17 @@ use pdma_model_contract::ring::Ring;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommandRequest {
     /// Fetch the channel's current command when the request is accepted.
-    Fetch(Work),
+    Fetch(CommandSnapshot),
     /// Resume the channel's already accepted, parked command.
     Resume(Work),
-    /// Continue validated traversal retained at a healthy chunk boundary.
-    Progress(Work),
 }
 
 impl CommandRequest {
     /// Identifies the requesting channel without transferring task ownership.
     pub const fn channel(self) -> ChannelId {
         match self {
-            Self::Fetch(channel) | Self::Resume(channel) | Self::Progress(channel) => {
-                channel.channel
-            }
+            Self::Fetch(snapshot) => snapshot.work.channel,
+            Self::Resume(work) => work.channel,
         }
     }
 }
@@ -56,11 +53,7 @@ impl<M, SB> Dma<M, SB> {
     /// Returns `Error::Unmapped` for an absent channel.
     pub fn command_request(&self, id: ChannelId) -> Result<Option<CommandRequest>, Error> {
         let channel = self.channels.get(id.index()).ok_or(Error::Unmapped)?;
-        if self
-            .active
-            .as_ref()
-            .is_some_and(|active| active.channel() != id)
-        {
+        if self.active.is_some() {
             return Ok(None);
         }
         if self.halted()
@@ -78,15 +71,18 @@ impl<M, SB> Dma<M, SB> {
             generation: channel.generation,
         };
         Ok(if channel.work.is_some() {
-            Some(if self.active == Some(work) {
-                CommandRequest::Progress(work)
-            } else {
-                CommandRequest::Resume(work)
-            })
+            Some(CommandRequest::Resume(work))
         } else if channel.command.pointers().is_empty() {
             None
         } else {
-            Some(CommandRequest::Fetch(work))
+            Some(CommandRequest::Fetch(CommandSnapshot {
+                work,
+                consumer: channel.command.pointers().consumer,
+                address: channel
+                    .command
+                    .entry(channel.command.pointers().consumer)
+                    .map_err(|_| Error::Cursor)?,
+            }))
         })
     }
 }

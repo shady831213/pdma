@@ -1,10 +1,10 @@
-use hardware_interface_pipeline::{Operation, Stage, StepOutcome, Then};
+use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, CompletionFlagsValues,
     Endpoint, ResponseRegisters,
 };
-use pdma_model_dma::{CheckRanges, Dma, Fetch, NextChunk, Pipeline, ReadCopy, WriteCopy};
+use pdma_model_dma::Dma;
 /// Test harness error propagation.
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -20,13 +20,6 @@ pub fn finish<C, S: Stage<C>>(
         }
     }
     Err("operation exceeded interaction bound".into())
-}
-
-/// Assemble one finite chunk from the existing hardware stages.
-pub fn single_chunk<M>(device: &Dma<M>) -> Then<Fetch, Pipeline> {
-    let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
-    let execution = Then::new(CheckRanges, chunk);
-    Then::new(Fetch, Then::new(execution, device.responses()))
 }
 
 /// Read an exact 32-bit register through the device bus.

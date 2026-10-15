@@ -12,7 +12,7 @@ use pdma_model_contract::dma::{
     ChannelBlock, ChannelRegisters, CommandRegisters, ResponseRegisters,
 };
 use pdma_model_dma::{Error, ResetControl};
-use support::{TestResult, command, read_word, setup, single_chunk, submit};
+use support::{TestResult, chunk_pipeline, command, read_word, setup, submit};
 
 const CONTROL: usize =
     pdma_model_contract::dma::ChannelBlock::ALIGNMENT + ChannelBlock::CONTROL.offset();
@@ -35,7 +35,7 @@ fn custom_service_publishes_completion() -> TestResult {
         &[3, 1, 4, 1],
     )?;
     submit(&mut device, &memory, command())?;
-    let pipeline = single_chunk(&device).downstream;
+    let pipeline = chunk_pipeline(&device);
     let mut hardware = device.service_with(pipeline);
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     // When: the custom command is driven to its terminal boundary.
@@ -76,7 +76,7 @@ fn custom_pipeline_retires_reset_work_before_accepting_new_work() -> TestResult 
     let (mut device, memory) = setup(0x1100, 2)?;
     memory.write(MemoryAddress::new(0x1300), MemoryAlignment::ONE, &[9; 4])?;
     submit(&mut device, &memory, command())?;
-    let pipeline = single_chunk(&device).downstream;
+    let pipeline = chunk_pipeline(&device);
     let mut hardware = device.service_with(pipeline);
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..32 {

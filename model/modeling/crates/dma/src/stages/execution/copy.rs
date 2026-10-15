@@ -1,155 +1,183 @@
-use crate::channel::{Action, PayloadAccess};
-use crate::{Dma, Error, MemoryFailure, Work};
+use crate::channel::Continuation;
+use crate::{COPY_CHUNK_BYTES, Chunk, Completion, ExecutionContext, MemoryFailure, Payload};
 use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
-use hardware_interface_runtime::MemoryAccess;
+use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::dma::ResponseStatus;
 
-/// Reads a payload chunk into channel-owned scratch and parks repairable faults.
+/// Reads a concrete bounded chunk and transfers its bytes to the next stage.
 #[derive(Debug, Default)]
 pub struct ReadCopy;
 
-impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for ReadCopy
+impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for ReadCopy
 where
     M::Error: Into<MemoryFailure>,
 {
-    type Input = Option<Work>;
-    type Output = Option<Work>;
-    type Error = Error;
-    type State = Option<Option<Work>>;
+    type Input = Option<Chunk>;
+    type Output = Option<Payload>;
+    type Error = crate::ExecutionError;
+    type State = Option<Self::Input>;
     fn start(input: Self::Input) -> Self::State {
         Some(input)
     }
-
     fn step(
         &mut self,
-        device: &mut Dma<M, SB>,
+        context: &mut ExecutionContext<'_, M, SB>,
         state: &mut Self::State,
-    ) -> StepResult<Self::Output, Error> {
-        let Some(work) = *state.as_ref().ok_or(RunError::Exhausted)? else {
+    ) -> StepResult<Self::Output, crate::ExecutionError> {
+        let Some(chunk) = state.as_ref().ok_or(RunError::Exhausted)? else {
             *state = None;
             return Ok(StepOutcome::Complete(Ok(None)));
         };
-        match device.work_ready(work) {
-            Err(error) => {
-                *state = None;
-                return Ok(StepOutcome::Complete(Err(error)));
-            }
-            Ok(false) => return Ok(StepOutcome::InProgress),
+        match context.ready(chunk.work) {
             Ok(true) => {}
-        }
-        let context = match device.channel_context(work.channel()) {
-            Ok(context) => context,
+            Ok(false) => return Ok(StepOutcome::InProgress),
             Err(error) => {
                 *state = None;
-                return Ok(StepOutcome::Complete(Err(error)));
+                return Ok(StepOutcome::Complete(Err(error.into())));
             }
-        };
-        let mut accepted = context.channel.work.take().ok_or(RunError::Exhausted)?;
-        let mut faulted = false;
-        accepted.action = match accepted.action {
-            Action::Read(mut transfer) => {
-                match transfer.read(&context.memory_for(transfer.progress.command.source.context)) {
-                    PayloadAccess::Complete => Action::Transform(transfer),
-                    PayloadAccess::Fault => {
-                        faulted = true;
-                        Action::Read(transfer)
+        }
+        let mut bytes = [0; COPY_CHUNK_BYTES];
+        if chunk.length > 0 {
+            let output = bytes.get_mut(..chunk.length).ok_or(RunError::Exhausted)?;
+            if let Err(error) = context.memory_for(chunk.work, chunk.source_context).read(
+                chunk.source,
+                MemoryAlignment::ONE,
+                output,
+            ) {
+                match error.into() {
+                    MemoryFailure::PageFault { .. } => {
+                        let Some(Some(chunk)) = state.take() else {
+                            return Err(RunError::Exhausted);
+                        };
+                        let result = context
+                            .park(chunk.work, Continuation::Read(chunk))
+                            .map(|()| None)
+                            .map_err(crate::ExecutionError::from);
+                        return Ok(StepOutcome::Complete(result));
+                    }
+                    MemoryFailure::Access => {
+                        let progress = context
+                            .selected
+                            .work
+                            .as_ref()
+                            .and_then(|work| work.progress.as_ref())
+                            .ok_or(RunError::Exhausted)?;
+                        let completion = Completion {
+                            work: chunk.work,
+                            response: progress.response_with(ResponseStatus::ReadError),
+                        };
+                        *state = None;
+                        return Ok(StepOutcome::Complete(Err(
+                            crate::ExecutionError::CommandFailed(completion),
+                        )));
                     }
                 }
             }
-            action @ (Action::Check(_)
-            | Action::Next(_)
-            | Action::Transform(_)
-            | Action::Write(_)
-            | Action::Respond(_)) => action,
-        };
-        context.channel.work = Some(accepted);
-        if faulted {
-            context.channel.suspend();
-            device.active = None;
         }
-        *state = None;
-        Ok(StepOutcome::Complete(Ok(if faulted {
-            None
-        } else {
-            Some(work)
-        })))
+        let Some(Some(chunk)) = state.take() else {
+            return Err(RunError::Exhausted);
+        };
+        Ok(StepOutcome::Complete(Ok(Some(Payload { chunk, bytes }))))
     }
 }
 
-/// Writes retained scratch and advances channel traversal or prepares its response.
+/// Consumes actual payload bytes and commits traversal only after a successful write.
 #[derive(Debug, Default)]
 pub struct WriteCopy;
 
-impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for WriteCopy
+impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for WriteCopy
 where
     M::Error: Into<MemoryFailure>,
 {
-    type Input = Option<Work>;
-    type Output = Option<Work>;
-    type Error = Error;
-    type State = Option<Option<Work>>;
+    type Input = Option<Payload>;
+    type Output = Option<Completion>;
+    type Error = crate::ExecutionError;
+    type State = Option<Self::Input>;
     fn start(input: Self::Input) -> Self::State {
         Some(input)
     }
-
     fn step(
         &mut self,
-        device: &mut Dma<M, SB>,
+        context: &mut ExecutionContext<'_, M, SB>,
         state: &mut Self::State,
-    ) -> StepResult<Self::Output, Error> {
-        let Some(work) = *state.as_ref().ok_or(RunError::Exhausted)? else {
+    ) -> StepResult<Self::Output, crate::ExecutionError> {
+        let Some(payload) = state.as_ref().ok_or(RunError::Exhausted)? else {
             *state = None;
             return Ok(StepOutcome::Complete(Ok(None)));
         };
-        match device.work_ready(work) {
-            Err(error) => {
-                *state = None;
-                return Ok(StepOutcome::Complete(Err(error)));
-            }
-            Ok(false) => return Ok(StepOutcome::InProgress),
+        let work = payload.chunk.work;
+        match context.ready(work) {
             Ok(true) => {}
-        }
-        let context = match device.channel_context(work.channel()) {
-            Ok(context) => context,
+            Ok(false) => return Ok(StepOutcome::InProgress),
             Err(error) => {
                 *state = None;
-                return Ok(StepOutcome::Complete(Err(error)));
+                return Ok(StepOutcome::Complete(Err(error.into())));
             }
-        };
-        let mut accepted = context.channel.work.take().ok_or(RunError::Exhausted)?;
-        let mut faulted = false;
-        accepted.action = match accepted.action {
-            Action::Transform(mut transfer) | Action::Write(mut transfer) => {
-                match transfer
-                    .write(&context.memory_for(transfer.progress.command.destination.context))
-                {
-                    PayloadAccess::Fault => {
-                        faulted = true;
-                        Action::Write(transfer)
-                    }
-                    PayloadAccess::Complete
-                        if transfer.progress.status == ResponseStatus::Success
-                            && transfer.progress.remaining > 0 =>
-                    {
-                        Action::Next(transfer.progress)
-                    }
-                    PayloadAccess::Complete => Action::Respond(transfer.progress.response()),
+        }
+        if payload.chunk.length > 0 {
+            let bytes = match payload.bytes() {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    *state = None;
+                    return Ok(StepOutcome::Complete(Err(error.into())));
                 }
+            };
+            match context
+                .memory_for(work, payload.chunk.destination_context)
+                .write(payload.chunk.destination, MemoryAlignment::ONE, bytes)
+            {
+                Ok(()) => {
+                    let progress = context
+                        .selected
+                        .work
+                        .as_mut()
+                        .and_then(|accepted| accepted.progress.as_mut())
+                        .ok_or(RunError::Exhausted)?;
+                    if let Err(error) = progress.commit(payload.chunk.length) {
+                        *state = None;
+                        return Ok(StepOutcome::Complete(Err(error.into())));
+                    }
+                }
+                Err(error) => match error.into() {
+                    MemoryFailure::PageFault { .. } => {
+                        let Some(Some(payload)) = state.take() else {
+                            return Err(RunError::Exhausted);
+                        };
+                        return Ok(StepOutcome::Complete(
+                            context
+                                .park(work, Continuation::Write(Box::new(payload)))
+                                .map(|()| None)
+                                .map_err(crate::ExecutionError::from),
+                        ));
+                    }
+                    MemoryFailure::Access => {
+                        let progress = context
+                            .selected
+                            .work
+                            .as_ref()
+                            .and_then(|accepted| accepted.progress.as_ref())
+                            .ok_or(RunError::Exhausted)?;
+                        let completion = Completion {
+                            work,
+                            response: progress.response_with(ResponseStatus::WriteError),
+                        };
+                        *state = None;
+                        return Ok(StepOutcome::Complete(Ok(Some(completion))));
+                    }
+                },
             }
-            action
-            @ (Action::Check(_) | Action::Next(_) | Action::Read(_) | Action::Respond(_)) => action,
-        };
-        let response_ready = matches!(accepted.action, Action::Respond(_));
-        context.channel.work = Some(accepted);
-        if faulted {
-            context.channel.suspend();
-            device.active = None;
         }
         *state = None;
-        Ok(StepOutcome::Complete(Ok(if response_ready {
-            Some(work)
+        let accepted = context.selected.work.as_mut().ok_or(RunError::Exhausted)?;
+        let progress = accepted.progress.as_ref().ok_or(RunError::Exhausted)?;
+        if progress.remaining > 0 {
+            accepted.continuation = Some(Continuation::Next);
+            Ok(StepOutcome::Complete(Ok(None)))
         } else {
-            None
-        })))
+            Ok(StepOutcome::Complete(Ok(Some(Completion {
+                work,
+                response: progress.response(),
+            }))))
+        }
     }
 }

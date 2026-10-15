@@ -21,15 +21,19 @@ const DEVICE_RESET: usize = (pdma_model_contract::dma::DmaDiscovery::EXTENT
 
 struct CommandExit;
 
-impl<M> Stage<Dma<M>> for CommandExit {
+impl<M> Stage<pdma_model_dma::ExecutionContext<'_, M>> for CommandExit {
     type Input = ();
     type Output = ();
-    type Error = Error;
+    type Error = pdma_model_dma::ExecutionError;
     type State = ();
 
     fn start((): ()) {}
 
-    fn step(&mut self, _: &mut Dma<M>, (): &mut ()) -> StepResult<(), Error> {
+    fn step(
+        &mut self,
+        _: &mut pdma_model_dma::ExecutionContext<'_, M>,
+        (): &mut (),
+    ) -> StepResult<(), pdma_model_dma::ExecutionError> {
         Ok(StepOutcome::Complete(Ok(())))
     }
 }
@@ -39,25 +43,37 @@ fn rejected_response_port_does_not_retire_the_command() -> TestResult {
     // Given: a fetched task retained between custom execution and response ports.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let mut fetch = pdma_model_dma::Fetch;
-    let mut operation = Operation::new(device.command_request(ChannelId::new(0))?);
-    let mut accepted = None;
-    for _ in 0..32 {
-        if let StepOutcome::Complete(Ok(task)) = operation.step(&mut fetch, &mut device)? {
-            accepted = Some(task);
-            break;
+    let input = support::accept(&mut device, ChannelId::new(0))?;
+    let mut pipeline = Then::new(
+        pdma_model_dma::PrepareChunk,
+        Then::new(pdma_model_dma::ReadCopy, pdma_model_dma::WriteCopy),
+    );
+    let work = {
+        let mut context = device.execution_context(ChannelId::new(0))?;
+        let mut operation = Operation::new(Some(input));
+        let mut output = None;
+        for _ in 0..128 {
+            if let StepOutcome::Complete(result) = operation.step(&mut pipeline, &mut context)? {
+                output = Some(result?);
+                break;
+            }
         }
-    }
-    let work = accepted.ok_or("command not accepted")?;
+        output.ok_or("missing completion")?
+    };
     device.write(RESET, &1_u32.to_le_bytes())?;
     let mut responses = device.responses();
-    let mut publish = Operation::new(work);
+    let mut publish = <pdma_model_dma::Responses as Stage<
+        pdma_model_dma::ExecutionContext<'_, hardware_interface_runtime::SharedMemory>,
+    >>::start(work);
     // When: the final port rejects the old task before publishing a response.
     let mut rejected = false;
     for _ in 0..32 {
         if matches!(
-            publish.step(&mut responses, &mut device)?,
-            StepOutcome::Complete(Err(Error::Reset))
+            responses.step(
+                &mut device.execution_context(ChannelId::new(0))?,
+                &mut publish
+            )?,
+            StepOutcome::Complete(Err(pdma_model_dma::ExecutionError::Rejected(Error::Reset)))
         ) {
             rejected = true;
             break;
@@ -75,7 +91,14 @@ fn published_response_retires_hardware_before_custom_command_exit() -> TestResul
     // Given: a command whose response is published but whose composition has not exited.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let pipeline = Then::new(support::single_chunk(&device).downstream, CommandExit);
+    let chunk = support::chunk_pipeline(&device);
+    let pipeline = Then::new(
+        chunk.upstream,
+        Then::new(
+            chunk.downstream.upstream,
+            Then::new(chunk.downstream.downstream, CommandExit),
+        ),
+    );
     let mut hardware = device.service_with(pipeline);
     let command = &mut hardware;
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();

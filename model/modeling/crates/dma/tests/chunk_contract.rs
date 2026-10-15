@@ -1,4 +1,4 @@
-//! Transform access is bounded by the channel-owned active chunk.
+//! Transform access is bounded by the typed payload's immutable chunk geometry.
 
 /// Shared hardware test fixtures.
 pub mod support;
@@ -6,16 +6,18 @@ pub mod support;
 use hardware_interface_pipeline::{Operation, RunError, Stage, StepOutcome, StepResult, Then};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::{CompletionInfo, Response, ResponseInfoValues, ResponseStatus};
-use pdma_model_dma::{CheckRanges, Dma, Error, NextChunk, ReadCopy, Work, WriteCopy};
+use pdma_model_dma::{
+    ExecutionContext, ExecutionError, Payload, PrepareChunk, ReadCopy, WriteCopy,
+};
 use support::{TestResult, command, setup, submit};
 
 struct FillChunk;
 
-impl Stage<Dma<SharedMemory>> for FillChunk {
-    type Input = Option<Work>;
-    type Output = Option<Work>;
-    type Error = Error;
-    type State = Option<Option<Work>>;
+impl Stage<ExecutionContext<'_, SharedMemory>> for FillChunk {
+    type Input = Option<Payload>;
+    type Output = Option<Payload>;
+    type Error = ExecutionError;
+    type State = Option<Self::Input>;
 
     fn start(input: Self::Input) -> Self::State {
         Some(input)
@@ -23,23 +25,22 @@ impl Stage<Dma<SharedMemory>> for FillChunk {
 
     fn step(
         &mut self,
-        device: &mut Dma<SharedMemory>,
+        _: &mut ExecutionContext<'_, SharedMemory>,
         state: &mut Self::State,
-    ) -> StepResult<Self::Output, Error> {
-        let Some(work) = state.take() else {
+    ) -> StepResult<Self::Output, ExecutionError> {
+        let Some(mut payload) = state.take() else {
             return Err(RunError::Exhausted);
         };
-        if let Some(work) = &work {
-            match device.work_scratch_mut(work) {
-                Ok(Some(bytes)) => {
+        if let Some(payload) = &mut payload {
+            match payload.bytes_mut() {
+                Ok(bytes) => {
                     assert_eq!(bytes.len(), 4);
                     bytes.fill(0x5a);
                 }
-                Ok(None) => return Ok(StepOutcome::Complete(Err(Error::Routing))),
-                Err(error) => return Ok(StepOutcome::Complete(Err(error))),
+                Err(error) => return Ok(StepOutcome::Complete(Err(error.into()))),
             }
         }
-        Ok(StepOutcome::Complete(Ok(work)))
+        Ok(StepOutcome::Complete(Ok(payload)))
     }
 }
 
@@ -50,18 +51,25 @@ fn transform_can_modify_only_the_active_chunk_and_cannot_forge_its_length() -> T
     memory.write(0x12ff.into(), MemoryAlignment::ONE, &[0xaa; 6])?;
     let descriptor = command();
     submit(&mut device, &memory, descriptor)?;
-    let chunk = Then::new(
-        Then::new(Then::new(NextChunk, ReadCopy), FillChunk),
-        WriteCopy,
-    );
-    let pipeline = Then::new(Then::new(CheckRanges, chunk), device.responses());
+    let read = Then::new(PrepareChunk, Then::new(ReadCopy, FillChunk));
+    let write = Then::new(WriteCopy, device.responses());
+    let pipeline = Then::new(read, write);
     let mut service = device.service_with(pipeline);
     let mut operation = Operation::new(());
     // When: the transform fills its entire exposed slice and normal execution publishes it.
     for _ in 0..128 {
         if let StepOutcome::Complete(result) = operation.step(&mut service, &mut device)? {
             result?;
-            break;
+            if support::read_word(
+                &mut device,
+                pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                    + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
+                    + pdma_model_contract::dma::ResponseRegisters::PRODUCER.offset(),
+            )? == 1
+            {
+                break;
+            }
+            operation = Operation::new(());
         }
     }
     // Then: the public slice cannot resize hardware scratch or change completion length.

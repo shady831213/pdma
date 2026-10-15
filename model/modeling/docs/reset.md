@@ -50,16 +50,26 @@ independent IRQ/reset hardware units. External HardwareDriver supplies subsequen
 service inputs. Reset checks advance on every top-level tick, including idle or
 unfinished command processing; they do not depend on an AfterEach child-step hook.
 
-Channel owns the accepted descriptor, validation and traversal progress, scratch,
-next hardware action and accepted lifetime. Fetch publishes consumer progress and
-installs accepted state in one synchronous step. All later stages see the full Dma
-context and use their tagged work to find that Channel; they check generation and
+Channel owns the accepted descriptor ledger, installed traversal and any concrete
+read/write fault checkpoint. Fetch advances consumer and installs the ledger in
+one synchronous step. Validation, current payload and completion can reside in
+typed stage values without releasing accepted ownership. Later stages borrow
+only the selected channel and execution resources; they check generation and
 reset before each effect. No leaf invokes another stage.
+
+A healthy command retains its hardware grant across finite chunk passes. The
+occupied execution unit backpressures command admission; ordinary stages prepare,
+read, optionally transform and write one chunk before the next pass. Reset still
+advances independently every top-level tick and access guards apply throughout.
+Chunk completion is not reset completion or accepted-command retirement.
 
 Payload fault ends the current finite execution path, releases the shared grant
 and leaves the concrete hardware task in Channel. Resume derives new work from
 that state. A failed write retries from retained transformed scratch without
-refetching or replaying Read/Transform. No generic child continuation owns the task.
+refetching or replaying Read/Transform. It enters the same configured write tail,
+including custom downstream stages. No generic child continuation owns the task.
+An early RESUME does not restore the released grant of the old invocation; that
+invocation must exit before arbitration starts the resumed one.
 Finite service completion is not command retirement while Channel still has work.
 
 Reset cleanup clears affected channel-owned work before acknowledging. A stale
@@ -81,12 +91,15 @@ not advance it, and cleanup does not zero it. Work tags retain the generation so
 custom stages can reject stale work even after reconfiguration. This
 is an additional stale-task guard, not the reset acknowledgment predicate.
 
-Custom finite graphs use `Dma::service_with` and ordinary composition; their stages
-operate on tagged work with the full Dma context. A custom stage must check its
-work tag before side effects, and commit any persistent result to explicit hardware
-state. Merely dropping a software waiter or pipeline invocation does not request
-reset or clear the accepted task. Conversely, retaining an obsolete token does
-not prevent hardware cleanup once it has no authority to issue further effects.
+Custom finite graphs use `Dma::service_with` and ordinary composition. Their stages
+receive concrete chunk, payload or completion data and a selected borrowed
+ExecutionContext, not the full Dma. Standard memory and publication stages check
+the private generation-bound identity before effects; a transform may modify
+owned bytes but cannot replace their geometry or identity. Persistent custom
+hardware effects need explicit storage and retirement rules. Merely dropping a
+software waiter or pipeline invocation does not request reset or clear the
+accepted task. Conversely, retaining obsolete data does not prevent hardware
+cleanup once it has no authority to issue further effects.
 
 ## Software waiting and memory lifetime
 

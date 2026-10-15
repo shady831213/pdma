@@ -1,13 +1,13 @@
 //! End-to-end host submission and interrupt notification behavior.
 
-use hardware_interface_pipeline::{AsyncExecutor, Operation, Then};
+use hardware_interface_pipeline::{AsyncExecutor, Operation};
 use hardware_interface_runtime::{
     InterruptSource, MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::dma::{ChannelFatalCode, Command, Endpoint, Response, ResponseStatus};
 use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
-use pdma_model_dma::{Candidate, CheckRanges, Dma, Fetch, NextChunk, ReadCopy, WriteCopy};
+use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
 
@@ -58,13 +58,16 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
         destination: Endpoint::linear(0, 0),
     }))
     .await?;
-    let mut operation = Operation::new(());
-    assert!(
+    for _ in 0..8 {
         AsyncExecutor::new(model.clone())
-            .run(&mut stage, &mut operation)
+            .run(&mut stage, &mut Operation::new(()))
             .await
-            .is_ok()
-    );
+            .map_err(|error| format!("{error:?}"))?;
+        if model.irq() {
+            break;
+        }
+    }
+    assert!(model.irq(), "response did not arrive before watchdog");
     let expected = Response {
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 13,
@@ -138,7 +141,6 @@ async fn copy_completes_when_host_submits_and_consumes_response()
             },
         ))
         .await?;
-    let mut operation = Operation::new(());
     let executor = AsyncExecutor::new(model.clone());
 
     // When: a real async worker executes the submitted command.
@@ -151,7 +153,16 @@ async fn copy_completes_when_host_submits_and_consumes_response()
         destination: Endpoint::linear(destination.raw(), 0),
     }))
     .await?;
-    assert!(executor.run(&mut stage, &mut operation).await.is_ok());
+    for _ in 0..8 {
+        executor
+            .run(&mut stage, &mut Operation::new(()))
+            .await
+            .map_err(|error| format!("{error:?}"))?;
+        if model.irq() {
+            break;
+        }
+    }
+    assert!(model.irq(), "response did not arrive before watchdog");
     model.wait_ready().await?;
     assert!(model.claim(()).await?.is_some());
     let response = cpu.run_main(channel.response()).await?;
@@ -197,19 +208,7 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
     let destination = allocator.allocate(8, alignment)?;
     let memory = allocator.memory_access();
     let device = Dma::new(memory.clone(), 1)?;
-    let mut stage = Then::new(
-        Candidate::new(pdma_model_contract::dma::ChannelId::new(0)),
-        Then::new(
-            Fetch,
-            Then::new(
-                Then::new(
-                    CheckRanges,
-                    Then::new(Then::new(NextChunk, ReadCopy), WriteCopy),
-                ),
-                device.responses(),
-            ),
-        ),
-    );
+    let mut stage = device.service();
     let mut model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
@@ -231,11 +230,22 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
         destination: Endpoint::linear(destination.raw(), 0),
     }))
     .await?;
-    let mut operation = Operation::new(());
     let executor = AsyncExecutor::new(model.clone());
 
     // When: response publication fails at the real memory boundary.
-    assert!(executor.run(&mut stage, &mut operation).await.is_err());
+    for _ in 0..8 {
+        executor
+            .run(&mut stage, &mut Operation::new(()))
+            .await
+            .map_err(|error| format!("{error:?}"))?;
+        if model.irq() {
+            break;
+        }
+    }
+    assert!(
+        model.irq(),
+        "fatal notification did not arrive before watchdog"
+    );
 
     // Then: the notification is claimed once while the fatal remains visible through masking.
     model.wait_ready().await?;

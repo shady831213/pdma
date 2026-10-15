@@ -86,8 +86,17 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
         } => observed?,
         result = executor.run(&mut stage, &mut operation) => assert!(result.is_err(), "driver completed before cancellation"),
     }
-    assert!(!operation.is_complete());
+    assert_eq!(cpu.run_main(channel.response()).await?, None);
+    assert_eq!(
+        memory.read_typed::<[u8; 8]>(destination, alignment)?,
+        [0; 8]
+    );
     assert!(executor.run(&mut stage, &mut operation).await.is_ok());
+    let mut execution = Operation::new(());
+    executor
+        .run(&mut stage, &mut execution)
+        .await
+        .map_err(|error| format!("{error:?}"))?;
 
     // Then: the accepted descriptor yields one response and the correct copied payload.
     assert_eq!(

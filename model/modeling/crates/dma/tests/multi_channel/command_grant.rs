@@ -150,7 +150,7 @@ fn reset_and_reconfigure_before_acceptance_uses_the_new_command_generation() -> 
         assert_eq!(response.status, ResponseStatus::Success);
         assert_eq!(response.bytes_completed(), 512);
         assert_eq!(word(&mut device, consumer)?, 1);
-        assert_eq!(word(&mut device, peer_consumer)?, 0);
+        assert_eq!(word(&mut device, peer_consumer)?, 0, "prefix {prefix}");
     }
     Err("command acceptance exceeded interaction bound".into())
 }

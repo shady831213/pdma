@@ -6,6 +6,8 @@ mod build;
 /// Channel-owned hardware state, registers and rings.
 pub mod channel;
 mod error;
+mod execution_context;
+mod flow;
 mod maintenance;
 mod memory;
 mod reset;
@@ -19,6 +21,10 @@ pub use arbitration::RoundRobin;
 pub use build::BuildError;
 pub use channel::{COPY_CHUNK_BYTES, Channel, CommandRing, ResponseRing};
 pub use error::{ChannelFatal, Error};
+pub use execution_context::ExecutionContext;
+pub use flow::{
+    Chunk, ChunkInput, CommandSnapshot, Completion, CopyProgress, FetchedCommand, Payload,
+};
 use hardware_interface_schema::RegisterWindow;
 pub use maintenance::MaintenanceError;
 pub use memory::{ChannelContext, MemoryFailure};
@@ -29,8 +35,8 @@ use pdma_model_contract::dma::{
 pub use reset::ResetControl;
 pub use routing::Responses;
 pub use stages::{
-    Candidate, CheckRanges, CommandRequest, CopyChunk, Execution, Fetch, NextChunk, Pipeline,
-    Publish, ReadCopy, Service, UpdateIrq, WriteCopy,
+    Candidate, CheckRanges, CommandRequest, CopyChunk, Execution, ExecutionError, Fetch, Pipeline,
+    PrepareChunk, Publish, ReadCopy, ReadPipeline, Service, UpdateIrq, WriteCopy, WritePipeline,
 };
 pub use work::Work;
 

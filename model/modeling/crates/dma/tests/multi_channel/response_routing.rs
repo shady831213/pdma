@@ -1,21 +1,51 @@
-use super::support::{TestResult, configure, finish, submit, word};
-use hardware_interface_pipeline::{Operation, StepOutcome, Then};
+use super::support::{TestResult, configure, submit, word};
+use hardware_interface_pipeline::{
+    HardwareDriver, Operation, RunError, Stage, StepOutcome, StepResult, Then,
+};
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, ChannelRegisters, ResponseRegisters};
-use pdma_model_dma::{COPY_CHUNK_BYTES, Candidate, Dma, Error, Publish, Work};
+use pdma_model_dma::{
+    Completion, Dma, Error, ExecutionContext, ExecutionError, PrepareChunk, Publish, ReadCopy,
+    Responses, WriteCopy,
+};
+use std::{cell::RefCell, rc::Rc};
 
-fn execute(device: &mut Dma<SharedMemory>) -> TestResult<Work> {
-    let pipeline = super::support::single_chunk(device);
-    let mut execution = Then::new(
-        Candidate::new(ChannelId::new(0)),
-        Then::new(pipeline.upstream, pipeline.downstream.upstream),
-    );
-    let mut work = None;
-    for _ in 0..512_usize.div_ceil(COPY_CHUNK_BYTES) {
-        let mut operation = Operation::new(());
-        work = finish(&mut execution, &mut operation, device)??;
+struct CaptureCompletion(Rc<RefCell<Option<Completion>>>);
+
+impl Stage<ExecutionContext<'_, SharedMemory>> for CaptureCompletion {
+    type Input = Option<Completion>;
+    type Output = ();
+    type Error = ExecutionError;
+    type State = Option<Self::Input>;
+
+    fn start(input: Self::Input) -> Self::State {
+        Some(input)
     }
-    work.ok_or_else(|| "command did not produce response work".into())
+
+    fn step(
+        &mut self,
+        _: &mut ExecutionContext<'_, SharedMemory>,
+        state: &mut Self::State,
+    ) -> StepResult<(), ExecutionError> {
+        *self.0.borrow_mut() = state.take().ok_or(RunError::Exhausted)?;
+        Ok(StepOutcome::Complete(Ok(())))
+    }
+}
+
+fn execute(device: &mut Dma<SharedMemory>) -> TestResult<Completion> {
+    let captured = Rc::new(RefCell::new(None));
+    let read = Then::new(PrepareChunk, ReadCopy);
+    let write = Then::new(WriteCopy, CaptureCompletion(Rc::clone(&captured)));
+    let mut hardware = device.service_with(Then::new(read, write));
+    let mut driver = HardwareDriver::new();
+    for _ in 0..256 {
+        assert_eq!(driver.step(&mut hardware, device)?, StepOutcome::InProgress);
+        if let Some(completion) = captured.borrow_mut().take() {
+            assert_eq!(completion.response().bytes_completed(), 512);
+            return Ok(completion);
+        }
+    }
+    Err("command did not produce response work".into())
 }
 
 fn setup() -> TestResult<Dma<SharedMemory>> {
@@ -40,7 +70,8 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
         let mut device = setup()?;
         let response = execute(&mut device)?;
         assert_eq!(response.channel(), ChannelId::new(0));
-        let mut publication = Operation::new(Some(response));
+        let mut publication =
+            <Responses as Stage<ExecutionContext<'_, SharedMemory>>>::start(Some(response));
         let mut destinations = device.responses();
         if suspend_publication {
             device.write(
@@ -51,7 +82,10 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
             )?;
             for _ in 0..16 {
                 assert!(matches!(
-                    publication.step(&mut destinations, &mut device)?,
+                    destinations.step(
+                        &mut device.execution_context(ChannelId::new(0))?,
+                        &mut publication,
+                    )?,
                     StepOutcome::InProgress
                 ));
             }
@@ -61,9 +95,22 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
             ChannelId::new(0).admin_offset(2).ok_or("offset")?,
             &1_u32.to_le_bytes(),
         )?;
-        let outcome = finish(&mut destinations, &mut publication, &mut device)?;
+        let mut outcome = None;
+        for _ in 0..256 {
+            if let StepOutcome::Complete(result) = destinations.step(
+                &mut device.execution_context(ChannelId::new(0))?,
+                &mut publication,
+            )? {
+                outcome = Some(result);
+                break;
+            }
+        }
+        let outcome = outcome.ok_or("publication exceeded interaction bound")?;
         // Then: generation checking rejects the retained result without advancing either response ring.
-        assert!(matches!(outcome, Err(Error::Reset)));
+        assert!(matches!(
+            outcome,
+            Err(ExecutionError::Rejected(Error::Reset))
+        ));
         assert_eq!(
             word(
                 &mut device,
@@ -93,11 +140,12 @@ fn a_response_port_rejects_work_owned_by_another_channel() -> TestResult {
     let response = execute(&mut device)?;
     let mut port = Publish::new(ChannelId::new(1));
     // When: an incorrectly wired graph sends the response to the wrong port.
-    let outcome = Operation::new(response).step(&mut port, &mut device)?;
+    let outcome = Operation::new(response)
+        .step(&mut port, &mut device.execution_context(ChannelId::new(1))?)?;
     // Then: routing misuse cannot publish into either channel's ring.
     assert!(matches!(
         outcome,
-        StepOutcome::Complete(Err(Error::Routing))
+        StepOutcome::Complete(Err(ExecutionError::Rejected(Error::Routing)))
     ));
     for index in 0..2 {
         assert_eq!(

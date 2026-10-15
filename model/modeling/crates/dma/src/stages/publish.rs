@@ -1,73 +1,75 @@
-use crate::channel::Action;
-use crate::{Dma, Error, Work};
+use crate::{Completion, Error, ExecutionContext};
 use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
-use hardware_interface_runtime::MemoryAccess;
-use pdma_model_contract::dma::ChannelId;
+use hardware_interface_runtime::{BoundMemory, MemoryAccess};
+use pdma_model_contract::dma::{ChannelId, ContextId, DmaAccess};
 
 /// Publishes the selected channel's retained response before retiring its work.
 #[derive(Debug)]
 pub struct Publish {
     channel: ChannelId,
 }
-
 impl Publish {
     /// Binds publication to the specified response-ring owner.
     pub const fn new(channel: ChannelId) -> Self {
         Self { channel }
     }
 }
-
-impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Publish {
-    type Input = Work;
+impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for Publish {
+    type Input = Completion;
     type Output = ();
-    type Error = Error;
-    type State = Option<Work>;
+    type Error = crate::ExecutionError;
+    type State = Option<Completion>;
     fn start(input: Self::Input) -> Self::State {
         Some(input)
     }
-
-    fn step(&mut self, device: &mut Dma<M, SB>, state: &mut Self::State) -> StepResult<(), Error> {
-        let work = *state.as_ref().ok_or(RunError::Exhausted)?;
+    fn step(
+        &mut self,
+        context: &mut ExecutionContext<'_, M, SB>,
+        state: &mut Self::State,
+    ) -> StepResult<(), crate::ExecutionError> {
+        let completion = state.as_ref().ok_or(RunError::Exhausted)?;
+        let work = completion.work;
         if work.channel() != self.channel {
             *state = None;
-            return Ok(StepOutcome::Complete(Err(Error::Routing)));
+            return Ok(StepOutcome::Complete(Err(Error::Routing.into())));
         }
-        match device.work_ready(work) {
+        match context.ready(work) {
             Err(error) => {
                 *state = None;
-                return Ok(StepOutcome::Complete(Err(error)));
+                return Ok(StepOutcome::Complete(Err(error.into())));
             }
             Ok(false) => return Ok(StepOutcome::InProgress),
             Ok(true) => {}
         }
-        let context = match device.channel_context(work.channel()) {
-            Ok(context) => context,
-            Err(error) => {
-                *state = None;
-                return Ok(StepOutcome::Complete(Err(error)));
-            }
-        };
-        let Some(Action::Respond(response)) =
-            context.channel.work.as_ref().map(|work| &work.action)
-        else {
-            *state = None;
-            return Ok(StepOutcome::Complete(Err(Error::Routing)));
-        };
-        let response = *response;
-        let was_empty = context.channel.response.pointers().is_empty();
-        match context.channel.response.push(&context.memory, &response) {
+        let memory = BoundMemory::new(
+            context.memory,
+            (context.sideband)(DmaAccess {
+                channel: work.channel,
+                context: ContextId::new(context.selected.registers.values.ring_context.raw()),
+            }),
+        );
+        let was_empty = context.selected.response.pointers().is_empty();
+        match context
+            .selected
+            .response
+            .push(&memory, &completion.response)
+        {
             Ok(true) => {
-                context.channel.published(&response, was_empty);
-                context.channel.work = None;
-                device.active = None;
+                context.selected.published(&completion.response, was_empty);
+                context.selected.work = None;
+                if *context.active == Some(work) {
+                    *context.active = None;
+                }
                 *state = None;
                 Ok(StepOutcome::Complete(Ok(())))
             }
             Ok(false) => Ok(StepOutcome::InProgress),
             Err(fatal) => {
-                context.channel.latch(fatal);
+                context.selected.latch(fatal);
                 *state = None;
-                Ok(StepOutcome::Complete(Err(Error::ChannelFatal(fatal))))
+                Ok(StepOutcome::Complete(
+                    Err(Error::ChannelFatal(fatal).into()),
+                ))
             }
         }
     }

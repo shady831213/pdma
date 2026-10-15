@@ -2,57 +2,90 @@ use crate::{
     RESET,
     support::{TestResult, command, read_word, setup, submit},
 };
-use hardware_interface_pipeline::{Operation, RunError, Stage, StepOutcome};
+use hardware_interface_pipeline::{Operation, RunError, Stage, StepOutcome, Then};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, ResponseRegisters,
 };
-use pdma_model_dma::{Dma, Error, Fetch, ResetControl, Service, WriteCopy};
+use pdma_model_dma::{
+    Completion, Dma, Error, ExecutionError, Payload, PrepareChunk, Publish, ReadCopy, ResetControl,
+    Service, WriteCopy,
+};
+
+fn payload(device: &mut Dma<SharedMemory>) -> TestResult<Payload> {
+    let input = crate::support::accept(device, ChannelId::new(0))?;
+    let mut pipeline = Then::new(PrepareChunk, ReadCopy);
+    let mut context = device.execution_context(ChannelId::new(0))?;
+    let mut operation = Operation::new(Some(input));
+    for _ in 0..128 {
+        if let StepOutcome::Complete(result) = operation.step(&mut pipeline, &mut context)? {
+            return result?.ok_or_else(|| "missing payload".into());
+        }
+    }
+    Err("payload watchdog".into())
+}
+
+enum Retained {
+    Payload(Box<Payload>),
+    Completion(Completion),
+}
 
 #[test]
 fn reset_retires_channel_work_while_an_old_token_is_retained() -> TestResult {
-    // Given: a real descriptor accepted into Channel state and a separately retained work token.
-    let (mut device, memory) = setup(0x1100, 2)?;
-    memory.write(0x1300.into(), MemoryAlignment::ONE, &[0xaa; 4])?;
-    submit(&mut device, &memory, command())?;
-    let request = device.command_request(ChannelId::new(0))?;
-    let StepOutcome::Complete(Ok(Some(work))) =
-        Operation::new(request).step(&mut Fetch, &mut device)?
-    else {
-        return Err("command not accepted".into());
-    };
-    device.write(RESET, &1_u32.to_le_bytes())?;
-    let _ = ResetControl.step(&mut device, &mut ())?;
-    assert_eq!(read_word(&mut device, RESET)?, 1);
-    let mut service = device.service();
-    let mut cleanup = Operation::new(());
-    // When: service advances concrete hardware cleanup with the old token still live.
-    for _ in 0..128 {
-        if let StepOutcome::Complete(result) = cleanup.step(&mut service, &mut device)? {
-            result?;
-            break;
+    for publish in [false, true] {
+        // Given: actual payload or response retained outside the accepted ledger.
+        let (mut device, memory) = setup(0x1100, 2)?;
+        submit(&mut device, &memory, command())?;
+        let bytes = payload(&mut device)?;
+        let retained = if publish {
+            let StepOutcome::Complete(Ok(Some(completion))) = Operation::new(Some(bytes)).step(
+                &mut WriteCopy,
+                &mut device.execution_context(ChannelId::new(0))?,
+            )?
+            else {
+                return Err("missing completion".into());
+            };
+            Retained::Completion(completion)
+        } else {
+            Retained::Payload(Box::new(bytes))
+        };
+        memory.write(0x1300.into(), MemoryAlignment::ONE, &[0xaa; 4])?;
+        device.write(RESET, &1_u32.to_le_bytes())?;
+        let _ = ResetControl.step(&mut device, &mut ())?;
+        assert_eq!(read_word(&mut device, RESET)?, 1);
+        let mut service = device.service();
+        let mut cleanup = Operation::new(());
+        // When: explicit hardware cleanup runs while the typed value remains retained.
+        for _ in 0..128 {
+            if let StepOutcome::Complete(result) = cleanup.step(&mut service, &mut device)? {
+                result?;
+                break;
+            }
         }
-    }
-    // Then: reset completes, and neither a stale payload stage nor publication can cause effects.
-    assert_eq!(read_word(&mut device, RESET)?, 0);
-    assert!(matches!(
-        Operation::new(Some(work)).step(&mut WriteCopy, &mut device)?,
-        StepOutcome::Complete(Err(Error::Reset))
-    ));
-    let mut responses = device.responses();
-    let mut stale = Operation::new(Some(work));
-    let mut result = None;
-    for _ in 0..32 {
-        if let StepOutcome::Complete(value) = stale.step(&mut responses, &mut device)? {
-            result = Some(value);
-            break;
+        // Then: stale write and publication inputs cannot access memory or retire new work.
+        assert!(cleanup.is_complete());
+        assert_eq!(read_word(&mut device, RESET)?, 0);
+        match retained {
+            Retained::Payload(bytes) => assert!(matches!(
+                Operation::new(Some(*bytes)).step(
+                    &mut WriteCopy,
+                    &mut device.execution_context(ChannelId::new(0))?
+                )?,
+                StepOutcome::Complete(Err(ExecutionError::Rejected(Error::Reset)))
+            )),
+            Retained::Completion(completion) => assert!(matches!(
+                Operation::new(completion).step(
+                    &mut Publish::new(ChannelId::new(0)),
+                    &mut device.execution_context(ChannelId::new(0))?
+                )?,
+                StepOutcome::Complete(Err(ExecutionError::Rejected(Error::Reset)))
+            )),
         }
+        assert_eq!(
+            memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+            [0xaa; 4]
+        );
     }
-    assert_eq!(result, Some(Err(Error::Reset)));
-    assert_eq!(
-        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
-        [0xaa; 4]
-    );
     Ok(())
 }
 
@@ -61,12 +94,7 @@ fn stale_work_cannot_retire_or_write_a_newer_accepted_command() -> TestResult {
     // Given: a completed old service invocation and a reset channel configured for new work.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let request = device.command_request(ChannelId::new(0))?;
-    let StepOutcome::Complete(Ok(Some(old_work))) =
-        Operation::new(request).step(&mut Fetch, &mut device)?
-    else {
-        return Err("command not accepted".into());
-    };
+    let old_work = payload(&mut device)?;
     device.write(RESET, &1_u32.to_le_bytes())?;
     let mut service = device.service();
     let mut old = <Service as Stage<Dma<SharedMemory>>>::start(());
@@ -112,21 +140,29 @@ fn stale_work_cannot_retire_or_write_a_newer_accepted_command() -> TestResult {
     };
     memory.write(0x1200.into(), MemoryAlignment::ONE, &[1, 2, 3, 4])?;
     submit(&mut device, &memory, descriptor)?;
-    let request = device.command_request(ChannelId::new(0))?;
-    assert!(matches!(
-        Operation::new(request).step(&mut Fetch, &mut device)?,
-        StepOutcome::Complete(Ok(Some(_)))
-    ));
+    let input = crate::support::accept(&mut device, ChannelId::new(0))?;
     // When: stale stage and already completed service states are driven after new acceptance.
     assert!(matches!(
-        Operation::new(Some(old_work)).step(&mut WriteCopy, &mut device)?,
-        StepOutcome::Complete(Err(Error::Reset))
+        Operation::new(Some(old_work)).step(
+            &mut WriteCopy,
+            &mut device.execution_context(ChannelId::new(0))?
+        )?,
+        StepOutcome::Complete(Err(ExecutionError::Rejected(Error::Reset)))
     ));
     assert_eq!(
         service.step(&mut device, &mut old),
         Err(RunError::Exhausted)
     );
-    crate::support::run(&mut device)?;
+    let mut pipeline = crate::support::chunk_pipeline(&device);
+    let mut context = device.execution_context(ChannelId::new(0))?;
+    let mut current = Operation::new(Some(input));
+    for _ in 0..128 {
+        if let StepOutcome::Complete(result) = current.step(&mut pipeline, &mut context)? {
+            result?;
+            break;
+        }
+    }
+    assert!(current.is_complete());
     // Then: the new descriptor completes normally and retains its own identity and payload.
     assert_eq!(
         memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,

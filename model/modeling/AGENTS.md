@@ -184,21 +184,28 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   enclosing block and cannot host sibling placements or interleaved banks. Group
   related registers in one child block before repeating it.
   Channel is a persistent hardware state object in the shared Dma context, not a
-  pipeline. Its private task state owns the accepted descriptor, validation and
-  traversal cursors, scratch, next hardware action and accepted lifetime. These
-  states must describe hardware registers/storage, never Rust S::State, ThenState,
-  Operation or a saved generic continuation. Stage-local state is transient work.
-  State representation and local operations belong under channel; shared
-  Stage<Dma> implementations belong under stages. DMA-wide Work identity,
+  pipeline. Its private task state owns the accepted descriptor ledger, validated
+  traversal and concrete read/write fault checkpoints. Accepted lifetime persists
+  even while a stage owns validation, payload or response data. These states must
+  describe hardware registers/storage, never Rust S::State, ThenState, Operation
+  or a saved generic continuation. Local validation and current payload travel in
+  stage input/output/state; they are not a shared Action program counter.
+  State representation and local operations belong under channel; shared stage
+  implementations belong under stages. DMA-wide Work identity,
   guarded access and retirement helpers belong in the DMA-level work module.
   Do not place shared execution stages under channel to accommodate visibility.
-  Service composes channel-targeted Candidate inputs, Arbitrate::snapshots with DMA's
-  RoundRobin selector and one shared engine through FanIn. RoundRobin implements
+  Service composes command admission through FanIn using channel-targeted Candidate
+  inputs and Arbitrate::snapshots with DMA's RoundRobin selector. Fresh selection
+  enters Fetch then CheckRanges; a resumed checkpoint skips that path. Its separate
+  shared execution path advances concrete typed chunk data. RoundRobin implements
   Arbitration, not FanPolicy; snapshot disposal belongs to the generic adapter.
   Candidates emit non-owning observations and do not consume descriptors. The
-  selected work is revalidated before acceptance. All post-arbitration stages
-  implement Stage<Dma<M, SB>> and use tagged input/output to access the corresponding
-  Channel. A temporary method-local channel borrow is not a fixed stage context.
+  selected work is revalidated before acceptance. Descriptor, execution and
+  publication stages use a freshly borrowed ExecutionContext for the selected
+  channel, memory port and lifecycle guards, not all of Dma. Typed command, chunk,
+  payload and completion values carry actual data plus private identity metadata.
+  Do not substitute renamed Work wrappers for dataflow or copy mutable hardware
+  state into a second context. The borrowed context never escapes a step.
   No hardware leaf invokes another stage. Reuse Then for dataflow and FanOut with
   Dispatch for channel-bound publication; do not add CommandScope, a second engine,
   a centralized step-dispatch switch or a wrapper around arbitrary child execution.
@@ -226,10 +233,24 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   shared grant. Resume starts fresh stage invocations from the retained hardware
   action, without refetching, restarting validation or repeating completed reads
   and transforms. A failed write retains transformed scratch and retries Write.
-  Arbitration retains a healthy command's grant across finite services until
-  command retirement or payload fault. Finite service completion alone is not
-  command retirement. Reset/Abort cleanup must progress despite a disabled peer.
-  Custom downstream graphs use Dma::service_with and ordinary Then composition.
+  A healthy command retains hardware state and its grant across finite chunk passes,
+  not one command-lifetime Rust invocation. Separate command admission from active
+  execution: occupied execution backpressures candidate/arbitration/Fetch while
+  ordinary stages prepare, read, transform and write the current chunk. Completing
+  a chunk pass does not retire the command or release its grant. Subsequent external
+  ticks advance retained hardware state without frontend reentry. A fault releases
+  the grant; even immediate RESUME requires new arbitration before more payload work.
+  Reset/Abort cleanup must progress despite a disabled peer.
+  Custom graphs use Dma::service_with with ordinary
+  Then<ReadGraph, Then<WriteCopy, CompletionTail>> composition. The boundaries
+  are Payload and Completion. Stopping command errors bypass normal data stages
+  and enter the same completion tail with their actual response; they must not
+  fabricate successful chunks or payload bytes. A write-fault retry
+  resumes the same downstream hardware object, including custom tail stages,
+  without reentering read/transform or using a separate hardcoded retry pipeline.
+  Fresh validation runs once; later chunks use installed hardware traversal.
+  Stage outputs and payload geometry are owned, non-clonable and not publicly
+  forgeable. Transforms may modify the bounded payload bytes, not addresses/length.
   Persistent custom data must have explicit hardware ownership; arbitrary Rust
   child-state destructor ordering is not a reset or accepted-lifetime contract.
   Guard command, SG-list, payload and response accesses before old work can interact again.
@@ -246,7 +267,11 @@ Firmware can consume DMA and peripheral contracts without owning those interface
 - Reuse FanIn/Arbitrate/FanOut/Dispatch/Then for execution composition.
   Repeat and AfterEach are removed. Do not recreate them with renamed combinators,
   ControlFlow feedback, per-child-step hooks or wrappers that restart completed
-  child pipelines. Express hardware feedback through
+  child pipelines. Do not add Producer/Stream to bind a hardware task's lifetime
+  to a Rust invocation. Each stage handles input/output and local state; persistent
+  cross-stage state has an explicit hardware owner in context. Combinators connect
+  values and express routing/backpressure, not device task lifecycle.
+  Express hardware feedback through
   typed input/output and shared state; continuous top-level driving belongs to executors.
   Runtime supplies memory and
   driving only; it must not gain PDMA traversal, validation or copy policy.

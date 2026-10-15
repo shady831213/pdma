@@ -66,6 +66,10 @@ async fn committed_copy_is_not_replayed_when_cancelled_before_response_publicati
     }))
     .await?;
     let executor = AsyncExecutor::new(model.clone());
+    executor
+        .run(&mut stage, &mut Operation::new(()))
+        .await
+        .map_err(|error| format!("{error:?}"))?;
     let mut operation = Operation::new(());
 
     // When: cancellation follows the DMA write, then changed buffers precede resumption.

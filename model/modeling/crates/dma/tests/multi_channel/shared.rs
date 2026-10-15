@@ -68,5 +68,28 @@ fn arbiter_accepts_no_peer_command_until_selected_command_finishes() -> TestResu
         )?;
         assert_eq!(bytes, [0; 512]);
     }
-    Ok(())
+    let producer = ChannelId::new(0).register_offset(3).ok_or("offset")?
+        + ChannelBlock::RESPONSE.offset()
+        + ResponseRegisters::PRODUCER.offset();
+    for _ in 0..256 {
+        for index in 1..3 {
+            assert_eq!(
+                word(
+                    &mut device,
+                    ChannelId::new(index).register_offset(3).ok_or("offset")?
+                        + ChannelBlock::COMMAND.offset()
+                        + CommandRegisters::CONSUMER.offset()
+                )?,
+                0
+            );
+        }
+        if word(&mut device, producer)? == 1 {
+            return Ok(());
+        }
+        assert_eq!(
+            operation.step(&mut hardware, &mut device)?,
+            StepOutcome::InProgress
+        );
+    }
+    Err("selected command did not complete before watchdog".into())
 }

@@ -164,10 +164,19 @@ async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
     }))
     .await?;
     // When: hardware publishes a masked IOC completion and software unmasks.
-    AsyncExecutor::new(model.clone())
-        .run(&mut stage, &mut Operation::new(()))
-        .await
-        .map_err(|error| format!("{error:?}"))?;
+    for _ in 0..8 {
+        AsyncExecutor::new(model.clone())
+            .run(&mut stage, &mut Operation::new(()))
+            .await
+            .map_err(|error| format!("{error:?}"))?;
+        if cpu
+            .run_main(channel.irq_cause())
+            .await?
+            .response_non_empty()
+        {
+            break;
+        }
+    }
     cpu.run_main(channel.set_irq_mask(ChannelIrqMaskValues::default()))
         .await?;
     // Then: software can inspect both causes and consume the response without a catch-up IRQ.

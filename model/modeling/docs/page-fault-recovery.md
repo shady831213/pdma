@@ -232,10 +232,18 @@ do not block the serial control queue waiting for repair. No new resume opcode,
 page-fault event, VF management queue or PF proxy requirement is introduced.
 
 **MODEL-PF-01.** Keep bounded per-channel task state and one shared execution
-pipeline. All shared execution stages see the full Dma context and identify their
-Channel through tagged work values. A fault ends the finite dataflow, not the
+pipeline. Shared execution stages borrow only the selected channel and required
+memory/lifecycle resources, and exchange actual typed chunk/payload/completion
+values with guarded identity. A fault ends the finite dataflow, not the
 accepted task; a later candidate derives runnable work from Channel state.
 No saved generic child continuation or per-channel engine is required.
+Ordinary stages prepare a chunk and pass its data through Read/optional Transform/Write.
+The finite chunk pass may complete without retiring the command. Shared execution
+occupancy backpressures admission until terminal retirement or fault, so healthy
+chunks do not reenter arbitration. Even early RESUME requires a new grant before
+more payload access; faulted task state remains in Channel, not a combinator.
+Fresh command validation is not repeated on resume. Retained write payload enters
+the same configured write/publication tail, bypassing only completed read/transform.
 Reuse existing pipeline/runtime components. Inject test page
 presence and fault reports through the platform backend; these are not a true MMU.
 Scenario software owns allocation, fault handling, repair and MMIO resume. Memory

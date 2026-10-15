@@ -1,7 +1,9 @@
+mod chunks;
 mod copy;
-mod next;
+mod error;
 mod validate;
 
+pub use chunks::PrepareChunk;
 pub use copy::{ReadCopy, WriteCopy};
-pub use next::NextChunk;
+pub use error::ExecutionError;
 pub use validate::CheckRanges;

@@ -1,68 +1,52 @@
-use crate::channel::Action;
-use crate::{Dma, Error, Work};
+use crate::channel::RangeCheck;
+use crate::{CopyProgress, ExecutionContext, FetchedCommand, Work};
 use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::MemoryAccess;
 
-/// Incrementally validates both channel-owned endpoint ranges before payload writes.
+/// Incrementally validates the freshly fetched descriptor exactly once.
 #[derive(Debug, Default)]
 pub struct CheckRanges;
 
-impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for CheckRanges {
-    type Input = Option<Work>;
-    type Output = Option<Work>;
-    type Error = Error;
-    type State = Option<Option<Work>>;
-
+impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for CheckRanges {
+    type Input = Option<FetchedCommand>;
+    type Output = Option<CopyProgress>;
+    type Error = crate::ExecutionError;
+    type State = Option<Option<(Work, RangeCheck)>>;
     fn start(input: Self::Input) -> Self::State {
-        Some(input)
+        Some(input.map(|fetched| (fetched.work, RangeCheck::new(fetched.command))))
     }
-
     fn step(
         &mut self,
-        device: &mut Dma<M, SB>,
+        context: &mut ExecutionContext<'_, M, SB>,
         state: &mut Self::State,
-    ) -> StepResult<Self::Output, Error> {
-        let Some(work) = *state.as_ref().ok_or(RunError::Exhausted)? else {
+    ) -> StepResult<Self::Output, crate::ExecutionError> {
+        let Some((work, scan)) = state.as_mut().ok_or(RunError::Exhausted)? else {
             *state = None;
             return Ok(StepOutcome::Complete(Ok(None)));
         };
-        match device.work_ready(work) {
-            Err(error) => {
-                *state = None;
-                return Ok(StepOutcome::Complete(Err(error)));
-            }
-            Ok(false) => return Ok(StepOutcome::InProgress),
+        match context.ready(*work) {
             Ok(true) => {}
-        }
-        let context = match device.channel_context(work.channel()) {
-            Ok(context) => context,
+            Ok(false) => return Ok(StepOutcome::InProgress),
             Err(error) => {
                 *state = None;
-                return Ok(StepOutcome::Complete(Err(error)));
+                return Ok(StepOutcome::Complete(Err(error.into())));
             }
-        };
-        let mut accepted = context.channel.work.take().ok_or(RunError::Exhausted)?;
-        let complete = match &mut accepted.action {
-            Action::Check(scan) => {
-                if let Some(progress) = scan.advance(&context.memory_for(scan.command.sg_context)) {
-                    accepted.action = Action::Next(progress);
-                    true
-                } else {
-                    false
-                }
-            }
-            Action::Next(_)
-            | Action::Read(_)
-            | Action::Transform(_)
-            | Action::Write(_)
-            | Action::Respond(_) => true,
-        };
-        context.channel.work = Some(accepted);
-        if complete {
-            *state = None;
-            Ok(StepOutcome::Complete(Ok(Some(work))))
-        } else {
-            Ok(StepOutcome::InProgress)
         }
+        let work = *work;
+        scan.advance(&context.memory_for(work, scan.command.sg_context))
+            .map_or(Ok(StepOutcome::InProgress), |progress| {
+                if progress.status.halts() {
+                    *state = None;
+                    return Ok(StepOutcome::Complete(Err(
+                        crate::ExecutionError::CommandFailed(crate::Completion {
+                            work,
+                            response: progress.response(),
+                        }),
+                    )));
+                }
+                let output = CopyProgress { work, progress };
+                *state = None;
+                Ok(StepOutcome::Complete(Ok(Some(output))))
+            })
     }
 }

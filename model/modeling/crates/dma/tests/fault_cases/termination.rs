@@ -1,40 +1,47 @@
 use super::*;
 use hardware_interface_pipeline::{RunError, Stage, StepResult};
 use pdma_model_contract::dma::ChannelId;
-use pdma_model_dma::{Error, Pipeline, ResetControl, Service, Work};
+use pdma_model_dma::{
+    ChunkInput, Error, ExecutionContext, ExecutionError, ReadPipeline, ResetControl, Service,
+};
 
 struct PeerFailure {
-    pipeline: Pipeline,
+    pipeline: ReadPipeline,
     raw_error: bool,
 }
 
 struct Invocation {
-    child: <Pipeline as Stage<Dma<Paged>>>::State,
-    work: Option<Work>,
+    child: <ReadPipeline as Stage<ExecutionContext<'static, Paged>>>::State,
+    channel: Option<ChannelId>,
 }
 
-impl Stage<Dma<Paged>> for PeerFailure {
-    type Input = Option<Work>;
-    type Output = ();
-    type Error = Error;
+impl Stage<ExecutionContext<'_, Paged>> for PeerFailure {
+    type Input = Option<ChunkInput>;
+    type Output = Option<pdma_model_dma::Payload>;
+    type Error = ExecutionError;
     type State = Invocation;
 
     fn start(work: Self::Input) -> Self::State {
+        let channel = work.as_ref().map(ChunkInput::channel);
         Invocation {
-            child: <Pipeline as Stage<Dma<Paged>>>::start(work),
-            work,
+            child: <ReadPipeline as Stage<ExecutionContext<'static, Paged>>>::start(work),
+            channel,
         }
     }
 
-    fn step(&mut self, device: &mut Dma<Paged>, state: &mut Invocation) -> StepResult<(), Error> {
+    fn step(
+        &mut self,
+        device: &mut ExecutionContext<'_, Paged>,
+        state: &mut Invocation,
+    ) -> StepResult<Self::Output, ExecutionError> {
         if state
-            .work
-            .is_some_and(|work| work.channel() == ChannelId::new(1))
+            .channel
+            .is_some_and(|channel| channel == ChannelId::new(1))
         {
             if self.raw_error {
                 Err(RunError::Exhausted)
             } else {
-                Ok(StepOutcome::Complete(Err(Error::Routing)))
+                Ok(StepOutcome::Complete(Err(Error::Routing.into())))
             }
         } else {
             self.pipeline.step(device, &mut state.child)
@@ -47,11 +54,17 @@ fn peer_pipeline_termination_preserves_parked_hardware_until_reset() -> TestResu
     for raw_error in [false, true] {
         // Given: one faulted channel and a peer whose custom pipeline will terminate.
         let (mut device, _, _) = super::peers::pair()?;
-        let pipeline = crate::support::single_chunk(&device).downstream;
-        let mut engine = device.service_with(PeerFailure {
-            pipeline,
-            raw_error,
-        });
+        let pipeline = hardware_interface_pipeline::Then::new(
+            pdma_model_dma::PrepareChunk,
+            pdma_model_dma::ReadCopy,
+        );
+        let mut engine = device.service_with(hardware_interface_pipeline::Then::new(
+            PeerFailure {
+                pipeline,
+                raw_error,
+            },
+            hardware_interface_pipeline::Then::new(pdma_model_dma::WriteCopy, device.responses()),
+        ));
         let mut state = <Service<PeerFailure> as Stage<Dma<Paged>>>::start(());
         let mut terminal = None;
         for _ in 0..512 {

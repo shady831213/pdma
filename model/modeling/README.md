@@ -97,12 +97,14 @@ backend errors. New platform error categories need no generic runtime change.
 | `crates/dma/src/arbitration.rs` | PDMA round-robin selection policy. |
 | `crates/dma/src/stages/candidate.rs` | Non-consuming channel candidate advancement against the full DMA context. |
 | `crates/dma/src/channel/work.rs` | Local operations on retained channel work. |
-| `crates/dma/src/channel/work/` | Local validation, traversal, payload scratch and cursor operations. |
+| `crates/dma/src/channel/work/` | Command traversal and cursor calculations. |
+| `crates/dma/src/flow.rs` | Owned command, chunk, payload and completion values. |
+| `crates/dma/src/execution_context.rs` | One step's selected-channel resources and lifecycle guards. |
 | `crates/dma/src/work.rs` | Work identity, DMA-wide tagged access and lifecycle cleanup. |
 | `crates/dma/src/routing.rs` | Generation-bound response destination policy. |
 | `crates/dma/src/stages/execution/validate.rs` | Shared selected-range validation stage. |
-| `crates/dma/src/stages/execution/next.rs` | Shared next-chunk preparation stage. |
-| `crates/dma/src/stages/execution/copy.rs` | Shared chunk read/write stages with full Dma context. |
+| `crates/dma/src/stages/execution/chunks.rs` | Shared bounded-chunk preparation stage. |
+| `crates/dma/src/stages/execution/copy.rs` | Shared chunk read/write stages with selected execution resources. |
 | `crates/dma/src/stages/publish.rs` | Response publication through the selected channel's ring. |
 | `crates/software/src/dma.rs` | Shared DMA driver configuration, submit and response consumption; reexported by Host. |
 | `crates/host/src/runtime.rs` | PDMA transport: async context access, cooperative yielding and pending notification delivery. |
@@ -116,60 +118,81 @@ backend errors. New platform error categories need no generic runtime change.
 | `crates/scenarios/tests/single_channel/software/` | Complete software program, buffer allocation and interrupt handler. |
 | `crates/scenarios/tests/multi_channel/` | Three-channel reset isolation through the same hardware/software/harness separation. |
 
-`device.service()` builds a finite command service and its independent IRQ/reset
-units. The shared downstream graph remains explicit and customizable:
+`device.service()` assembles fresh command admission, shared chunk execution
+and independent IRQ/reset units. Custom execution uses ordinary Then composition
+with an explicit payload boundary:
 
 ```rust
-let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
-let execution = Then::new(CheckRanges, chunk);
-device.service_with(Then::new(execution, device.responses()))
+let read = Then::new(PrepareChunk, ReadCopy);
+let write = Then::new(WriteCopy, device.responses());
+device.service_with(Then::new(read, write))
 ```
 
-Channel is a hardware state object, not a pipeline. Alongside software-visible
-registers it owns private accepted-command state: descriptor, validation and
-Linear/SG cursors, committed progress, scratch and the next hardware action.
-These are concrete hardware values; no Channel stores a Rust stage, Operation or
-generic composition state. Its retained state and local operations live under
-channel. Shared Stage<Dma> implementations live under stages, alongside their
-DMA-level assembly, rather than under the object whose state they update.
-Work identity and cross-channel access/retirement helpers belong to DMA's work
-module. The one shared engine retains a healthy command's
-grant across chunks and releases that grant on completion or payload fault.
+A transform composes after ReadCopy inside the read graph. The graph has the
+shape `Then<ReadGraph, Then<WriteCopy, CompletionTail>>`; application stages can
+compose into the completion tail. A write-fault retry enters that same write
+graph, including its custom tail, without repeating the read or transform.
 
-Each Candidate advances against the shared Dma context and produces a non-owning
-channel request. FanIn gathers those values; Arbitrate::snapshots adapts DMA's
-RoundRobin selector and forwards at most one candidate to Then(Fetch, downstream).
-Unselected observations are discarded and resampled next round. Selection never
-receives or invokes a source stage. Fetch revalidates the request before consuming
-a descriptor, installs accepted state in Channel and forwards generation-tagged
-Work. Later services use that accepted state without refetching.
+Channel is a persistent hardware object, not a pipeline. It retains the accepted
+descriptor ledger, validated traversal and concrete fault checkpoints. Current
+validation, chunk, payload and completion values move through stage inputs,
+outputs and local state. Moving those values does not release accepted ownership.
+There is no global Action enum telling every stage which operation to execute,
+and no Channel-owned Rust Operation or generic composition continuation.
 
-Every post-arbitration leaf implements Stage<Dma<M, SB>>. Its input identifies
-the channel to access; its context contains all channels and shared memory ports.
-A temporary channel borrow within a step is not a fixed ChannelContext binding
-for the entire pipeline. Leaves exchange tagged work or update shared hardware
-state, never invoke another stage. The default execution leaves pass Option<Work>:
-Some identifies work to advance, None ends effects along this finite path.
-Hardware action state determines whether a leaf has applicable work.
+Candidate produces a non-owning channel request. FanIn and Arbitrate::snapshots
+select a request through DMA's RoundRobin policy, without calling source stages
+from the selected output. Fresh requests enter Fetch then CheckRanges. Fetch
+rechecks current eligibility at acceptance, reads the descriptor, advances consumer
+and establishes accepted ownership atomically. Its FetchedCommand output carries
+the actual command. CheckRanges owns its incremental scan and produces validated
+CopyProgress, installed once as authoritative hardware traversal.
 
-CheckRanges stores incremental validation in Channel. NextChunk prepares a
-bounded transfer, ReadCopy fills channel-owned scratch, and WriteCopy commits
-the chunk and advances traversal or prepares a response. A custom stage inserted
-with Then between read and write can access the transform-ready scratch prefix
-through work_scratch_mut. It sees no mutable length or out-of-range storage.
-Write retry is not transform-ready, so completed transforms are not replayed.
-Responses uses FanOut/Dispatch to route the work to its channel-bound Publish
-port. Ordinary errors still publish a stopping response; metadata/publication
-failures retain their channel-fatal semantics.
+Accepted identity differs from candidate observation: a reset/reconfiguration
+before acceptance can change the eligible channel head, but accepted values never
+refresh their generation. Every later memory access rejects stale work.
 
-A payload PageFault ends the finite execution path with no response or DMA IRQ.
-Channel retains its descriptor, next action, both cursors and scratch while peers
-may run. Authorized resume makes it eligible again; a fresh invocation advances
-from the retained action. A failed write retries the already transformed bytes,
-without rereading source memory. No CommandScope or saved S::State bank exists.
-The assembly can be replaced after suspension without losing the task's hardware
-state. Persistent custom data must have explicit hardware ownership rather than
-depend on suspension of an arbitrary Rust invocation.
+Normal execution dataflow is:
+
+| Boundary | Transferred data |
+| --- | --- |
+| Fetch -> CheckRanges | FetchedCommand: descriptor and accepted identity |
+| CheckRanges -> hardware installation | CopyProgress: validated traversal |
+| PrepareChunk -> ReadCopy | Chunk: source/destination spans, selectors and length |
+| ReadCopy -> transform/write | Payload: actual bounded bytes and chunk geometry |
+| WriteCopy -> publication | Completion: actual Response and destination identity |
+
+These values have private metadata and are not clonable. Transform code accesses
+`Payload::bytes_mut()`, not a global scratch lookup, and cannot resize the payload
+or replace validated addresses, lengths or response metadata.
+
+Stopping execution errors carry a real error completion and short-circuit normal
+data processing through Then's existing failure path. They enter the same configured
+completion tail; a failed read does not fabricate payload bytes for a transform.
+Lifecycle rejection, channel/device fatal and repairable PageFault keep distinct
+handling. A successful empty transfer remains normal completion.
+
+Descriptor, payload and publication stages implement
+`Stage<ExecutionContext<'_, M, SB>>`. This context freshly borrows one selected
+Channel, the memory port and required lifecycle guards; it has no device MMIO
+layout, arbitration policy or maintenance controller. Its borrow ends each step,
+so the next step observes intervening reset, enable and fault changes. Candidate
+and device-wide maintenance retain the broader context they actually need.
+
+The engine's active grant backpressures admission while command work remains.
+Subsequent finite chunk passes use installed traversal, not another Fetch or range
+validation. Stage completion means only that local transform has finished; it is
+not command retirement. Publish consumes the real completion, updates its channel's
+response/IRQ state and retires accepted ownership only after successful storage.
+
+Payload PageFault ends the current finite path without response or DMA IRQ.
+A read checkpoint retains the concrete unread Chunk. A write checkpoint retains
+the already read/transformed Payload. Both keep command traversal and accepted
+references alive while releasing shared execution capacity. Resume arbitrates
+the parked task again and enters the appropriate dataflow boundary; it does not
+refetch, revalidate or transform retained write bytes. Even immediate RESUME cannot
+revive a failed path. The assembly can be replaced while parked because checkpoints
+are concrete hardware data, not saved Rust stage continuations.
 
 The top-level Service explicitly advances IRQ and reset units each external tick,
 including idle or stalled command processing. Neither is nested in AfterEach or
@@ -182,8 +205,9 @@ and the RTL obligation to drain every affected outstanding transaction.
 Fan remains finite N-to-M value flow: unfinished input/output states and unconsumed
 completed values belong to its invocation. Policy validates routing before effects;
 it never owns device lifetime or fault recovery. Then, FanIn/Arbitrate and
-FanOut/Dispatch keep their existing generic behavior. Repeat and AfterEach are
-removed; no replacement feedback or per-child-step wrapper is introduced.
+FanOut/Dispatch keep their existing generic behavior. The attempted Producer/Stream
+extension is removed: hardware task lifetime belongs to context, not to a
+combinator invocation. Repeat and AfterEach remain removed.
 
 Scenarios retain HardwareDriver and use AsyncExecutor::drive. Only the external
 driver supplies subsequent finite service inputs and yields after each bounded
@@ -219,9 +243,10 @@ externally; software allocates its own rings and payload buffers through that se
 
 Both MMIO reads and writes are hardware transactions with exclusive device access.
 The register owner applies access side effects and refreshes its IRQ state; the runtime
-accepts emitted notifications, releases the device lock and notifies the worker to recheck its
-conditions, preserving the transaction's success or error. Ordinary reads may therefore
-cause an extra recheck. The current register set has no read-clear behavior.
+accepts emitted notifications and releases the device lock, preserving the
+transaction's success or error. Independently driven hardware steps observe the
+resulting state; they do not wait for an MMIO wakeup. The current register set has
+no read-clear behavior.
 
 ## Shared ring contract
 

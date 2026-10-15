@@ -445,3 +445,110 @@ source leaves its peer parked until its own resume. Real reset and release/regra
 then exercise new work while the retired old handler rejects its retained report.
 Separate routing tests check arbitrary nonnumeric tag types and that rejected
 authorization invokes neither the platform mapper nor the memory backend.
+
+## 9. Keep command occupancy in hardware state, not invocation lifetime
+
+The 2026-10-15 performance review exposed a modeling boundary problem in the
+finite-service implementation: a healthy command reentered candidate sampling,
+arbitration and Fetch for each bounded copy chunk. Fetch reused accepted Channel
+state, so it did not reread the descriptor, but this frontend activity did not
+represent admission of new work. The shared grant already belonged to that command.
+Profiling counted 65 FanIn starts for one 16 KiB linear command with 256-byte
+scratch. Extra external ticks also amplified software polling. Those measurements
+motivate correcting the boundary, not changing the hardware contract to hit a
+timing target.
+
+The first attempted correction incorrectly made one command equal one pipeline
+invocation. Under that extra constraint, ordinary Then could not produce multiple
+chunks: a Stage transfers output only on terminal completion, and Then replaces
+completed upstream state. This led to a Producer/Stream extension with separate
+item emission and terminal completion. It passed functional and performance tests,
+but user review rejected the premise. The extension solved Rust invocation
+continuity rather than representing the hardware's already persistent task state.
+It and its API-only tests/examples were removed, not retained as another option.
+
+The correction separates command admission from execution. Candidate/FanIn/
+Arbitrate/Fetch installs the accepted command in Channel and claims the shared
+execution grant. Later externally driven passes select execution while that grant
+is held, so they do not resample candidates or run arbitration/Fetch per chunk.
+The execution path is ordinary Then composition: CheckRanges, PrepareChunk,
+Read, optional Transform, Write and response dispatch. CheckRanges retains its
+validation progress in Channel and does not repeat completed validation. Each
+chunk's local pipeline may complete while the command remains active in hardware.
+
+The hardware grant supplies frontend backpressure. Channel owns descriptor,
+cursors, scratch and next action exactly once; no new execution-context copy or
+generic continuation is needed. Top-level hardware driving starts subsequent
+finite passes. No downstream stage invokes a previous stage, and no combinator
+restarts a completed command pipeline. IRQ/reset still advance every tick.
+
+Fault releases the grant, parks Channel state and ends the chunk path without a
+response. Even immediate software RESUME cannot cause later stages of that failed
+path to retry: the fault propagates no work downstream. New arbitration is required
+before another execution pass. Write retry uses retained transformed scratch.
+Reset/Abort retire concrete hardware ownership regardless of invocation disposal.
+
+Verification retains payload, scratch, reset, Abort and peer behavior assertions.
+The rejected one-command/one-invocation count is replaced by completed chunk-pass
+boundaries with retained command state and no frontend reentry. The acceptance
+criterion is hardware ownership and dataflow, not a benchmark target.
+
+## 10. Carry stage results as data and narrow execution resources
+
+Further review found that separating admission from execution was insufficient.
+Every execution stage still accepted and returned the same Work identity, while
+the real transfer and response lived behind a shared Action enum. Read, transform
+and write each inspected that enum to discover their job. The connections did not
+express the transformations, and every leaf consequently depended on the full Dma.
+
+The correction transfers real owned values: Fetch produces FetchedCommand;
+CheckRanges produces validated CopyProgress; PrepareChunk produces source and
+destination spans; ReadCopy produces Payload bytes; WriteCopy produces Completion
+containing the actual response and owner. Private metadata and non-clonable values
+prevent callers from forging geometry or replaying a copied completion. Transform
+code receives only its bounded mutable payload slice. Work remains an internal
+identity/guard within these values, not the universal input/output type.
+
+ExecutionContext is a per-step borrow of one selected Channel, memory and required
+lifecycle state. It does not expose all channels, device MMIO or the scheduler.
+Fresh validation owns its scan locally and installs authoritative traversal once.
+Channel separately retains the accepted descriptor ledger through validation,
+payload flow and pending publication. This distinction is essential: moving data
+into a stage must not falsely satisfy Drain or permit reset acknowledgment. Reset
+cleanup invalidates old typed values before later accesses; dropping Rust state is
+still not hardware retirement.
+
+Fault checkpoints contain concrete read requests or already transformed write
+payloads, never saved stage state. Resume bypasses completed validation and, for
+write faults, read/transform. Review caught an initially hardcoded retry tail that
+would also bypass custom stages after WriteCopy. A regression observed a healthy
+completion-tail call count of one but zero after fault/resume. The assembly now
+shares the same write and completion hardware across normal and resumed inputs;
+the public Then structure makes that injection boundary explicit.
+
+Error-path review also observed a failed read producing four zero bytes for a
+transform, and failed range validation producing a dummy zero-address chunk.
+Neither is valid successful stage data. Stopping command errors must instead
+carry their real response through typed execution failure, short-circuit normal
+processing and reach the same completion tail. Rejected lifecycle/access attempts
+remain distinct from command-error responses. Successful empty copies are not
+errors, and repairable PageFault continues to park without any response. No new
+wire format, generic combinator, runtime policy or bus timing follows from this
+internal type correction.
+
+### Review follow-up: remove centralized execution sequencing
+
+The typed-dataflow checkpoint still has a ServiceState that selects admission,
+fresh execution, write retry and completion paths, including direct access to
+nested Then children. This is a known architectural follow-up, not the desired
+final hardware organization. Behavioral regression coverage does not establish
+that this controller is necessary.
+
+The agreed direction is fixed top-level wiring and local progress from valid
+inputs and explicit hardware state. Arbitration grants shared execution to a
+channel; it does not select which pipeline stage to call. Read-fault checkpoints
+retain unread chunk work, while write-fault checkpoints retain payload after
+transformation at the write boundary. Resume must preserve those boundaries
+without a global program counter or a renamed controller wrapper. IRQ, reset
+and maintenance must remain independently progressed. This follow-up is deferred
+to the next review session; it is not implemented by this checkpoint.

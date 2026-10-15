@@ -9,7 +9,6 @@ pub use command::CommandRing;
 pub use response::ResponseRing;
 
 use crate::ChannelFatal;
-use hardware_interface_runtime::MemoryAddress;
 use hardware_interface_schema::RegisterWindow;
 use pdma_model_contract::dma::{
     ChannelAdmin, ChannelBlock, ChannelFatalCode, ChannelIrqCauseValues, ChannelRegisters,
@@ -115,19 +114,10 @@ impl Channel {
 }
 
 #[derive(Debug)]
-pub(crate) enum Action {
-    Check(RangeCheck),
-    Next(CopyState),
-    Read(Transfer),
-    Transform(Transfer),
-    Write(Transfer),
-    Respond(Response),
-}
-
-#[derive(Debug)]
 pub(crate) struct Accepted {
     pub(crate) command: Command,
-    pub(crate) action: Action,
+    pub(crate) continuation: Option<Continuation>,
+    pub(crate) progress: Option<CopyState>,
 }
 
 /// Retained traversal of one command's two byte streams.
@@ -141,20 +131,13 @@ pub(crate) struct CopyState {
     pub(crate) status: ResponseStatus,
 }
 
-/// One retained payload chunk between the composable read and write stages.
 #[derive(Debug)]
-pub(crate) struct Transfer {
-    /// Command progress returned to the next copy iteration.
-    pub(crate) progress: CopyState,
-    /// Current source byte address.
-    pub(crate) source: MemoryAddress,
-    /// Current destination byte address.
-    pub(crate) destination: MemoryAddress,
-    /// Active prefix of the scratch buffer.
-    pub(crate) length: usize,
-    /// Owned bytes available to an inserted payload transform.
-    pub(crate) bytes: [u8; COPY_CHUNK_BYTES],
+pub(crate) enum Continuation {
+    Next,
+    Read(crate::Chunk),
+    Write(Box<crate::Payload>),
 }
+
 #[derive(Debug)]
 enum Side {
     Source,
@@ -163,14 +146,9 @@ enum Side {
 
 /// Incremental validation of selected ranges, without payload access.
 #[derive(Debug)]
-pub(crate) struct RangeCheck {
+pub struct RangeCheck {
     pub(crate) command: Command,
     cursor: Cursor,
     side: Side,
     remaining: u64,
-}
-
-pub(crate) enum PayloadAccess {
-    Complete,
-    Fault,
 }

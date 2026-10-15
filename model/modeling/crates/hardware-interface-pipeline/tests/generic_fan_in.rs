@@ -144,15 +144,15 @@ fn arbitration_retains_unselected_values_until_single_output_can_reuse() {
         );
     }
     assert_eq!(context, [3, 8]);
-    for _ in 0..2 {
-        assert_eq!(
-            hardware.step(&mut context, &mut state),
-            Ok(StepOutcome::InProgress)
-        );
-    }
-    let result = hardware.step(&mut context, &mut state);
+    let result = (0..3).find_map(|_| match hardware.step(&mut context, &mut state) {
+        Ok(StepOutcome::InProgress) => None,
+        other => Some(other),
+    });
     // Then: aggregate completion includes both values without rerunning source hardware.
-    assert_eq!(result, Ok(StepOutcome::Complete(Ok(vec![(0, 3), (0, 8)]))));
+    assert_eq!(
+        result,
+        Some(Ok(StepOutcome::Complete(Ok(vec![(0, 3), (0, 8)]))))
+    );
     assert_eq!(context, [3, 8]);
 }
 #[test]

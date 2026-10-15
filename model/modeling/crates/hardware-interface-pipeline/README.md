@@ -26,6 +26,12 @@ advance from the external tick. Their progress must not depend on how many
 internal steps another pipeline takes. The framework has no per-child-step
 maintenance wrapper or feedback combinator.
 
+Stage invocation lifetime need not equal application task lifetime. A hardware
+task may persist in explicitly owned context while successive finite passes
+advance it. Application occupancy and readiness state supplies backpressure;
+the top-level hardware assembly and external driver provide subsequent inputs.
+No separate producer trait or command-lifetime streaming combinator is required.
+
 ## Fan value flow
 
 `Fan<S,P,T>::new(inputs, policy, outputs)` connects N input stages to M output
@@ -33,7 +39,7 @@ stages. One invocation accepts `Vec<S::Input>` matching the input population and
 returns `Vec<(usize,T::Output)>` in output-completion order. Output sweeps use
 ascending port order. Each source is invoked once per batch.
 
-A batch alternates three bounded steps:
+A batch rotates through three bounded steps, skipping phases with no work:
 
 1. Advance every unfinished input at most once. Completed values enter distinct
    buffer slots; finished sources are not stepped again.
@@ -42,6 +48,11 @@ A batch alternates three bounded steps:
    selected values, then call `route` with their ownership.
 3. Advance every active output at most once, retaining incomplete child states
    and completed receipts. Output slots become reusable after completion.
+
+Planning runs only when completed values are buffered, including retained values
+when all outputs are busy (a policy may discard them). Each tick performs at most
+one meaningful phase. With only active outputs left, successive ticks advance
+those outputs directly; running inputs and outputs retain their rotation order.
 
 An incomplete input never prevents peers from finishing or active outputs from
 advancing. Unselected completed values remain buffered. Completion requires every

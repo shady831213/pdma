@@ -6,6 +6,7 @@ use hardware_interface_pipeline::{
 mod value_fan {
     mod disposal;
     mod plans;
+    mod scheduling;
 }
 
 #[derive(Default)]

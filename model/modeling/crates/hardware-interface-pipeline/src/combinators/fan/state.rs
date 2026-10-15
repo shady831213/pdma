@@ -14,6 +14,19 @@ pub struct FanState<S, V, T, O> {
     pub(super) phase: Phase,
 }
 impl<S, V, T, O> FanState<S, V, T, O> {
+    pub(super) fn ready_phase(&self) -> Option<Phase> {
+        let order = match self.phase {
+            Phase::Inputs => [Phase::Inputs, Phase::Plan, Phase::Outputs],
+            Phase::Plan => [Phase::Plan, Phase::Outputs, Phase::Inputs],
+            Phase::Outputs => [Phase::Outputs, Phase::Inputs, Phase::Plan],
+        };
+        order.into_iter().find(|phase| match phase {
+            Phase::Inputs => self.inputs.iter().any(Option::is_some),
+            Phase::Plan => self.values.iter().any(Option::is_some),
+            Phase::Outputs => self.outputs.iter().any(Option::is_some),
+        })
+    }
+
     pub(super) fn new(inputs: Vec<S>) -> Self {
         Self {
             values: (0..inputs.len()).map(|_| None).collect(),

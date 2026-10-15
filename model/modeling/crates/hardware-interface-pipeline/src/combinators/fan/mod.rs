@@ -53,7 +53,10 @@ where
         if batch.outputs.is_empty() {
             batch.outputs = (0..self.outputs.len()).map(|_| None).collect();
         }
-        match batch.phase {
+        let Some(phase) = batch.ready_phase() else {
+            return Ok(StepOutcome::Complete(Ok(batch.receipts)));
+        };
+        match phase {
             Phase::Inputs => {
                 for ((port, input), value) in self
                     .inputs
@@ -131,14 +134,11 @@ where
                         }
                     }
                 }
-                if batch.inputs.iter().all(Option::is_none)
-                    && batch.values.iter().all(Option::is_none)
-                    && batch.outputs.iter().all(Option::is_none)
-                {
-                    return Ok(StepOutcome::Complete(Ok(batch.receipts)));
-                }
                 batch.phase = Phase::Inputs;
             }
+        }
+        if batch.ready_phase().is_none() {
+            return Ok(StepOutcome::Complete(Ok(batch.receipts)));
         }
         *state = Some(batch);
         Ok(StepOutcome::InProgress)

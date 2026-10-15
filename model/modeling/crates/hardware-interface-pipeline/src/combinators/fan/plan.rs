@@ -12,6 +12,8 @@ pub struct FanPlan {
 /// Plans from completed values; it never receives or drives source hardware.
 pub trait FanPolicy<V, I, E> {
     /// Selects values and idle output slots without consuming either.
+    /// Called only when at least one completed value is buffered, even if every
+    /// output is busy. Retained values may be offered again without new completions.
     fn plan(&mut self, values: &[Option<V>], available: &[bool]) -> Result<FanPlan, E>;
     /// Transforms the validated selection into one owned input per selected output.
     /// Sharing or cloning belongs explicitly to the policy.

@@ -44,7 +44,7 @@ fn full_fan_transforms_two_completed_values_into_two_owned_outputs() {
         ..Context::default()
     };
     // When: value collection, routing, and incomplete output work cross separate boundaries.
-    for _ in 0..5 {
+    for _ in 0..3 {
         assert_eq!(
             hardware.step(&mut context, &mut state),
             Ok(StepOutcome::InProgress)
@@ -127,7 +127,7 @@ fn later_plan_failure_preserves_already_committed_output() {
         released: true,
         ..Context::default()
     };
-    for _ in 0..7 {
+    for _ in 0..5 {
         assert_eq!(
             hardware.step(&mut context, &mut state),
             Ok(StepOutcome::InProgress)
@@ -154,8 +154,11 @@ fn invalid_plans_cannot_create_unbounded_work_or_use_unfinished_values() {
         (Invalid::EmptyInput, BranchError::EmptyInput),
         (Invalid::MissingValue, BranchError::Unavailable { index: 0 }),
     ] {
-        let mut hardware = Fan::new(vec![Source(0)], policy, vec![Sink]);
-        let mut state = <Fan<Source, Invalid, Sink> as Stage<Context>>::start(vec!["held".into()]);
+        let mut hardware = Fan::new(vec![Source(0), Source(1)], policy, vec![Sink]);
+        let mut state = <Fan<Source, Invalid, Sink> as Stage<Context>>::start(vec![
+            "held".into(),
+            "ready".into(),
+        ]);
         let mut context = Context::default();
         assert_eq!(
             hardware.step(&mut context, &mut state),
@@ -205,7 +208,7 @@ fn occupied_output_cannot_be_overwritten_by_a_later_plan() {
         released: true,
         ..Context::default()
     };
-    for _ in 0..4 {
+    for _ in 0..3 {
         assert_eq!(
             hardware.step(&mut context, &mut state),
             Ok(StepOutcome::InProgress)

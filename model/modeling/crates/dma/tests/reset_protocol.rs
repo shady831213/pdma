@@ -22,17 +22,17 @@ const DEVICE_RESET: usize = (pdma_model_contract::dma::DmaDiscovery::EXTENT
 struct CommandExit;
 
 impl<M> Stage<pdma_model_dma::ExecutionContext<'_, M>> for CommandExit {
-    type Input = ();
-    type Output = ();
-    type Error = pdma_model_dma::Error;
+    type Input = pdma_model_dma::Flow<()>;
+    type Output = pdma_model_dma::Flow<()>;
+    type Error = std::convert::Infallible;
     fn step(
         &mut self,
         _: &mut pdma_model_dma::ExecutionContext<'_, M>,
-        input: &mut Option<()>,
-    ) -> StepResult<(), pdma_model_dma::Error> {
-        Ok(input
-            .take()
-            .map_or(StepOutcome::InProgress, |()| StepOutcome::Complete(Ok(()))))
+        input: &mut Option<Self::Input>,
+    ) -> StepResult<Self::Output, Self::Error> {
+        Ok(input.take().map_or(StepOutcome::InProgress, |flow| {
+            StepOutcome::Complete(Ok(flow))
+        }))
     }
 }
 
@@ -50,8 +50,8 @@ fn reset_invalidates_a_response_retained_outside_the_pipeline() -> TestResult {
         ),
     );
     let work = {
-        let mut context = device.execution_context(ChannelId::new(0))?;
-        let mut operation = Operation::new(Some(input));
+        let mut context = device.execution_context();
+        let mut operation = Operation::new(input);
         let mut output = None;
         for _ in 0..128 {
             if let StepOutcome::Complete(result) = operation.step(&mut pipeline, &mut context)? {
@@ -62,23 +62,26 @@ fn reset_invalidates_a_response_retained_outside_the_pipeline() -> TestResult {
         output.ok_or("missing completion")?
     };
     device.write(RESET, &1_u32.to_le_bytes())?;
+    assert_eq!(read_word(&mut device, RESET)?, 1);
     let mut responses = device.responses();
     let mut publish = Some(work);
     // When: the final port rejects the old task before publishing a response.
     let mut rejected = false;
     for _ in 0..32 {
-        if matches!(
-            responses.step(
-                &mut device.execution_context(ChannelId::new(0))?,
-                &mut publish
-            )?,
-            StepOutcome::Complete(Err(Error::Reset))
-        ) {
+        if let StepOutcome::Complete(Ok(flow)) =
+            responses.step(&mut device.execution_context(), &mut publish)?
+        {
+            assert_eq!(flow.status(), Err(Error::Reset));
+            assert_eq!(read_word(&mut device, RESET)?, 1);
+            assert_eq!(
+                Operation::new(flow).step(&mut pdma_model_dma::Retire, &mut device)?,
+                StepOutcome::Complete(Err(Error::Reset))
+            );
             rejected = true;
             break;
         }
     }
-    // Then: reset has cleaned the nonresident command and the stale port cannot publish.
+    // Then: retirement cleans the owned command and the stale port cannot publish.
     assert!(rejected);
     assert_eq!(read_word(&mut device, RESET)?, 0);
     assert_eq!(

@@ -6,31 +6,31 @@ pub mod support;
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome, StepResult, Then};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::{CompletionInfo, Response, ResponseInfoValues, ResponseStatus};
-use pdma_model_dma::{Error, ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy};
+use pdma_model_dma::{ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy};
 use support::{TestResult, command, setup, submit};
 
 struct FillChunk;
 
 impl Stage<ExecutionContext<'_, SharedMemory>> for FillChunk {
-    type Input = Option<Payload>;
-    type Output = Option<Payload>;
-    type Error = Error;
+    type Input = pdma_model_dma::Flow<Payload>;
+    type Output = pdma_model_dma::Flow<Payload>;
+    type Error = std::convert::Infallible;
 
     fn step(
         &mut self,
         _: &mut ExecutionContext<'_, SharedMemory>,
         input: &mut Option<Self::Input>,
-    ) -> StepResult<Self::Output, Error> {
+    ) -> StepResult<Self::Output, Self::Error> {
         let Some(mut payload) = input.take() else {
             return Ok(StepOutcome::InProgress);
         };
-        if let Some(payload) = &mut payload {
-            match payload.bytes_mut() {
+        if let Some(data) = payload.data_mut() {
+            match data.bytes_mut() {
                 Ok(bytes) => {
                     assert_eq!(bytes.len(), 4);
                     bytes.fill(0x5a);
                 }
-                Err(error) => return Ok(StepOutcome::Complete(Err(error))),
+                Err(error) => return Ok(StepOutcome::Complete(Ok(payload.stop(error)))),
             }
         }
         Ok(StepOutcome::Complete(Ok(payload)))

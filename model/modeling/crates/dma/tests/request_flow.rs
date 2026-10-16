@@ -8,9 +8,7 @@ use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, CompletionFlagsValues,
     Endpoint, ResponseRegisters,
 };
-use pdma_model_dma::{
-    Candidate, CommandRequest, Dma, Error, ExecutionContext, Fetch, FetchedCommand, RoundRobin,
-};
+use pdma_model_dma::{Candidate, CommandRequest, Dma, Fetch, FetchedCommand, RoundRobin};
 use std::cell::RefCell;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -144,37 +142,34 @@ fn arbitration_hands_only_the_selected_request_to_fetch() -> TestResult {
         .flatten()
         .ok_or("request")?;
     assert!(device.memory.reads.borrow().is_empty());
-    let result = Operation::new(match request {
-        CommandRequest::Fetch(snapshot) => Some(snapshot),
-        CommandRequest::Resume(_) | CommandRequest::Continue(_) => {
-            return Err("unexpected continuation".into());
-        }
-    })
-    .step(&mut Fetch, &mut device.execution_context(expected_channel)?)?;
+    let result = Operation::new(Some(request)).step(&mut Fetch, &mut device)?;
     // Then: only the selected descriptor is read and its identity crosses the boundary.
-    let StepOutcome::Complete(Ok(Some(task))) = result else {
+    let StepOutcome::Complete(Ok(task)) = result else {
         return Err("fetch did not complete".into());
     };
     assert_eq!(request.channel(), expected_channel);
-    assert_eq!(task.channel(), expected_channel);
+    assert_eq!(
+        task.data().ok_or("fetched data")?.channel(),
+        expected_channel
+    );
     assert_eq!(device.memory.reads.borrow().as_slice(), &[expected_address]);
     Ok(())
 }
 
 struct WorkChannel;
 
-impl<M, SB> Stage<ExecutionContext<'_, M, SB>> for WorkChannel {
-    type Input = Option<FetchedCommand>;
-    type Output = Option<ChannelId>;
-    type Error = Error;
+impl<M, SB> Stage<Dma<M, SB>> for WorkChannel {
+    type Input = pdma_model_dma::Flow<FetchedCommand>;
+    type Output = pdma_model_dma::Flow<ChannelId>;
+    type Error = std::convert::Infallible;
 
     fn step(
         &mut self,
-        _: &mut ExecutionContext<'_, M, SB>,
+        _: &mut Dma<M, SB>,
         input: &mut Option<Self::Input>,
-    ) -> StepResult<Self::Output, Error> {
+    ) -> StepResult<Self::Output, Self::Error> {
         Ok(input.take().map_or(StepOutcome::InProgress, |task| {
-            StepOutcome::Complete(Ok(task.as_ref().map(FetchedCommand::channel)))
+            StepOutcome::Complete(Ok(task.map(|command| command.channel())))
         }))
     }
 }
@@ -189,16 +184,15 @@ fn then_transfers_fetched_command_to_downstream_without_an_engine_driver() -> Te
     let Some(CommandRequest::Fetch(snapshot)) = device.command_request(selected)? else {
         return Err("fresh snapshot".into());
     };
-    let mut operation = Operation::new(Some(snapshot));
-    let mut context = device.execution_context(selected)?;
+    let mut operation = Operation::new(Some(CommandRequest::Fetch(snapshot)));
     // When: each side of the connection is advanced through the composition.
-    assert_eq!(
-        operation.step(&mut pipeline, &mut context)?,
+    assert!(matches!(
+        operation.step(&mut pipeline, &mut device)?,
         StepOutcome::InProgress
-    );
-    let result = operation.step(&mut pipeline, &mut context)?;
+    ));
+    let result = operation.step(&mut pipeline, &mut device)?;
     // Then: downstream receives the fetched command without any other descriptor read.
-    assert_eq!(result, StepOutcome::Complete(Ok(Some(selected))));
+    assert!(matches!(result, StepOutcome::Complete(Ok(flow)) if flow.data() == Some(&selected)));
     assert_eq!(device.memory.reads.borrow().as_slice(), &[expected]);
     Ok(())
 }

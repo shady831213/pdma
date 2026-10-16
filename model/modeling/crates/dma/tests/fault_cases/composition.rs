@@ -1,27 +1,25 @@
 use super::*;
 use hardware_interface_pipeline::{Stage, StepResult, Then};
-use pdma_model_dma::{
-    CheckRanges, Error, ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy,
-};
+use pdma_model_dma::{CheckRanges, ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy};
 
 pub(super) struct InvertPayload;
 
 impl Stage<ExecutionContext<'_, Paged>> for InvertPayload {
-    type Input = Option<Payload>;
-    type Output = Option<Payload>;
-    type Error = Error;
+    type Input = pdma_model_dma::Flow<Payload>;
+    type Output = pdma_model_dma::Flow<Payload>;
+    type Error = std::convert::Infallible;
     fn step(
         &mut self,
         _: &mut ExecutionContext<'_, Paged>,
         input: &mut Option<Self::Input>,
-    ) -> StepResult<Self::Output, Error> {
+    ) -> StepResult<Self::Output, Self::Error> {
         let Some(mut work) = input.take() else {
             return Ok(StepOutcome::InProgress);
         };
-        if let Some(payload) = &mut work {
-            match payload.bytes_mut() {
+        if let Some(data) = work.data_mut() {
+            match data.bytes_mut() {
                 Ok(bytes) => bytes.iter_mut().for_each(|byte| *byte = !*byte),
-                Err(error) => return Ok(StepOutcome::Complete(Err(error))),
+                Err(error) => return Ok(StepOutcome::Complete(Ok(work.stop(error)))),
             }
         }
         Ok(StepOutcome::Complete(Ok(work)))
@@ -57,29 +55,33 @@ fn transformed_resume(replace_service: bool) -> TestResult {
         ),
     );
     let mut engine = device.hardware_with(pipeline);
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = Operation::new(());
     for _ in 0..256 {
-        assert!(matches!(
-            operation.step(&mut engine, &mut device)?,
-            StepOutcome::InProgress
-        ));
-        if fault_status(&mut device)? == 1 {
-            break;
+        if let StepOutcome::Complete(result) = operation.step(&mut engine, &mut device)? {
+            result?;
+            if fault_status(&mut device)? == 1 {
+                break;
+            }
+            operation = Operation::new(());
         }
     }
     // When: a repeated fault and eventual repair resume that same composed operation.
     assert_eq!(fault_status(&mut device)?, 1);
+    assert!(operation.is_complete());
+    operation = Operation::new(());
     resume(&mut device, 1)?;
     for _ in 0..256 {
-        assert!(matches!(
-            operation.step(&mut engine, &mut device)?,
-            StepOutcome::InProgress
-        ));
-        if fault_status(&mut device)? == 1 {
-            break;
+        if let StepOutcome::Complete(result) = operation.step(&mut engine, &mut device)? {
+            result?;
+            if fault_status(&mut device)? == 1 {
+                break;
+            }
+            operation = Operation::new(());
         }
     }
     assert_eq!(fault_status(&mut device)?, 1);
+    assert!(operation.is_complete());
+    operation = Operation::new(());
     device.memory.missing.set(None);
     if replace_service {
         let chunk = Then::new(
@@ -93,7 +95,6 @@ fn transformed_resume(replace_service: bool) -> TestResult {
                 Then::new(pdma_model_dma::CompletionInput, device.responses()),
             ),
         ));
-        operation = hardware_interface_pipeline::HardwareDriver::new();
         device.memory.memory.write(
             0x1000.into(),
             MemoryAlignment::ONE,
@@ -106,10 +107,10 @@ fn transformed_resume(replace_service: bool) -> TestResult {
         .write(0x1240.into(), MemoryAlignment::ONE, b"12345")?;
     resume(&mut device, 1)?;
     for _ in 0..256 {
-        assert!(matches!(
-            operation.step(&mut engine, &mut device)?,
-            StepOutcome::InProgress
-        ));
+        if let StepOutcome::Complete(result) = operation.step(&mut engine, &mut device)? {
+            result?;
+            operation = Operation::new(());
+        }
         if read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())? == 1 {
             break;
         }
@@ -139,16 +140,18 @@ fn standalone_range_validation_cannot_consume_parked_work() -> TestResult {
     submit(&mut device, command, 0)?;
     device.until(|dma| Ok(fault_status(dma)? == 1))?;
     // When: an empty standalone invocation has no accepted work.
-    let mut state = Some(None);
+    let StepOutcome::Complete(Ok(empty)) =
+        Operation::new(None).step(&mut pdma_model_dma::Fetch, &mut device.dma)?
+    else {
+        return Err("empty Fetch did not complete".into());
+    };
+    let mut state = Some(empty);
     let mut validation = CheckRanges::default();
     let mut complete = false;
     for _ in 0..16 {
-        if let StepOutcome::Complete(result) = validation.step(
-            &mut device
-                .dma
-                .execution_context(pdma_model_contract::dma::ChannelId::new(0))?,
-            &mut state,
-        )? {
+        if let StepOutcome::Complete(result) =
+            validation.step(&mut device.dma.execution_context(), &mut state)?
+        {
             let _progress = result?;
             complete = true;
             break;

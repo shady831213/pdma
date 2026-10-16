@@ -16,7 +16,7 @@ impl Work {
 }
 
 impl<M, S> Dma<M, S> {
-    pub(crate) fn release_invocation(&mut self, work: Work) {
+    pub(crate) fn release_residency(&mut self, work: Work) {
         let halted = self.halted();
         let abort_context = self
             .maintenance

@@ -18,26 +18,42 @@ fn stage_outputs_carry_descriptor_addresses_bytes_and_response() -> TestResult {
         return Err("missing fresh snapshot".into());
     };
     // When: standalone leaves transfer owned values through a narrow context.
-    let mut context = dma.execution_context(ChannelId::new(0))?;
-    let fetched = finish(&mut Fetch, &mut context, Some(snapshot))?.ok_or("fetch")?;
-    assert_eq!(fetched.command(), &command());
-    let progress =
-        finish(&mut CheckRanges::default(), &mut context, Some(fetched))?.ok_or("validate")?;
-    let request = context.install_progress(progress)?;
-    let chunk =
-        finish(&mut PrepareChunk::default(), &mut context, Some(request))?.ok_or("chunk")?;
+    let fetched = finish(&mut Fetch, &mut dma, Some(CommandRequest::Fetch(snapshot)))?;
+    assert_eq!(fetched.data().ok_or("fetch")?.command(), &command());
+    let mut context = dma.execution_context();
+    let progress = finish(&mut CheckRanges::default(), &mut context, fetched)?;
+    let request = context.install_progress(progress);
+    let chunk = finish(&mut PrepareChunk::default(), &mut context, request)?;
+    let geometry = chunk.data().ok_or("chunk")?;
     assert_eq!(
-        (chunk.source().raw(), chunk.destination().raw(), chunk.len()),
+        (
+            geometry.source().raw(),
+            geometry.destination().raw(),
+            geometry.len()
+        ),
         (0x1200, 0x1300, 4)
     );
-    let mut payload = finish(&mut ReadCopy::default(), &mut context, Some(chunk))?.ok_or("read")?;
-    assert_eq!(payload.bytes()?, b"abcd");
-    payload.bytes_mut()?.copy_from_slice(b"WXYZ");
-    let completion =
-        finish(&mut WriteCopy::default(), &mut context, Some(payload))?.ok_or("completion")?;
+    let mut payload = finish(&mut ReadCopy::default(), &mut context, chunk)?;
+    assert_eq!(payload.data().ok_or("read")?.bytes()?, b"abcd");
+    payload
+        .data_mut()
+        .ok_or("read")?
+        .bytes_mut()?
+        .copy_from_slice(b"WXYZ");
+    let completion = finish(&mut WriteCopy::default(), &mut context, payload)?;
     // Then: downstream consumes the modified bytes and the actual response value.
-    assert_eq!(completion.response().id, command().id);
-    assert_eq!(completion.response().bytes_completed(), 4);
+    assert_eq!(
+        completion.data().ok_or("completion")?.response().id,
+        command().id
+    );
+    assert_eq!(
+        completion
+            .data()
+            .ok_or("completion")?
+            .response()
+            .bytes_completed(),
+        4
+    );
     assert_eq!(
         memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
         *b"WXYZ"

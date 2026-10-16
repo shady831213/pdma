@@ -1,23 +1,23 @@
 use super::*;
 use hardware_interface_pipeline::{HardwareDriver, Stage, StepResult, Then};
-use pdma_model_dma::{Completion, Error, ExecutionContext, PrepareChunk, ReadCopy, WriteCopy};
+use pdma_model_dma::{Completion, ExecutionContext, PrepareChunk, ReadCopy, WriteCopy};
 use std::{cell::Cell, rc::Rc};
 
 struct ObserveCompletion(Rc<Cell<usize>>);
 
 impl Stage<ExecutionContext<'_, Paged>> for ObserveCompletion {
-    type Input = Option<Completion>;
-    type Output = Option<Completion>;
-    type Error = Error;
+    type Input = pdma_model_dma::Flow<Completion>;
+    type Output = pdma_model_dma::Flow<Completion>;
+    type Error = std::convert::Infallible;
     fn step(
         &mut self,
         _: &mut ExecutionContext<'_, Paged>,
         input: &mut Option<Self::Input>,
-    ) -> StepResult<Self::Output, Error> {
+    ) -> StepResult<Self::Output, Self::Error> {
         let Some(completion) = input.take() else {
             return Ok(StepOutcome::InProgress);
         };
-        if completion.is_some() {
+        if completion.data().is_some() {
             self.0.set(self.0.get() + 1);
         }
         Ok(StepOutcome::Complete(Ok(completion)))

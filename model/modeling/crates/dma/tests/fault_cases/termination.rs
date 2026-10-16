@@ -9,28 +9,37 @@ struct PeerFailure {
 }
 
 impl Stage<ExecutionContext<'_, Paged>> for PeerFailure {
-    type Input = Option<ChunkInput>;
-    type Output = ();
-    type Error = Error;
+    type Input = pdma_model_dma::Flow<ChunkInput>;
+    type Output = pdma_model_dma::Flow<()>;
+    type Error = std::convert::Infallible;
     fn step(
         &mut self,
         device: &mut ExecutionContext<'_, Paged>,
         input: &mut Option<Self::Input>,
-    ) -> StepResult<Self::Output, Error> {
-        if self.raw_error && device.lifecycle().is_err() {
+    ) -> StepResult<Self::Output, Self::Error> {
+        if self.raw_error
+            && input
+                .as_ref()
+                .is_some_and(|flow| flow.lifecycle(device).is_err())
+        {
             self.raw_error = false;
-            return Ok(StepOutcome::Complete(Err(Error::Reset)));
+            return Ok(StepOutcome::Complete(Ok(input
+                .take()
+                .ok_or(hardware_interface_pipeline::RunError::Exhausted)?
+                .stop(Error::Reset))));
         }
         if input
             .as_ref()
-            .and_then(Option::as_ref)
+            .and_then(pdma_model_dma::Flow::data)
             .is_some_and(|work| work.channel() == ChannelId::new(1))
         {
             if self.raw_error {
                 Err(RunError::Exhausted)
             } else {
-                input.take();
-                Ok(StepOutcome::Complete(Err(Error::Routing)))
+                Ok(StepOutcome::Complete(Ok(input
+                    .take()
+                    .ok_or(hardware_interface_pipeline::RunError::Exhausted)?
+                    .stop(Error::Routing))))
             }
         } else {
             self.pipeline.step(device, input)

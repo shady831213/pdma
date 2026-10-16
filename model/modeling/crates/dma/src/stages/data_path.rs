@@ -1,28 +1,24 @@
-mod admission;
-mod selected;
+#[cfg(test)]
+mod tests;
 
-use super::{Candidate, CheckRanges, Fetch};
+use super::{Candidate, CheckRanges, Fetch, Retire, execution::Install};
 use crate::{
-    ChunkInput, CommandRequest, CopyProgress, Dma, Error, FetchedCommand, Pipeline, RoundRobin,
+    ChunkInput, CommandRequest, CopyProgress, Dma, Error, ExecutionContext, FetchedCommand, Flow,
+    Pipeline, RoundRobin,
 };
-use admission::Install;
 use hardware_interface_pipeline::{
     Arbitrate, FanIn, MapError, Stage, StepOutcome, StepResult, Then,
 };
 use pdma_model_contract::dma::ChannelId;
-use selected::Selected;
+use std::convert::Infallible;
 
-type Accepted<S> = Selected<
-    Then<
-        Fetch,
-        Then<CheckRanges, Then<Install, S, Option<ChunkInput>>, Option<CopyProgress>>,
-        Option<FetchedCommand>,
-    >,
->;
+type ExecutionGraph<S> = Then<CheckRanges, Then<Install, S, Flow<ChunkInput>>, Flow<CopyProgress>>;
+type TaskExecution<S> = Then<Fetch, Resources<ExecutionGraph<S>>, Flow<FetchedCommand>>;
+type TaskPath<S> = Then<MapError<TaskExecution<S>, fn(Infallible) -> Error>, Retire, Flow<()>>;
 type Commands<S> = FanIn<
     Candidate,
     Arbitrate<RoundRobin>,
-    Accepted<S>,
+    TaskPath<S>,
     (),
     Option<CommandRequest>,
     Option<CommandRequest>,
@@ -49,10 +45,19 @@ impl<S> Hardware<S> {
                         .map(|index| Candidate::new(ChannelId::new(index)))
                         .collect(),
                     Arbitrate::snapshots(RoundRobin::default()),
-                    Selected::new(Then::new(
-                        Fetch,
-                        Then::new(CheckRanges::default(), Then::new(Install, pipeline)),
-                    )),
+                    Then::new(
+                        MapError::new(
+                            Then::new(
+                                Fetch,
+                                Resources(Then::new(
+                                    CheckRanges::default(),
+                                    Then::new(Install, pipeline),
+                                )),
+                            ),
+                            impossible as fn(Infallible) -> Error,
+                        ),
+                        Retire,
+                    ),
                 ),
                 Error::from as fn(_) -> _,
             ),
@@ -91,5 +96,33 @@ where
             Ok(StepOutcome::InProgress) => Ok(StepOutcome::InProgress),
             Err(error) => Err(error),
         }
+    }
+}
+
+const fn impossible(error: Infallible) -> Error {
+    match error {}
+}
+
+#[derive(Debug)]
+struct Resources<S>(S);
+
+impl<M, SB, S> Stage<Dma<M, SB>> for Resources<S>
+where
+    for<'a> S: Stage<
+            ExecutionContext<'a, M, SB>,
+            Input = Flow<FetchedCommand>,
+            Output = Flow<()>,
+            Error = Infallible,
+        >,
+{
+    type Input = Flow<FetchedCommand>;
+    type Output = Flow<()>;
+    type Error = Infallible;
+    fn step(
+        &mut self,
+        dma: &mut Dma<M, SB>,
+        input: &mut Option<Self::Input>,
+    ) -> StepResult<Self::Output, Self::Error> {
+        self.0.step(&mut dma.execution_context(), input)
     }
 }

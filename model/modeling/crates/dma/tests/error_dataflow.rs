@@ -8,25 +8,25 @@ use pdma_model_contract::dma::{
     ChannelBlock, Command, Endpoint, Response, ResponseRaw, ResponseRegisters, ResponseStatus,
 };
 use pdma_model_dma::{
-    Chunk, Completion, Error, ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy,
+    Chunk, Completion, ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy,
 };
 use std::{cell::Cell, marker::PhantomData, rc::Rc};
 use support::{TestResult, command, read_word, setup, submit};
 
 struct Observe<T>(Rc<Cell<usize>>, PhantomData<T>);
 impl<T> Stage<ExecutionContext<'_, SharedMemory>> for Observe<T> {
-    type Input = Option<T>;
-    type Output = Option<T>;
-    type Error = Error;
+    type Input = pdma_model_dma::Flow<T>;
+    type Output = pdma_model_dma::Flow<T>;
+    type Error = std::convert::Infallible;
     fn step(
         &mut self,
         _: &mut ExecutionContext<'_, SharedMemory>,
         input: &mut Option<Self::Input>,
-    ) -> StepResult<Self::Output, Error> {
+    ) -> StepResult<Self::Output, Self::Error> {
         let Some(value) = input.take() else {
             return Ok(StepOutcome::InProgress);
         };
-        if value.is_some() {
+        if value.data().is_some() {
             self.0.set(self.0.get() + 1);
         }
         Ok(StepOutcome::Complete(Ok(value)))
@@ -94,17 +94,26 @@ fn standalone_chunk_graph_publishes_the_actual_read_failure() -> TestResult {
     let id = pdma_model_contract::dma::ChannelId::new(0);
     let input = support::accept(&mut dma, id)?;
     let mut graph = support::chunk_pipeline(&dma);
-    let mut operation = hardware_interface_pipeline::Operation::new(Some(input));
     // When: the standalone graph runs without a Hardware controller.
-    let mut context = dma.execution_context(id)?;
-    for _ in 0..128 {
-        if let StepOutcome::Complete(result) = operation.step(&mut graph, &mut context)? {
-            result?;
-            break;
+    let retired = {
+        let mut context = dma.execution_context();
+        let mut operation = hardware_interface_pipeline::Operation::new(input);
+        let mut output = None;
+        for _ in 0..128 {
+            if let StepOutcome::Complete(result) = operation.step(&mut graph, &mut context)? {
+                output = Some(result?);
+                break;
+            }
         }
-    }
+        assert!(operation.is_complete());
+        output.ok_or("standalone graph watchdog")?
+    };
+    assert_eq!(
+        hardware_interface_pipeline::Operation::new(retired)
+            .step(&mut pdma_model_dma::Retire, &mut dma)?,
+        StepOutcome::Complete(Ok(()))
+    );
     // Then: one actual failure response publishes with no fabricated success bytes.
-    assert!(operation.is_complete());
     assert_eq!(
         read_word(
             &mut dma,

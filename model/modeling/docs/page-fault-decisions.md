@@ -708,6 +708,10 @@ current reset contract.
 
 ## 14. Continuation-owned completion, without framework flush
 
+This correction removed forced child cleanup. Section 15 subsequently removes the
+Selected wrapper itself and replaces its completion observation with explicit
+DMA result transfer and retirement.
+
 The stage instance owns its continuation. Its public processing interface is step,
 not a private State handle or an external flush/cancel entry point. Removing start
 or moving State into the object does not require a new termination mechanism.
@@ -738,3 +742,47 @@ semantics in the generic framework. Custom DMA stages share the same obligation:
 observe the context lifecycle even while stalled and finish their own cleanup.
 The framework cannot guarantee reset completion for a child that ignores reset.
 The authoritative completion and RTL obligations remain in reset.md.
+
+## 15. Remove Selected by making DMA retirement explicit
+
+Removing flush did not remove Selected's other responsibilities. It still accepted
+requests, held task identity, projected context on every step and watched the whole
+child graph finish before releasing residency. Moving that bundle into Hardware
+would have preserved the same controller under another name.
+
+The concrete obstacle was the DMA extension boundary: arbitrary execution graphs
+returned unit and could fail through Then before a final cleanup stage ran. A
+postpublication tail could still own work even though the response and active grant
+were already released. Merely deleting the wrapper or adding an ordinary final
+stage without changing this error path would acknowledge reset too early or strand
+residency. This is a DMA interface issue, not a reason to forbid unit outputs in
+the generic Stage framework.
+
+Fetch now validates the exact selected request, acquires residency and transfers
+actual typed data through DMA-local Flow<T>. Flow retains the owner through normal
+data, bubbles and domain stops. Execution stages have Error=Infallible: they report
+domain stops as data, so Then reaches Retire on every such path. Custom stages
+retain Flow while busy, observe lifecycle before further effects, and return its
+typed result after local cleanup. They do not manually release ownership tickets.
+Raw RunError is still a driving error that retains unfinished work.
+
+Retire consumes the completed Flow and updates its hardware owner. Publication
+still owns response writes and IRQ updates; parking still owns fault checkpoints
+and grant release. Retire neither chooses an execution phase nor interprets retry
+checkpoints. The top-level driver does not acquire a DMA cleanup policy. A small
+stateless context projection only borrows the resource bank and forwards step;
+it holds no task identity and performs no admission or retirement.
+
+The resource bank permits each leaf to borrow only the channel selected by its
+input identity. Owned Flow cannot be cloned or constructed with forged identity;
+ordinary retained data keeps its own generation checks. Fetch refuses readmission
+while that channel has resident transfer data, preventing an old result from
+retiring a same-generation successor. Flow preserves the first domain stop.
+
+Standalone stage tests now distinguish a non-owning command observation from owned
+execution data: retaining Flow also retains residency, and cleanup must reach
+Retire before reset acknowledges. Finite test drivers must finish their invocation
+instead of stopping at response publication, since publication and retirement are
+now separate dataflow interactions. This changes no wire layout, fault reporting,
+memory ownership or software reset completion requirement. The generic pipeline
+crate and its support for unit output remain unchanged.

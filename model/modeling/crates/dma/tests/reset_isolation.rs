@@ -1,4 +1,4 @@
-//! Reset ownership while an opaque execution stage retains invocation state.
+//! Reset isolation while an opaque execution stage retains command state.
 /// Shared raw-bus fixtures.
 pub mod support;
 
@@ -10,29 +10,30 @@ use pdma_model_dma::{ChunkInput, Dma, Error, ExecutionContext};
 use std::{cell::Cell, rc::Rc};
 use support::{TestResult, command, submit};
 
-struct Stalled(Rc<Cell<bool>>, bool);
+struct Stalled(Rc<Cell<bool>>, Option<pdma_model_dma::Flow<ChunkInput>>);
 impl<M> Stage<ExecutionContext<'_, M>> for Stalled {
-    type Input = Option<ChunkInput>;
-    type Output = ();
-    type Error = Error;
+    type Input = pdma_model_dma::Flow<ChunkInput>;
+    type Output = pdma_model_dma::Flow<()>;
+    type Error = std::convert::Infallible;
     fn step(
         &mut self,
         context: &mut ExecutionContext<'_, M>,
         input: &mut Option<Self::Input>,
-    ) -> StepResult<(), Error> {
-        if !self.1 {
-            if input.take().is_none() {
-                return Ok(StepOutcome::InProgress);
-            }
-            self.0.set(true);
-            self.1 = true;
+    ) -> StepResult<Self::Output, Self::Error> {
+        if self.1.is_none() {
+            self.1 = input.take();
         }
-        Ok(match context.lifecycle() {
+        let Some(flow) = self.1.as_ref() else {
+            return Ok(StepOutcome::InProgress);
+        };
+        self.0.set(true);
+        Ok(match flow.lifecycle(context) {
             Ok(()) => StepOutcome::InProgress,
-            Err(error) => {
-                self.1 = false;
-                StepOutcome::Complete(Err(error))
-            }
+            Err(error) => StepOutcome::Complete(Ok(self
+                .1
+                .take()
+                .ok_or(hardware_interface_pipeline::RunError::Exhausted)?
+                .stop(error))),
         })
     }
 }
@@ -73,7 +74,7 @@ fn unrelated_idle_reset_completes_without_stepping_stalled_pipeline() -> TestRes
     }
     submit(&mut dma, &memory, command())?;
     let entered = Rc::new(Cell::new(false));
-    let mut hardware = dma.hardware_with(Stalled(Rc::clone(&entered), false));
+    let mut hardware = dma.hardware_with(Stalled(Rc::clone(&entered), None));
     let mut driver = HardwareDriver::new();
     for _ in 0..128 {
         let _ = driver.step(&mut hardware, &mut dma)?;

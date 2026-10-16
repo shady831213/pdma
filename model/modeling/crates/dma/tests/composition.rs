@@ -16,21 +16,21 @@ use support::{TestResult, command, setup, submit};
 struct InvertPayload;
 
 impl Stage<ExecutionContext<'_, SharedMemory>> for InvertPayload {
-    type Input = Option<Payload>;
-    type Output = Option<Payload>;
-    type Error = Error;
+    type Input = pdma_model_dma::Flow<Payload>;
+    type Output = pdma_model_dma::Flow<Payload>;
+    type Error = std::convert::Infallible;
     fn step(
         &mut self,
         _: &mut ExecutionContext<'_, SharedMemory>,
         input: &mut Option<Self::Input>,
-    ) -> StepResult<Self::Output, Error> {
+    ) -> StepResult<Self::Output, Self::Error> {
         let Some(mut payload) = input.take() else {
             return Ok(StepOutcome::InProgress);
         };
-        if let Some(payload) = &mut payload {
-            match payload.bytes_mut() {
+        if let Some(data) = payload.data_mut() {
+            match data.bytes_mut() {
                 Ok(bytes) => bytes.iter_mut().for_each(|byte| *byte = !*byte),
-                Err(error) => return Ok(StepOutcome::Complete(Err(error))),
+                Err(error) => return Ok(StepOutcome::Complete(Ok(payload.stop(error)))),
             }
         }
         Ok(StepOutcome::Complete(Ok(payload)))
@@ -83,12 +83,12 @@ fn independently_composed_execution_obeys_device_fatal() -> TestResult {
     let fetched = support::fetch(&mut device, ChannelId::new(0))?;
     device.signal_fatal();
     // When: validation receives that command through a newly borrowed narrow context.
-    let result = Operation::new(Some(fetched)).step(
-        &mut CheckRanges::default(),
-        &mut device.execution_context(ChannelId::new(0))?,
-    )?;
+    let result = Operation::new(fetched)
+        .step(&mut CheckRanges::default(), &mut device.execution_context())?;
     // Then: global fatal still invalidates work without exposing the whole DMA.
-    assert!(matches!(result, StepOutcome::Complete(Err(Error::Halted))));
+    assert!(
+        matches!(result, StepOutcome::Complete(Ok(flow)) if flow.status() == Err(Error::Halted))
+    );
     Ok(())
 }
 
@@ -104,12 +104,12 @@ fn rejected_publication_consumes_its_transient_stage_state() -> TestResult {
         Then::new(ReadCopy::default(), WriteCopy::default()),
     );
     let completion = {
-        let mut context = device.execution_context(channel)?;
-        let mut operation = Operation::new(Some(request));
+        let mut context = device.execution_context();
+        let mut operation = Operation::new(request);
         let mut completion = None;
         for _ in 0..128 {
             if let StepOutcome::Complete(result) = operation.step(&mut execution, &mut context)? {
-                completion = result?;
+                completion = Some(result?);
                 break;
             }
         }
@@ -117,17 +117,16 @@ fn rejected_publication_consumes_its_transient_stage_state() -> TestResult {
     };
     let mut publish = Publish::new(ChannelId::new(1));
     let mut state = Some(completion);
-    let mut context = device.execution_context(channel)?;
+    let mut context = device.execution_context();
     // When: publication rejects the actual completion's destination.
-    assert_eq!(
-        publish.step(&mut context, &mut state)?,
-        StepOutcome::Complete(Err(Error::Routing))
+    assert!(
+        matches!(publish.step(&mut context, &mut state)?, StepOutcome::Complete(Ok(flow)) if flow.status() == Err(Error::Routing))
     );
     // Then: consumed input cannot replay publication without Operation owning it.
     assert!(state.is_none());
-    assert_eq!(
+    assert!(matches!(
         publish.step(&mut context, &mut state),
         Ok(StepOutcome::InProgress)
-    );
+    ));
     Ok(())
 }

@@ -7,3 +7,4 @@ pub use chunks::PrepareChunk;
 pub use completion::CompletionInput;
 pub use copy::{ReadCopy, WriteCopy};
 pub use validate::CheckRanges;
+pub(super) use validate::Install;

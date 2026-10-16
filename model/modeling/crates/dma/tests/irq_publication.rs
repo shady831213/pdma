@@ -16,17 +16,14 @@ fn irq_requires_published_response_on_every_step() -> TestResult {
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
     let mut hardware = support::chunk_pipeline(&device);
-    let mut state = Some(Some(support::accept(
+    let mut state = Some(support::accept(
         &mut device,
         pdma_model_contract::dma::ChannelId::new(0),
-    )?));
+    )?);
     // When
     for _ in 0..32 {
         let outcome = hardware
-            .step(
-                &mut device.execution_context(pdma_model_contract::dma::ChannelId::new(0))?,
-                &mut state,
-            )
+            .step(&mut device.execution_context(), &mut state)
             .map_err(|error| format!("{error:?}"))?;
         // Then
         let irq = device.irq();
@@ -48,7 +45,11 @@ fn irq_requires_published_response_on_every_step() -> TestResult {
         match outcome {
             StepOutcome::InProgress => {}
             StepOutcome::Complete(result) => {
-                result?;
+                assert_eq!(
+                    hardware_interface_pipeline::Operation::new(result?)
+                        .step(&mut pdma_model_dma::Retire, &mut device)?,
+                    StepOutcome::Complete(Ok(()))
+                );
                 assert!(irq);
                 return Ok(());
             }

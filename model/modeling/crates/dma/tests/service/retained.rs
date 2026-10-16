@@ -7,38 +7,41 @@ use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, ResponseRegisters,
 };
-use pdma_model_dma::{Completion, Dma, Error, Payload, PrepareChunk, Publish, ReadCopy, WriteCopy};
+use pdma_model_dma::{
+    Completion, Dma, Error, Flow, Payload, PrepareChunk, Publish, ReadCopy, Retire, WriteCopy,
+};
 
-fn payload(device: &mut Dma<SharedMemory>) -> TestResult<Payload> {
+fn payload(device: &mut Dma<SharedMemory>) -> TestResult<Flow<Payload>> {
     let input = crate::support::accept(device, ChannelId::new(0))?;
     let mut pipeline = Then::new(PrepareChunk::default(), ReadCopy::default());
-    let mut context = device.execution_context(ChannelId::new(0))?;
-    let mut operation = Operation::new(Some(input));
+    let mut context = device.execution_context();
+    let mut operation = Operation::new(input);
     for _ in 0..128 {
         if let StepOutcome::Complete(result) = operation.step(&mut pipeline, &mut context)? {
-            return result?.ok_or_else(|| "missing payload".into());
+            let flow = result?;
+            flow.status()?;
+            assert!(flow.data().is_some());
+            return Ok(flow);
         }
     }
     Err("payload watchdog".into())
 }
 
 enum Retained {
-    Payload(Box<Payload>),
-    Completion(Completion),
+    Payload(Box<Flow<Payload>>),
+    Completion(Flow<Completion>),
 }
 
 #[test]
-fn reset_retires_channel_work_while_an_old_token_is_retained() -> TestResult {
+fn reset_waits_for_retained_data_to_reach_retirement_without_old_effects() -> TestResult {
     for publish in [false, true] {
-        // Given: actual payload or response retained outside the accepted ledger.
+        // Given: actual payload or response owns an unfinished hardware transfer.
         let (mut device, memory) = setup(0x1100, 2)?;
         submit(&mut device, &memory, command())?;
         let bytes = payload(&mut device)?;
         let retained = if publish {
-            let StepOutcome::Complete(Ok(Some(completion))) = Operation::new(Some(bytes)).step(
-                &mut WriteCopy::default(),
-                &mut device.execution_context(ChannelId::new(0))?,
-            )?
+            let StepOutcome::Complete(Ok(completion)) = Operation::new(bytes)
+                .step(&mut WriteCopy::default(), &mut device.execution_context())?
             else {
                 return Err("missing completion".into());
             };
@@ -48,25 +51,34 @@ fn reset_retires_channel_work_while_an_old_token_is_retained() -> TestResult {
         };
         memory.write(0x1300.into(), MemoryAlignment::ONE, &[0xaa; 4])?;
         device.write(RESET, &1_u32.to_le_bytes())?;
-        // When: reset cleans nonresident work while the typed value remains retained.
-        // Then: stale write and publication inputs cannot access memory or retire new work.
-        assert_eq!(read_word(&mut device, RESET)?, 0);
-        match retained {
-            Retained::Payload(bytes) => assert!(matches!(
-                Operation::new(Some(*bytes)).step(
-                    &mut WriteCopy::default(),
-                    &mut device.execution_context(ChannelId::new(0))?
-                )?,
-                StepOutcome::Complete(Err(Error::Reset))
-            )),
-            Retained::Completion(completion) => assert!(matches!(
-                Operation::new(completion).step(
+        // When: reset stops the retained transfer before another memory interaction.
+        assert_eq!(read_word(&mut device, RESET)?, 1);
+        let stopped = match retained {
+            Retained::Payload(bytes) => {
+                let StepOutcome::Complete(Ok(flow)) = Operation::new(*bytes)
+                    .step(&mut WriteCopy::default(), &mut device.execution_context())?
+                else {
+                    return Err("write did not observe reset".into());
+                };
+                flow.finish()
+            }
+            Retained::Completion(completion) => {
+                let StepOutcome::Complete(Ok(flow)) = Operation::new(completion).step(
                     &mut Publish::new(ChannelId::new(0)),
-                    &mut device.execution_context(ChannelId::new(0))?
-                )?,
-                StepOutcome::Complete(Err(Error::Reset))
-            )),
-        }
+                    &mut device.execution_context(),
+                )?
+                else {
+                    return Err("publish did not observe reset".into());
+                };
+                flow
+            }
+        };
+        assert_eq!(stopped.status(), Err(Error::Reset));
+        assert_eq!(read_word(&mut device, RESET)?, 1);
+        let result = Operation::new(stopped).step(&mut Retire, &mut device)?;
+        // Then: only explicit retirement acknowledges reset; neither stopped path writes bytes.
+        assert_eq!(result, StepOutcome::Complete(Err(Error::Reset)));
+        assert_eq!(read_word(&mut device, RESET)?, 0);
         assert_eq!(
             memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
             [0xaa; 4]
@@ -80,16 +92,16 @@ fn stale_work_cannot_retire_or_write_a_newer_accepted_command() -> TestResult {
     // Given: a completed old service invocation and a reset channel configured for new work.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let old_work = payload(&mut device)?;
+    let mut old_payload = None;
+    let finished = payload(&mut device)?.map(|bytes| {
+        old_payload = Some(bytes);
+    });
+    let mut old = Operation::new(finished);
+    assert_eq!(
+        old.step(&mut Retire, &mut device)?,
+        StepOutcome::Complete(Ok(()))
+    );
     device.write(RESET, &1_u32.to_le_bytes())?;
-    let mut service = device.hardware();
-    let mut old = Operation::new(());
-    for _ in 0..128 {
-        if let StepOutcome::Complete(result) = old.step(&mut service, &mut device)? {
-            result?;
-            break;
-        }
-    }
     assert_eq!(read_word(&mut device, RESET)?, 0);
     let base = ChannelBlock::ALIGNMENT;
     for (offset, value) in [
@@ -127,28 +139,20 @@ fn stale_work_cannot_retire_or_write_a_newer_accepted_command() -> TestResult {
     memory.write(0x1200.into(), MemoryAlignment::ONE, &[1, 2, 3, 4])?;
     submit(&mut device, &memory, descriptor)?;
     let input = crate::support::accept(&mut device, ChannelId::new(0))?;
-    // When: stale stage and already completed service states are driven after new acceptance.
-    assert!(matches!(
-        Operation::new(Some(old_work)).step(
-            &mut WriteCopy::default(),
-            &mut device.execution_context(ChannelId::new(0))?
-        )?,
-        StepOutcome::Complete(Err(Error::Reset))
-    ));
+    let old_payload = old_payload.ok_or("missing old payload")?;
+    // When: a miswired transform substitutes obsolete bytes into the new flow.
+    let StepOutcome::Complete(Ok(rejected)) = Operation::new(input.map(|_| old_payload))
+        .step(&mut WriteCopy::default(), &mut device.execution_context())?
+    else {
+        return Err("stale payload not rejected".into());
+    };
+    assert_eq!(rejected.status(), Err(Error::Reset));
+    assert_eq!(old.step(&mut Retire, &mut device), Err(RunError::Exhausted));
     assert_eq!(
-        old.step(&mut service, &mut device),
-        Err(RunError::Exhausted)
+        Operation::new(rejected.finish()).step(&mut Retire, &mut device)?,
+        StepOutcome::Complete(Err(Error::Reset))
     );
-    let mut pipeline = crate::support::chunk_pipeline(&device);
-    let mut context = device.execution_context(ChannelId::new(0))?;
-    let mut current = Operation::new(Some(input));
-    for _ in 0..128 {
-        if let StepOutcome::Complete(result) = current.step(&mut pipeline, &mut context)? {
-            result?;
-            break;
-        }
-    }
-    assert!(current.is_complete());
+    crate::support::run(&mut device)?;
     // Then: the new descriptor completes normally and retains its own identity and payload.
     assert_eq!(
         memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,

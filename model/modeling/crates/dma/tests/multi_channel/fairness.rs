@@ -109,20 +109,20 @@ fn fill_response_ring(device: &mut Dma<SharedMemory>, base: usize) -> TestResult
             break;
         }
         let mut hardware = device.hardware();
-        let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+        let mut operation = hardware_interface_pipeline::Operation::new(());
         let mut finished = false;
         for _ in 0..128 {
-            assert!(matches!(
-                operation.step(&mut hardware, device)?,
-                StepOutcome::InProgress
-            ));
-            if word(
-                device,
-                base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset(),
-            )? == producer
-            {
-                finished = true;
-                break;
+            if let StepOutcome::Complete(result) = operation.step(&mut hardware, device)? {
+                result?;
+                if word(
+                    device,
+                    base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset(),
+                )? == producer
+                {
+                    finished = true;
+                    break;
+                }
+                operation = hardware_interface_pipeline::Operation::new(());
             }
         }
         assert!(finished);

@@ -18,7 +18,7 @@ struct Tail {
 }
 
 struct TailState {
-    completion: Option<pdma_model_dma::Completion>,
+    completion: Option<pdma_model_dma::Flow<pdma_model_dma::Completion>>,
     dropped: Option<Rc<Cell<bool>>>,
 }
 
@@ -31,9 +31,9 @@ impl Drop for TailState {
 }
 
 impl<M> Stage<pdma_model_dma::ExecutionContext<'_, M>> for Tail {
-    type Input = Option<pdma_model_dma::Completion>;
-    type Output = Option<pdma_model_dma::Completion>;
-    type Error = pdma_model_dma::Error;
+    type Input = pdma_model_dma::Flow<pdma_model_dma::Completion>;
+    type Output = pdma_model_dma::Flow<pdma_model_dma::Completion>;
+    type Error = std::convert::Infallible;
     fn step(
         &mut self,
         context: &mut pdma_model_dma::ExecutionContext<'_, M>,
@@ -42,20 +42,30 @@ impl<M> Stage<pdma_model_dma::ExecutionContext<'_, M>> for Tail {
         if self.state.is_none() && input.is_none() {
             return Ok(StepOutcome::InProgress);
         }
-        if let Err(error) = context.lifecycle() {
-            if self.state.take().is_none() {
-                input.take();
-            }
-            return Ok(StepOutcome::Complete(Err(error)));
-        }
         if self.state.is_none() {
             let Some(completion) = input.take() else {
                 return Ok(StepOutcome::InProgress);
             };
             self.state = Some(TailState {
-                completion,
+                completion: Some(completion),
                 dropped: Some(Rc::clone(&self.dropped)),
             });
+        }
+        if let Some(error) = self
+            .state
+            .as_ref()
+            .and_then(|state| state.completion.as_ref())
+            .and_then(|flow| flow.lifecycle(context).err())
+        {
+            let mut state = self
+                .state
+                .take()
+                .ok_or(hardware_interface_pipeline::RunError::Exhausted)?;
+            return Ok(StepOutcome::Complete(Ok(state
+                .completion
+                .take()
+                .ok_or(hardware_interface_pipeline::RunError::Exhausted)?
+                .stop(error))));
         }
         self.entered.set(true);
         Ok(if self.release.get() {
@@ -63,7 +73,8 @@ impl<M> Stage<pdma_model_dma::ExecutionContext<'_, M>> for Tail {
             StepOutcome::Complete(Ok(self
                 .state
                 .take()
-                .and_then(|mut state| state.completion.take())))
+                .and_then(|mut state| state.completion.take())
+                .ok_or(hardware_interface_pipeline::RunError::Exhausted)?))
         } else {
             StepOutcome::InProgress
         })
@@ -85,7 +96,7 @@ fn reset_after_committed_chunk_retires_hardware_while_custom_tail_is_pending() -
     let release = Rc::new(Cell::new(false));
     let completed = Rc::new(Cell::new(0));
     let dropped = Rc::new(Cell::new(false));
-    let sink: Then<_, _, Option<pdma_model_dma::Completion>> = Then::new(
+    let sink: Then<_, _, pdma_model_dma::Flow<pdma_model_dma::Completion>> = Then::new(
         WriteCopy::default(),
         Tail {
             entered: Rc::clone(&entered),

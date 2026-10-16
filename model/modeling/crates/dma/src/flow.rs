@@ -1,7 +1,94 @@
 use crate::channel::CopyState;
-use crate::{COPY_CHUNK_BYTES, Work};
+use crate::{COPY_CHUNK_BYTES, Error, ExecutionContext, Work};
+use hardware_interface_pipeline::{StepOutcome, StepResult};
 use hardware_interface_runtime::MemoryAddress;
 use pdma_model_contract::dma::{ChannelId, Command, ContextId, Response};
+use std::convert::Infallible;
+
+/// Execution data retaining identity through bubbles and domain stops until retirement.
+#[derive(Debug)]
+#[must_use]
+pub struct Flow<T> {
+    pub(crate) work: Option<Work>,
+    pub(crate) value: Result<Option<T>, Error>,
+}
+
+impl<T> Flow<T> {
+    pub(crate) const fn new(work: Option<Work>, value: Result<Option<T>, Error>) -> Self {
+        Self { work, value }
+    }
+    /// Borrows actual data; bubbles and domain stops contain no data.
+    pub fn data(&self) -> Option<&T> {
+        self.value.as_ref().ok().and_then(Option::as_ref)
+    }
+    /// Mutably borrows data without exposing task identity.
+    pub fn data_mut(&mut self) -> Option<&mut T> {
+        self.value.as_mut().ok().and_then(Option::as_mut)
+    }
+    /// Transforms data while retaining bubbles, domain stops and identity.
+    pub fn map<U>(self, transform: impl FnOnce(T) -> U) -> Flow<U> {
+        Flow::new(self.work, self.value.map(|data| data.map(transform)))
+    }
+    /// Carries a domain stop to retirement after releasing this value's data.
+    pub fn stop<U>(self, error: Error) -> Flow<U> {
+        let error = match self.value {
+            Err(retained) => retained,
+            Ok(_) => error,
+        };
+        Flow::new(self.work, Err(error))
+    }
+    /// Completes a custom tail while retaining any preceding domain stop.
+    pub fn finish(self) -> Flow<()> {
+        self.map(|_| ())
+    }
+    /// Reports the retained domain outcome without releasing ownership.
+    pub const fn status(&self) -> Result<(), Error> {
+        match self.value {
+            Ok(_) => Ok(()),
+            Err(error) => Err(error),
+        }
+    }
+    /// Observes this value's retained stop and current owner lifecycle.
+    ///
+    /// # Errors
+    /// Returns the retained stop, or a current reset/halt error.
+    pub fn lifecycle<M, S>(&self, context: &mut ExecutionContext<'_, M, S>) -> Result<(), Error> {
+        match &self.value {
+            Err(error) => Err(*error),
+            Ok(_) => self
+                .work
+                .map_or(Ok(()), |work| context.select(work)?.lifecycle()),
+        }
+    }
+    pub(crate) fn advance<M, S, U>(
+        state: &mut Option<Self>,
+        context: &mut ExecutionContext<'_, M, S>,
+        operation: impl FnOnce(
+            &mut Option<T>,
+            &mut crate::SelectedResources<'_, M, S>,
+        ) -> StepResult<Option<U>, Error>,
+    ) -> StepResult<Flow<U>, Infallible> {
+        let Some(flow) = state.as_mut() else {
+            return Ok(StepOutcome::InProgress);
+        };
+        let work = flow.work;
+        let result = match (&mut flow.value, work) {
+            (Err(error), _) => StepOutcome::Complete(Err(*error)),
+            (Ok(_), None) => StepOutcome::Complete(Ok(None)),
+            (Ok(data), Some(identity)) => match context.select(identity) {
+                Ok(mut selected) => operation(data, &mut selected)?,
+                Err(error) => StepOutcome::Complete(Err(error)),
+            },
+        };
+        match result {
+            StepOutcome::InProgress => Ok(StepOutcome::InProgress),
+            StepOutcome::Complete(value) => {
+                *state = None;
+                Ok(StepOutcome::Complete(Ok(Flow::new(work, value))))
+            }
+        }
+    }
+}
 
 /// Non-owning observation of a channel head, refreshed before descriptor acceptance.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

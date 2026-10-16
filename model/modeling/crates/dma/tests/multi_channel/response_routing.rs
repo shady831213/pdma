@@ -1,52 +1,46 @@
 use super::support::{TestResult, configure, submit, word};
-use hardware_interface_pipeline::{
-    HardwareDriver, Operation, Stage, StepOutcome, StepResult, Then,
-};
+use hardware_interface_pipeline::{Operation, Stage, StepOutcome, Then};
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, ChannelRegisters, ResponseRegisters};
 use pdma_model_dma::{
-    Completion, Dma, Error, ExecutionContext, PrepareChunk, Publish, ReadCopy, WriteCopy,
+    CheckRanges, Completion, CompletionInput, Dma, Error, Fetch, Flow, PrepareChunk, Publish,
+    ReadCopy, Retire, WriteCopy,
 };
-use std::{cell::RefCell, rc::Rc};
 
-struct CaptureCompletion(Rc<RefCell<Option<Completion>>>);
-
-impl Stage<ExecutionContext<'_, SharedMemory>> for CaptureCompletion {
-    type Input = Option<Completion>;
-    type Output = ();
-    type Error = Error;
-
-    fn step(
-        &mut self,
-        _: &mut ExecutionContext<'_, SharedMemory>,
-        input: &mut Option<Self::Input>,
-    ) -> StepResult<(), Error> {
-        let Some(completion) = input.take() else {
-            return Ok(StepOutcome::InProgress);
-        };
-        *self.0.borrow_mut() = completion;
-        Ok(StepOutcome::Complete(Ok(())))
-    }
-}
-
-fn execute(device: &mut Dma<SharedMemory>) -> TestResult<Completion> {
-    let captured = Rc::new(RefCell::new(None));
-    let read = Then::new(PrepareChunk::default(), ReadCopy::default());
-    let write = Then::new(
-        WriteCopy::default(),
-        Then::new(
-            pdma_model_dma::CompletionInput,
-            CaptureCompletion(Rc::clone(&captured)),
-        ),
+fn execute(device: &mut Dma<SharedMemory>) -> TestResult<Flow<Completion>> {
+    let mut pipeline = Then::new(
+        Then::new(PrepareChunk::default(), ReadCopy::default()),
+        Then::new(WriteCopy::default(), CompletionInput),
     );
-    let mut hardware = device.hardware_with(Then::new(read, write));
-    let mut driver = HardwareDriver::new();
-    for _ in 0..256 {
-        assert_eq!(driver.step(&mut hardware, device)?, StepOutcome::InProgress);
-        if let Some(completion) = captured.borrow_mut().take() {
-            assert_eq!(completion.response().bytes_completed(), 512);
+    let mut expected_length = None;
+    for _ in 0..32 {
+        let request = device.command_request(ChannelId::new(0))?;
+        let StepOutcome::Complete(Ok(fetched)) =
+            Operation::new(request).step(&mut Fetch, device)?
+        else {
+            return Err("fetch did not complete".into());
+        };
+        if let Some(command) = fetched.data() {
+            expected_length = Some(command.command().copy_length);
+        }
+        let mut context = device.execution_context();
+        let checked = super::support::finish(
+            &mut CheckRanges::default(),
+            &mut Operation::new(fetched),
+            &mut context,
+        )??;
+        let input = context.install_progress(checked);
+        let completion =
+            super::support::finish(&mut pipeline, &mut Operation::new(input), &mut context)??;
+        completion.status()?;
+        if let Some(value) = completion.data() {
+            assert_eq!(Some(value.response().bytes_completed()), expected_length);
             return Ok(completion);
         }
+        assert_eq!(
+            Operation::new(completion.finish()).step(&mut Retire, device)?,
+            StepOutcome::Complete(Ok(()))
+        );
     }
     Err("command did not produce response work".into())
 }
@@ -72,8 +66,11 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
         // Given: shared execution has finished but its tagged response has not been dispatched.
         let mut device = setup()?;
         let response = execute(&mut device)?;
-        assert_eq!(response.channel(), ChannelId::new(0));
-        let mut publication = Some(Some(response));
+        assert_eq!(
+            response.data().ok_or("response")?.channel(),
+            ChannelId::new(0)
+        );
+        let mut publication = Some(response);
         let mut destinations = device.responses();
         if suspend_publication {
             device.write(
@@ -84,10 +81,7 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
             )?;
             for _ in 0..16 {
                 assert!(matches!(
-                    destinations.step(
-                        &mut device.execution_context(ChannelId::new(0))?,
-                        &mut publication,
-                    )?,
+                    destinations.step(&mut device.execution_context(), &mut publication,)?,
                     StepOutcome::InProgress
                 ));
             }
@@ -99,17 +93,27 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
         )?;
         let mut outcome = None;
         for _ in 0..256 {
-            if let StepOutcome::Complete(result) = destinations.step(
-                &mut device.execution_context(ChannelId::new(0))?,
-                &mut publication,
-            )? {
+            if let StepOutcome::Complete(result) =
+                destinations.step(&mut device.execution_context(), &mut publication)?
+            {
                 outcome = Some(result);
                 break;
             }
         }
-        let outcome = outcome.ok_or("publication exceeded interaction bound")?;
+        let outcome = outcome.ok_or("publication exceeded interaction bound")??;
         // Then: generation checking rejects the retained result without advancing either response ring.
-        assert!(matches!(outcome, Err(Error::Reset)));
+        assert_eq!(outcome.status(), Err(Error::Reset));
+        assert_eq!(
+            word(
+                &mut device,
+                ChannelId::new(0).admin_offset(2).ok_or("offset")?
+            )?,
+            1
+        );
+        assert_eq!(
+            Operation::new(outcome).step(&mut Retire, &mut device)?,
+            StepOutcome::Complete(Err(Error::Reset))
+        );
         assert_eq!(
             word(
                 &mut device,
@@ -139,13 +143,16 @@ fn a_response_port_rejects_work_owned_by_another_channel() -> TestResult {
     let response = execute(&mut device)?;
     let mut port = Publish::new(ChannelId::new(1));
     // When: an incorrectly wired graph sends the response to the wrong port.
-    let outcome = Operation::new(response)
-        .step(&mut port, &mut device.execution_context(ChannelId::new(1))?)?;
+    let outcome = Operation::new(response).step(&mut port, &mut device.execution_context())?;
     // Then: routing misuse cannot publish into either channel's ring.
-    assert!(matches!(
-        outcome,
+    let StepOutcome::Complete(Ok(outcome)) = outcome else {
+        return Err("publication did not complete".into());
+    };
+    assert_eq!(outcome.status(), Err(Error::Routing));
+    assert_eq!(
+        Operation::new(outcome).step(&mut Retire, &mut device)?,
         StepOutcome::Complete(Err(Error::Routing))
-    ));
+    );
     for index in 0..2 {
         assert_eq!(
             word(

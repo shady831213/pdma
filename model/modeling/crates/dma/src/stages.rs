@@ -2,30 +2,32 @@ mod candidate;
 mod data_path;
 mod execution;
 mod fetch;
-mod publish;
+mod responses;
+mod retire;
 #[cfg(test)]
 mod tests;
 
-use crate::{Chunk, ChunkInput, Completion, Dma, Error, ExecutionContext, Payload, Responses};
+use crate::{Chunk, ChunkInput, Completion, Dma, ExecutionContext, Flow, Payload};
 pub use candidate::{Candidate, CommandRequest, RetainedTask};
 pub use data_path::Hardware;
 pub use execution::{CheckRanges, CompletionInput, PrepareChunk, ReadCopy, WriteCopy};
 pub use fetch::Fetch;
 use hardware_interface_pipeline::{Stage, Then};
 use pdma_model_contract::dma::ChannelId;
-pub use publish::Publish;
+pub use responses::{Publish, Responses};
+pub use retire::Retire;
 
 /// One concrete chunk transferred through preparation, read and write.
-pub type CopyChunk = Then<PrepareChunk, Then<ReadCopy, WriteCopy, Option<Payload>>, Option<Chunk>>;
+pub type CopyChunk = Then<PrepareChunk, Then<ReadCopy, WriteCopy, Flow<Payload>>, Flow<Chunk>>;
 /// Execution of one bounded chunk of already validated hardware traversal.
 pub type Execution = CopyChunk;
 /// Shared execution followed by response dispatch.
-pub type Pipeline = Then<ReadPipeline, WritePipeline, Option<Payload>>;
+pub type Pipeline = Then<ReadPipeline, WritePipeline, Flow<Payload>>;
 /// Preparation and payload read before optional custom transformation.
-pub type ReadPipeline = Then<PrepareChunk, ReadCopy, Option<Chunk>>;
+pub type ReadPipeline = Then<PrepareChunk, ReadCopy, Flow<Chunk>>;
 /// Payload write and response publication, shared by fresh and resumed writes.
 pub type WritePipeline =
-    Then<WriteCopy, Then<CompletionInput, Responses, Option<Completion>>, Option<Completion>>;
+    Then<WriteCopy, Then<CompletionInput, Responses, Flow<Completion>>, Flow<Completion>>;
 impl<M, SB> Dma<M, SB> {
     /// Builds response dispatch ports bound to this instance's channels.
     pub fn responses(&self) -> Responses {
@@ -40,9 +42,9 @@ impl<M, SB> Dma<M, SB> {
     where
         for<'a> S: Stage<
                 ExecutionContext<'a, M, SB>,
-                Input = Option<ChunkInput>,
-                Output = (),
-                Error = Error,
+                Input = Flow<ChunkInput>,
+                Output = Flow<()>,
+                Error = std::convert::Infallible,
             >,
     {
         Hardware::new(pipeline, self.channels.len())

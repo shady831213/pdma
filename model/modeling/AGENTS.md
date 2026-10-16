@@ -205,16 +205,17 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   Arbitration, not FanPolicy; snapshot disposal belongs to the generic adapter.
   Candidates emit non-owning observations and do not consume descriptors. The
   selected work is revalidated before acceptance. Descriptor, execution and
-  publication stages use a freshly borrowed ExecutionContext for the selected
-  channel, memory port and lifecycle guards, not all of Dma. Typed command, chunk,
+  publication stages use a freshly borrowed ExecutionContext resource bank, selecting
+  narrow channel resources by each Flow's identity, not all of Dma. Typed command, chunk,
   payload and completion values carry actual data plus private identity metadata.
   Do not substitute renamed Work wrappers for dataflow or copy mutable hardware
   state into a second context. The borrowed context never escapes a step.
   No hardware leaf invokes another stage. Reuse Then for dataflow and FanOut with
   Dispatch for channel-bound publication; do not add CommandScope, a second engine,
   a centralized step-dispatch switch or a wrapper that selects child execution phases.
-  A selected-context projection may borrow resources for a whole graph, but must
-  not interpret checkpoints, synthesize ThenState or step nested Then children.
+  A stateless context projection may only borrow the execution resource bank and
+  delegate step. It must not store task identity, observe completion for cleanup,
+  interpret checkpoints, synthesize ThenState or step nested Then children.
   Dma::hardware() returns one connected pipeline driven by HardwareDriver and
   AsyncExecutor::drive. Scenarios abort/join after software finishes. No group
   driver, independent lifecycle-stage tuple or runtime lifecycle policy is needed.
@@ -238,8 +239,11 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   No minimum busy duration or extra model step is part of the software contract.
   Idle/parked scopes without resident pipeline state can complete on request after
   cleanup. Each resident stage must observe reset in step and release its own local
-  work before completing, independently of data readiness. The selected projection
-  releases residency only after actual child completion. Track resident identity
+  work before completing, independently of data readiness. Fetch owns admission and
+  residency acquisition; Retire consumes the explicit Flow result to release it.
+  Accepted execution uses Error=Infallible; domain stops travel as Flow data so Then
+  cannot bypass retirement. Preserve raw driving errors as unfinished continuations.
+  Do not restore Selected or move its lifecycle observation into Hardware. Track resident identity
   separately from accepted ownership and active grant; publication or parking can
   release the grant while invocation-local state still exists. Do not clear the
   ledger and acknowledge reset while leaving a live old invocation to finish later.
@@ -262,8 +266,15 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   or validation. Empty candidate sweeps cannot advance RR state. A fault releases
   the grant; even immediate RESUME requires new arbitration before more payload work.
   Reset/Abort cleanup must progress despite a disabled peer.
-  Dma::hardware_with accepts a complete execution graph, with Option<ChunkInput>
-  input and unit output over the narrow ExecutionContext. Do not require a specific
+  Dma::hardware_with accepts a complete execution graph, with Flow<ChunkInput>
+  input, Flow<()> output and Infallible domain-error port over ExecutionContext.
+  Flow is DMA-specific data and ownership metadata, not a generic framework rule;
+  ordinary Stage output can still be unit. Custom stages use Flow::map/stop/finish
+  to preserve ownership and Flow::lifecycle before effects/readiness checks. There
+  are no destructor-based retirement or manual per-stage ticket-release obligations.
+  Dropping a Flow is not retirement. Fetch rejects replacement of a resident transfer,
+  including after response publication or fault parking releases the active grant.
+  Do not require a specific
   nested Then shape or extract child hardware from a caller's graph. Ordinary
   composition connects Payload and Completion boundaries; CompletionInput merges
   retained errors before the chosen completion tail. Stopping command errors retain their actual response

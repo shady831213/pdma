@@ -176,23 +176,24 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
         device.write(offset, &1_u32.to_le_bytes())?;
     }
     let mut hardware = support::chunk_pipeline(&device);
-    let mut state = Some(Some(support::accept(
+    let mut state = Some(support::accept(
         &mut device,
         pdma_model_contract::dma::ChannelId::new(0),
-    )?));
+    )?);
     let mut completed = false;
     // When
     for _ in 0..32 {
         match hardware
-            .step(
-                &mut device.execution_context(pdma_model_contract::dma::ChannelId::new(0))?,
-                &mut state,
-            )
+            .step(&mut device.execution_context(), &mut state)
             .map_err(|error| format!("{error:?}"))?
         {
             StepOutcome::InProgress => {}
             StepOutcome::Complete(result) => {
-                result?;
+                assert_eq!(
+                    hardware_interface_pipeline::Operation::new(result?)
+                        .step(&mut pdma_model_dma::Retire, &mut device)?,
+                    StepOutcome::Complete(Ok(()))
+                );
                 completed = true;
                 break;
             }

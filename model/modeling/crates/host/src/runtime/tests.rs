@@ -103,14 +103,16 @@ async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestRe
         else {
             return Err("no command request".into());
         };
-        let mut operation = Operation::new(Some(snapshot));
-        let outcome = {
-            let mut context = device.execution_context(id)?;
-            (0..256).find_map(|_| match operation.step(&mut hardware, &mut context) {
-                Ok(StepOutcome::InProgress) => None,
-                terminal => Some(terminal),
-            })
-        };
+        let mut operation = Operation::new(Some(pdma_model_dma::CommandRequest::Fetch(snapshot)));
+        let mut outcome = None;
+        for _ in 0..256 {
+            if let StepOutcome::Complete(Ok(flow)) = operation.step(&mut hardware, &mut *device)? {
+                outcome = Some(
+                    Operation::new(flow.finish()).step(&mut pdma_model_dma::Retire, &mut *device),
+                );
+                break;
+            }
+        }
         drop(device);
         outcome
     };

@@ -76,16 +76,19 @@ An early RESUME does not restore the released grant of the old invocation; that
 invocation must exit before arbitration starts the resumed one.
 Finite data-path completion is not command retirement while Channel still has work.
 
-The selected execution boundary retains the identity of pipeline-resident work,
-separately from the accepted command and shared execution grant. Publication or
-parking can release the grant before all invocation-local state has exited.
+Fetch records pipeline residency, separately from the accepted command and shared
+execution grant. Flow values retain its identity across connecting buffers and
+local processing. Publication or parking can release the grant before a tail exits.
 Reset first prevents admission and invalidates old work. A resident stage observes
 the request through its borrowed context during step, before data-readiness checks
-or further effects. It releases the storage it owns and returns a terminal result.
-Then propagates that result without starting an unneeded successor; the selected
-projection releases residency only after its child graph actually completes.
+or further effects. It releases the storage it owns and returns a stopped Flow.
+Then passes that result through the remaining data path to Retire. Accepted
+execution stages have Infallible domain-error ports so they cannot skip retirement
+through Complete(Err). Custom stages forward stopped results without further data
+effects, after releasing their own local work. Retire consumes the result and
+releases residency; no enclosing controller observes child completion for cleanup.
 Buffered values that have not yet been accepted reach their receiving stage, which
-checks the same lifecycle state before acting. The projection never reaches into
+checks the same lifecycle state before acting. Context projection never reaches into
 child storage or invokes an external flush method. In RTL, reset similarly must
 reach occupied stages independently of data readiness and completion must wait for
 their cleanup acknowledgements and any outstanding transactions.
@@ -111,17 +114,20 @@ is an additional stale-task guard, not the reset acknowledgment predicate.
 
 Custom finite graphs use `Dma::hardware_with` and ordinary composition. Their stages
 receive concrete chunk, payload or completion data and a selected borrowed
-ExecutionContext, not the full Dma. Standard memory and publication stages check
+ExecutionContext resource bank, not the full Dma. Each Flow identifies its owner;
+custom stages observe Flow::lifecycle(context), and standard memory/publication stages check
 the private generation-bound identity before effects; a transform may modify
 owned bytes but cannot replace their geometry or identity. Persistent custom
 hardware effects need explicit storage and retirement rules. Merely dropping a
 software waiter does not terminate the stage, request reset or clear the
 accepted task. Externally retained obsolete data does not prevent hardware cleanup
-once it has no authority to issue effects, but an active selected invocation must
-finish its affected work before reset completes. Custom stages must observe the
-context's lifecycle before readiness checks and side effects, release their own
-transient state, and report termination. A custom stage that ignores reset cannot
-be made quiescent by the composition framework; reset remains busy until it exits.
+once it has no authority to issue effects, but retained Flow is an owned pipeline
+transfer, not an external non-owning observation. It must reach Retire before reset
+can complete. Custom stages observe lifecycle before readiness checks and effects,
+release their own transient state, and output the stopped Flow. A custom stage
+that ignores reset cannot be made quiescent by composition; reset remains busy
+until that work exits and reaches retirement. A stale unaccepted command observation
+does not hold residency and cannot substitute a newer command after reconfiguration.
 
 ## Software waiting and memory lifetime
 

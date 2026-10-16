@@ -98,14 +98,13 @@ backend errors. New platform error categories need no generic runtime change.
 | `crates/dma/src/stages/candidate.rs` | Non-consuming channel candidate advancement against the full DMA context. |
 | `crates/dma/src/channel/work.rs` | Local operations on retained channel work. |
 | `crates/dma/src/channel/work/` | Command traversal and cursor calculations. |
-| `crates/dma/src/flow.rs` | Owned command, chunk, payload and completion values. |
-| `crates/dma/src/execution_context.rs` | One step's selected-channel resources and lifecycle guards. |
-| `crates/dma/src/work.rs` | Work identity, DMA-wide tagged access and lifecycle cleanup. |
-| `crates/dma/src/routing.rs` | Generation-bound response destination policy. |
-| `crates/dma/src/stages/execution/validate.rs` | Shared selected-range validation stage. |
+| `crates/dma/src/flow.rs` | Owned Flow and typed command, chunk, payload and completion values. |
+| `crates/dma/src/execution_context.rs` | DMA resource bank and input-selected borrowed views with lifecycle guards. |
+| `crates/dma/src/work.rs` | Work identity, residency release and invalid-grant handling. |
+| `crates/dma/src/stages/execution/validate.rs` | Range validation and validated traversal installation. |
 | `crates/dma/src/stages/execution/chunks.rs` | Shared bounded-chunk preparation stage. |
 | `crates/dma/src/stages/execution/copy.rs` | Shared chunk read/write stages with selected execution resources. |
-| `crates/dma/src/stages/publish.rs` | Response publication through the selected channel's ring. |
+| `crates/dma/src/stages/responses.rs` | Generation-bound response dispatch and publication through channel rings. |
 | `crates/software/src/dma.rs` | Shared DMA driver configuration, submit and response consumption; reexported by Host. |
 | `crates/host/src/runtime.rs` | PDMA transport: async context access, cooperative yielding and pending notification delivery. |
 | `crates/software/src/dma/control.rs` | Shared discovery, fatal, IRQ and register-only reset access. |
@@ -135,8 +134,8 @@ The data-path constructor accepts the complete graph without inspecting or rearr
 Then structure. A write-fault retry restores retained bytes at
 WriteCopy's own input boundary and continues through that same completion tail.
 The upstream graph carries empty inputs, not the retained payload; it performs
-no repeated read or valid-data transformation. Option-based custom stages must
-distinguish an empty input from a payload, just as on ordinary empty passes.
+no repeated read or valid-data transformation. Custom stages distinguish a Flow
+without data from a payload and preserve its identity and retained stop status.
 
 Channel is a persistent hardware object, not a pipeline. It retains the accepted
 descriptor ledger, validated traversal and concrete fault checkpoints. Current
@@ -162,11 +161,12 @@ Normal execution dataflow is:
 
 | Boundary | Transferred data |
 | --- | --- |
-| Fetch -> CheckRanges | FetchedCommand: descriptor and accepted identity |
-| CheckRanges -> hardware installation | CopyProgress: validated traversal |
-| PrepareChunk -> ReadCopy | Chunk: source/destination spans, selectors and length |
-| ReadCopy -> transform/write | Payload: actual bounded bytes and chunk geometry |
-| WriteCopy -> publication | Completion: actual Response and destination identity |
+| Fetch -> CheckRanges | `Flow<FetchedCommand>`: descriptor and accepted identity |
+| CheckRanges -> hardware installation | `Flow<CopyProgress>`: validated traversal |
+| PrepareChunk -> ReadCopy | `Flow<Chunk>`: source/destination spans, selectors and length |
+| ReadCopy -> transform/write | `Flow<Payload>`: actual bounded bytes and chunk geometry |
+| WriteCopy -> publication | `Flow<Completion>`: actual Response and destination identity |
+| Publication/custom tail -> Retire | `Flow<()>`: owner and terminal domain result |
 
 These values have private metadata and are not clonable. Transform code accesses
 `Payload::bytes_mut()`, not a global scratch lookup, and cannot resize the payload
@@ -179,13 +179,22 @@ bytes for a transform or require the top level to select a response stage.
 Lifecycle rejection, channel/device fatal and repairable PageFault keep distinct
 handling. A successful empty transfer remains normal completion.
 
-Descriptor, payload and publication stages implement
-`Stage<ExecutionContext<'_, M, SB>>`. This context freshly borrows one selected
-Channel, the memory port and required lifecycle guards; it has no device MMIO
-layout, arbitration policy or maintenance controller. Its borrow ends each step,
-so the next step observes intervening reset, enable and fault changes. Candidate
-retains the broader context it actually needs. Lifecycle transitions notify the
-context-maintenance owner when its observed channel state changes.
+Execution and publication stages implement `Stage<ExecutionContext<'_, M, SB>>`.
+This context borrows the execution resource bank, without device MMIO layout or
+arbitration policy. Each leaf selects narrow channel resources using its input's
+identity. The borrow ends each step, so subsequent interactions observe reset,
+enable and fault changes. Candidate, Fetch and Retire use the DMA owner for
+observation, acceptance and retirement respectively. Lifecycle transitions notify
+context maintenance when its observed channel state changes.
+
+DMA-local `Flow<T>` carries actual typed data, its retained identity, and a domain
+stop or bubble. `Flow<Payload>` contains real payload bytes, not just a Work token.
+Custom transforms use data() or data_mut(), preserve identity through map(), and
+propagate stops with stop(). Accepted execution uses `Error = Infallible`: reset,
+halt and other domain stops travel to Retire as data rather than skipping it
+through a Then error. Raw driving errors retain the continuation. The framework
+remains free to use any output, including unit; only this DMA execution interface
+requires an ownership-bearing result. Dropping that result is not retirement.
 
 The engine's active grant backpressures peer tasks while command work remains.
 The active task supplies a Continue request. Arbitration holds its existing
@@ -207,10 +216,13 @@ not refetch, revalidate or transform retained write bytes. Even immediate RESUME
 revive a failed path. The assembly can be replaced while parked because checkpoints
 are concrete hardware data, not saved Rust stage continuations.
 
-FanIn's output is the actual selected execution subgraph: Fetch, CheckRanges,
-Install and the configured execution pipeline connected through Then. There is no
-passthrough SelectedRequest or separate Grant stage. The receiving boundary checks
-the exact request and records residency; it does not choose a different task.
+FanIn's output is Fetch, CheckRanges, Install, the configured execution pipeline
+and Retire connected through Then. Fetch validates the exact request and records
+residency; it cannot replace an outstanding resident transfer. Retire consumes the
+execution result and releases that residency, including after publication or a
+domain stop. Selected and its whole-subpipeline lifecycle observation are removed.
+A stateless resource projection only borrows context and delegates stepping; it
+stores no task identity and performs no acceptance or cleanup.
 Install forwards its chunk request without a separate execution round. The data-path wrapper only
 adapts its unit input and treats reset/halt/channel-fatal termination as the end of
 that invocation, not permanent simulation failure. It neither steps sibling units
@@ -251,8 +263,8 @@ Busy stages leave a new offer untouched. There is no public Stage::State or star
 initialization happens inside step and intermediate state stays in the stage.
 Completion transfers the result and releases that input's intermediate state.
 Only step advances a continuation; no external flush hook exposes child cleanup.
-The DMA projection releases residency after its child completes, not by forcibly
-clearing the child. Software-wait cancellation does not reset hardware.
+DMA retirement consumes an explicit result after local processing completes;
+context projection does not release residency. Software-wait cancellation does not reset hardware.
 There are no hardware wait tokens or separate readiness trait. Async driving yields
 after every bounded hardware step, including idle polling, so software can access
 registers between steps. Software interrupt and doorbell waits remain event-driven.

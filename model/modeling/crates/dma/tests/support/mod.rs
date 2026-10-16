@@ -7,8 +7,8 @@ use pdma_model_contract::dma::{
     ChannelRegisters, Command, CommandRegisters, Endpoint, ResponseRegisters,
 };
 use pdma_model_dma::{
-    CheckRanges, ChunkInput, CommandRequest, Dma, Fetch, FetchedCommand, Pipeline, PrepareChunk,
-    ReadCopy, WriteCopy,
+    CheckRanges, ChunkInput, CommandRequest, Dma, Fetch, FetchedCommand, Flow, Pipeline,
+    PrepareChunk, ReadCopy, WriteCopy,
 };
 
 /// Test harness error propagation.
@@ -26,29 +26,31 @@ pub fn chunk_pipeline<M>(device: &Dma<M>) -> Pipeline {
 }
 
 /// Fetches a fresh descriptor through the public selected-channel interface.
-pub fn fetch<M: MemoryAccess>(device: &mut Dma<M>, id: ChannelId) -> TestResult<FetchedCommand> {
+pub fn fetch<M: MemoryAccess>(
+    device: &mut Dma<M>,
+    id: ChannelId,
+) -> TestResult<Flow<FetchedCommand>> {
     let Some(CommandRequest::Fetch(request)) = device.command_request(id)? else {
         return Err("no fresh command request".into());
     };
-    let mut context = device.execution_context(id)?;
-    match Operation::new(Some(request)).step(&mut Fetch, &mut context)? {
-        StepOutcome::Complete(Ok(Some(command))) => Ok(command),
+    match Operation::new(Some(CommandRequest::Fetch(request))).step(&mut Fetch, device)? {
+        StepOutcome::Complete(Ok(command)) if command.data().is_some() => Ok(command),
         StepOutcome::Complete(Err(error)) => Err(error.into()),
-        StepOutcome::Complete(Ok(None)) | StepOutcome::InProgress => {
+        StepOutcome::Complete(Ok(_)) | StepOutcome::InProgress => {
             Err("descriptor was not accepted".into())
         }
     }
 }
 
 /// Validates one accepted descriptor and installs its hardware traversal.
-pub fn accept<M: MemoryAccess>(device: &mut Dma<M>, id: ChannelId) -> TestResult<ChunkInput> {
+pub fn accept<M: MemoryAccess>(device: &mut Dma<M>, id: ChannelId) -> TestResult<Flow<ChunkInput>> {
     let fetched = fetch(device, id)?;
-    let mut context = device.execution_context(id)?;
-    let mut operation = Operation::new(Some(fetched));
+    let mut context = device.execution_context();
+    let mut operation = Operation::new(fetched);
     let mut validation = CheckRanges::default();
     for _ in 0..1024 {
         if let StepOutcome::Complete(result) = operation.step(&mut validation, &mut context)? {
-            return Ok(context.install_progress(result?.ok_or("no validated command")?)?);
+            return Ok(context.install_progress(result?));
         }
     }
     Err("validation exceeded interaction bound".into())
@@ -143,7 +145,7 @@ pub fn submit(
 /// Drive the hardware pipeline to one published response within a fixed bound.
 pub fn run(device: &mut Dma<SharedMemory>) -> TestResult {
     let mut hardware = device.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = Operation::new(());
     let producer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
         + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
         + ResponseRegisters::PRODUCER.offset();
@@ -151,10 +153,10 @@ pub fn run(device: &mut Dma<SharedMemory>) -> TestResult {
     for _ in 0..1024 {
         if let StepOutcome::Complete(result) = operation.step(&mut hardware, device)? {
             result?;
-            return Err("hardware stopped before response".into());
-        }
-        if read_word(device, producer)? != initial {
-            return Ok(());
+            if read_word(device, producer)? != initial {
+                return Ok(());
+            }
+            operation = Operation::new(());
         }
     }
     Err("pipeline exceeded interaction bound".into())

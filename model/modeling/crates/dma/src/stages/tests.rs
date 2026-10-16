@@ -12,6 +12,21 @@ use pdma_model_contract::dma::{
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
+#[test]
+fn accepted_datapath_cannot_short_circuit_retirement_with_domain_errors() {
+    fn assert_boundary<S>()
+    where
+        for<'a> S: hardware_interface_pipeline::Stage<
+                crate::ExecutionContext<'a, SharedMemory>,
+                Input = crate::Flow<crate::ChunkInput>,
+                Output = crate::Flow<()>,
+                Error = std::convert::Infallible,
+            >,
+    {
+    }
+    assert_boundary::<crate::Pipeline>();
+}
+
 pub(super) fn queued_copy(response_base: u64, ioc: bool) -> TestResult<Dma<SharedMemory>> {
     let memory = SharedMemory::new();
     memory.add_regions(&[MemoryRegion::try_new(

@@ -10,9 +10,9 @@ fn active_task_remains_a_candidate_and_backpressures_peers() -> TestResult {
         return Err("fresh snapshot".into());
     };
     assert!(matches!(
-        Operation::new(Some(snapshot))
-            .step(&mut Fetch, &mut device.execution_context(selected)?)?,
-        StepOutcome::Complete(Ok(Some(_)))
+        Operation::new(Some(CommandRequest::Fetch(snapshot)))
+            .step(&mut Fetch, &mut device)?,
+        StepOutcome::Complete(Ok(ref flow)) if flow.data().is_some()
     ));
     // When: the next finite chunk pass samples task candidates.
     let continuation = device.command_request(selected)?;
@@ -62,10 +62,10 @@ fn stale_fetch_cannot_substitute_a_reconfigured_head() -> TestResult {
         &1_u32.to_le_bytes(),
     )?;
     // When: the old selected request arrives after reconfiguration.
-    let result = Operation::new(Some(snapshot))
-        .step(&mut Fetch, &mut device.execution_context(selected)?)?;
+    let result =
+        Operation::new(Some(CommandRequest::Fetch(snapshot))).step(&mut Fetch, &mut device)?;
     // Then: the stale identity cannot read or accept the new head.
-    assert!(!matches!(result, StepOutcome::Complete(Ok(Some(_)))));
+    assert!(!matches!(result, StepOutcome::Complete(Ok(ref flow)) if flow.data().is_some()));
     assert!(device.memory.reads.borrow().is_empty());
     Ok(())
 }
@@ -84,11 +84,11 @@ fn continuation_preserves_round_robin_position() -> TestResult {
         return Err("fresh snapshot".into());
     };
     assert!(matches!(
-        Operation::new(Some(snapshot)).step(
+        Operation::new(Some(CommandRequest::Fetch(snapshot))).step(
             &mut Fetch,
-            &mut device.execution_context(ChannelId::new(0))?
+            &mut device
         )?,
-        StepOutcome::Complete(Ok(Some(_)))
+        StepOutcome::Complete(Ok(ref flow)) if flow.data().is_some()
     ));
     let continuing = device.command_request(ChannelId::new(0))?;
     // When: repeated continuation values occupy a different input position.
@@ -108,15 +108,15 @@ fn busy_read_retains_its_chunk_and_leaves_the_next_offer_untouched() -> TestResu
     let Some(CommandRequest::Fetch(snapshot)) = device.command_request(id)? else {
         return Err("fresh snapshot".into());
     };
-    let mut context = device.execution_context(id)?;
     let StepOutcome::Complete(Ok(fetched)) =
-        Operation::new(Some(snapshot)).step(&mut Fetch, &mut context)?
+        Operation::new(Some(CommandRequest::Fetch(snapshot))).step(&mut Fetch, &mut device)?
     else {
         return Err("fetch completion".into());
     };
+    let mut context = device.execution_context();
     let progress = finish(&mut CheckRanges::default(), &mut context, fetched)?;
-    let request = context.install_progress(progress.ok_or("validated traversal")?)?;
-    let chunk = finish(&mut PrepareChunk::default(), &mut context, Some(request))?;
+    let request = context.install_progress(progress);
+    let chunk = finish(&mut PrepareChunk::default(), &mut context, request)?;
     let enable = id.register_offset(2).ok_or("channel")?
         + ChannelBlock::CONTROL.offset()
         + ChannelRegisters::ENABLE.offset();
@@ -124,26 +124,33 @@ fn busy_read_retains_its_chunk_and_leaves_the_next_offer_untouched() -> TestResu
     let mut read = ReadCopy::default();
     let mut input = Some(chunk);
     assert!(matches!(
-        read.step(&mut device.execution_context(id)?, &mut input)?,
+        read.step(&mut device.execution_context(), &mut input)?,
         StepOutcome::InProgress
     ));
     assert!(input.is_none());
     // When: another offer arrives while the stage retains the first chunk.
-    let mut next = Some(None);
+    let bubble = finish(&mut Fetch, &mut device, None)?;
+    let mut context = device.execution_context();
+    let progress = finish(&mut CheckRanges::default(), &mut context, bubble)?;
+    let request = context.install_progress(progress);
+    let mut next = Some(finish(&mut PrepareChunk::default(), &mut context, request)?);
     assert!(matches!(
-        read.step(&mut device.execution_context(id)?, &mut next)?,
+        read.step(&mut device.execution_context(), &mut next)?,
         StepOutcome::InProgress
     ));
     device.write(enable, &1_u32.to_le_bytes())?;
-    let StepOutcome::Complete(Ok(Some(payload))) =
-        read.step(&mut device.execution_context(id)?, &mut next)?
+    let StepOutcome::Complete(Ok(payload)) =
+        read.step(&mut device.execution_context(), &mut next)?
     else {
         return Err("retained chunk was lost".into());
     };
     // Then: only the original chunk is read and the next offer is still pending.
-    assert_eq!(payload.chunk().source(), MemoryAddress::new(0x2000));
-    assert_eq!(payload.bytes()?, &[0; 4]);
-    assert!(matches!(next, Some(None)));
+    assert_eq!(
+        payload.data().ok_or("payload")?.chunk().source(),
+        MemoryAddress::new(0x2000)
+    );
+    assert_eq!(payload.data().ok_or("payload")?.bytes()?, &[0; 4]);
+    assert!(next.as_ref().is_some_and(|flow| flow.data().is_none()));
     assert_eq!(device.memory.reads.borrow().as_slice(), &[0x1000, 0x2000]);
     Ok(())
 }

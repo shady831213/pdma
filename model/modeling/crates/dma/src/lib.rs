@@ -6,12 +6,12 @@ mod build;
 /// Channel-owned hardware state, registers and rings.
 pub mod channel;
 mod error;
-mod execution_context;
+/// Borrowed resources for DMA execution stages.
+pub mod execution_context;
 mod flow;
 mod maintenance;
 mod memory;
 mod reset;
-mod routing;
 mod stages;
 #[cfg(test)]
 mod tests;
@@ -22,8 +22,9 @@ pub use build::BuildError;
 pub use channel::{COPY_CHUNK_BYTES, Channel, CommandRing, ResponseRing};
 pub use error::{ChannelFatal, Error};
 pub use execution_context::ExecutionContext;
+pub(crate) use execution_context::SelectedResources;
 pub use flow::{
-    Chunk, ChunkInput, CommandSnapshot, Completion, CopyProgress, FetchedCommand, Payload,
+    Chunk, ChunkInput, CommandSnapshot, Completion, CopyProgress, FetchedCommand, Flow, Payload,
 };
 use hardware_interface_schema::RegisterWindow;
 pub use maintenance::MaintenanceError;
@@ -32,11 +33,10 @@ use pdma_model_contract::dma::{
     ChannelId, Command, ContextId, DmaAccess, DmaControl, DmaDiscovery, DmaFatalCode,
     DmaRegistersLayout, EndpointMode,
 };
-pub use routing::Responses;
 pub use stages::{
     Candidate, CheckRanges, CommandRequest, CompletionInput, CopyChunk, Execution, Fetch, Hardware,
-    Pipeline, PrepareChunk, Publish, ReadCopy, ReadPipeline, RetainedTask, WriteCopy,
-    WritePipeline,
+    Pipeline, PrepareChunk, Publish, ReadCopy, ReadPipeline, Responses, RetainedTask, Retire,
+    WriteCopy, WritePipeline,
 };
 pub use work::Work;
 

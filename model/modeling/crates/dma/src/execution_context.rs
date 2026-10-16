@@ -4,7 +4,7 @@ use pdma_model_contract::dma::{ChannelId, ContextId, DmaAccess};
 
 /// Borrowed channel execution resources with owner lifecycle observation.
 #[derive(Debug)]
-pub struct ExecutionContext<'a, M, S = ()> {
+pub(crate) struct SelectedResources<'a, M, S = ()> {
     pub(crate) selected: &'a mut Channel,
     pub(crate) id: ChannelId,
     pub(crate) generation: u64,
@@ -17,12 +17,50 @@ pub struct ExecutionContext<'a, M, S = ()> {
 }
 
 impl<M, S> Dma<M, S> {
-    /// Borrows only resources used by descriptor, payload and publication stages.
-    pub fn execution_context(
+    /// Borrows the resource bank used by typed execution dataflow.
+    pub fn execution_context(&mut self) -> ExecutionContext<'_, M, S> {
+        ExecutionContext {
+            halted: self.halted() || self.resetting(),
+            channels: &mut self.channels,
+            memory: &self.memory,
+            sideband: self.sideband,
+            active: &mut self.active,
+            maintenance: &mut self.maintenance,
+        }
+    }
+}
+
+/// Borrowed execution resources; each interaction selects by its input identity.
+#[derive(Debug)]
+pub struct ExecutionContext<'a, M, S = ()> {
+    channels: &'a mut [Channel],
+    memory: &'a M,
+    sideband: fn(DmaAccess) -> S,
+    halted: bool,
+    active: &'a mut Option<Work>,
+    maintenance: &'a mut Option<crate::Maintenance>,
+}
+
+impl<M, S> ExecutionContext<'_, M, S> {
+    /// Installs validated traversal while retaining the invocation's ownership.
+    pub fn install_progress(
         &mut self,
-        id: ChannelId,
-    ) -> Result<ExecutionContext<'_, M, S>, Error> {
-        let halted = self.halted() || self.resetting();
+        validated: crate::Flow<crate::CopyProgress>,
+    ) -> crate::Flow<crate::ChunkInput> {
+        let work = validated.work;
+        let value = validated.value.and_then(|value| match value {
+            Some(progress) => self
+                .select(work.ok_or(Error::Routing)?)?
+                .install_progress(progress)
+                .map(Some),
+            None => Ok(work
+                .filter(|work| *self.active == Some(*work))
+                .map(crate::ChunkInput::next)),
+        });
+        crate::Flow::new(work, value)
+    }
+    pub(crate) fn select(&mut self, work: Work) -> Result<SelectedResources<'_, M, S>, Error> {
+        let id = work.channel;
         let selected = self.channels.get_mut(id.index()).ok_or(Error::Unmapped)?;
         let abort_context = self
             .maintenance
@@ -41,26 +79,26 @@ impl<M, S> Dma<M, S> {
                     })
             })
             .map(|maintenance| maintenance.context);
-        Ok(ExecutionContext {
-            generation: selected.generation,
+        Ok(SelectedResources {
+            generation: work.generation,
             selected,
             id,
-            memory: &self.memory,
+            memory: self.memory,
             sideband: self.sideband,
-            halted,
-            active: &mut self.active,
+            halted: self.halted,
+            active: self.active,
             abort_context,
-            maintenance: &mut self.maintenance,
+            maintenance: self.maintenance,
         })
     }
 }
 
-impl<M, S> ExecutionContext<'_, M, S> {
+impl<M, S> SelectedResources<'_, M, S> {
     /// Observes reset, halt and parked-task abort independently of data readiness.
     ///
     /// # Errors
     /// Returns `Reset` or `Halted`; resident stages must release local work before completing.
-    pub fn lifecycle(&self) -> Result<(), Error> {
+    pub(crate) fn lifecycle(&self) -> Result<(), Error> {
         let channel = &self.selected;
         if channel.generation != self.generation || channel.resetting() {
             return Err(Error::Reset);
@@ -103,7 +141,7 @@ impl<M, S> ExecutionContext<'_, M, S> {
         self.ready(work)
     }
     /// Installs validated traversal once and returns its first chunk request.
-    pub fn install_progress(
+    pub(crate) fn install_progress(
         &mut self,
         validated: crate::CopyProgress,
     ) -> Result<crate::ChunkInput, Error> {

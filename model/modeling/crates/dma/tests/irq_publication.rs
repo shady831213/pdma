@@ -16,9 +16,7 @@ fn irq_requires_published_response_on_every_step() -> TestResult {
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
     let mut hardware = support::chunk_pipeline(&device);
-    let mut state = <pdma_model_dma::Pipeline as Stage<
-        pdma_model_dma::ExecutionContext<'_, hardware_interface_runtime::SharedMemory>,
-    >>::start(Some(support::accept(
+    let mut state = Some(Some(support::accept(
         &mut device,
         pdma_model_contract::dma::ChannelId::new(0),
     )?));

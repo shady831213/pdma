@@ -38,7 +38,7 @@ async fn canceled_gather_resumes_completed_candidates_and_active_output() {
     let mut hardware = FanIn::new(
         (0..2).map(Candidate).collect(),
         Policy::Fixed,
-        Accept::Normal,
+        Accept::new(super::sources::Behavior::Normal),
     );
     let mut operation = Operation::new(vec![(); 2]);
     let mut task_context = TaskContext::from_waker(Waker::noop());
@@ -102,7 +102,7 @@ async fn executor_drop_before_planning_retains_collected_values() {
     let mut hardware = FanIn::new(
         (0..2).map(Candidate).collect(),
         Policy::Fixed,
-        Accept::Normal,
+        Accept::new(super::sources::Behavior::Normal),
     );
     let mut operation = Operation::new(vec![(); 2]);
     let mut task_context = TaskContext::from_waker(Waker::noop());

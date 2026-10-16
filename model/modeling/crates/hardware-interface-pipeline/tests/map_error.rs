@@ -8,9 +8,10 @@ impl Stage<()> for Fails {
     type Input = ();
     type Output = ();
     type Error = u8;
-    type State = ();
-    fn start((): ()) {}
-    fn step(&mut self, (): &mut (), (): &mut ()) -> StepResult<(), u8> {
+    fn step(&mut self, (): &mut (), input: &mut Option<()>) -> StepResult<(), u8> {
+        let Some(()) = input.take() else {
+            return Ok(StepOutcome::InProgress);
+        };
         Ok(StepOutcome::Complete(Err(7)))
     }
 }

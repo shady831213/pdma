@@ -146,7 +146,9 @@ fn arbitration_hands_only_the_selected_request_to_fetch() -> TestResult {
     assert!(device.memory.reads.borrow().is_empty());
     let result = Operation::new(match request {
         CommandRequest::Fetch(snapshot) => Some(snapshot),
-        CommandRequest::Resume(_) => return Err("unexpected resume".into()),
+        CommandRequest::Resume(_) | CommandRequest::Continue(_) => {
+            return Err("unexpected continuation".into());
+        }
     })
     .step(&mut Fetch, &mut device.execution_context(expected_channel)?)?;
     // Then: only the selected descriptor is read and its identity crosses the boundary.
@@ -165,18 +167,15 @@ impl<M, SB> Stage<ExecutionContext<'_, M, SB>> for WorkChannel {
     type Input = Option<FetchedCommand>;
     type Output = Option<ChannelId>;
     type Error = Error;
-    type State = Option<ChannelId>;
-
-    fn start(task: Self::Input) -> Self::State {
-        task.as_ref().map(FetchedCommand::channel)
-    }
 
     fn step(
         &mut self,
         _: &mut ExecutionContext<'_, M, SB>,
-        channel: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, Error> {
-        Ok(StepOutcome::Complete(Ok(*channel)))
+        Ok(input.take().map_or(StepOutcome::InProgress, |task| {
+            StepOutcome::Complete(Ok(task.as_ref().map(FetchedCommand::channel)))
+        }))
     }
 }
 
@@ -203,3 +202,5 @@ fn then_transfers_fetched_command_to_downstream_without_an_engine_driver() -> Te
     assert_eq!(device.memory.reads.borrow().as_slice(), &[expected]);
     Ok(())
 }
+
+mod request_selection;

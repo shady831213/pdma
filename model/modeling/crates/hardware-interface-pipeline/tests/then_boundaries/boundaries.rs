@@ -1,4 +1,4 @@
-use hardware_interface_pipeline::{PipelineExt, RunError, Stage, StepOutcome, Then};
+use hardware_interface_pipeline::{PipelineExt, RunError, Stage, StepOutcome};
 
 use super::fixtures::{Effect, Fault, Prepare, Reply};
 
@@ -12,11 +12,11 @@ fn preparation_upstream_unfinished_is_never_retried_in_a_step() {
         ..Prepare::default()
     }
     .then(Effect::default());
-    let mut state = Then::<Prepare, Effect>::start(10);
+    let mut state = hardware_interface_pipeline::Operation::new(10);
     let mut context = Vec::new();
 
     // When: the composed stage advances once.
-    let outcome = pipeline.step(&mut context, &mut state);
+    let outcome = state.step(&mut pipeline, &mut context);
 
     // Then: preparation is called once and no effect interaction occurs.
     assert_eq!(outcome, expected);
@@ -34,15 +34,15 @@ fn newly_reached_effect_unfinished_is_never_retried_in_a_step() {
         reply,
         ..Effect::default()
     });
-    let mut state = Then::<Prepare, Effect>::start(10);
+    let mut state = hardware_interface_pipeline::Operation::new(10);
     let mut context = Vec::new();
     assert_eq!(
-        pipeline.step(&mut context, &mut state),
+        state.step(&mut pipeline, &mut context),
         Ok(StepOutcome::InProgress)
     );
 
     // When: the composed stage advances once.
-    let outcome = pipeline.step(&mut context, &mut state);
+    let outcome = state.step(&mut pipeline, &mut context);
 
     // Then: the effect result is forwarded after exactly one child call.
     assert_eq!(outcome, expected);
@@ -60,15 +60,15 @@ fn newly_reached_preparation_unfinished_is_never_retried_in_a_step() {
         reply,
         ..Prepare::default()
     });
-    let mut state = Then::<Effect, Prepare>::start(10);
+    let mut state = hardware_interface_pipeline::Operation::new(10);
     let mut context = Vec::new();
     assert_eq!(
-        pipeline.step(&mut context, &mut state),
+        state.step(&mut pipeline, &mut context),
         Ok(StepOutcome::InProgress)
     );
 
     // When: the composed stage advances once.
-    let outcome = pipeline.step(&mut context, &mut state);
+    let outcome = state.step(&mut pipeline, &mut context);
 
     // Then: the tail runs once and cannot trigger a preparation retry loop.
     assert_eq!(outcome, expected);
@@ -90,15 +90,15 @@ fn preparation_failure_or_exhaustion_prevents_later_effect_interaction() {
                 ..Prepare::default()
             })
             .then(Effect::default());
-        let mut state = Then::<Then<Prepare, Prepare>, Effect>::start(10);
+        let mut state = hardware_interface_pipeline::Operation::new(10);
         let mut context = Vec::new();
         assert_eq!(
-            pipeline.step(&mut context, &mut state),
+            state.step(&mut pipeline, &mut context),
             Ok(StepOutcome::InProgress)
         );
 
         // When: preparation terminates after its first handoff.
-        let outcome = pipeline.step(&mut context, &mut state);
+        let outcome = state.step(&mut pipeline, &mut context);
 
         // Then: its terminal result propagates and the effect stage is untouched.
         assert_eq!(outcome, expected);
@@ -108,32 +108,51 @@ fn preparation_failure_or_exhaustion_prevents_later_effect_interaction() {
 }
 
 #[test]
-fn direct_state_is_inert_after_preparation_handoff_terminal_outcomes() {
+fn stage_completion_is_inert_while_raw_errors_retain_the_active_child() {
     for reply in [Reply::Complete, Reply::Failure, Reply::Exhausted] {
-        // Given: direct state already terminalized by a child handoff.
+        // Given: a graph returning stage completion or a resumable call error.
         let mut pipeline = Prepare::default().then(Effect {
             reply,
             ..Effect::default()
         });
-        let mut state = Then::<Prepare, Effect>::start(10);
+        let mut input = Some(10);
         let mut context = Vec::new();
         assert_eq!(
-            pipeline.step(&mut context, &mut state),
+            pipeline.step(&mut context, &mut input),
             Ok(StepOutcome::InProgress)
         );
-        let terminal = pipeline.step(&mut context, &mut state);
+        let terminal = pipeline.step(&mut context, &mut input);
         assert!(matches!(
             terminal,
             Ok(StepOutcome::Complete(_)) | Err(RunError::Exhausted)
         ));
 
-        // When: direct callers step terminal state again without an Operation wrapper.
-        let outcome = pipeline.step(&mut context, &mut state);
+        // When: the graph is stepped again without a new input.
+        let outcome = pipeline.step(&mut context, &mut input);
 
-        // Then: no stage is called again and prior effects remain unchanged.
-        assert_eq!(outcome, Err(RunError::Exhausted));
+        // Then: completed children stay idle while the raw-error child resumes in place.
         assert_eq!(pipeline.upstream.calls, 1);
-        assert_eq!(pipeline.downstream.calls, 1);
-        assert_eq!(context, [11]);
+        match reply {
+            Reply::Exhausted => {
+                assert_eq!(outcome, Err(RunError::Exhausted));
+                pipeline.downstream.reply = Reply::Complete;
+                assert_eq!(
+                    pipeline.step(&mut context, &mut input),
+                    Ok(StepOutcome::Complete(Ok(12)))
+                );
+                assert_eq!(pipeline.downstream.calls, 3);
+                assert_eq!(context, [11, 11, 11]);
+            }
+            Reply::Complete | Reply::Failure => {
+                assert_eq!(outcome, Ok(StepOutcome::InProgress));
+                assert_eq!(pipeline.downstream.calls, 1);
+                assert_eq!(context, [11]);
+            }
+            Reply::InProgress => {
+                assert_eq!(outcome, Ok(StepOutcome::InProgress));
+                assert_eq!(pipeline.downstream.calls, 2);
+                assert_eq!(context, [11, 11]);
+            }
+        }
     }
 }

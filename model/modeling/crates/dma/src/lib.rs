@@ -34,8 +34,9 @@ use pdma_model_contract::dma::{
 };
 pub use routing::Responses;
 pub use stages::{
-    Candidate, CheckRanges, CommandRequest, CompletionInput, CopyChunk, Execution, Fetch, Grant,
-    Hardware, Pipeline, PrepareChunk, Publish, ReadCopy, ReadPipeline, WriteCopy, WritePipeline,
+    Candidate, CheckRanges, CommandRequest, CompletionInput, CopyChunk, Execution, Fetch, Hardware,
+    Pipeline, PrepareChunk, Publish, ReadCopy, ReadPipeline, RetainedTask, WriteCopy,
+    WritePipeline,
 };
 pub use work::Work;
 

@@ -4,7 +4,7 @@
 pub mod support;
 
 use hardware_interface_pipeline::{
-    HardwareDriver, Operation, RunError, Stage, StepOutcome, StepResult, Then,
+    HardwareDriver, Operation, Stage, StepOutcome, StepResult, Then,
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::ChannelId;
@@ -19,16 +19,14 @@ impl Stage<ExecutionContext<'_, SharedMemory>> for InvertPayload {
     type Input = Option<Payload>;
     type Output = Option<Payload>;
     type Error = Error;
-    type State = Option<Self::Input>;
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
     fn step(
         &mut self,
         _: &mut ExecutionContext<'_, SharedMemory>,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, Error> {
-        let mut payload = state.take().ok_or(RunError::Exhausted)?;
+        let Some(mut payload) = input.take() else {
+            return Ok(StepOutcome::InProgress);
+        };
         if let Some(payload) = &mut payload {
             match payload.bytes_mut() {
                 Ok(bytes) => bytes.iter_mut().for_each(|byte| *byte = !*byte),
@@ -49,9 +47,12 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
         &[0, 1, 2, 255],
     )?;
     submit(&mut device, &memory, command())?;
-    let read = Then::new(PrepareChunk, Then::new(ReadCopy, InvertPayload));
+    let read = Then::new(
+        PrepareChunk::default(),
+        Then::new(ReadCopy::default(), InvertPayload),
+    );
     let write = Then::new(
-        WriteCopy,
+        WriteCopy::default(),
         Then::new(pdma_model_dma::CompletionInput, device.responses()),
     );
     let mut hardware = device.hardware_with(Then::new(read, write));
@@ -83,7 +84,7 @@ fn independently_composed_execution_obeys_device_fatal() -> TestResult {
     device.signal_fatal();
     // When: validation receives that command through a newly borrowed narrow context.
     let result = Operation::new(Some(fetched)).step(
-        &mut CheckRanges,
+        &mut CheckRanges::default(),
         &mut device.execution_context(ChannelId::new(0))?,
     )?;
     // Then: global fatal still invalidates work without exposing the whole DMA.
@@ -98,7 +99,10 @@ fn rejected_publication_consumes_its_transient_stage_state() -> TestResult {
     submit(&mut device, &memory, command())?;
     let channel = ChannelId::new(0);
     let request = support::accept(&mut device, channel)?;
-    let mut execution = Then::new(PrepareChunk, Then::new(ReadCopy, WriteCopy));
+    let mut execution = Then::new(
+        PrepareChunk::default(),
+        Then::new(ReadCopy::default(), WriteCopy::default()),
+    );
     let completion = {
         let mut context = device.execution_context(channel)?;
         let mut operation = Operation::new(Some(request));
@@ -112,17 +116,18 @@ fn rejected_publication_consumes_its_transient_stage_state() -> TestResult {
         completion.ok_or("missing completion")?
     };
     let mut publish = Publish::new(ChannelId::new(1));
-    let mut state = <Publish as Stage<ExecutionContext<'_, SharedMemory>>>::start(completion);
+    let mut state = Some(completion);
     let mut context = device.execution_context(channel)?;
     // When: publication rejects the actual completion's destination.
     assert_eq!(
         publish.step(&mut context, &mut state)?,
         StepOutcome::Complete(Err(Error::Routing))
     );
-    // Then: the terminal state remains exhausted even without Operation owning it.
+    // Then: consumed input cannot replay publication without Operation owning it.
+    assert!(state.is_none());
     assert_eq!(
         publish.step(&mut context, &mut state),
-        Err(RunError::Exhausted)
+        Ok(StepOutcome::InProgress)
     );
     Ok(())
 }

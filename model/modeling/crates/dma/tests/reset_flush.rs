@@ -10,16 +10,30 @@ use pdma_model_dma::{ChunkInput, Dma, Error, ExecutionContext};
 use std::{cell::Cell, rc::Rc};
 use support::{TestResult, command, submit};
 
-struct Stalled(Rc<Cell<bool>>);
+struct Stalled(Rc<Cell<bool>>, bool);
 impl<M> Stage<ExecutionContext<'_, M>> for Stalled {
     type Input = Option<ChunkInput>;
     type Output = ();
     type Error = Error;
-    type State = ();
-    fn start(_: Self::Input) {}
-    fn step(&mut self, _: &mut ExecutionContext<'_, M>, (): &mut ()) -> StepResult<(), Error> {
-        self.0.set(true);
-        Ok(StepOutcome::InProgress)
+    fn step(
+        &mut self,
+        context: &mut ExecutionContext<'_, M>,
+        input: &mut Option<Self::Input>,
+    ) -> StepResult<(), Error> {
+        if !self.1 {
+            if input.take().is_none() {
+                return Ok(StepOutcome::InProgress);
+            }
+            self.0.set(true);
+            self.1 = true;
+        }
+        Ok(match context.lifecycle() {
+            Ok(()) => StepOutcome::InProgress,
+            Err(error) => {
+                self.1 = false;
+                StepOutcome::Complete(Err(error))
+            }
+        })
     }
 }
 
@@ -59,7 +73,7 @@ fn unrelated_idle_reset_completes_without_stepping_stalled_pipeline() -> TestRes
     }
     submit(&mut dma, &memory, command())?;
     let entered = Rc::new(Cell::new(false));
-    let mut hardware = dma.hardware_with(Stalled(Rc::clone(&entered)));
+    let mut hardware = dma.hardware_with(Stalled(Rc::clone(&entered), false));
     let mut driver = HardwareDriver::new();
     for _ in 0..128 {
         let _ = driver.step(&mut hardware, &mut dma)?;

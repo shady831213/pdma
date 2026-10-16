@@ -195,7 +195,10 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   guarded access and retirement helpers belong in the DMA-level work module.
   Do not place shared execution stages under channel to accommodate visibility.
   The data path composes command admission through FanIn using channel-targeted Candidate
-  inputs and Arbitrate::snapshots with DMA's RoundRobin selector. Fresh selection
+  inputs and Arbitrate::snapshots with DMA's RoundRobin selector. Candidates are task
+  requests, not channel selections: reject stale head/generation/retained-task
+  position rather than substituting another task. Continue holds an active task's
+  existing authorization without advancing RR; peers remain backpressured. Fresh selection
   enters Fetch then CheckRanges; a resumed request grants the channel and produces
   no new descriptor. Install forwards the new or retained chunk request into the
   same Then-connected execution graph. RoundRobin implements
@@ -215,7 +218,8 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   Dma::hardware() returns one connected pipeline driven by HardwareDriver and
   AsyncExecutor::drive. Scenarios abort/join after software finishes. No group
   driver, independent lifecycle-stage tuple or runtime lifecycle policy is needed.
-  Hardware contains one Then graph and its local terminal-error boundary, not
+  Hardware contains FanIn with the real accepting/executing Then subgraph as its
+  output and a local terminal-error boundary, not SelectedRequest/Grant adapters or
   sibling-unit state or lifecycle coordination. Its finite invocation drains
   before the external driver restarts admission; no old faulted path may consume
   a newly reacquired grant. Do not recreate Service, separate admission/execution
@@ -233,8 +237,9 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   writes in a busy scope with `Error::ResetInProgress`; retain read access.
   No minimum busy duration or extra model step is part of the software contract.
   Idle/parked scopes without resident pipeline state can complete on request after
-  cleanup. A resident selected invocation must flush its actual local state before
-  acknowledging reset, independently of data readiness. Track resident identity
+  cleanup. Each resident stage must observe reset in step and release its own local
+  work before completing, independently of data readiness. The selected projection
+  releases residency only after actual child completion. Track resident identity
   separately from accepted ownership and active grant; publication or parking can
   release the grant while invocation-local state still exists. Do not clear the
   ledger and acknowledge reset while leaving a live old invocation to finish later.
@@ -250,7 +255,7 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   transformed scratch at the write boundary, not a next-stage instruction.
   A healthy command retains hardware state and its grant across finite chunk passes,
   not one command-lifetime Rust invocation. Separate command admission from active
-  execution: occupied execution backpressures candidate/arbitration/Fetch while
+  execution: occupied execution backpressures peer candidates while
   ordinary stages prepare, read, transform and write the current chunk. Completing
   a chunk pass does not retire the command or release its grant. Subsequent external
   ticks advance retained hardware state without another grant, descriptor fetch
@@ -310,7 +315,15 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   keep side-specific memory/MMIO access and publish pointers only after successful
   entry access. Do not introduce a shadow cursor store or duplicate ring arithmetic.
 - Keep the model deterministic and step-based. No cycle timing or extra executors.
-  Stage completion releases invocation-local intermediate state and transfers its
+  Stage<C> exposes Input/Output/Error, not State or start. step takes a mutable
+  Option<Input> slot: take transfers ownership, busy stages leave new input untouched,
+  and accepted progress lives inside the stage. None means no offered input;
+  Some(None) is a domain bubble for optional inputs. Stage itself is the continuation;
+  no external flush/cancel hook or exposed private state is allowed. Domain reset
+  belongs to context and is observed by stages in step. A call error preserves the
+  continuation, rather than proving hardware completion. Fan error handling stops
+  new admissions and waits for accepted children to complete through step before
+  reporting its retained error. Stage completion releases invocation-local intermediate state and transfers its
   output; InProgress retains unfinished work. Async hardware driving yields after
   every bounded step, including idle polling. Do not restore Pending, wait tokens,
   or ReadyStage. Software interrupt/doorbell waits remain event-driven. Generic Fan

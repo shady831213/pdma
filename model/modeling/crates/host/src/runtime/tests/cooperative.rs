@@ -17,17 +17,22 @@ impl Stage<Dma<()>> for ObserveEnable {
     type Input = ();
     type Output = ();
     type Error = Error;
-    type State = ();
-
-    fn start((): ()) {}
-
-    fn step(&mut self, device: &mut Dma<()>, (): &mut ()) -> StepResult<(), Error> {
+    fn step(&mut self, device: &mut Dma<()>, input: &mut Option<()>) -> StepResult<(), Error> {
+        if input.is_none() {
+            return Ok(StepOutcome::InProgress);
+        }
         self.0.fetch_add(1, Ordering::Relaxed);
         let mut value = [0; 4];
         Ok(match device.read(IRQ_ENABLE, &mut value) {
-            Ok(()) if u32::from_le_bytes(value) != 0 => StepOutcome::Complete(Ok(())),
+            Ok(()) if u32::from_le_bytes(value) != 0 => {
+                input.take();
+                StepOutcome::Complete(Ok(()))
+            }
             Ok(()) => StepOutcome::InProgress,
-            Err(error) => StepOutcome::Complete(Err(error)),
+            Err(error) => {
+                input.take();
+                StepOutcome::Complete(Err(error))
+            }
         })
     }
 }

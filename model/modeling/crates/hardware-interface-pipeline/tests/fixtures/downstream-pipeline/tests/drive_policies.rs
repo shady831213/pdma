@@ -25,51 +25,55 @@ impl Stage<Model> for Source {
     type Input = u32;
     type Output = u32;
     type Error = &'static str;
-    type State = u32;
-
-    fn start(input: Self::Input) -> Self::State {
-        input
-    }
 
     fn step(
         &mut self,
         model: &mut Model,
-        input: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<u32, &'static str> {
+        let Some(input) = input.take() else {
+            return Ok(StepOutcome::InProgress);
+        };
         model.upstream_calls += 1;
-        Ok(StepOutcome::Complete(Ok(*input)))
+        Ok(StepOutcome::Complete(Ok(input)))
     }
 }
 
-#[derive(Debug)]
-struct Sink;
+#[derive(Debug, Default)]
+struct Sink {
+    pending: Option<u32>,
+}
 
 impl Stage<Model> for Sink {
     type Input = u32;
     type Output = u32;
     type Error = &'static str;
-    type State = u32;
-
-    fn start(input: Self::Input) -> Self::State {
-        input
-    }
 
     fn step(
         &mut self,
         model: &mut Model,
-        input: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<u32, &'static str> {
+        if self.pending.is_none() {
+            self.pending = input.take();
+        }
+        if self.pending.is_none() {
+            return Ok(StepOutcome::InProgress);
+        }
         model.downstream_calls += 1;
         if model.readiness < 2 {
             return Ok(StepOutcome::InProgress);
         }
-        Ok(StepOutcome::Complete(Ok(*input + 22)))
+        Ok(StepOutcome::Complete(Ok(self
+            .pending
+            .take()
+            .ok_or(hip::RunError::Exhausted)?
+            + 22)))
     }
 }
 
-fn pipeline()
--> impl Stage<Model, Input = u32, Output = u32, Error = &'static str, State: Send> + Send {
-    Source.then(Sink)
+fn pipeline() -> impl Stage<Model, Input = u32, Output = u32, Error = &'static str> + Send {
+    Source.then(Sink::default())
 }
 
 #[derive(Debug, Default)]

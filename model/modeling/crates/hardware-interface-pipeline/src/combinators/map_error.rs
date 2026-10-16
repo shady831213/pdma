@@ -19,12 +19,12 @@ where
     type Input = S::Input;
     type Output = S::Output;
     type Error = E;
-    type State = S::State;
-    fn start(input: Self::Input) -> Self::State {
-        S::start(input)
-    }
-    fn step(&mut self, context: &mut C, state: &mut Self::State) -> StepResult<Self::Output, E> {
-        Ok(match self.stage.step(context, state)? {
+    fn step(
+        &mut self,
+        context: &mut C,
+        input: &mut Option<Self::Input>,
+    ) -> StepResult<Self::Output, E> {
+        Ok(match self.stage.step(context, input)? {
             StepOutcome::InProgress => StepOutcome::InProgress,
             StepOutcome::Complete(result) => StepOutcome::Complete(result.map_err(&mut self.map)),
         })

@@ -47,7 +47,7 @@ fn output_only_work_advances_each_tick_without_empty_plans() {
             calls: Rc::clone(&calls),
             discard_busy: false,
         },
-        vec![Sink],
+        vec![Sink::default()],
     );
     let mut operation = Operation::new(vec!["value".into()]);
     let mut context = Context::default();
@@ -76,7 +76,7 @@ fn unfinished_inputs_advance_without_empty_policy_callbacks() {
             calls: Rc::clone(&calls),
             discard_busy: false,
         },
-        vec![Sink],
+        vec![Sink::default()],
     );
     let mut operation = Operation::new(vec!["held".into()]);
     let mut context = Context::default();
@@ -104,7 +104,7 @@ fn buffered_values_are_replanned_while_outputs_are_busy() {
                 calls: Rc::clone(&calls),
                 discard_busy,
             },
-            vec![Sink],
+            vec![Sink::default()],
         );
         let mut operation = Operation::new(vec!["first".into(), "second".into()]);
         let mut context = Context::default();

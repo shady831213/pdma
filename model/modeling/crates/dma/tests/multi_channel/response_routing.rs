@@ -1,11 +1,11 @@
 use super::support::{TestResult, configure, submit, word};
 use hardware_interface_pipeline::{
-    HardwareDriver, Operation, RunError, Stage, StepOutcome, StepResult, Then,
+    HardwareDriver, Operation, Stage, StepOutcome, StepResult, Then,
 };
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, ChannelRegisters, ResponseRegisters};
 use pdma_model_dma::{
-    Completion, Dma, Error, ExecutionContext, PrepareChunk, Publish, ReadCopy, Responses, WriteCopy,
+    Completion, Dma, Error, ExecutionContext, PrepareChunk, Publish, ReadCopy, WriteCopy,
 };
 use std::{cell::RefCell, rc::Rc};
 
@@ -15,27 +15,25 @@ impl Stage<ExecutionContext<'_, SharedMemory>> for CaptureCompletion {
     type Input = Option<Completion>;
     type Output = ();
     type Error = Error;
-    type State = Option<Self::Input>;
-
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
 
     fn step(
         &mut self,
         _: &mut ExecutionContext<'_, SharedMemory>,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<(), Error> {
-        *self.0.borrow_mut() = state.take().ok_or(RunError::Exhausted)?;
+        let Some(completion) = input.take() else {
+            return Ok(StepOutcome::InProgress);
+        };
+        *self.0.borrow_mut() = completion;
         Ok(StepOutcome::Complete(Ok(())))
     }
 }
 
 fn execute(device: &mut Dma<SharedMemory>) -> TestResult<Completion> {
     let captured = Rc::new(RefCell::new(None));
-    let read = Then::new(PrepareChunk, ReadCopy);
+    let read = Then::new(PrepareChunk::default(), ReadCopy::default());
     let write = Then::new(
-        WriteCopy,
+        WriteCopy::default(),
         Then::new(
             pdma_model_dma::CompletionInput,
             CaptureCompletion(Rc::clone(&captured)),
@@ -75,8 +73,7 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
         let mut device = setup()?;
         let response = execute(&mut device)?;
         assert_eq!(response.channel(), ChannelId::new(0));
-        let mut publication =
-            <Responses as Stage<ExecutionContext<'_, SharedMemory>>>::start(Some(response));
+        let mut publication = Some(Some(response));
         let mut destinations = device.responses();
         if suspend_publication {
             device.write(

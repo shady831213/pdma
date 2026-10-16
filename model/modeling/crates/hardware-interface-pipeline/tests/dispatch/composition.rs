@@ -7,11 +7,11 @@ impl Stage<Context> for Count {
     type Input = Vec<(usize, ())>;
     type Output = usize;
     type Error = BranchError<&'static str>;
-    type State = Option<Self::Input>;
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
-    fn step(&mut self, _: &mut Context, state: &mut Self::State) -> StepResult<usize, Self::Error> {
+    fn step(
+        &mut self,
+        _: &mut Context,
+        state: &mut Option<Self::Input>,
+    ) -> StepResult<usize, Self::Error> {
         Ok(StepOutcome::Complete(Ok(state
             .take()
             .ok_or(RunError::Exhausted)?
@@ -27,14 +27,12 @@ fn then_consumes_dispatch_receipts_after_a_separate_boundary() {
         vec![Destination::new(0)],
     );
     let mut hardware = Then::new(fan, Count);
-    let mut state = <Then<FanOut<Source, Dispatch<Routing>, Destination>, Count> as Stage<
-        Context,
-    >>::start(request(0));
+    let mut state = hardware_interface_pipeline::Operation::new(request(0));
     let mut context = Context::default();
     // When: delivery completes before downstream reduction.
     for _ in 0..3 {
         assert_eq!(
-            hardware.step(&mut context, &mut state),
+            state.step(&mut hardware, &mut context),
             Ok(StepOutcome::InProgress)
         );
     }

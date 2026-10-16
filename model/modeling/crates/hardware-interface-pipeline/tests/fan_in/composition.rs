@@ -10,9 +10,14 @@ impl Stage<Context> for Inputs {
     type Input = ();
     type Output = Vec<()>;
     type Error = BranchError<&'static str>;
-    type State = ();
-    fn start((): ()) {}
-    fn step(&mut self, _: &mut Context, (): &mut ()) -> StepResult<Self::Output, Self::Error> {
+    fn step(
+        &mut self,
+        _: &mut Context,
+        input: &mut Option<()>,
+    ) -> StepResult<Self::Output, Self::Error> {
+        let Some(()) = input.take() else {
+            return Ok(StepOutcome::InProgress);
+        };
         Ok(StepOutcome::Complete(Ok(vec![(); 3])))
     }
 }
@@ -21,14 +26,10 @@ impl Stage<Context> for Next {
     type Input = Vec<(usize, Option<Job>)>;
     type Output = ();
     type Error = BranchError<&'static str>;
-    type State = Option<Self::Input>;
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
     fn step(
         &mut self,
         context: &mut Context,
-        state: &mut Self::State,
+        state: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, Self::Error> {
         let receipts = state.take().ok_or(RunError::Exhausted)?;
         assert!(receipts.iter().all(|(_, job)| job.is_some()));
@@ -42,7 +43,7 @@ fn external_driver_preserves_round_robin_across_finite_invocations() {
     let fan = FanIn::new(
         (0..3).map(Candidate).collect(),
         Policy::RoundRobin(1),
-        Accept::Normal,
+        Accept::new(super::sources::Behavior::Normal),
     );
     let mut hardware = Then::new(Inputs, Then::new(fan, Next));
     let mut driver = HardwareDriver::new();
@@ -67,14 +68,10 @@ impl Stage<Context> for Identity {
     type Input = Option<usize>;
     type Output = Option<usize>;
     type Error = &'static str;
-    type State = Option<Self::Input>;
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
     fn step(
         &mut self,
         _: &mut Context,
-        state: &mut Self::State,
+        state: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, Self::Error> {
         Ok(StepOutcome::Complete(Ok(state
             .take()
@@ -87,15 +84,14 @@ fn composed_sources_finish_before_candidate_values_reach_policy() {
     let mut hardware = FanIn::new(
         (0..2).map(|i| Then::new(Candidate(i), Identity)).collect(),
         Policy::Fixed,
-        Accept::Normal,
+        Accept::new(super::sources::Behavior::Normal),
     );
-    let mut state =
-        <FanIn<Then<Candidate, Identity>, Policy, Accept> as Stage<Context>>::start(vec![(); 2]);
+    let mut state = hardware_interface_pipeline::Operation::new(vec![(); 2]);
     let mut context = Context::with_jobs(&[1]);
     // When: the first input/plan/output sweep has no completed composite sources yet.
     for _ in 0..3 {
         assert_eq!(
-            hardware.step(&mut context, &mut state),
+            state.step(&mut hardware, &mut context),
             Ok(StepOutcome::InProgress)
         );
     }

@@ -25,16 +25,14 @@ impl<M> Stage<pdma_model_dma::ExecutionContext<'_, M>> for CommandExit {
     type Input = ();
     type Output = ();
     type Error = pdma_model_dma::Error;
-    type State = ();
-
-    fn start((): ()) {}
-
     fn step(
         &mut self,
         _: &mut pdma_model_dma::ExecutionContext<'_, M>,
-        (): &mut (),
+        input: &mut Option<()>,
     ) -> StepResult<(), pdma_model_dma::Error> {
-        Ok(StepOutcome::Complete(Ok(())))
+        Ok(input
+            .take()
+            .map_or(StepOutcome::InProgress, |()| StepOutcome::Complete(Ok(()))))
     }
 }
 
@@ -45,8 +43,11 @@ fn reset_invalidates_a_response_retained_outside_the_pipeline() -> TestResult {
     submit(&mut device, &memory, command())?;
     let input = support::accept(&mut device, ChannelId::new(0))?;
     let mut pipeline = Then::new(
-        pdma_model_dma::PrepareChunk,
-        Then::new(pdma_model_dma::ReadCopy, pdma_model_dma::WriteCopy),
+        pdma_model_dma::PrepareChunk::default(),
+        Then::new(
+            pdma_model_dma::ReadCopy::default(),
+            pdma_model_dma::WriteCopy::default(),
+        ),
     );
     let work = {
         let mut context = device.execution_context(ChannelId::new(0))?;
@@ -62,9 +63,7 @@ fn reset_invalidates_a_response_retained_outside_the_pipeline() -> TestResult {
     };
     device.write(RESET, &1_u32.to_le_bytes())?;
     let mut responses = device.responses();
-    let mut publish = <pdma_model_dma::Responses as Stage<
-        pdma_model_dma::ExecutionContext<'_, hardware_interface_runtime::SharedMemory>,
-    >>::start(work);
+    let mut publish = Some(work);
     // When: the final port rejects the old task before publishing a response.
     let mut rejected = false;
     for _ in 0..32 {
@@ -95,7 +94,7 @@ fn reset_invalidates_a_response_retained_outside_the_pipeline() -> TestResult {
 }
 
 #[test]
-fn reset_flushes_the_resident_tail_after_response_publication() -> TestResult {
+fn reset_waits_for_the_resident_tail_after_response_publication() -> TestResult {
     // Given: a command whose response is published but whose composition has not exited.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
@@ -125,7 +124,7 @@ fn reset_flushes_the_resident_tail_after_response_publication() -> TestResult {
     assert_eq!(read_word(&mut device, producer)?, 1);
     // When: reset is requested before the complete command returns.
     device.write(RESET, &1_u32.to_le_bytes())?;
-    // Then: the unfinished invocation keeps reset busy until its state is flushed.
+    // Then: the unfinished invocation keeps reset busy until its terminal step.
     assert_eq!(read_word(&mut device, RESET)?, 1);
     let mut completed = false;
     for _ in 0..32 {
@@ -164,7 +163,7 @@ fn idle_reset_completes_without_a_hardware_step() -> TestResult {
 }
 
 #[test]
-fn reset_stays_busy_until_the_accepted_invocation_is_flushed() -> TestResult {
+fn reset_stays_busy_until_the_accepted_invocation_retires() -> TestResult {
     // Given: an accepted command whose execution state is still retained.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
@@ -181,7 +180,7 @@ fn reset_stays_busy_until_the_accepted_invocation_is_flushed() -> TestResult {
     }
     assert_eq!(read_word(&mut device, consumer)?, 1);
     device.write(RESET, &1_u32.to_le_bytes())?;
-    // When: software attempts reconfiguration before the resident state is flushed.
+    // When: software attempts reconfiguration before the resident invocation retires.
     assert_eq!(
         device.write(
             CHANNEL + ChannelRegisters::ENABLE.offset(),
@@ -222,7 +221,7 @@ fn repeated_and_zero_requests_do_not_cancel_or_complete_reset() -> TestResult {
     // When: software writes zero and repeats the request.
     device.write(RESET, &0_u32.to_le_bytes())?;
     device.write(RESET, &1_u32.to_le_bytes())?;
-    // Then: busy remains asserted until the same invocation is flushed.
+    // Then: busy remains asserted until the same invocation retires.
     assert_eq!(read_word(&mut device, RESET)?, 1);
     for _ in 0..64 {
         let _ = driver.step(&mut hardware, &mut device)?;

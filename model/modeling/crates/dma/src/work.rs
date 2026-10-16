@@ -1,4 +1,4 @@
-use crate::{Dma, Error};
+use crate::Dma;
 use pdma_model_contract::dma::ChannelId;
 
 /// Non-owning channel identity and reset generation for one hardware work snapshot.
@@ -16,27 +16,6 @@ impl Work {
 }
 
 impl<M, S> Dma<M, S> {
-    pub(crate) fn invocation_error(&self, work: Work) -> Option<Error> {
-        let Some(channel) = self.channels.get(work.channel.index()) else {
-            return Some(Error::Unmapped);
-        };
-        if channel.generation != work.generation || channel.resetting() {
-            return Some(Error::Reset);
-        }
-        let aborted = self.active != Some(work)
-            && self.maintenance.as_ref().is_some_and(|maintenance| {
-                maintenance.abort
-                    && maintenance.result == Ok(false)
-                    && maintenance
-                        .frontiers
-                        .iter()
-                        .any(|frontier| frontier.channel == work.channel)
-                    && channel.accepted_command().is_some_and(|command| {
-                        crate::references(command).contains(&Some(maintenance.context))
-                    })
-            });
-        (self.halted() || channel.halted() || aborted).then_some(Error::Halted)
-    }
     pub(crate) fn release_invocation(&mut self, work: Work) {
         let halted = self.halted();
         let abort_context = self

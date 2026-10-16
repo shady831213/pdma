@@ -1,85 +1,118 @@
 use crate::{BranchError, RunError, Stage, StepOutcome, StepResult};
 mod plan;
+mod settle;
 mod state;
 pub use plan::{FanPlan, FanPolicy};
-pub use state::FanState;
-use state::Phase;
+use state::{FanState, Phase};
 
 /// Finite N-to-M value flow with independent child progress and bounded buffering.
 ///
 /// Each input is invoked once; output slots may be reused after completion.
 /// Planning consumes selected completed values only after validating the full plan.
+/// Failure stops admission and routing, then steps every accepted child once per
+/// call until all have completed before delivering the first error.
 #[derive(Debug)]
-pub struct Fan<S, P, T> {
+pub struct Fan<S, P, T, I, V, J, O, E> {
     inputs: Vec<S>,
     policy: P,
     outputs: Vec<T>,
+    batch: Option<FanState<I, V, J, O, E>>,
 }
-impl<S, P, T> Fan<S, P, T> {
+impl<S, P, T, I, V, J, O, E> Fan<S, P, T, I, V, J, O, E> {
+    pub(super) const fn is_active(&self) -> bool {
+        self.batch.is_some()
+    }
+
     /// Owns input stages, value-selection policy, and output stages.
     pub const fn new(inputs: Vec<S>, policy: P, outputs: Vec<T>) -> Self {
         Self {
             inputs,
             policy,
             outputs,
+            batch: None,
         }
     }
 }
-impl<C, S, P, T> Stage<C> for Fan<S, P, T>
+impl<C, S, P, T, I, V, J, O, E> Stage<C> for Fan<S, P, T, I, V, J, O, E>
 where
-    S: Stage<C>,
-    T: Stage<C, Error = S::Error>,
+    S: Stage<C, Input = I, Output = V, Error = E>,
+    T: Stage<C, Input = J, Output = O, Error = S::Error>,
     P: FanPolicy<S::Output, T::Input, S::Error>,
 {
     type Input = Vec<S::Input>;
     type Output = Vec<(usize, T::Output)>;
     type Error = BranchError<S::Error>;
-    type State = Option<FanState<S::State, S::Output, T::State, T::Output>>;
-    fn start(inputs: Self::Input) -> Self::State {
-        Some(FanState::new(inputs.into_iter().map(S::start).collect()))
-    }
     fn step(
         &mut self,
         context: &mut C,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, Self::Error> {
-        let mut batch = state.take().ok_or(RunError::Exhausted)?;
+        if self.batch.is_none() {
+            let Some(inputs) = input.take() else {
+                return Ok(StepOutcome::InProgress);
+            };
+            self.batch = Some(FanState::new(inputs));
+        }
+        let mut batch = self.batch.take().ok_or(RunError::Exhausted)?;
+        let result = if batch.failure.is_some() {
+            self.settle(context, &mut batch)
+        } else {
+            self.advance(context, &mut batch)
+        };
+        match result {
+            Ok(StepOutcome::Complete(Ok(()))) => Ok(StepOutcome::Complete(Ok(batch.receipts))),
+            Ok(StepOutcome::Complete(Err(error))) => {
+                batch.fail(error);
+                if batch.ready_phase().is_none() {
+                    Ok(StepOutcome::Complete(Err(batch
+                        .failure
+                        .take()
+                        .ok_or(RunError::Exhausted)?)))
+                } else {
+                    self.batch = Some(batch);
+                    Ok(StepOutcome::InProgress)
+                }
+            }
+            other => {
+                self.batch = Some(batch);
+                other.map(|_| StepOutcome::InProgress)
+            }
+        }
+    }
+}
+impl<S, P, T, I, V, J, O, E> Fan<S, P, T, I, V, J, O, E> {
+    fn advance<C>(
+        &mut self,
+        context: &mut C,
+        batch: &mut FanState<I, V, J, O, E>,
+    ) -> StepResult<(), BranchError<E>>
+    where
+        S: Stage<C, Input = I, Output = V, Error = E>,
+        T: Stage<C, Input = J, Output = O, Error = S::Error>,
+        P: FanPolicy<V, J, S::Error>,
+    {
         if batch.inputs.len() != self.inputs.len() {
             return Ok(StepOutcome::Complete(Err(BranchError::InputCount {
                 expected: self.inputs.len(),
                 actual: batch.inputs.len(),
             })));
         }
-        if batch.outputs.is_empty() {
-            batch.outputs = (0..self.outputs.len()).map(|_| None).collect();
-        }
+        batch.prepare_outputs(self.outputs.len());
         let Some(phase) = batch.ready_phase() else {
-            return Ok(StepOutcome::Complete(Ok(batch.receipts)));
+            return Ok(StepOutcome::Complete(Ok(())));
         };
         match phase {
             Phase::Inputs => {
-                for ((port, input), value) in self
-                    .inputs
-                    .iter_mut()
-                    .zip(&mut batch.inputs)
-                    .zip(&mut batch.values)
-                {
-                    if let Some(mut child) = input.take() {
-                        match port.step(context, &mut child)? {
-                            StepOutcome::InProgress => *input = Some(child),
-                            StepOutcome::Complete(Ok(output)) => *value = Some(output),
-                            StepOutcome::Complete(Err(error)) => {
-                                return Ok(StepOutcome::Complete(Err(BranchError::Application(
-                                    error,
-                                ))));
-                            }
-                        }
+                match self.advance_inputs(context, batch)? {
+                    StepOutcome::Complete(Ok(())) | StepOutcome::InProgress => {}
+                    StepOutcome::Complete(Err(error)) => {
+                        return Ok(StepOutcome::Complete(Err(BranchError::Application(error))));
                     }
                 }
                 batch.phase = Phase::Plan;
             }
             Phase::Plan => {
-                let available: Vec<_> = batch.outputs.iter().map(Option::is_none).collect();
+                let available: Vec<_> = batch.output_active.iter().map(|active| !active).collect();
                 let result = self
                     .policy
                     .plan(&batch.values, &available)
@@ -113,20 +146,32 @@ where
                     }
                     for (index, input) in plan.outputs.into_iter().zip(routed) {
                         let output = batch.outputs.get_mut(index).ok_or(RunError::Exhausted)?;
-                        *output = Some(T::start(input));
+                        *output = Some(input);
+                        *batch
+                            .output_active
+                            .get_mut(index)
+                            .ok_or(RunError::Exhausted)? = true;
                     }
                 }
                 batch.phase = Phase::Outputs;
             }
             Phase::Outputs => {
-                for (index, (port, output)) in
-                    self.outputs.iter_mut().zip(&mut batch.outputs).enumerate()
+                for (index, ((port, output), active)) in self
+                    .outputs
+                    .iter_mut()
+                    .zip(&mut batch.outputs)
+                    .zip(&mut batch.output_active)
+                    .enumerate()
                 {
-                    if let Some(mut child) = output.take() {
-                        match port.step(context, &mut child)? {
-                            StepOutcome::InProgress => *output = Some(child),
-                            StepOutcome::Complete(Ok(value)) => batch.receipts.push((index, value)),
+                    if *active {
+                        match port.step(context, output)? {
+                            StepOutcome::InProgress => {}
+                            StepOutcome::Complete(Ok(value)) => {
+                                batch.receipts.push((index, value));
+                                *active = false;
+                            }
                             StepOutcome::Complete(Err(error)) => {
+                                *active = false;
                                 return Ok(StepOutcome::Complete(Err(BranchError::Application(
                                     error,
                                 ))));
@@ -138,9 +183,40 @@ where
             }
         }
         if batch.ready_phase().is_none() {
-            return Ok(StepOutcome::Complete(Ok(batch.receipts)));
+            return Ok(StepOutcome::Complete(Ok(())));
         }
-        *state = Some(batch);
         Ok(StepOutcome::InProgress)
+    }
+    fn advance_inputs<C>(
+        &mut self,
+        context: &mut C,
+        batch: &mut FanState<I, V, J, O, E>,
+    ) -> StepResult<(), S::Error>
+    where
+        S: Stage<C, Input = I, Output = V, Error = E>,
+    {
+        for (((port, input), value), active) in self
+            .inputs
+            .iter_mut()
+            .zip(&mut batch.inputs)
+            .zip(&mut batch.values)
+            .zip(&mut batch.input_active)
+        {
+            if *active {
+                match port.step(context, input)? {
+                    StepOutcome::InProgress => {}
+                    StepOutcome::Complete(Ok(output)) => {
+                        *value = Some(output);
+                        *active = false;
+                    }
+                    StepOutcome::Complete(Err(error)) => {
+                        *active = false;
+                        return Ok(StepOutcome::Complete(Err(error)));
+                    }
+                }
+            }
+        }
+
+        Ok(StepOutcome::Complete(Ok(())))
     }
 }

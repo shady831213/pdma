@@ -24,7 +24,7 @@ const CASES: [Case; 4] = [
     Case {
         name: "dyn_stage",
         feature: "negative-dyn-stage",
-        fragments: &["error[E0038]", "not dyn compatible", "start"],
+        fragments: &["error[E0038]", "not dyn compatible", "Sized"],
     },
     Case {
         name: "compact_live_storage",

@@ -19,7 +19,7 @@ The channel and device `Reset` registers have the same read/write protocol:
 
 There is no minimum busy duration and software need not observe one before zero.
 An idle scope can complete during request handling, after its state is cleared.
-A scope with resident pipeline work remains busy until that work is flushed and
+A scope with resident pipeline work remains busy until that work has exited and
 cleanup is acknowledged. While busy, otherwise valid configuration/control/ring writes
 are rejected with `Error::ResetInProgress`, apart from the reset protocol itself;
 register reads remain available. Software may configure and enable the scope again
@@ -79,12 +79,16 @@ Finite data-path completion is not command retirement while Channel still has wo
 The selected execution boundary retains the identity of pipeline-resident work,
 separately from the accepted command and shared execution grant. Publication or
 parking can release the grant before all invocation-local state has exited.
-Reset first prevents admission and invalidates old work. If the scope has resident
-pipeline state, that boundary flushes its retained state before acknowledging
-retirement; it does not wait for a stalled child to return Complete. In hardware
-this corresponds to clearing affected valid/storage state through the reset
-control path, independently of data backpressure. In this synchronous model the
-retained Rust state is dropped before the owner's flush acknowledgement.
+Reset first prevents admission and invalidates old work. A resident stage observes
+the request through its borrowed context during step, before data-readiness checks
+or further effects. It releases the storage it owns and returns a terminal result.
+Then propagates that result without starting an unneeded successor; the selected
+projection releases residency only after its child graph actually completes.
+Buffered values that have not yet been accepted reach their receiving stage, which
+checks the same lifecycle state before acting. The projection never reaches into
+child storage or invokes an external flush method. In RTL, reset similarly must
+reach occupied stages independently of data readiness and completion must wait for
+their cleanup acknowledgements and any outstanding transactions.
 
 If no pipeline state resides in the scope, its owner can clear retained channel
 state and acknowledge immediately. An unrelated stalled channel therefore cannot
@@ -111,10 +115,13 @@ ExecutionContext, not the full Dma. Standard memory and publication stages check
 the private generation-bound identity before effects; a transform may modify
 owned bytes but cannot replace their geometry or identity. Persistent custom
 hardware effects need explicit storage and retirement rules. Merely dropping a
-software waiter or pipeline invocation does not request reset or clear the
+software waiter does not terminate the stage, request reset or clear the
 accepted task. Externally retained obsolete data does not prevent hardware cleanup
 once it has no authority to issue effects, but an active selected invocation must
-acknowledge its flush before reset completes.
+finish its affected work before reset completes. Custom stages must observe the
+context's lifecycle before readiness checks and side effects, release their own
+transient state, and report termination. A custom stage that ignores reset cannot
+be made quiescent by the composition framework; reset remains busy until it exits.
 
 ## Software waiting and memory lifetime
 

@@ -17,9 +17,9 @@ pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 /// Assembles one typed chunk pass through response publication.
 pub fn chunk_pipeline<M>(device: &Dma<M>) -> Pipeline {
     Then::new(
-        Then::new(PrepareChunk, ReadCopy),
+        Then::new(PrepareChunk::default(), ReadCopy::default()),
         Then::new(
-            WriteCopy,
+            WriteCopy::default(),
             Then::new(pdma_model_dma::CompletionInput, device.responses()),
         ),
     )
@@ -45,8 +45,9 @@ pub fn accept<M: MemoryAccess>(device: &mut Dma<M>, id: ChannelId) -> TestResult
     let fetched = fetch(device, id)?;
     let mut context = device.execution_context(id)?;
     let mut operation = Operation::new(Some(fetched));
+    let mut validation = CheckRanges::default();
     for _ in 0..1024 {
-        if let StepOutcome::Complete(result) = operation.step(&mut CheckRanges, &mut context)? {
+        if let StepOutcome::Complete(result) = operation.step(&mut validation, &mut context)? {
             return Ok(context.install_progress(result?.ok_or("no validated command")?)?);
         }
     }

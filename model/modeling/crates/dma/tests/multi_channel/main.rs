@@ -91,7 +91,7 @@ fn device_reset_subsumes_a_busy_channel_reset_and_cleans_idle_peers() -> TestRes
             break;
         }
     }
-    // Then: the resident flush completes both scopes and clears every queue configuration.
+    // Then: resident cleanup completes both scopes and clears every queue configuration.
     assert_eq!(word(&mut device, device_reset)?, 0);
     for index in 0..3 {
         let reset = ChannelId::new(index).admin_offset(3).ok_or("offset")?;

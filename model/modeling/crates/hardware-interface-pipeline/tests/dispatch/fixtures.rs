@@ -22,14 +22,10 @@ impl Stage<Context> for Source {
     type Input = Request;
     type Output = Request;
     type Error = &'static str;
-    type State = Option<Request>;
-    fn start(input: Request) -> Self::State {
-        Some(input)
-    }
     fn step(
         &mut self,
         context: &mut Context,
-        state: &mut Self::State,
+        state: &mut Option<Self::Input>,
     ) -> StepResult<Request, Self::Error> {
         let value = state.take().ok_or(RunError::Exhausted)?;
         context.source_calls += 1;
@@ -46,12 +42,14 @@ pub(super) enum Behavior {
 pub(super) struct Destination {
     pub id: usize,
     pub behavior: Behavior,
+    pub pending: (Option<Request>, bool),
 }
 impl Destination {
     pub(super) const fn new(id: usize) -> Self {
         Self {
             id,
             behavior: Behavior::Complete,
+            pending: (None, false),
         }
     }
 }
@@ -59,15 +57,18 @@ impl Stage<Context> for Destination {
     type Input = Request;
     type Output = ();
     type Error = &'static str;
-    type State = (Option<Request>, bool);
-    fn start(input: Request) -> Self::State {
-        (Some(input), false)
-    }
     fn step(
         &mut self,
         context: &mut Context,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<(), Self::Error> {
+        if self.pending.0.is_none() {
+            self.pending = (input.take(), false);
+        }
+        if self.pending.0.is_none() {
+            return Ok(StepOutcome::InProgress);
+        }
+        let state = &mut self.pending;
         context.attempts.push(self.id);
         match self.behavior {
             Behavior::Stall if !context.released => return Ok(StepOutcome::InProgress),
@@ -86,7 +87,7 @@ impl Stage<Context> for Destination {
                 return Ok(StepOutcome::Complete(Err("destination failed")));
             }
             Behavior::Exhausted => {
-                state.0 = None;
+                self.behavior = Behavior::Complete;
                 return Err(RunError::Exhausted);
             }
             Behavior::Complete | Behavior::Stall | Behavior::Progress => {}
@@ -110,11 +111,11 @@ impl Route<Request, &'static str> for Routing {
 }
 pub(super) fn finish<S: Stage<Context>>(
     hardware: &mut S,
-    state: &mut S::State,
+    state: &mut hardware_interface_pipeline::Operation<S, Context>,
     context: &mut Context,
 ) -> StepResult<S::Output, S::Error> {
     for _ in 0..100 {
-        match hardware.step(context, state) {
+        match state.step(hardware, context) {
             Ok(StepOutcome::InProgress) => {}
             terminal => return terminal,
         }

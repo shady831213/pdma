@@ -20,8 +20,8 @@ impl<B> AsyncExecutor<B> {
     /// Drives finite hardware services, yielding after every bounded interaction.
     ///
     /// # Cancel safety
-    /// The caller's driver retains unfinished invocation state and terminal
-    /// errors across cancellation, including cancellation at the final yield.
+    /// Hardware retains accepted work; the caller's driver retains pending input
+    /// and terminal errors across cancellation, including the final yield.
     /// Completed service effects are never replayed on resumption.
     pub async fn drive<C, S>(
         &self,
@@ -31,16 +31,17 @@ impl<B> AsyncExecutor<B> {
     where
         B: AsyncInteractionBackend<C> + Sync,
         S: Stage<C, Input = (), Output = ()> + Send,
-        S::State: Send,
         S::Error: Send,
     {
         loop {
-            if driver.is_complete() {
-                return Err(match driver.take_failure() {
-                    Some(Ok(error)) => AsyncRunError::Stage(error),
-                    Some(Err(error)) => AsyncRunError::Run(error),
-                    None => AsyncRunError::Run(RunError::Exhausted),
+            if let Some(failure) = driver.take_failure() {
+                return Err(match failure {
+                    Ok(error) => AsyncRunError::Stage(error),
+                    Err(error) => AsyncRunError::Run(error),
                 });
+            }
+            if driver.is_complete() {
+                return Err(AsyncRunError::Run(RunError::Exhausted));
             }
             let outcome = self
                 .backend
@@ -49,7 +50,14 @@ impl<B> AsyncExecutor<B> {
                 .map_err(AsyncRunError::BackendInteraction)?;
             self.backend.yield_now().await;
             match outcome {
-                Ok(StepOutcome::InProgress | StepOutcome::Complete(Ok(()))) => {}
+                Ok(StepOutcome::InProgress) => {}
+                Ok(StepOutcome::Complete(Ok(()))) => {
+                    return Err(match driver.take_failure() {
+                        Some(Ok(error)) => AsyncRunError::Stage(error),
+                        Some(Err(error)) => AsyncRunError::Run(error),
+                        None => AsyncRunError::Run(RunError::Exhausted),
+                    });
+                }
                 Ok(StepOutcome::Complete(Err(error))) => match error {},
                 Err(error) => return Err(AsyncRunError::Run(error)),
             }
@@ -60,7 +68,7 @@ impl<B> AsyncExecutor<B> {
     ///
     /// # Cancel safety
     /// Dropping this future releases any pending backend acquisition. The caller's
-    /// operation retains accepted request state and committed hardware effects remain.
+    /// operation retains pending input; hardware retains accepted work and committed effects.
     /// Calling this method again resumes that operation without reconstructing hardware.
     /// Terminal results remain in the operation until delivered after the final yield.
     pub async fn run<C, S>(
@@ -71,10 +79,13 @@ impl<B> AsyncExecutor<B> {
     where
         B: AsyncInteractionBackend<C> + Sync,
         S: Stage<C> + Send,
-        S::State: Send,
+        S::Input: Send,
         S::Output: Send,
         S::Error: Send,
     {
+        if let Some(error) = operation.take_run_error() {
+            return Err(AsyncRunError::Run(error));
+        }
         if let Some(result) = operation.take_completion() {
             return result.map_err(AsyncRunError::Stage);
         }
@@ -88,6 +99,9 @@ impl<B> AsyncExecutor<B> {
             match outcome {
                 Ok(StepOutcome::InProgress) => {}
                 Ok(StepOutcome::Complete(Ok(()))) => {
+                    if let Some(error) = operation.take_run_error() {
+                        return Err(AsyncRunError::Run(error));
+                    }
                     return operation
                         .take_completion()
                         .ok_or(AsyncRunError::Run(RunError::Exhausted))?

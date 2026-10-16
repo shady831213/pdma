@@ -5,7 +5,9 @@ use pdma_model_contract::dma::ResponseStatus;
 
 /// Reads a concrete bounded chunk and transfers its bytes to the next stage.
 #[derive(Debug, Default)]
-pub struct ReadCopy;
+pub struct ReadCopy {
+    state: Option<Chunk>,
+}
 
 impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for ReadCopy
 where
@@ -14,25 +16,26 @@ where
     type Input = Option<Chunk>;
     type Output = Option<Payload>;
     type Error = crate::Error;
-    type State = Option<Self::Input>;
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
     fn step(
         &mut self,
         context: &mut ExecutionContext<'_, M, SB>,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, crate::Error> {
-        if state.as_ref().ok_or(RunError::Exhausted)?.is_none() {
+        if self.state.is_none() {
+            let Some(input) = input.take() else {
+                return Ok(StepOutcome::InProgress);
+            };
+            self.state = input;
+        }
+        let state = &mut self.state;
+        if state.is_none() {
             match context.checkpoint_ready() {
                 Ok(true) => {
-                    *state = Some(
-                        context
-                            .selected
-                            .work
-                            .as_mut()
-                            .and_then(|accepted| accepted.unread.take()),
-                    );
+                    *state = context
+                        .selected
+                        .work
+                        .as_mut()
+                        .and_then(|accepted| accepted.unread.take());
                 }
                 Ok(false) => {}
                 Err(error) => {
@@ -41,7 +44,7 @@ where
                 }
             }
         }
-        let Some(chunk) = state.as_ref().ok_or(RunError::Exhausted)? else {
+        let Some(chunk) = state.as_ref() else {
             *state = None;
             return Ok(StepOutcome::Complete(Ok(None)));
         };
@@ -63,7 +66,7 @@ where
             ) {
                 match error.into() {
                     MemoryFailure::PageFault { .. } => {
-                        let Some(Some(chunk)) = state.take() else {
+                        let Some(chunk) = state.take() else {
                             return Err(RunError::Exhausted);
                         };
                         let work = chunk.work;
@@ -95,7 +98,7 @@ where
                 }
             }
         }
-        let Some(Some(chunk)) = state.take() else {
+        let Some(chunk) = state.take() else {
             return Err(RunError::Exhausted);
         };
         Ok(StepOutcome::Complete(Ok(Some(Payload { chunk, bytes }))))
@@ -104,7 +107,9 @@ where
 
 /// Consumes actual payload bytes and commits traversal only after a successful write.
 #[derive(Debug, Default)]
-pub struct WriteCopy;
+pub struct WriteCopy {
+    state: Option<Payload>,
+}
 
 impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for WriteCopy
 where
@@ -113,26 +118,27 @@ where
     type Input = Option<Payload>;
     type Output = Option<Completion>;
     type Error = crate::Error;
-    type State = Option<Self::Input>;
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
     fn step(
         &mut self,
         context: &mut ExecutionContext<'_, M, SB>,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, crate::Error> {
-        if state.as_ref().ok_or(RunError::Exhausted)?.is_none() {
+        if self.state.is_none() {
+            let Some(input) = input.take() else {
+                return Ok(StepOutcome::InProgress);
+            };
+            self.state = input;
+        }
+        let state = &mut self.state;
+        if state.is_none() {
             match context.checkpoint_ready() {
                 Ok(true) => {
-                    *state = Some(
-                        context
-                            .selected
-                            .work
-                            .as_mut()
-                            .and_then(|accepted| accepted.payload.take())
-                            .map(|payload| *payload),
-                    );
+                    *state = context
+                        .selected
+                        .work
+                        .as_mut()
+                        .and_then(|accepted| accepted.payload.take())
+                        .map(|payload| *payload);
                 }
                 Ok(false) => {}
                 Err(error) => {
@@ -141,7 +147,7 @@ where
                 }
             }
         }
-        let Some(payload) = state.as_ref().ok_or(RunError::Exhausted)? else {
+        let Some(payload) = state.as_ref() else {
             *state = None;
             return Ok(StepOutcome::Complete(Ok(None)));
         };
@@ -180,7 +186,7 @@ where
                 }
                 Err(error) => match error.into() {
                     MemoryFailure::PageFault { .. } => {
-                        let Some(Some(payload)) = state.take() else {
+                        let Some(payload) = state.take() else {
                             return Err(RunError::Exhausted);
                         };
                         context
@@ -211,13 +217,11 @@ where
         *state = None;
         let accepted = context.selected.work.as_mut().ok_or(RunError::Exhausted)?;
         let progress = accepted.progress.as_ref().ok_or(RunError::Exhausted)?;
-        if progress.remaining > 0 {
-            Ok(StepOutcome::Complete(Ok(None)))
-        } else {
-            Ok(StepOutcome::Complete(Ok(Some(Completion {
+        Ok(StepOutcome::Complete(Ok((progress.remaining == 0).then(
+            || Completion {
                 work,
                 response: progress.response(),
-            }))))
-        }
+            },
+        ))))
     }
 }

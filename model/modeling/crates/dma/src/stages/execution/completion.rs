@@ -1,5 +1,5 @@
 use crate::{Completion, Error, ExecutionContext};
-use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
+use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
 
 /// Merges a normal write completion with a retained stopping command response.
 #[derive(Debug)]
@@ -9,16 +9,14 @@ impl<M, SB> Stage<ExecutionContext<'_, M, SB>> for CompletionInput {
     type Input = Option<Completion>;
     type Output = Option<Completion>;
     type Error = Error;
-    type State = Option<Self::Input>;
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
     fn step(
         &mut self,
         context: &mut ExecutionContext<'_, M, SB>,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, Error> {
-        let completion = state.take().ok_or(RunError::Exhausted)?;
+        let Some(completion) = input.take() else {
+            return Ok(StepOutcome::InProgress);
+        };
         let work = context.work();
         let result = context.channel(work).map(|channel| {
             completion.or_else(|| {

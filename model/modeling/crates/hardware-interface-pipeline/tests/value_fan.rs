@@ -20,14 +20,10 @@ impl Stage<Context> for Source {
     type Input = String;
     type Output = String;
     type Error = &'static str;
-    type State = Option<String>;
-    fn start(input: String) -> Self::State {
-        Some(input)
-    }
     fn step(
         &mut self,
         context: &mut Context,
-        state: &mut Self::State,
+        state: &mut Option<Self::Input>,
     ) -> StepResult<String, Self::Error> {
         context.reads.push(self.0);
         if self.0 == 0 && !context.released {
@@ -38,25 +34,22 @@ impl Stage<Context> for Source {
             .ok_or(RunError::Exhausted)?)))
     }
 }
-struct Sink;
+#[derive(Default)]
+struct Sink(Option<String>);
 impl Stage<Context> for Sink {
     type Input = String;
     type Output = usize;
     type Error = &'static str;
-    type State = (Option<String>, bool);
-    fn start(input: String) -> Self::State {
-        (Some(input), false)
-    }
     fn step(
         &mut self,
         context: &mut Context,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<usize, Self::Error> {
-        if !state.1 {
-            state.1 = true;
+        if self.0.is_none() {
+            self.0 = input.take();
             return Ok(StepOutcome::InProgress);
         }
-        let value = state.0.take().ok_or(RunError::Exhausted)?;
+        let value = self.0.take().ok_or(RunError::Exhausted)?;
         let len = value.len();
         context.writes.push(value);
         Ok(StepOutcome::Complete(Ok(len)))
@@ -87,7 +80,7 @@ impl FanPolicy<String, String, &'static str> for Select {
 #[test]
 fn incomplete_input_does_not_block_completed_values_or_outputs() {
     // Given: the first source stalls while the second has an owned value.
-    let mut fan = Fan::new(vec![Source(0), Source(1)], Select, vec![Sink]);
+    let mut fan = Fan::new(vec![Source(0), Source(1)], Select, vec![Sink::default()]);
     let mut operation = Operation::new(vec!["first".into(), "second".into()]);
     let mut context = Context::default();
     // When: several sweeps run before the first source is released.
@@ -106,7 +99,7 @@ fn incomplete_input_does_not_block_completed_values_or_outputs() {
 #[test]
 fn completion_waits_for_retained_input_and_delivers_each_value_once() {
     // Given: a stalled source and another completed value share one output slot.
-    let mut fan = Fan::new(vec![Source(0), Source(1)], Select, vec![Sink]);
+    let mut fan = Fan::new(vec![Source(0), Source(1)], Select, vec![Sink::default()]);
     let first = "first".to_owned();
     let second = "second".to_owned();
     let expected = vec![(0, second.len()), (0, first.len())];

@@ -29,11 +29,14 @@ fn chunked_transform(fault: bool) -> TestResult {
     if fault {
         device.memory.missing.set(Some((0x1900, true)));
     }
-    let chunks = Then::new(PrepareChunk, Then::new(ReadCopy, InvertPayload));
+    let chunks = Then::new(
+        PrepareChunk::default(),
+        Then::new(ReadCopy::default(), InvertPayload),
+    );
     let mut service = device.hardware_with(Then::new(
         chunks,
         Then::new(
-            WriteCopy,
+            WriteCopy::default(),
             Then::new(pdma_model_dma::CompletionInput, device.responses()),
         ),
     ));

@@ -1,6 +1,5 @@
 use super::fixtures::{Behavior, Context, Destination, Routing, Source, finish, request};
-use hardware_interface_pipeline::{Dispatch, FanOut, Operation, Stage, StepOutcome};
-type Routed = FanOut<Source, Dispatch<Routing>, Destination>;
+use hardware_interface_pipeline::{Dispatch, FanOut, Operation, StepOutcome};
 #[test]
 fn routes_owned_input_only_to_selected_destination_across_distinct_steps() {
     // Given: a request addressed to the middle destination.
@@ -33,13 +32,14 @@ fn stalled_destination_resumes_owned_input_without_restarting_source() {
         vec![Destination {
             id: 0,
             behavior: Behavior::Stall,
+            pending: (None, false),
         }],
     );
-    let mut state = Routed::start(request(0));
+    let mut state = hardware_interface_pipeline::Operation::new(request(0));
     let mut context = Context::default();
     for _ in 0..6 {
         assert_eq!(
-            hardware.step(&mut context, &mut state),
+            state.step(&mut hardware, &mut context),
             Ok(StepOutcome::InProgress)
         );
     }
@@ -60,9 +60,10 @@ fn progressed_destination_retains_mutated_child_state() {
         vec![Destination {
             id: 0,
             behavior: Behavior::Progress,
+            pending: (None, false),
         }],
     );
-    let mut state = Routed::start(request(0));
+    let mut state = hardware_interface_pipeline::Operation::new(request(0));
     let mut context = Context::default();
     // When: execution proceeds to completion.
     let result = finish(&mut hardware, &mut state, &mut context);

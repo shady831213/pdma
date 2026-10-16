@@ -7,26 +7,33 @@ use pdma_model_contract::dma::{ChannelId, ContextId, DmaAccess};
 #[derive(Debug)]
 pub struct Publish {
     channel: ChannelId,
+    state: Option<Completion>,
 }
 impl Publish {
     /// Binds publication to the specified response-ring owner.
     pub const fn new(channel: ChannelId) -> Self {
-        Self { channel }
+        Self {
+            channel,
+            state: None,
+        }
     }
 }
 impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for Publish {
     type Input = Completion;
     type Output = ();
     type Error = crate::Error;
-    type State = Option<Completion>;
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
     fn step(
         &mut self,
         context: &mut ExecutionContext<'_, M, SB>,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<(), crate::Error> {
+        if self.state.is_none() {
+            self.state = input.take();
+        }
+        let state = &mut self.state;
+        if state.is_none() {
+            return Ok(StepOutcome::InProgress);
+        }
         let completion = state.as_ref().ok_or(RunError::Exhausted)?;
         let work = completion.work;
         if work.channel() != self.channel {

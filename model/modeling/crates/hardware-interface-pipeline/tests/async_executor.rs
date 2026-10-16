@@ -36,21 +36,21 @@ mod async_executor {
         type Input = &'static str;
         type Output = &'static str;
         type Error = &'static str;
-        type State = ();
-
-        fn start(_: Self::Input) -> Self::State {}
 
         fn step(
             &mut self,
             context: &mut Context,
-            (): &mut Self::State,
+            input: &mut Option<Self::Input>,
         ) -> StepResult<Self::Output, Self::Error> {
+            let Some(_) = input.take() else {
+                return Ok(StepOutcome::InProgress);
+            };
             context.push(self.name);
             Ok(StepOutcome::Complete(self.result))
         }
     }
 
-    fn ready_chain() -> Then<Then<Leaf, Leaf>, Leaf> {
+    fn ready_chain() -> Then<Then<Leaf, Leaf, &'static str>, Leaf, &'static str> {
         Leaf::new("A", Ok("a"))
             .then(Leaf::new("B", Ok("b")))
             .then(Leaf::new("C", Ok("terminal")))
@@ -116,8 +116,8 @@ mod async_executor {
     async fn unfinished_stage_is_revisited_without_a_notification() {
         // Given: a stage retaining unfinished work and an immediately ready backend.
         let executor = AsyncExecutor::new(ScriptedBackend::configured(true, true, None));
-        let mut stage = TwoStep;
-        let mut stepped_hw = TwoStep;
+        let mut stage = TwoStep::default();
+        let mut stepped_hw = TwoStep::default();
         let mut stepped_op = Operation::new(());
 
         // When: the async executor cooperatively revisits the retained work.
@@ -213,27 +213,27 @@ mod async_executor {
         assert_eq!(after.backend().interactions.load(Ordering::SeqCst), 1);
     }
 
-    struct TwoStep;
+    #[derive(Default)]
+    struct TwoStep(bool);
 
     impl Stage<Context> for TwoStep {
         type Input = ();
         type Output = &'static str;
         type Error = &'static str;
-        type State = bool;
-
-        fn start((): Self::Input) -> Self::State {
-            false
-        }
 
         fn step(
             &mut self,
             _: &mut Context,
-            state: &mut Self::State,
+            input: &mut Option<Self::Input>,
         ) -> StepResult<Self::Output, Self::Error> {
-            if *state {
+            if self.0 {
+                self.0 = false;
                 Ok(StepOutcome::Complete(Ok("completed")))
             } else {
-                *state = true;
+                let Some(()) = input.take() else {
+                    return Ok(StepOutcome::InProgress);
+                };
+                self.0 = true;
                 Ok(StepOutcome::InProgress)
             }
         }

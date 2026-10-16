@@ -13,6 +13,7 @@ pub(super) struct Context {
     pub blocked: Vec<usize>,
     pub stalled: bool,
     pub updates: usize,
+    pub reset: bool,
 }
 impl Context {
     pub(super) fn with_jobs(channels: &[usize]) -> Self {
@@ -34,19 +35,14 @@ impl Stage<Context> for Candidate {
     type Input = ();
     type Output = Option<usize>;
     type Error = &'static str;
-    type State = bool;
-    fn start((): ()) -> bool {
-        false
-    }
     fn step(
         &mut self,
         context: &mut Context,
-        done: &mut bool,
+        input: &mut Option<()>,
     ) -> StepResult<Self::Output, Self::Error> {
-        if *done {
-            return Err(RunError::Exhausted);
-        }
-        *done = true;
+        let Some(()) = input.take() else {
+            return Ok(StepOutcome::InProgress);
+        };
         context.observed.push(self.0);
         Ok(StepOutcome::Complete(Ok(context
             .queues
@@ -58,59 +54,77 @@ impl Stage<Context> for Candidate {
 pub(super) enum AcceptState {
     New(usize),
     Active(Job),
-    Done,
 }
-pub(super) enum Accept {
+pub(super) enum Behavior {
     Normal,
     Failure,
     Exhausted,
+}
+pub(super) struct Accept {
+    pub behavior: Behavior,
+    pending: Option<AcceptState>,
+}
+impl Accept {
+    pub(super) const fn new(behavior: Behavior) -> Self {
+        Self {
+            behavior,
+            pending: None,
+        }
+    }
 }
 impl Stage<Context> for Accept {
     type Input = usize;
     type Output = Option<Job>;
     type Error = &'static str;
-    type State = AcceptState;
-    fn start(input: usize) -> AcceptState {
-        AcceptState::New(input)
-    }
     fn step(
         &mut self,
         context: &mut Context,
-        state: &mut AcceptState,
+        input: &mut Option<usize>,
     ) -> StepResult<Self::Output, Self::Error> {
-        let active = std::mem::replace(state, AcceptState::Done);
+        if self.pending.is_none() {
+            self.pending = input.take().map(AcceptState::New);
+        }
+        let Some(active) = self.pending.take() else {
+            return Ok(StepOutcome::InProgress);
+        };
+        if context.reset {
+            return Ok(StepOutcome::Complete(Err("reset")));
+        }
         match active {
             AcceptState::New(index) => {
                 let Some(job) = context.queues.get_mut(index).and_then(VecDeque::pop_front) else {
                     return Ok(StepOutcome::Complete(Ok(None)));
                 };
                 context.accepted.push(index);
-                *state = AcceptState::Active(job);
+                self.pending = Some(AcceptState::Active(job));
                 Ok(StepOutcome::InProgress)
             }
             AcceptState::Active(job) => {
                 if context.blocked.contains(&job.channel) {
                     context.stalled = true;
-                    *state = AcceptState::Active(job);
+                    self.pending = Some(AcceptState::Active(job));
                     return Ok(StepOutcome::InProgress);
                 }
-                match self {
-                    Self::Normal => Ok(StepOutcome::Complete(Ok(Some(job)))),
-                    Self::Failure => Ok(StepOutcome::Complete(Err("accept failed"))),
-                    Self::Exhausted => Err(RunError::Exhausted),
+                match self.behavior {
+                    Behavior::Normal => Ok(StepOutcome::Complete(Ok(Some(job)))),
+                    Behavior::Failure => Ok(StepOutcome::Complete(Err("accept failed"))),
+                    Behavior::Exhausted => {
+                        self.pending = Some(AcceptState::Active(job));
+                        self.behavior = Behavior::Normal;
+                        Err(RunError::Exhausted)
+                    }
                 }
             }
-            AcceptState::Done => Err(RunError::Exhausted),
         }
     }
 }
 pub(super) fn finish<S: Stage<Context>>(
     hardware: &mut S,
-    state: &mut S::State,
+    state: &mut hardware_interface_pipeline::Operation<S, Context>,
     context: &mut Context,
 ) -> StepResult<S::Output, S::Error> {
     for _ in 0..100 {
-        match hardware.step(context, state) {
+        match state.step(hardware, context) {
             Ok(StepOutcome::InProgress) => {}
             terminal => return terminal,
         }

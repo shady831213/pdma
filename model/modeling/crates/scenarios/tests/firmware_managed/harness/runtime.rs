@@ -75,7 +75,7 @@ where
     M::Error: Into<pdma_model_dma::MemoryFailure>,
 {
     shared: Arc<Shared<M>>,
-    hardware: pdma_model_dma::Hardware,
+    hardware: Box<pdma_model_dma::Hardware>,
     firmware_runtime: InterruptRuntime<PendingInterrupt<ControlIrq>>,
     firmware_cpu: Arc<SoftwareCpu>,
     firmware_memory: memory::ControlMemory<M>,

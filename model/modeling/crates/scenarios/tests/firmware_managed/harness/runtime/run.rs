@@ -44,9 +44,9 @@ where
         let hardware = async {
             let mut pipeline = self.hardware;
             let executor = AsyncExecutor::new(Driver(self.shared));
-            let mut driver = Box::new(HardwareDriver::new());
+            let mut driver = HardwareDriver::new();
             executor
-                .drive(&mut pipeline, &mut driver)
+                .drive(pipeline.as_mut(), &mut driver)
                 .await
                 .map_err(RunError::Hardware)?;
             Err::<Infallible, _>(RunError::HardwareStopped)

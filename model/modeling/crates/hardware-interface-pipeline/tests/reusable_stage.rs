@@ -13,13 +13,8 @@ impl Stage<()> for Accumulator {
     type Input = String;
     type Output = String;
     type Error = String;
-    type State = Option<String>;
 
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
-
-    fn step(&mut self, (): &mut (), state: &mut Self::State) -> StepResult<String, String> {
+    fn step(&mut self, (): &mut (), state: &mut Option<Self::Input>) -> StepResult<String, String> {
         match state.take() {
             Some(input) => {
                 self.calls += 1;
@@ -64,19 +59,19 @@ fn same_nested_hardware_processes_two_owned_requests() {
 struct Publication {
     ready: bool,
     records: Vec<String>,
+    reset: bool,
 }
 
 impl Stage<()> for Publication {
     type Input = String;
     type Output = ();
     type Error = String;
-    type State = Option<String>;
 
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
-
-    fn step(&mut self, (): &mut (), state: &mut Self::State) -> StepResult<(), String> {
+    fn step(&mut self, (): &mut (), state: &mut Option<Self::Input>) -> StepResult<(), String> {
+        if self.reset {
+            state.take();
+            return Ok(StepOutcome::Complete(Err("reset".to_owned())));
+        }
         if !self.ready {
             return Ok(StepOutcome::InProgress);
         }
@@ -91,7 +86,7 @@ impl Stage<()> for Publication {
 }
 
 #[test]
-fn reset_discards_pending_handoff_without_resetting_hardware() {
+fn stage_observes_reset_before_fresh_handoff_without_resetting_hardware() {
     // Given: a request retained downstream after an upstream hardware interaction.
     let mut hardware = Accumulator::default().then(Publication::default());
     let mut operation = Operation::new("discarded".to_owned());
@@ -104,8 +99,13 @@ fn reset_discards_pending_handoff_without_resetting_hardware() {
         Ok(StepOutcome::InProgress)
     );
 
-    // When: reset discards that operation and a fresh request uses the same hardware.
-    operation.reset();
+    // When: the stage observes reset and completes before accepting a fresh request.
+    hardware.downstream.reset = true;
+    assert_eq!(
+        operation.step(&mut hardware, &mut ()),
+        Ok(StepOutcome::Complete(Err("reset".to_owned())))
+    );
+    hardware.downstream.reset = false;
     hardware.downstream.ready = true;
     assert_eq!(
         operation.step(&mut hardware, &mut ()),

@@ -36,6 +36,7 @@ async fn cancelled_executor_resumes_stalled_child_without_restarting_source() {
         vec![Destination {
             id: 0,
             behavior: Behavior::Stall,
+            pending: (None, false),
         }],
     );
     let mut operation = Operation::new(request(0));

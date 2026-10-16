@@ -1,27 +1,31 @@
 use crate::channel::RangeCheck;
 use crate::{CopyProgress, ExecutionContext, FetchedCommand, Work};
-use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
+use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::MemoryAccess;
 
 /// Incrementally validates the freshly fetched descriptor exactly once.
 #[derive(Debug, Default)]
-pub struct CheckRanges;
+pub struct CheckRanges {
+    state: Option<(Work, RangeCheck)>,
+}
 
 impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for CheckRanges {
     type Input = Option<FetchedCommand>;
     type Output = Option<CopyProgress>;
     type Error = crate::Error;
-    type State = Option<Option<(Work, RangeCheck)>>;
-    fn start(input: Self::Input) -> Self::State {
-        Some(input.map(|fetched| (fetched.work, RangeCheck::new(fetched.command))))
-    }
     fn step(
         &mut self,
         context: &mut ExecutionContext<'_, M, SB>,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, crate::Error> {
-        let Some((work, scan)) = state.as_mut().ok_or(RunError::Exhausted)? else {
-            *state = None;
+        if self.state.is_none() {
+            let Some(input) = input.take() else {
+                return Ok(StepOutcome::InProgress);
+            };
+            self.state = input.map(|fetched| (fetched.work, RangeCheck::new(fetched.command)));
+        }
+        let state = &mut self.state;
+        let Some((work, scan)) = state.as_mut() else {
             return Ok(StepOutcome::Complete(Ok(None)));
         };
         match context.ready(*work) {

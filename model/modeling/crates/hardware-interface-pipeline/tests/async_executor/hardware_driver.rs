@@ -24,33 +24,42 @@ async fn finish<T>(future: impl Future<Output = T>) -> Option<T> {
 struct Service {
     completed: bool,
     failure: bool,
+    accepted: bool,
 }
 
 impl Stage<Context> for Service {
     type Input = ();
     type Output = ();
     type Error = &'static str;
-    type State = bool;
 
-    fn start((): ()) -> bool {
-        false
-    }
-
-    fn step(&mut self, context: &mut Context, accepted: &mut bool) -> StepResult<(), Self::Error> {
+    fn step(
+        &mut self,
+        context: &mut Context,
+        input: &mut Option<()>,
+    ) -> StepResult<(), Self::Error> {
         if self.completed {
+            let Some(()) = input.take() else {
+                return Ok(StepOutcome::InProgress);
+            };
             context.push("stopped");
             return Ok(StepOutcome::Complete(Err("stop")));
         }
-        if !*accepted {
-            *accepted = true;
+        if !self.accepted {
+            let Some(()) = input.take() else {
+                return Ok(StepOutcome::InProgress);
+            };
+            self.accepted = true;
             context.push("accepted");
             return Ok(StepOutcome::InProgress);
         }
-        self.completed = true;
-        context.push("committed");
         if self.failure {
+            self.failure = false;
+            context.push("interrupted");
             Err(RunError::BudgetExhausted)
         } else {
+            self.completed = true;
+            self.accepted = false;
+            context.push("committed");
             Ok(StepOutcome::Complete(Ok(())))
         }
     }
@@ -63,6 +72,7 @@ async fn cancellation_after_acceptance_preserves_the_active_invocation() {
     let mut hardware = Service {
         completed: false,
         failure: false,
+        accepted: false,
     };
     let mut driver = HardwareDriver::new();
 
@@ -89,6 +99,7 @@ async fn cancellation_at_successful_completion_yield_does_not_replay_effects() {
     let mut hardware = Service {
         completed: false,
         failure: false,
+        accepted: false,
     };
     let mut driver = HardwareDriver::new();
     assert_eq!(
@@ -117,13 +128,14 @@ async fn cancellation_at_successful_completion_yield_does_not_replay_effects() {
 }
 
 #[tokio::test]
-async fn cancellation_at_failure_yield_retains_typed_and_raw_terminal_errors() {
+async fn cancellation_at_failure_yield_retains_typed_and_raw_failure_receipts() {
     // Given: either a stage failure or a raw run failure occurs on the next step.
     for raw in [false, true] {
         let executor = AsyncExecutor::new(ScriptedBackend::configured(true, true, None));
         let mut hardware = Service {
             completed: !raw,
             failure: raw,
+            accepted: false,
         };
         let mut driver = HardwareDriver::new();
         if raw {
@@ -133,22 +145,30 @@ async fn cancellation_at_failure_yield_retains_typed_and_raw_terminal_errors() {
             );
         }
 
-        // When: delivery is canceled at the terminal yield and retried.
+        // When: delivery is canceled at the failure yield and retried.
         let mut run = Box::pin(executor.drive(&mut hardware, &mut driver));
         assert!(poll_once(run.as_mut()).is_pending());
         drop(run);
-        assert!(driver.is_complete());
+        assert_eq!(driver.is_complete(), !raw);
         let result = finish(executor.drive(&mut hardware, &mut driver)).await;
         let retried = finish(executor.drive(&mut hardware, &mut driver)).await;
 
-        // Then: the original failure survives, and no terminal effect runs again.
+        // Then: the original receipt survives and raw failure resumes the accepted invocation.
         let expected = if raw {
             AsyncRunError::Run(RunError::BudgetExhausted)
         } else {
             AsyncRunError::Stage("stop")
         };
         assert_eq!(result, Some(Err(expected)));
-        assert_eq!(retried, Some(Err(AsyncRunError::Run(RunError::Exhausted))));
-        assert_eq!(lock(&executor.backend().context).len(), 1);
+        if raw {
+            assert_eq!(retried, Some(Err(AsyncRunError::Stage("stop"))));
+            assert_eq!(
+                *lock(&executor.backend().context),
+                ["interrupted", "committed", "stopped"]
+            );
+        } else {
+            assert_eq!(retried, Some(Err(AsyncRunError::Run(RunError::Exhausted))));
+            assert_eq!(*lock(&executor.backend().context), ["stopped"]);
+        }
     }
 }

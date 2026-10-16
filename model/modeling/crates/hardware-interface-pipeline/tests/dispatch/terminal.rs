@@ -1,6 +1,5 @@
 use super::fixtures::{Behavior, Context, Destination, Routing, Source, finish, request};
-use hardware_interface_pipeline::{BranchError, Dispatch, FanOut, RunError, Stage, StepOutcome};
-type Routed = FanOut<Source, Dispatch<Routing>, Destination>;
+use hardware_interface_pipeline::{BranchError, Dispatch, FanOut, RunError, StepOutcome};
 #[test]
 fn invalid_destination_fails_before_effects_including_empty_population() {
     // Given: target 2 does not exist in either tested population.
@@ -10,7 +9,7 @@ fn invalid_destination_fails_before_effects_including_empty_population() {
             Dispatch::new(Routing::Accept),
             (0..count).map(Destination::new).collect(),
         );
-        let mut state = Routed::start(request(2));
+        let mut state = hardware_interface_pipeline::Operation::new(request(2));
         let mut context = Context::default();
         // When: routing validates the target.
         let result = finish(&mut hardware, &mut state, &mut context);
@@ -33,7 +32,7 @@ fn policy_error_is_wrapped_once_before_destination_effects() {
         Dispatch::new(Routing::Reject),
         vec![Destination::new(0)],
     );
-    let mut state = Routed::start(request(0));
+    let mut state = hardware_interface_pipeline::Operation::new(request(0));
     let mut context = Context::default();
     // When: routing rejects the request.
     let result = finish(&mut hardware, &mut state, &mut context);
@@ -61,17 +60,32 @@ fn destination_error_or_exhaustion_makes_direct_state_terminal() {
         let mut hardware = FanOut::new(
             Source,
             Dispatch::new(Routing::Accept),
-            vec![Destination { id: 0, behavior }],
+            vec![Destination {
+                id: 0,
+                behavior,
+                pending: (None, false),
+            }],
         );
-        let mut state = Routed::start(request(0));
+        let mut state = hardware_interface_pipeline::Operation::new(request(0));
         let mut context = Context::default();
         // When: the failed output is advanced and the caller attempts reuse.
         let result = finish(&mut hardware, &mut state, &mut context);
-        let repeated = hardware.step(&mut context, &mut state);
         // Then: terminal state cannot repeat output effects.
         assert_eq!(result, expected);
-        assert_eq!(repeated, Err(RunError::Exhausted));
         assert_eq!(context.attempts, [0]);
-        assert!(state.is_none());
+        if expected.is_err() {
+            assert!(!state.is_complete());
+            assert_eq!(
+                finish(&mut hardware, &mut state, &mut context),
+                Ok(StepOutcome::Complete(Ok(vec![(0, ())])))
+            );
+            assert_eq!(context.deliveries, [(0, "owned payload".into())]);
+        } else {
+            assert_eq!(
+                state.step(&mut hardware, &mut context),
+                Err(RunError::Exhausted)
+            );
+        }
+        assert!(state.is_complete());
     }
 }

@@ -231,7 +231,7 @@ AfterEach was also removed. It attached maintenance to another child's step coun
 and could hold that child's result while maintenance progressed. The subsequent
 independently driven lifecycle-unit design was also rejected (section 12).
 IRQ now updates at source mutations; reset uses owner cleanup and an out-of-band
-pipeline flush handshake. Then expresses data dependencies; FanIn/Arbitrate and
+request observed by the active stages (section 14). Then expresses data dependencies; FanIn/Arbitrate and
 FanOut/Dispatch retain selection/routing. No generic replacement callback wrapper
 or PDMA policy in runtime is introduced.
 
@@ -604,6 +604,10 @@ tests cover the same graph without relying on Service to supply missing wiring.
 
 ## 12. Remove Service and return lifecycle behavior to hardware owners
 
+The flush mechanism discussed in this section records an intermediate design.
+Section 14 supersedes it with stage-owned cleanup through step; the architectural
+request/completion contract and separation of ownership remain applicable.
+
 The two-path Service still imposed a shared completion round on admission and
 execution. Install discarded its ChunkInput and a separate ChunkSource reconstructed
 it from active state, so this barrier compensated for a disconnected data boundary.
@@ -662,3 +666,75 @@ again rather than silently retagging live state. Regression coverage includes
 normal and read-error responses after reset/reconfiguration before acceptance,
 as well as rejection of stale accepted work. Tests do not require a reset channel
 to keep its former arbitration position ahead of eligible peers.
+
+## 13. Task selection and stage-owned processing state
+
+Review found that the fan's output was a SelectedRequest passthrough and a later
+Grant stage performed real reception, continued the active task, and recreated
+execution input. That split obscured task selection: arbitration chooses a task
+candidate carrying channel identity, not a channel from which another task may be
+substituted. The actual accepting/executing Then subgraph now occupies FanIn's
+output. The passthrough and Grant are removed. The receiver validates the exact
+descriptor head/generation or retained task position before acquiring residency.
+
+A healthy command keeps its authorization across finite chunk passes. Its owning
+channel provides Continue while peers are backpressured; DMA arbitration holds
+that authorization without advancing RR. Fault releases it and Resume competes
+again. These requests traverse existing fan phases, but continuing a chunk does
+not mean fresh task arbitration, descriptor fetch or range validation. This is
+DMA policy, not a new framework combinator or a restart wrapper.
+
+The separate Stage::State/start API also proved unnecessary for expressing stage
+interfaces. Input is transferred data; processing state belongs inside the stage.
+step now receives a mutable optional input slot. Taking it is acceptance, a busy
+stage leaves another offer untouched, and completion leaves the stage reusable.
+No offer is distinct from an offered optional bubble. Combinators own their typed
+edge buffers; child stages own their own unfinished work. Extra inferred edge type
+parameters let Then/Fan store those values without a context lifetime, type erasure
+or a second execution trait. Static-only composition remains the framework contract.
+
+Moving state into hardware must not make asynchronous cancellation reset it.
+Drivers retain unaccepted input and terminal receipts; canceling a driving future
+does not flush the stages. Results and call errors survive cancellation during
+the terminal yield without replaying effects.
+
+A contextless flush prototype exposed a real lifecycle bug: it erased Selected's
+local identity but left the channel's resident marker, causing a later MMIO reset
+to remain busy forever. A subsequent flush(context) prototype released residency
+after recursively clearing children. User review rejected this design too: moving
+state inside a stage cannot justify giving its parent a second way to control that
+continuation. The required correction is recorded below; the prototype is not the
+current reset contract.
+
+## 14. Continuation-owned completion, without framework flush
+
+The stage instance owns its continuation. Its public processing interface is step,
+not a private State handle or an external flush/cancel entry point. Removing start
+or moving State into the object does not require a new termination mechanism.
+The former Selected boundary used flush to override an arbitrary stalled child's
+lifetime. That hid the model stage's obligation to implement reset correctly.
+
+Reset remains a DMA hardware request recorded in context. An active stage observes
+that request before data-readiness checks or side effects, performs its own cleanup,
+and returns Complete only when its accepted work has exited. The selected-context
+projection steps the child normally and releases residency after child completion.
+It cannot force the child to terminate. A stage with additional real cleanup work
+may remain InProgress while doing that work; reset busy remains set. This preserves
+the architectural request/completion and memory-lifetime contract without treating
+Rust destructor execution as a hardware acknowledgement. No timing or bus-transaction
+simulation is introduced. Idle scopes can still complete immediately.
+
+Then owns only its connecting edge and phase. A child domain error terminates the
+sequence after that child has released its own processing state. Fan requires more
+care because several children may have accepted work: on the first domain/routing
+error it stops admission and discards its own unaccepted values, but continues
+accepted children until they complete before reporting the retained error. It must
+not silently drop those continuations, reset them, or report premature completion.
+Call errors do not establish termination and preserve graph state for further
+driving. Canceling a driving future likewise does not terminate hardware.
+
+This correction keeps lifecycle semantics in the hardware model and value-flow
+semantics in the generic framework. Custom DMA stages share the same obligation:
+observe the context lifecycle even while stalled and finish their own cleanup.
+The framework cannot guarantee reset completion for a child that ignores reset.
+The authoritative completion and RTL obligations remain in reset.md.

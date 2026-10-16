@@ -5,6 +5,7 @@ pub(super) struct Context {
     pub attempts: Vec<usize>,
     pub deliveries: Vec<(usize, String)>,
     pub blocked: Vec<usize>,
+    pub reset: bool,
 }
 #[derive(Debug)]
 pub(super) struct Parcel(pub String);
@@ -16,14 +17,10 @@ impl Stage<Context> for Source {
     type Input = Request;
     type Output = Request;
     type Error = &'static str;
-    type State = Option<Request>;
-    fn start(input: Request) -> Self::State {
-        Some(input)
-    }
     fn step(
         &mut self,
         context: &mut Context,
-        state: &mut Self::State,
+        state: &mut Option<Self::Input>,
     ) -> StepResult<Request, Self::Error> {
         let request = state.take().ok_or(RunError::Exhausted)?;
         context.sources += 1;
@@ -39,12 +36,14 @@ pub(super) enum Behavior {
 pub(super) struct Destination {
     pub id: usize,
     pub behavior: Behavior,
+    pub pending: (Option<Parcel>, bool),
 }
 impl Destination {
     pub(super) const fn new(id: usize) -> Self {
         Self {
             id,
             behavior: Behavior::Normal,
+            pending: (None, false),
         }
     }
 }
@@ -52,16 +51,23 @@ impl Stage<Context> for Destination {
     type Input = Parcel;
     type Output = Receipt;
     type Error = &'static str;
-    type State = (Option<Parcel>, bool);
-    fn start(input: Parcel) -> Self::State {
-        (Some(input), false)
-    }
     fn step(
         &mut self,
         context: &mut Context,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Receipt, Self::Error> {
+        if self.pending.0.is_none() {
+            self.pending = (input.take(), false);
+        }
+        if self.pending.0.is_none() {
+            return Ok(StepOutcome::InProgress);
+        }
+        let state = &mut self.pending;
         context.attempts.push(self.id);
+        if context.reset {
+            state.0 = None;
+            return Ok(StepOutcome::Complete(Err("reset")));
+        }
         if context.blocked.contains(&self.id) {
             return Ok(StepOutcome::InProgress);
         }
@@ -71,7 +77,7 @@ impl Stage<Context> for Destination {
                 return Ok(StepOutcome::Complete(Err("destination failed")));
             }
             Behavior::Exhausted => {
-                state.0 = None;
+                self.behavior = Behavior::Normal;
                 return Err(RunError::Exhausted);
             }
             Behavior::Progress if !state.1 => {
@@ -119,11 +125,11 @@ pub(super) fn request(indices: &[usize]) -> Request {
 }
 pub(super) fn finish<S: Stage<Context>>(
     hardware: &mut S,
-    state: &mut S::State,
+    state: &mut hardware_interface_pipeline::Operation<S, Context>,
     context: &mut Context,
 ) -> StepResult<S::Output, S::Error> {
     for _ in 0..100 {
-        match hardware.step(context, state) {
+        match state.step(hardware, context) {
             Ok(StepOutcome::InProgress) => {}
             terminal => return terminal,
         }

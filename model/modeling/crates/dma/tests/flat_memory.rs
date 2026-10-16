@@ -176,9 +176,7 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
         device.write(offset, &1_u32.to_le_bytes())?;
     }
     let mut hardware = support::chunk_pipeline(&device);
-    let mut state = <pdma_model_dma::Pipeline as Stage<
-        pdma_model_dma::ExecutionContext<'_, FlatMemory>,
-    >>::start(Some(support::accept(
+    let mut state = Some(Some(support::accept(
         &mut device,
         pdma_model_contract::dma::ChannelId::new(0),
     )?));

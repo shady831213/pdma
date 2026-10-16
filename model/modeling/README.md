@@ -123,9 +123,9 @@ Custom execution supplies a complete ordinary
 stage graph, with explicit data and completion boundaries:
 
 ```rust
-let read = Then::new(PrepareChunk, ReadCopy);
+let read = Then::new(PrepareChunk::default(), ReadCopy::default());
 let publish = Then::new(CompletionInput, device.responses());
-let write = Then::new(WriteCopy, publish);
+let write = Then::new(WriteCopy::default(), publish);
 device.hardware_with(Then::new(read, write))
 ```
 
@@ -145,17 +145,18 @@ outputs and local state. Moving those values does not release accepted ownership
 There is no global Action enum telling every stage which operation to execute,
 and no Channel-owned Rust Operation or generic composition continuation.
 
-Candidate produces a non-owning channel request. FanIn and Arbitrate::snapshots
-select a request through DMA's RoundRobin policy, without calling source stages
+Candidate produces a non-owning task request carrying its originating channel.
+FanIn and Arbitrate::snapshots select a task through DMA's RoundRobin policy, without calling source stages
 from the selected output. Fresh requests enter Fetch then CheckRanges. Fetch
 rechecks current eligibility at acceptance, reads the descriptor, advances consumer
 and establishes accepted ownership atomically. Its FetchedCommand output carries
 the actual command. CheckRanges owns its incremental scan and produces validated
 CopyProgress, installed once as authoritative hardware traversal.
 
-Accepted identity differs from candidate observation: a reset/reconfiguration
-before acceptance can change the eligible channel head, but accepted values never
-refresh their generation. Every later memory access rejects stale work.
+Candidates are revalidated, not replaced by a newer task from the same channel.
+A stale descriptor head or generation is rejected before consumption. Retained
+task requests also capture the consumer position so a continuation cannot select
+a same-generation successor. Every later memory access rejects stale reset work.
 
 Normal execution dataflow is:
 
@@ -186,7 +187,11 @@ so the next step observes intervening reset, enable and fault changes. Candidate
 retains the broader context it actually needs. Lifecycle transitions notify the
 context-maintenance owner when its observed channel state changes.
 
-The engine's active grant backpressures admission while command work remains.
+The engine's active grant backpressures peer tasks while command work remains.
+The active task supplies a Continue request. Arbitration holds its existing
+authorization without advancing round-robin priority; fresh and resumed tasks
+compete only after that grant is released. Continuations still traverse the fan
+connection, but do not repeat task selection or descriptor acceptance.
 Subsequent finite chunk passes use installed traversal, not another Fetch or range
 validation. Stage completion means only that local transform has finished; it is
 not command retirement. Publish consumes the real completion, updates its channel's
@@ -202,9 +207,11 @@ not refetch, revalidate or transform retained write bytes. Even immediate RESUME
 revive a failed path. The assembly can be replaced while parked because checkpoints
 are concrete hardware data, not saved Rust stage continuations.
 
-Admission and execution are connected by ordinary Then dataflow. Grant forwards
-selected or already active work; Install forwards its chunk request rather than
-dropping it and waiting for a separate execution round. The data-path wrapper only
+FanIn's output is the actual selected execution subgraph: Fetch, CheckRanges,
+Install and the configured execution pipeline connected through Then. There is no
+passthrough SelectedRequest or separate Grant stage. The receiving boundary checks
+the exact request and records residency; it does not choose a different task.
+Install forwards its chunk request without a separate execution round. The data-path wrapper only
 adapts its unit input and treats reset/halt/channel-fatal termination as the end of
 that invocation, not permanent simulation failure. It neither steps sibling units
 nor interprets their results. An old faulted invocation drains before the external
@@ -216,16 +223,17 @@ maintenance observes acceptance, cursor advancement, suspension and retirement;
 Fetch discards unstarted Abort-target descriptors within the captured frontier.
 These operations are not independently driven pipelines.
 
-Reset is an out-of-band flush handshake. Idle scopes can clear their storage and
-complete immediately. A selected scope remains busy until its resident execution
-state has been flushed, independently of downstream data backpressure. Completion
+Reset is an out-of-band hardware request. Idle scopes can clear their storage and
+complete immediately. Resident stages observe reset through context in step and
+release their own work before completing, independently of data readiness. A
+selected scope remains busy until its resident execution has actually exited. Completion
 has no minimum latency, but always means that affected old work can no longer act.
 Runtime/harness wiring supplies none of this policy. See the
 [reset contract](docs/reset.md) for software memory lifetime and the RTL obligation
 to drain every affected outstanding transaction.
 
-Fan remains finite N-to-M value flow: unfinished input/output states and unconsumed
-completed values belong to its invocation. Policy validates routing before effects;
+Fan remains finite N-to-M value flow: child stages own unfinished work, and the fan
+owns buffered input/output values and receipts. Policy validates routing before effects;
 it never owns device lifetime or fault recovery. Then, FanIn/Arbitrate and
 FanOut/Dispatch keep their existing generic behavior. The attempted Producer/Stream
 extension is removed: hardware task lifetime belongs to context, not to a
@@ -238,7 +246,13 @@ arbitration, IRQ or reset rules. Software owns allocation, registration, submiss
 and repair. Harnesses stop and join hardware when their software program ends.
 
 `StepOutcome` distinguishes only `InProgress` from `Complete(Result<Output, Error>)`.
-Completion transfers the result and releases invocation-local intermediate state.
+Stages receive a mutable optional input slot and take it only when accepting work.
+Busy stages leave a new offer untouched. There is no public Stage::State or start;
+initialization happens inside step and intermediate state stays in the stage.
+Completion transfers the result and releases that input's intermediate state.
+Only step advances a continuation; no external flush hook exposes child cleanup.
+The DMA projection releases residency after its child completes, not by forcibly
+clearing the child. Software-wait cancellation does not reset hardware.
 There are no hardware wait tokens or separate readiness trait. Async driving yields
 after every bounded hardware step, including idle polling, so software can access
 registers between steps. Software interrupt and doorbell waits remain event-driven.

@@ -1,7 +1,25 @@
 use super::*;
-use hardware_interface_pipeline::Stage;
+use hardware_interface_pipeline::{Stage, StepResult};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_dma::{CheckRanges, CommandRequest, Fetch, PrepareChunk, ReadCopy, WriteCopy};
+
+struct AcceptOnly;
+
+impl Stage<pdma_model_dma::ExecutionContext<'_, Paged>> for AcceptOnly {
+    type Input = Option<pdma_model_dma::ChunkInput>;
+    type Output = ();
+    type Error = pdma_model_dma::Error;
+
+    fn step(
+        &mut self,
+        _: &mut pdma_model_dma::ExecutionContext<'_, Paged>,
+        input: &mut Option<Self::Input>,
+    ) -> StepResult<(), Self::Error> {
+        Ok(input
+            .take()
+            .map_or(StepOutcome::InProgress, |_| StepOutcome::Complete(Ok(()))))
+    }
+}
 
 #[test]
 fn standalone_write_consumes_its_retained_transformed_checkpoint_after_regrant() -> TestResult {
@@ -25,18 +43,18 @@ fn checkpoint(write: bool) -> TestResult {
     };
     let mut context = dma.execution_context(ChannelId::new(0))?;
     let fetched = finish(&mut Fetch, &mut context, Some(snapshot))?;
-    let progress = finish(&mut CheckRanges, &mut context, fetched)?.ok_or("progress")?;
+    let progress = finish(&mut CheckRanges::default(), &mut context, fetched)?.ok_or("progress")?;
     let request = context.install_progress(progress)?;
-    let chunk = finish(&mut PrepareChunk, &mut context, Some(request))?;
+    let chunk = finish(&mut PrepareChunk::default(), &mut context, Some(request))?;
     dma.memory
         .missing
         .set(Some((if write { 0x1300 } else { 0x1200 }, write)));
     let mut context = dma.execution_context(ChannelId::new(0))?;
-    let payload = finish(&mut ReadCopy, &mut context, chunk)?;
+    let payload = finish(&mut ReadCopy::default(), &mut context, chunk)?;
     if write {
         let mut payload = payload.ok_or("payload")?;
         payload.bytes_mut()?.copy_from_slice(b"WXYZ");
-        assert!(finish(&mut WriteCopy, &mut context, Some(payload))?.is_none());
+        assert!(finish(&mut WriteCopy::default(), &mut context, Some(payload))?.is_none());
     } else {
         assert!(payload.is_none());
     }
@@ -45,17 +63,16 @@ fn checkpoint(write: bool) -> TestResult {
     resume(&mut dma, 1)?;
     let accesses = dma.memory.accesses.get();
     let mut context = dma.execution_context(ChannelId::new(0))?;
-    assert!(finish(&mut ReadCopy, &mut context, None)?.is_none());
-    assert!(finish(&mut WriteCopy, &mut context, None)?.is_none());
+    assert!(finish(&mut ReadCopy::default(), &mut context, None)?.is_none());
+    assert!(finish(&mut WriteCopy::default(), &mut context, None)?.is_none());
     assert_eq!(
         dma.memory.accesses.get(),
         accesses,
         "resume alone does not grant execution"
     );
     // When: a new admission grants the parked owner, then its local leaf gets a bubble.
-    let request = dma.command_request(ChannelId::new(0))?;
-    let granted = finish(&mut pdma_model_dma::Grant, &mut dma, vec![(0, request)])?;
-    assert!(matches!(granted, Some((_, None))));
+    let mut admission = dma.hardware_with(AcceptOnly);
+    finish(&mut admission, &mut dma, ())?;
     assert_eq!(
         dma.memory.accesses.get(),
         accesses,
@@ -63,11 +80,12 @@ fn checkpoint(write: bool) -> TestResult {
     );
     let mut context = dma.execution_context(ChannelId::new(0))?;
     let completion = if write {
-        finish(&mut WriteCopy, &mut context, None)?
+        finish(&mut WriteCopy::default(), &mut context, None)?
     } else {
-        let payload = finish(&mut ReadCopy, &mut context, None)?.ok_or("read checkpoint")?;
+        let payload =
+            finish(&mut ReadCopy::default(), &mut context, None)?.ok_or("read checkpoint")?;
         assert_eq!(payload.bytes()?, b"abcd");
-        finish(&mut WriteCopy, &mut context, Some(payload))?
+        finish(&mut WriteCopy::default(), &mut context, Some(payload))?
     }
     .ok_or("local checkpoint completion")?;
     // Then: the leaf completes the original command with exact retained bytes.

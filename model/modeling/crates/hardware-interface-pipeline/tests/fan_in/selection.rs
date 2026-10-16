@@ -2,17 +2,16 @@ use super::{
     policy::Policy,
     sources::{Accept, Candidate, Context, Job, finish},
 };
-use hardware_interface_pipeline::{FanIn, Stage, StepOutcome};
-type Gather = FanIn<Candidate, Policy, Accept>;
+use hardware_interface_pipeline::{FanIn, StepOutcome};
 #[test]
 fn selection_consumes_only_the_granted_candidate() {
     // Given: three non-consuming candidate stages and queued jobs on two channels.
     let mut hardware = FanIn::new(
         (0..3).map(Candidate).collect(),
         Policy::Fixed,
-        Accept::Normal,
+        Accept::new(super::sources::Behavior::Normal),
     );
-    let mut state = Gather::start(vec![(); 3]);
+    let mut state = hardware_interface_pipeline::Operation::new(vec![(); 3]);
     let mut context = Context::with_jobs(&[1, 2]);
     // When: completed values are planned and one output accepts work.
     let result = finish(&mut hardware, &mut state, &mut context);
@@ -40,12 +39,12 @@ fn round_robin_wraps_across_repeated_operations() {
     let mut hardware = FanIn::new(
         (0..3).map(Candidate).collect(),
         Policy::RoundRobin(2),
-        Accept::Normal,
+        Accept::new(super::sources::Behavior::Normal),
     );
     let mut context = Context::with_jobs(&[0, 1, 2, 0]);
     // When: four independent batches use the same hardware.
     for _ in 0..4 {
-        let mut state = Gather::start(vec![(); 3]);
+        let mut state = hardware_interface_pipeline::Operation::new(vec![(); 3]);
         assert!(matches!(
             finish(&mut hardware, &mut state, &mut context),
             Ok(StepOutcome::Complete(Ok(_)))
@@ -60,12 +59,12 @@ fn fixed_priority_restarts_at_the_first_candidate() {
     let mut hardware = FanIn::new(
         (0..2).map(Candidate).collect(),
         Policy::Fixed,
-        Accept::Normal,
+        Accept::new(super::sources::Behavior::Normal),
     );
     let mut context = Context::with_jobs(&[0, 0, 1]);
     // When: two batches are executed.
     for _ in 0..2 {
-        let mut state = Gather::start(vec![(); 2]);
+        let mut state = hardware_interface_pipeline::Operation::new(vec![(); 2]);
         assert!(matches!(
             finish(&mut hardware, &mut state, &mut context),
             Ok(StepOutcome::Complete(Ok(_)))
@@ -77,9 +76,13 @@ fn fixed_priority_restarts_at_the_first_candidate() {
 #[test]
 fn idle_batch_completes_without_acceptance_and_later_batch_rechecks() {
     // Given: a candidate observes an empty queue.
-    let mut hardware = FanIn::new(vec![Candidate(0)], Policy::Fixed, Accept::Normal);
+    let mut hardware = FanIn::new(
+        vec![Candidate(0)],
+        Policy::Fixed,
+        Accept::new(super::sources::Behavior::Normal),
+    );
     let mut context = Context::default();
-    let mut state = Gather::start(vec![()]);
+    let mut state = hardware_interface_pipeline::Operation::new(vec![()]);
     // When: the idle batch completes and a new batch follows software submission.
     let idle = finish(&mut hardware, &mut state, &mut context);
     context.queues.push(
@@ -89,7 +92,7 @@ fn idle_batch_completes_without_acceptance_and_later_batch_rechecks() {
         }]
         .into(),
     );
-    let mut next = Gather::start(vec![()]);
+    let mut next = hardware_interface_pipeline::Operation::new(vec![()]);
     let result = finish(&mut hardware, &mut next, &mut context);
     // Then: no work was invented during idle and new candidate values see the submission.
     assert_eq!(idle, Ok(StepOutcome::Complete(Ok(vec![]))));

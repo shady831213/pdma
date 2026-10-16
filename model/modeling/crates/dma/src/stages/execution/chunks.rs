@@ -5,23 +5,27 @@ use pdma_model_contract::dma::{ContextId, DmaAccess};
 
 /// Selects the next bounded chunk using the channel-owned traversal cursors.
 #[derive(Debug, Default)]
-pub struct PrepareChunk;
+pub struct PrepareChunk {
+    state: Option<ChunkInput>,
+}
 
 impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for PrepareChunk {
     type Input = Option<ChunkInput>;
     type Output = Option<Chunk>;
     type Error = crate::Error;
-    type State = Option<Self::Input>;
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
     fn step(
         &mut self,
         context: &mut ExecutionContext<'_, M, SB>,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, crate::Error> {
-        let Some(input) = state.as_mut().ok_or(RunError::Exhausted)? else {
-            *state = None;
+        if self.state.is_none() {
+            let Some(input) = input.take() else {
+                return Ok(StepOutcome::InProgress);
+            };
+            self.state = input;
+        }
+        let state = &mut self.state;
+        let Some(input) = state.as_mut() else {
             return Ok(StepOutcome::Complete(Ok(None)));
         };
         let work = input.work;

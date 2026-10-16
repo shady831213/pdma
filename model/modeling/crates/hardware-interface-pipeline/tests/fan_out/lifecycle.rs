@@ -1,12 +1,11 @@
 use super::fixtures::{Behavior, Context, Destination, Receipt, Routing, Source, finish, request};
 use super::policies::Reject;
-use hardware_interface_pipeline::{BranchError, FanOut, Operation, RunError, Stage, StepOutcome};
+use hardware_interface_pipeline::{BranchError, FanOut, Operation, RunError, StepOutcome};
 #[test]
 fn stalled_destination_does_not_block_peers_or_lose_receipts() {
     // Given: the middle output is blocked.
     let mut hardware = FanOut::new(Source, Routing, (0..3).map(Destination::new).collect());
-    let mut state =
-        <FanOut<Source, Routing, Destination> as Stage<Context>>::start(request(&[0, 1, 2]));
+    let mut state = hardware_interface_pipeline::Operation::new(request(&[0, 1, 2]));
     let mut context = Context {
         blocked: vec![1],
         ..Context::default()
@@ -14,7 +13,7 @@ fn stalled_destination_does_not_block_peers_or_lose_receipts() {
     // When: peers finish and the blocked output later resumes.
     for _ in 0..6 {
         assert_eq!(
-            hardware.step(&mut context, &mut state),
+            state.step(&mut hardware, &mut context),
             Ok(StepOutcome::InProgress)
         );
     }
@@ -43,8 +42,7 @@ fn malformed_plans_fail_before_destination_interaction() {
         (vec![0, 0], BranchError::DuplicateIndex { index: 0 }),
     ] {
         let mut hardware = FanOut::new(Source, Routing, (0..2).map(Destination::new).collect());
-        let mut state =
-            <FanOut<Source, Routing, Destination> as Stage<Context>>::start(request(&indices));
+        let mut state = hardware_interface_pipeline::Operation::new(request(&indices));
         let mut context = Context::default();
         // When: the complete plan is validated.
         let result = finish(&mut hardware, &mut state, &mut context);
@@ -52,7 +50,7 @@ fn malformed_plans_fail_before_destination_interaction() {
         assert_eq!(result, Ok(StepOutcome::Complete(Err(expected))));
         assert!(context.attempts.is_empty());
         assert_eq!(
-            hardware.step(&mut context, &mut state),
+            state.step(&mut hardware, &mut context),
             Err(RunError::Exhausted)
         );
     }
@@ -74,12 +72,15 @@ fn terminal_destination_stops_later_work_and_keeps_committed_effects() {
             Routing,
             vec![
                 Destination::new(0),
-                Destination { id: 1, behavior },
+                Destination {
+                    id: 1,
+                    behavior,
+                    pending: (None, false),
+                },
                 Destination::new(2),
             ],
         );
-        let mut state =
-            <FanOut<Source, Routing, Destination> as Stage<Context>>::start(request(&[0, 1, 2]));
+        let mut state = hardware_interface_pipeline::Operation::new(request(&[0, 1, 2]));
         let mut context = Context::default();
         // When: the output sweep reaches the failed destination.
         let result = finish(&mut hardware, &mut state, &mut context);
@@ -87,10 +88,31 @@ fn terminal_destination_stops_later_work_and_keeps_committed_effects() {
         assert_eq!(result, expected);
         assert_eq!(context.deliveries, [(0, "payload 0".into())]);
         assert_eq!(context.attempts, [0, 1]);
-        assert_eq!(
-            hardware.step(&mut context, &mut state),
-            Err(RunError::Exhausted)
-        );
+        if expected.is_err() {
+            assert!(!state.is_complete());
+            assert_eq!(
+                finish(&mut hardware, &mut state, &mut context),
+                Ok(StepOutcome::Complete(Ok(vec![
+                    (0, Receipt(0)),
+                    (1, Receipt(1)),
+                    (2, Receipt(2))
+                ])))
+            );
+            assert_eq!(
+                context.deliveries,
+                [
+                    (0, "payload 0".into()),
+                    (1, "payload 1".into()),
+                    (2, "payload 2".into())
+                ]
+            );
+        } else {
+            assert!(state.is_complete());
+            assert_eq!(
+                state.step(&mut hardware, &mut context),
+                Err(RunError::Exhausted)
+            );
+        }
     }
 }
 #[test]
@@ -101,8 +123,7 @@ fn policy_errors_terminalize_without_destination_effects() {
         (Reject::Route, "route failed"),
     ] {
         let mut hardware = FanOut::new(Source, policy, vec![Destination::new(0)]);
-        let mut state =
-            <FanOut<Source, Reject, Destination> as Stage<Context>>::start(request(&[0]));
+        let mut state = hardware_interface_pipeline::Operation::new(request(&[0]));
         let mut context = Context::default();
         // When: policy evaluation fails.
         let result = finish(&mut hardware, &mut state, &mut context);
@@ -114,11 +135,11 @@ fn policy_errors_terminalize_without_destination_effects() {
             ))))
         );
         assert!(context.attempts.is_empty());
-        assert!(state.is_none());
+        assert!(state.is_complete());
     }
 }
 #[test]
-fn reset_abandons_stalled_payload_without_reverting_committed_delivery() {
+fn stalled_destination_observes_reset_without_reverting_committed_delivery() {
     // Given: one output can commit while its peer is blocked.
     let mut hardware = FanOut::new(Source, Routing, (0..2).map(Destination::new).collect());
     let mut operation = Operation::new(request(&[0, 1]));
@@ -132,8 +153,14 @@ fn reset_abandons_stalled_payload_without_reverting_committed_delivery() {
             Ok(StepOutcome::InProgress)
         );
     }
-    // When: cancellation explicitly resets invocation state.
-    operation.reset();
+    // When: the stalled destination observes reset and finishes its own invocation.
+    context.reset = true;
+    assert_eq!(
+        finish(&mut hardware, &mut operation, &mut context),
+        Ok(StepOutcome::Complete(Err(BranchError::Application(
+            "reset"
+        ))))
+    );
     // Then: committed effects remain and outstanding work is inert.
     assert_eq!(
         operation.step(&mut hardware, &mut context),

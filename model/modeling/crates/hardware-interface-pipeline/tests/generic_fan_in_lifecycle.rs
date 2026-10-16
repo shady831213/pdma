@@ -9,7 +9,7 @@ struct Context {
     outputs: usize,
 }
 struct Owned(String);
-struct Source(u8);
+struct Source(u8, SourceState);
 enum SourceState {
     New,
     Waiting(Owned),
@@ -19,11 +19,14 @@ impl Stage<Context> for Source {
     type Input = ();
     type Output = Owned;
     type Error = u8;
-    type State = SourceState;
-    fn start((): ()) -> SourceState {
-        SourceState::New
-    }
-    fn step(&mut self, context: &mut Context, state: &mut SourceState) -> StepResult<Owned, u8> {
+    fn step(&mut self, context: &mut Context, input: &mut Option<()>) -> StepResult<Owned, u8> {
+        if matches!(self.1, SourceState::Done) {
+            let Some(()) = input.take() else {
+                return Ok(StepOutcome::InProgress);
+            };
+            self.1 = SourceState::New;
+        }
+        let state = &mut self.1;
         match std::mem::replace(state, SourceState::Done) {
             SourceState::New => {
                 context.consumed.push(self.0);
@@ -34,7 +37,10 @@ impl Stage<Context> for Source {
                         Ok(StepOutcome::InProgress)
                     }
                     2 => Ok(StepOutcome::Complete(Err(42))),
-                    _ => Err(RunError::Exhausted),
+                    _ => {
+                        *state = SourceState::Waiting(Owned("resumed".into()));
+                        Err(RunError::Exhausted)
+                    }
                 }
             }
             SourceState::Waiting(value) => {
@@ -75,40 +81,43 @@ impl Stage<Context> for Sink {
     type Input = String;
     type Output = String;
     type Error = u8;
-    type State = Option<String>;
-    fn start(input: String) -> Self::State {
-        Some(input)
-    }
-    fn step(&mut self, context: &mut Context, state: &mut Self::State) -> StepResult<String, u8> {
+    fn step(
+        &mut self,
+        context: &mut Context,
+        state: &mut Option<Self::Input>,
+    ) -> StepResult<String, u8> {
         let value = state.take().ok_or(RunError::Exhausted)?;
         context.outputs += 1;
         Ok(StepOutcome::Complete(Ok(value)))
     }
 }
-type Pipeline = FanIn<Source, Gather, Sink>;
 #[test]
 fn partial_gather_keeps_owned_results_across_incomplete_inputs() {
     // Given: a non-Clone completed value and a delayed peer.
-    let mut hardware = FanIn::new(vec![Source(0), Source(1)], Gather { fail: false }, Sink);
-    let mut state = Pipeline::start(vec![(); 2]);
+    let mut hardware = FanIn::new(
+        vec![Source(0, SourceState::Done), Source(1, SourceState::Done)],
+        Gather { fail: false },
+        Sink,
+    );
+    let mut state = hardware_interface_pipeline::Operation::new(vec![(); 2]);
     let mut context = Context::default();
     for _ in 0..6 {
         assert!(matches!(
-            hardware.step(&mut context, &mut state),
+            state.step(&mut hardware, &mut context),
             Ok(StepOutcome::InProgress)
         ));
     }
     // When: the delayed source becomes runnable.
     context.released = true;
     assert!(matches!(
-        hardware.step(&mut context, &mut state),
+        state.step(&mut hardware, &mut context),
         Ok(StepOutcome::InProgress)
     ));
     assert!(matches!(
-        hardware.step(&mut context, &mut state),
+        state.step(&mut hardware, &mut context),
         Ok(StepOutcome::InProgress)
     ));
-    let result = hardware.step(&mut context, &mut state);
+    let result = state.step(&mut hardware, &mut context);
     // Then: both original owned values reach reduction without source replay.
     assert_eq!(
         result,
@@ -120,24 +129,28 @@ fn partial_gather_keeps_owned_results_across_incomplete_inputs() {
 #[test]
 fn reducer_failure_terminalizes_without_output_effects() {
     // Given: reduction rejects a completed source value.
-    let mut hardware = FanIn::new(vec![Source(0)], Gather { fail: true }, Sink);
-    let mut state = Pipeline::start(vec![()]);
+    let mut hardware = FanIn::new(
+        vec![Source(0, SourceState::Done)],
+        Gather { fail: true },
+        Sink,
+    );
+    let mut state = hardware_interface_pipeline::Operation::new(vec![()]);
     let mut context = Context::default();
     assert!(matches!(
-        hardware.step(&mut context, &mut state),
+        state.step(&mut hardware, &mut context),
         Ok(StepOutcome::InProgress)
     ));
     // When: the validated selection is reduced.
-    let result = hardware.step(&mut context, &mut state);
+    let result = state.step(&mut hardware, &mut context);
     // Then: the error is returned once and output hardware remains untouched.
     assert_eq!(
         result,
         Ok(StepOutcome::Complete(Err(BranchError::Application(19))))
     );
     assert_eq!(context.outputs, 0);
-    assert!(state.is_none());
+    assert!(state.is_complete());
     assert_eq!(
-        hardware.step(&mut context, &mut state),
+        state.step(&mut hardware, &mut context),
         Err(RunError::Exhausted)
     );
 }
@@ -152,18 +165,36 @@ fn child_failure_and_exhaustion_stop_later_input_effects() {
         (3, Err(RunError::Exhausted)),
     ] {
         let mut hardware = FanIn::new(
-            vec![Source(0), Source(id), Source(1)],
+            vec![
+                Source(0, SourceState::Done),
+                Source(id, SourceState::Done),
+                Source(1, SourceState::Done),
+            ],
             Gather { fail: false },
             Sink,
         );
-        let mut state = Pipeline::start(vec![(); 3]);
+        let mut state = hardware_interface_pipeline::Operation::new(vec![(); 3]);
         let mut context = Context::default();
         // When: the input sweep encounters the terminal child.
-        let result = hardware.step(&mut context, &mut state);
+        let result = state.step(&mut hardware, &mut context);
         // Then: committed effects remain, later children are untouched, and invocation state is empty.
         assert_eq!(result, expected);
         assert_eq!(context.consumed, [0, id]);
         assert_eq!(context.outputs, 0);
-        assert!(state.is_none());
+        assert_eq!(state.is_complete(), id == 2);
+        if id == 3 {
+            context.released = true;
+            let mut completed = false;
+            for _ in 0..16 {
+                if let Ok(StepOutcome::Complete(result)) = state.step(&mut hardware, &mut context) {
+                    assert_eq!(result, Ok(vec![(0, "firstresumedsecond".to_owned())]));
+                    completed = true;
+                    break;
+                }
+            }
+            assert!(completed);
+            assert_eq!(context.consumed, [0, 3, 1]);
+            assert_eq!(context.outputs, 1);
+        }
     }
 }

@@ -178,7 +178,7 @@ async fn reset_completes_only_after_hardware_clears_its_scope()
                 .await
                 .is_pending()
         );
-        // When: the retained pipeline advances and flushes its accepted work.
+        // When: the retained pipeline advances and cleans up its accepted work.
         for _ in 0..128 {
             assert!(matches!(
                 model

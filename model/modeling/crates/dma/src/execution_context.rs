@@ -56,6 +56,32 @@ impl<M, S> Dma<M, S> {
 }
 
 impl<M, S> ExecutionContext<'_, M, S> {
+    /// Observes reset, halt and parked-task abort independently of data readiness.
+    ///
+    /// # Errors
+    /// Returns `Reset` or `Halted`; resident stages must release local work before completing.
+    pub fn lifecycle(&self) -> Result<(), Error> {
+        let channel = &self.selected;
+        if channel.generation != self.generation || channel.resetting() {
+            return Err(Error::Reset);
+        }
+        let aborted = *self.active != Some(self.work())
+            && self.maintenance.as_ref().is_some_and(|maintenance| {
+                maintenance.abort
+                    && maintenance.result == Ok(false)
+                    && maintenance
+                        .frontiers
+                        .iter()
+                        .any(|frontier| frontier.channel == self.id)
+                    && channel.accepted_command().is_some_and(|command| {
+                        crate::references(command).contains(&Some(maintenance.context))
+                    })
+            });
+        if self.halted || channel.halted() || aborted {
+            return Err(Error::Halted);
+        }
+        Ok(())
+    }
     pub(crate) fn changed(&mut self) {
         if let Some(maintenance) = self.maintenance {
             maintenance.observe(self.id, self.selected, *self.active, self.halted);
@@ -69,6 +95,7 @@ impl<M, S> ExecutionContext<'_, M, S> {
         }
     }
     pub(crate) fn checkpoint_ready(&mut self) -> Result<bool, Error> {
+        self.lifecycle()?;
         let work = self.work();
         if *self.active != Some(work) {
             return Ok(false);
@@ -89,14 +116,11 @@ impl<M, S> ExecutionContext<'_, M, S> {
         if work.channel != self.id {
             return Err(Error::Routing);
         }
-        let channel = &mut *self.selected;
-        if channel.generation != work.generation || channel.resetting() {
+        if self.selected.generation != work.generation {
             return Err(Error::Reset);
         }
-        if self.halted || channel.halted() {
-            return Err(Error::Halted);
-        }
-        Ok(channel)
+        self.lifecycle()?;
+        Ok(self.selected)
     }
 
     pub(crate) fn ready(&mut self, work: Work) -> Result<bool, Error> {

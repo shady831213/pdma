@@ -21,17 +21,20 @@ fn stage_outputs_carry_descriptor_addresses_bytes_and_response() -> TestResult {
     let mut context = dma.execution_context(ChannelId::new(0))?;
     let fetched = finish(&mut Fetch, &mut context, Some(snapshot))?.ok_or("fetch")?;
     assert_eq!(fetched.command(), &command());
-    let progress = finish(&mut CheckRanges, &mut context, Some(fetched))?.ok_or("validate")?;
+    let progress =
+        finish(&mut CheckRanges::default(), &mut context, Some(fetched))?.ok_or("validate")?;
     let request = context.install_progress(progress)?;
-    let chunk = finish(&mut PrepareChunk, &mut context, Some(request))?.ok_or("chunk")?;
+    let chunk =
+        finish(&mut PrepareChunk::default(), &mut context, Some(request))?.ok_or("chunk")?;
     assert_eq!(
         (chunk.source().raw(), chunk.destination().raw(), chunk.len()),
         (0x1200, 0x1300, 4)
     );
-    let mut payload = finish(&mut ReadCopy, &mut context, Some(chunk))?.ok_or("read")?;
+    let mut payload = finish(&mut ReadCopy::default(), &mut context, Some(chunk))?.ok_or("read")?;
     assert_eq!(payload.bytes()?, b"abcd");
     payload.bytes_mut()?.copy_from_slice(b"WXYZ");
-    let completion = finish(&mut WriteCopy, &mut context, Some(payload))?.ok_or("completion")?;
+    let completion =
+        finish(&mut WriteCopy::default(), &mut context, Some(payload))?.ok_or("completion")?;
     // Then: downstream consumes the modified bytes and the actual response value.
     assert_eq!(completion.response().id, command().id);
     assert_eq!(completion.response().bytes_completed(), 4);

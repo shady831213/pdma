@@ -1,5 +1,5 @@
 use crate::{Context, Sink, Source};
-use hardware_interface_pipeline::{BranchError, Fan, FanPlan, FanPolicy, Stage, StepOutcome};
+use hardware_interface_pipeline::{BranchError, Fan, FanPlan, FanPolicy, StepOutcome};
 
 struct SplitJoin(usize);
 impl FanPolicy<String, String, &'static str> for SplitJoin {
@@ -36,9 +36,9 @@ fn full_fan_transforms_two_completed_values_into_two_owned_outputs() {
     let mut hardware = Fan::new(
         vec![Source(0), Source(1)],
         SplitJoin(split_at),
-        vec![Sink, Sink],
+        vec![Sink::default(), Sink::default()],
     );
-    let mut state = <Fan<Source, SplitJoin, Sink> as Stage<Context>>::start(vec![first, second]);
+    let mut state = hardware_interface_pipeline::Operation::new(vec![first, second]);
     let mut context = Context {
         released: true,
         ..Context::default()
@@ -46,11 +46,11 @@ fn full_fan_transforms_two_completed_values_into_two_owned_outputs() {
     // When: value collection, routing, and incomplete output work cross separate boundaries.
     for _ in 0..3 {
         assert_eq!(
-            hardware.step(&mut context, &mut state),
+            state.step(&mut hardware, &mut context),
             Ok(StepOutcome::InProgress)
         );
     }
-    let result = hardware.step(&mut context, &mut state);
+    let result = state.step(&mut hardware, &mut context);
     // Then: the actual N-to-M composition returns both outputs, with no duplicate input reads.
     assert_eq!(result, Ok(StepOutcome::Complete(Ok(expected))));
     assert_eq!(context.writes, [head, tail]);
@@ -117,24 +117,22 @@ fn later_plan_failure_preserves_already_committed_output() {
     let mut hardware = Fan::new(
         vec![Source(0), Source(1)],
         Invalid::RejectAfterFirst,
-        vec![Sink],
+        vec![Sink::default()],
     );
-    let mut state = <Fan<Source, Invalid, Sink> as Stage<Context>>::start(vec![
-        "first".into(),
-        "second".into(),
-    ]);
+    let mut state =
+        hardware_interface_pipeline::Operation::new(vec!["first".into(), "second".into()]);
     let mut context = Context {
         released: true,
         ..Context::default()
     };
     for _ in 0..5 {
         assert_eq!(
-            hardware.step(&mut context, &mut state),
+            state.step(&mut hardware, &mut context),
             Ok(StepOutcome::InProgress)
         );
     }
     // When: a later routing decision fails after the first receipt was retained.
-    let result = hardware.step(&mut context, &mut state);
+    let result = state.step(&mut hardware, &mut context);
     // Then: committed effects remain, later work does not run, and the batch is terminal.
     assert_eq!(
         result,
@@ -144,7 +142,7 @@ fn later_plan_failure_preserves_already_committed_output() {
     );
     assert_eq!(context.writes, ["first"]);
     assert_eq!(context.reads, [0, 1]);
-    assert!(state.is_none());
+    assert!(state.is_complete());
 }
 
 #[test]
@@ -154,37 +152,35 @@ fn invalid_plans_cannot_create_unbounded_work_or_use_unfinished_values() {
         (Invalid::EmptyInput, BranchError::EmptyInput),
         (Invalid::MissingValue, BranchError::Unavailable { index: 0 }),
     ] {
-        let mut hardware = Fan::new(vec![Source(0), Source(1)], policy, vec![Sink]);
-        let mut state = <Fan<Source, Invalid, Sink> as Stage<Context>>::start(vec![
-            "held".into(),
-            "ready".into(),
-        ]);
+        let mut hardware = Fan::new(vec![Source(0), Source(1)], policy, vec![Sink::default()]);
+        let mut state =
+            hardware_interface_pipeline::Operation::new(vec!["held".into(), "ready".into()]);
         let mut context = Context::default();
         assert_eq!(
-            hardware.step(&mut context, &mut state),
+            state.step(&mut hardware, &mut context),
             Ok(StepOutcome::InProgress)
         );
         // When: the plan crosses the validation boundary.
-        let result = hardware.step(&mut context, &mut state);
+        let result = state.step(&mut hardware, &mut context);
         // Then: no output interaction occurs and invalid work cannot survive.
         assert_eq!(result, Ok(StepOutcome::Complete(Err(expected))));
         assert!(context.writes.is_empty());
-        assert!(state.is_none());
+        assert!(state.is_complete());
     }
 }
 
 #[test]
 fn routed_count_mismatch_is_rejected_before_output_execution() {
     // Given: a route returns fewer owned payloads than its validated destination plan.
-    let mut hardware = Fan::new(vec![Source(1)], Invalid::WrongCount, vec![Sink]);
-    let mut state = <Fan<Source, Invalid, Sink> as Stage<Context>>::start(vec!["owned".into()]);
+    let mut hardware = Fan::new(vec![Source(1)], Invalid::WrongCount, vec![Sink::default()]);
+    let mut state = hardware_interface_pipeline::Operation::new(vec!["owned".into()]);
     let mut context = Context::default();
     assert_eq!(
-        hardware.step(&mut context, &mut state),
+        state.step(&mut hardware, &mut context),
         Ok(StepOutcome::InProgress)
     );
     // When: the policy produces its payloads.
-    let result = hardware.step(&mut context, &mut state);
+    let result = state.step(&mut hardware, &mut context);
     // Then: the output stage never starts a malformed invocation.
     assert_eq!(
         result,
@@ -199,30 +195,35 @@ fn routed_count_mismatch_is_rejected_before_output_execution() {
 #[test]
 fn occupied_output_cannot_be_overwritten_by_a_later_plan() {
     // Given: one output is incomplete while another input value remains buffered.
-    let mut hardware = Fan::new(vec![Source(0), Source(1)], Invalid::BusyOutput, vec![Sink]);
-    let mut state = <Fan<Source, Invalid, Sink> as Stage<Context>>::start(vec![
-        "first".into(),
-        "second".into(),
-    ]);
+    let mut hardware = Fan::new(
+        vec![Source(0), Source(1)],
+        Invalid::BusyOutput,
+        vec![Sink::default()],
+    );
+    let mut state =
+        hardware_interface_pipeline::Operation::new(vec!["first".into(), "second".into()]);
     let mut context = Context {
         released: true,
         ..Context::default()
     };
     for _ in 0..3 {
         assert_eq!(
-            hardware.step(&mut context, &mut state),
+            state.step(&mut hardware, &mut context),
             Ok(StepOutcome::InProgress)
         );
     }
     // When: the next plan tries to reuse the occupied slot.
-    let result = hardware.step(&mut context, &mut state);
-    // Then: the active child is never overwritten and the invalid batch terminates.
+    let result = state.step(&mut hardware, &mut context);
+    // Then: the active child finishes its original payload before the batch reports failure.
+    assert_eq!(result, Ok(StepOutcome::InProgress));
+    assert!(context.writes.is_empty());
+    assert!(!state.is_complete());
     assert_eq!(
-        result,
+        state.step(&mut hardware, &mut context),
         Ok(StepOutcome::Complete(Err(BranchError::Unavailable {
             index: 0
         })))
     );
-    assert!(context.writes.is_empty());
-    assert!(state.is_none());
+    assert_eq!(context.writes, ["first"]);
+    assert!(state.is_complete());
 }

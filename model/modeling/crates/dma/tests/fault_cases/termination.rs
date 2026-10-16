@@ -1,48 +1,39 @@
 use super::*;
 use hardware_interface_pipeline::{RunError, Stage, StepResult};
 use pdma_model_contract::dma::ChannelId;
-use pdma_model_dma::{ChunkInput, Error, ExecutionContext, Hardware, Pipeline};
+use pdma_model_dma::{ChunkInput, Error, ExecutionContext, Pipeline};
 
 struct PeerFailure {
     pipeline: Pipeline,
     raw_error: bool,
 }
 
-struct Invocation {
-    child: <Pipeline as Stage<ExecutionContext<'static, Paged>>>::State,
-    channel: Option<ChannelId>,
-}
-
 impl Stage<ExecutionContext<'_, Paged>> for PeerFailure {
     type Input = Option<ChunkInput>;
     type Output = ();
     type Error = Error;
-    type State = Invocation;
-
-    fn start(work: Self::Input) -> Self::State {
-        let channel = work.as_ref().map(ChunkInput::channel);
-        Invocation {
-            child: <Pipeline as Stage<ExecutionContext<'static, Paged>>>::start(work),
-            channel,
-        }
-    }
-
     fn step(
         &mut self,
         device: &mut ExecutionContext<'_, Paged>,
-        state: &mut Invocation,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, Error> {
-        if state
-            .channel
-            .is_some_and(|channel| channel == ChannelId::new(1))
+        if self.raw_error && device.lifecycle().is_err() {
+            self.raw_error = false;
+            return Ok(StepOutcome::Complete(Err(Error::Reset)));
+        }
+        if input
+            .as_ref()
+            .and_then(Option::as_ref)
+            .is_some_and(|work| work.channel() == ChannelId::new(1))
         {
             if self.raw_error {
                 Err(RunError::Exhausted)
             } else {
+                input.take();
                 Ok(StepOutcome::Complete(Err(Error::Routing)))
             }
         } else {
-            self.pipeline.step(device, &mut state.child)
+            self.pipeline.step(device, input)
         }
     }
 }
@@ -57,13 +48,13 @@ fn peer_pipeline_termination_preserves_parked_hardware_until_reset() -> TestResu
             pipeline,
             raw_error,
         });
-        let mut state = <Hardware<PeerFailure> as Stage<Dma<Paged>>>::start(());
+        let mut state = Operation::new(());
         let mut terminal = None;
         for _ in 0..512 {
-            match engine.step(&mut device, &mut state) {
+            match state.step(&mut engine, &mut device) {
                 Ok(StepOutcome::InProgress) => {}
                 Ok(StepOutcome::Complete(Ok(()))) => {
-                    state = <Hardware<PeerFailure> as Stage<Dma<Paged>>>::start(());
+                    state = Operation::new(());
                 }
                 result => {
                     terminal = Some(result);
@@ -73,7 +64,7 @@ fn peer_pipeline_termination_preserves_parked_hardware_until_reset() -> TestResu
         }
         assert_eq!(fault_status(&mut device)?, 1);
         assert_eq!(device.memory.faults.get(), 1);
-        // When: the peer terminates and a fresh service processes explicit channel resets.
+        // When: the peer fails and software requests explicit channel resets.
         let expected = if raw_error {
             Err(RunError::Exhausted)
         } else {
@@ -81,19 +72,29 @@ fn peer_pipeline_termination_preserves_parked_hardware_until_reset() -> TestResu
         };
         assert_eq!(terminal, Some(expected));
         assert_eq!(
-            engine.step(&mut device, &mut state),
+            state.step(&mut engine, &mut device),
             Err(RunError::Exhausted)
         );
         for index in 0..2 {
             let reset = ChannelId::new(index).admin_offset(2).ok_or("reset")?;
             device.write(reset, &1_u32.to_le_bytes())?;
         }
+        if raw_error {
+            assert!(!state.is_complete());
+            for _ in 0..128 {
+                if let StepOutcome::Complete(result) = state.step(&mut engine, &mut device)? {
+                    assert_eq!(result, Ok(()));
+                    break;
+                }
+            }
+            assert!(state.is_complete());
+        }
         let mut cleanup = device.hardware();
         let mut operation = hardware_interface_pipeline::HardwareDriver::new();
         for _ in 0..128 {
             let _ = operation.step(&mut cleanup, &mut device)?;
         }
-        // Then: hardware cleanup completes independently of the retained failed invocation state.
+        // Then: reset retires the original continuation and leaves parked peer effects unchanged.
         for index in 0..2 {
             assert_eq!(
                 read_word(

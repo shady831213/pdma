@@ -6,17 +6,15 @@ impl Stage<()> for Terminal {
     type Input = ();
     type Output = ();
     type Error = ();
-    type State = ();
-
-    fn start((): ()) {}
-
-    fn step(&mut self, _: &mut (), _: &mut ()) -> StepResult<(), ()> {
-        Ok(StepOutcome::Complete(Ok(())))
+    fn step(&mut self, _: &mut (), input: &mut Option<()>) -> StepResult<(), ()> {
+        Ok(match input.take() {
+            Some(()) => StepOutcome::Complete(Ok(())),
+            None => StepOutcome::InProgress,
+        })
     }
 }
 
 fn main() {
-    let stage: Box<dyn Stage<(), Input = (), Output = (), Error = (), State = ()>> =
-        Box::new(Terminal);
+    let stage: Box<dyn Stage<(), Input = (), Output = (), Error = ()>> = Box::new(Terminal);
     let _composed = stage.then(Terminal);
 }

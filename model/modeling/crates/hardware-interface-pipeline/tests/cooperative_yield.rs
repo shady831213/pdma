@@ -30,19 +30,25 @@ impl AsyncInteractionBackend<usize> for ReadyBackend {
     }
 }
 
-struct BoundedWork;
+#[derive(Default)]
+struct BoundedWork(bool);
 
 impl Stage<usize> for BoundedWork {
     type Input = ();
     type Output = ();
     type Error = ();
-    type State = ();
-    fn start((): ()) {}
-    fn step(&mut self, count: &mut usize, (): &mut ()) -> StepResult<(), ()> {
+    fn step(&mut self, count: &mut usize, input: &mut Option<()>) -> StepResult<(), ()> {
+        if !self.0 {
+            let Some(()) = input.take() else {
+                return Ok(StepOutcome::InProgress);
+            };
+            self.0 = true;
+        }
         *count += 1;
         if *count < 4 {
             Ok(StepOutcome::InProgress)
         } else {
+            self.0 = false;
             Ok(StepOutcome::Complete(Ok(())))
         }
     }
@@ -52,7 +58,7 @@ impl Stage<usize> for BoundedWork {
 fn ready_backend_yields_before_driving_another_step() {
     // Given: an immediately ready backend and bounded unfinished work.
     let executor = AsyncExecutor::new(ReadyBackend(Mutex::new(0)));
-    let mut stage = BoundedWork;
+    let mut stage = BoundedWork::default();
     let mut operation = Operation::new(());
     let mut run = Box::pin(executor.run(&mut stage, &mut operation));
     // When: the scheduler polls the driver once.
@@ -71,7 +77,7 @@ async fn spawned_hardware_yields_to_software_using_the_runtime_scheduler() {
     tasks.spawn(async move {
         let executor = AsyncExecutor::new(hardware_backend.as_ref());
         executor
-            .run(&mut BoundedWork, &mut Operation::new(()))
+            .run(&mut BoundedWork::default(), &mut Operation::new(()))
             .await
     });
     // When: software yields once while hardware has unfinished interactions.
@@ -94,7 +100,7 @@ async fn spawned_hardware_yields_to_software_using_the_runtime_scheduler() {
 async fn cancelling_terminal_yield_retains_completion_without_replaying_work() {
     // Given: one interaction remains before terminal completion.
     let executor = AsyncExecutor::new(ReadyBackend(Mutex::new(3)));
-    let mut stage = BoundedWork;
+    let mut stage = BoundedWork::default();
     let mut operation = Operation::new(());
     // When: the driver is cancelled during its terminal cooperative yield and resumed.
     let mut run = Box::pin(executor.run(&mut stage, &mut operation));
@@ -126,17 +132,62 @@ impl Drop for Retained {
 
 struct Terminal;
 
+struct CallFailure(bool);
+
+impl Stage<usize> for CallFailure {
+    type Input = ();
+    type Output = ();
+    type Error = ();
+
+    fn step(&mut self, count: &mut usize, input: &mut Option<()>) -> StepResult<(), ()> {
+        if std::mem::take(&mut self.0) {
+            return Ok(StepOutcome::Complete(Ok(())));
+        }
+        let Some(()) = input.take() else {
+            return Ok(StepOutcome::InProgress);
+        };
+        *count += 1;
+        self.0 = true;
+        Err(RunError::BudgetExhausted)
+    }
+}
+
+#[tokio::test]
+async fn cancelling_terminal_yield_retains_call_error_without_replaying_work() {
+    let executor = AsyncExecutor::new(ReadyBackend(Mutex::new(0)));
+    let mut stage = CallFailure(false);
+    let mut operation = Operation::new(());
+    let mut run = Box::pin(executor.run(&mut stage, &mut operation));
+    assert!(
+        run.as_mut()
+            .poll(&mut Context::from_waker(Waker::noop()))
+            .is_pending()
+    );
+    drop(run);
+    assert_eq!(
+        executor.run(&mut stage, &mut operation).await,
+        Err(AsyncRunError::Run(RunError::BudgetExhausted))
+    );
+    assert_eq!(*executor.backend().0.lock().expect("context lock"), 1);
+    assert!(!operation.is_complete());
+    assert_eq!(executor.run(&mut stage, &mut operation).await, Ok(()));
+    assert!(operation.is_complete());
+    assert_eq!(*executor.backend().0.lock().expect("context lock"), 1);
+}
+
 impl Stage<usize> for Terminal {
     type Input = Retained;
     type Output = Receipt;
     type Error = Receipt;
-    type State = Retained;
 
-    fn start(input: Self::Input) -> Self::State {
-        input
-    }
-
-    fn step(&mut self, count: &mut usize, state: &mut Self::State) -> StepResult<Receipt, Receipt> {
+    fn step(
+        &mut self,
+        count: &mut usize,
+        input: &mut Option<Self::Input>,
+    ) -> StepResult<Receipt, Receipt> {
+        let Some(mut state) = input.take() else {
+            return Ok(StepOutcome::InProgress);
+        };
         *count += 1;
         state
             .result

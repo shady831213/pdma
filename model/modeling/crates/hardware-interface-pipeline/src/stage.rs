@@ -1,49 +1,41 @@
 use crate::StepResult;
 
-/// Reusable hardware with typed ports and separately owned operation state.
+/// Reusable hardware with typed ports and stage-owned transient state.
 ///
-/// Hardware outlives each operation. Starting creates request state, never hardware.
+/// Taking input accepts it; busy stages leave new offers untouched through completion.
+/// `None` offers no input; `Some(None)` is an actual optional domain input.
+/// An idle stage with no offer is inert. Completion leaves transient storage reusable.
 /// Each step performs bounded work. `InProgress` retains the invocation without
 /// promising forward progress. `Complete` transfers the result and releases all
 /// invocation intermediates; persistent hardware configuration remains reusable.
 /// Domain faults needing downstream handling belong in Output; Error terminates
-/// the operation. No context borrow escapes a step.
-pub trait Stage<C> {
+/// the operation. A raw `RunError` rejects driving without terminating accepted
+/// work; the stage retains its continuation for later steps. No context borrow escapes a step.
+pub trait Stage<C>: Sized {
     /// Owned request accepted by this hardware.
     type Input;
     /// Owned result passed downstream.
     type Output;
     /// Structural failure terminating this operation.
     type Error;
-    /// Request state retained independently of hardware and the driving future.
-    type State;
-
-    /// Constructs request state without interacting with hardware or context.
-    fn start(input: Self::Input) -> Self::State;
-
     /// Advances one invocation through bounded hardware work.
     fn step(
         &mut self,
         context: &mut C,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, Self::Error>;
 }
 
-impl<C, S: Stage<C> + ?Sized> Stage<C> for &mut S {
+impl<C, S: Stage<C>> Stage<C> for &mut S {
     type Input = S::Input;
     type Output = S::Output;
     type Error = S::Error;
-    type State = S::State;
-
-    fn start(input: Self::Input) -> Self::State {
-        S::start(input)
-    }
 
     fn step(
         &mut self,
         context: &mut C,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, Self::Error> {
-        S::step(self, context, state)
+        S::step(self, context, input)
     }
 }

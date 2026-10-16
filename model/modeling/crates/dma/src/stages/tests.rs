@@ -12,7 +12,7 @@ use pdma_model_contract::dma::{
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
-fn queued_copy(response_base: u64, ioc: bool) -> TestResult<Dma<SharedMemory>> {
+pub(super) fn queued_copy(response_base: u64, ioc: bool) -> TestResult<Dma<SharedMemory>> {
     let memory = SharedMemory::new();
     memory.add_regions(&[MemoryRegion::try_new(
         MemoryAddress::new(0x1000),

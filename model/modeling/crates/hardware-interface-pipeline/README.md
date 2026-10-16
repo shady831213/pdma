@@ -4,22 +4,39 @@
 value flow. It has no normal dependency on a device model, storage backend, locks,
 or async runtime.
 
-`Stage<C>` maps an owned `Input` to an owned `Output` using local invocation
-`State`. `start(input)` performs no hardware effects. A bounded `step` returns
+`Stage<C>` maps an owned `Input` to an owned `Output`. Its transient processing
+state lives inside the stage instance; there is no public State type or start method.
+A bounded `step(context, &mut input_slot)` returns
 `StepResult<O,E> = Result<StepOutcome<O,E>, RunError>`. The only business outcomes
 are `InProgress` and `Complete(Result<O,E>)`. Completion transfers the value and
-leaves no unfinished work in that invocation. `RunError::Exhausted` is a driving
+leaves no unfinished work for that accepted input. `RunError::Exhausted` is a driving
 call error, never a stage result. There are no wait tokens or readiness interface.
 
-`Operation<S,C>` owns invocation state independently of the hardware and its
-driving future. Terminal transitions discard child state. Explicit reset discards
-retained state and any uncollected terminal result, while committed external
-effects remain. A canceled asynchronous driver can resume the same operation,
-including an owned result retained across the mandatory terminal yield.
+The input slot is the ownership handshake. Taking its value accepts the request;
+a busy stage leaves a new offer untouched. It can continue accepted work with an
+empty slot, and does not accept a replacement on the step completing that work.
+An idle stage with no offer returns InProgress without effects. For a stage whose
+Input is Option<T>, outer None means no offer and Some(None) is an offered domain
+bubble. Completion leaves the stage ready for a subsequent request.
 
-`Then<A,B>` transfers an upstream result to downstream state and returns
-`InProgress`; downstream runs on a later step. A child returning `InProgress`
-retains its exact state.
+The stage instance is the continuation. Only `step` advances it; the framework
+exposes neither its private processing state nor an external cleanup hook.
+Domain reset requests belong to context. A stage observes them while stepping,
+releases its own unfinished work according to the domain protocol, and completes.
+Combinators cannot force an unfinished child to become complete.
+
+`Operation<S,C>` retains only the unaccepted input and terminal result, not a child
+continuation. Accepted intermediate state stays in the hardware even when an
+asynchronous driving future is canceled. Resuming uses the same hardware and
+operation, including any result retained across the mandatory terminal yield.
+A call error does not establish hardware completion: the operation and hardware
+retain their continuation for subsequent driving. Dropping a driving future is
+not a domain reset or a permission to reuse resources held by unfinished work.
+
+`Then<A,B,V>` buffers the upstream result V for downstream and returns InProgress;
+downstream runs on a later step. While downstream is active, the upstream input
+slot is backpressured. A child returning InProgress retains its own state.
+The edge type V is inferred by construction and checked against both ports.
 `MapError` converts application errors without converting call errors.
 Independent hardware units belong in the application's top-level assembly and
 advance from the external tick. Their progress must not depend on how many
@@ -34,7 +51,7 @@ No separate producer trait or command-lifetime streaming combinator is required.
 
 ## Fan value flow
 
-`Fan<S,P,T>::new(inputs, policy, outputs)` connects N input stages to M output
+`Fan::new(inputs, policy, outputs)` connects N input stages to M output
 stages. One invocation accepts `Vec<S::Input>` matching the input population and
 returns `Vec<(usize,T::Output)>` in output-completion order. Output sweeps use
 ascending port order. Each source is invoked once per batch.
@@ -46,8 +63,9 @@ A batch rotates through three bounded steps, skipping phases with no work:
 2. Ask `FanPolicy::plan` to observe the buffered `&[Option<Value>]` and idle-output
    bitmap. Validate its complete `FanPlan { inputs, outputs }` before consuming
    selected values, then call `route` with their ownership.
-3. Advance every active output at most once, retaining incomplete child states
-   and completed receipts. Output slots become reusable after completion.
+3. Advance every active output at most once, retaining input offers and completed
+   receipts in the fan. Accepted progress remains in each child. Output slots become
+   reusable after completion.
 
 Planning runs only when completed values are buffered, including retained values
 when all outputs are busy (a policy may discard them). Each tick performs at most
@@ -63,8 +81,8 @@ in progress; synchronous callers can bound this with the immediate executor.
 The policy receives values, never source stage objects or an execution context.
 A source can emit a non-consuming readiness snapshot; an output accepting real
 work must revalidate stale snapshots when its domain requires it. Policy-owned
-round-robin position may persist with the hardware. Per-request payloads and
-unfinished child states belong to the fan invocation.
+round-robin position may persist with the hardware. Buffered edge values belong
+to the fan; unfinished child work belongs to its respective stage instance.
 
 Plan indices must exist and be unique within their axis. Selected inputs must
 have completed values and selected outputs must be idle. A nonempty output plan
@@ -73,13 +91,24 @@ selected inputs. `route` must return exactly one owned input per selected output
 The framework never clones payloads. Application splitting, reduction, sharing,
 or cloning is explicit in `route`. One value/state slot per input, one active
 state per output, and at most N*M receipts bound buffering for a finite batch.
-Plan or child failure clears invocation state without rolling back committed
-effects, and stops later effects in that sweep.
+On plan or child failure, the fan retains the first error, stops admitting new
+work and discards only its own unaccepted offers and buffered values. Already
+accepted children continue stepping until they complete. Only then does the fan
+return the retained error. This neither cancels those children nor rolls back
+their effects. A child call error preserves the batch and propagates to the driver;
+it is not proof that the child has terminated.
 
-`FanIn<S,P,T>::new(inputs, policy, output)` and
-`FanOut<S,P,T>::new(input, policy, outputs)` are singleton-axis wrappers over
+`FanIn::new(inputs, policy, output)` and
+`FanOut::new(input, policy, outputs)` are singleton-axis wrappers over
 that same mechanism. Fan-in accepts a vector of source inputs; fan-out accepts
 its single source input directly. Both return indexed receipt vectors.
+
+Named fan types include their stored port value types:
+`Fan<S,P,T,I,V,J,O,E>` (and the same parameters for FanIn/FanOut). I/V describe the
+source input/output, J/O the destination input/output, and E the retained child
+error while accepted peers finish. Constructor calls infer
+them. Keeping only owned values in this storage preserves generic contexts and
+freshly borrowed contexts without storing context lifetimes in the hardware.
 
 `Arbitrate<A>` adapts `Arbitration<Value,Error>::select` into a singleton-output
 value-selection policy. `Arbitrate::new` retains unselected owned values until
@@ -97,9 +126,11 @@ reducers after receipt collection compose as ordinary downstream stages.
 
 - `StepExecutor` advances one bounded step.
 - `HardwareDriver<S,C>` owns external driving state for a hardware service whose
-  input and output are both unit. It retains the current `Operation` while work
-  is unfinished. Successful completion returns `InProgress`; the next external
-  step starts a fresh invocation. Stage errors and raw call errors stop driving.
+  input and output are both unit. It retains the current input/result receipt while
+  unfinished work stays in the stage. Successful completion returns `InProgress`; the next external
+  step starts a fresh invocation. A stage error terminates the service. A raw call
+  error returns to the driver caller while retaining unfinished work; another call
+  resumes it without supplying a replacement input.
   It is not a `Stage` and cannot be inserted into a pipeline.
 - `ImmediateExecutor` advances steps until completion or its nonzero budget,
   returning `RunError::BudgetExhausted` without discarding unfinished work.

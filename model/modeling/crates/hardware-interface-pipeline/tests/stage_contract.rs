@@ -27,34 +27,39 @@ struct Request {
     completion: Option<Result<OwnedOutput, OwnedError>>,
 }
 
-struct ContractStage;
+#[derive(Default)]
+struct ContractStage(Option<Request>);
 
 impl Stage<Context> for ContractStage {
     type Input = Result<OwnedOutput, OwnedError>;
     type Error = OwnedError;
     type Output = OwnedOutput;
-    type State = Request;
-
-    fn start(input: Self::Input) -> Self::State {
-        Request {
-            state: State::Start,
-            completion: Some(input),
-        }
-    }
 
     fn step(
         &mut self,
         context: &mut Context,
-        request: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, Self::Error> {
+        if self.0.is_none() {
+            let Some(input) = input.take() else {
+                return Ok(StepOutcome::InProgress);
+            };
+            self.0 = Some(Request {
+                state: State::Start,
+                completion: Some(input),
+            });
+        }
+        let mut request = self.0.take().ok_or(RunError::Exhausted)?;
         match request.state {
             State::Start => {
                 context.interactions += 1;
                 request.state = State::Waiting;
+                self.0 = Some(request);
                 Ok(StepOutcome::InProgress)
             }
             State::Waiting => {
                 request.state = State::Ready;
+                self.0 = Some(request);
                 Ok(StepOutcome::InProgress)
             }
             State::Ready => {
@@ -74,7 +79,7 @@ impl Stage<Context> for ContractStage {
 #[test]
 fn all_outcomes_transfer_owned_values_and_terminal_stage_is_exhausted() {
     // Given: one reusable stage and requests owning non-Copy success and error values.
-    let mut hardware = ContractStage;
+    let mut hardware = ContractStage::default();
     let mut success = Operation::new(Ok(OwnedOutput("owned output".to_owned())));
     let mut failure = Operation::new(Err(OwnedError("owned error".to_owned())));
     let mut success_context = Context::default();
@@ -121,7 +126,7 @@ fn all_outcomes_transfer_owned_values_and_terminal_stage_is_exhausted() {
 #[test]
 fn unfinished_step_can_be_discarded_and_stage_resumes_without_repeating_interaction() {
     // Given: a stage advanced through one interaction with retained work.
-    let mut hardware = ContractStage;
+    let mut hardware = ContractStage::default();
     let mut operation = Operation::new(Ok(OwnedOutput("owned output".to_owned())));
     let mut context = Context::default();
     assert_eq!(

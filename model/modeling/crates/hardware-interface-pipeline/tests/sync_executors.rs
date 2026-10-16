@@ -31,6 +31,7 @@ enum Behavior {
 struct Leaf {
     name: &'static str,
     behavior: Behavior,
+    accepted: bool,
 }
 
 impl Leaf {
@@ -38,6 +39,7 @@ impl Leaf {
         Self {
             name,
             behavior: Behavior::Ready(result),
+            accepted: false,
         }
     }
 
@@ -48,6 +50,7 @@ impl Leaf {
         Self {
             name,
             behavior: Behavior::Unfinished { completion },
+            accepted: false,
         }
     }
 
@@ -55,6 +58,7 @@ impl Leaf {
         Self {
             name: "progress",
             behavior: Behavior::Progressing(calls),
+            accepted: false,
         }
     }
 }
@@ -63,28 +67,31 @@ impl Stage<Context> for Leaf {
     type Input = Value;
     type Error = Fault;
     type Output = Value;
-    type State = bool;
-
-    fn start(_: Self::Input) -> Self::State {
-        false
-    }
 
     fn step(
         &mut self,
         context: &mut Context,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, Self::Error> {
+        let continuing = self.accepted;
+        if !continuing {
+            let Some(_) = input.take() else {
+                return Ok(StepOutcome::InProgress);
+            };
+            self.accepted = true;
+        }
         match &self.behavior {
             Behavior::Ready(result) => {
+                self.accepted = false;
                 context.actions.push(self.name);
                 Ok(StepOutcome::Complete(result.map(Value).map_err(Fault)))
             }
             Behavior::Unfinished { completion } => {
-                if *state {
+                if continuing {
+                    self.accepted = false;
                     context.actions.push(self.name);
                     Ok(StepOutcome::Complete(completion.map(Value).map_err(Fault)))
                 } else {
-                    *state = true;
                     Ok(StepOutcome::InProgress)
                 }
             }

@@ -2,7 +2,7 @@
 /// Shared hardware fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{HardwareDriver, RunError, Stage, StepOutcome, StepResult, Then};
+use hardware_interface_pipeline::{HardwareDriver, Stage, StepOutcome, StepResult, Then};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::{
     ChannelBlock, Command, Endpoint, Response, ResponseRaw, ResponseRegisters, ResponseStatus,
@@ -18,16 +18,14 @@ impl<T> Stage<ExecutionContext<'_, SharedMemory>> for Observe<T> {
     type Input = Option<T>;
     type Output = Option<T>;
     type Error = Error;
-    type State = Option<Self::Input>;
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
     fn step(
         &mut self,
         _: &mut ExecutionContext<'_, SharedMemory>,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, Error> {
-        let value = state.take().ok_or(RunError::Exhausted)?;
+        let Some(value) = input.take() else {
+            return Ok(StepOutcome::InProgress);
+        };
         if value.is_some() {
             self.0.set(self.0.get() + 1);
         }
@@ -138,11 +136,11 @@ fn check(
     let payloads = Rc::new(Cell::new(0));
     let completions = Rc::new(Cell::new(0));
     let read = Then::new(
-        PrepareChunk,
+        PrepareChunk::default(),
         Then::new(
             Observe::<Chunk>(Rc::clone(&chunks), PhantomData),
             Then::new(
-                ReadCopy,
+                ReadCopy::default(),
                 Observe::<Payload>(Rc::clone(&payloads), PhantomData),
             ),
         ),
@@ -153,7 +151,10 @@ fn check(
     );
     let mut hardware = dma.hardware_with(Then::new(
         read,
-        Then::new(WriteCopy, Then::new(pdma_model_dma::CompletionInput, tail)),
+        Then::new(
+            WriteCopy::default(),
+            Then::new(pdma_model_dma::CompletionInput, tail),
+        ),
     ));
     let mut driver = HardwareDriver::new();
     let producer = ChannelBlock::ALIGNMENT

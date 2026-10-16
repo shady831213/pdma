@@ -27,21 +27,29 @@ pub(super) struct Fault;
 pub(super) struct Prepare {
     pub reply: Reply,
     pub calls: usize,
+    pub pending: Option<u32>,
 }
 
 impl Stage<Vec<u32>> for Prepare {
     type Input = u32;
     type Output = u32;
     type Error = Fault;
-    type State = u32;
 
-    fn start(input: u32) -> Self::State {
-        input
-    }
-
-    fn step(&mut self, _: &mut Vec<u32>, state: &mut Self::State) -> StepResult<u32, Fault> {
+    fn step(&mut self, _: &mut Vec<u32>, input: &mut Option<u32>) -> StepResult<u32, Fault> {
+        if self.pending.is_none() {
+            self.pending = input.take();
+        }
+        let Some(value) = self.pending else {
+            return Ok(StepOutcome::InProgress);
+        };
         self.calls += 1;
-        self.reply.outcome(*state)
+        {
+            let result = self.reply.outcome(value);
+            if matches!(result, Ok(StepOutcome::Complete(_))) {
+                self.pending = None;
+            }
+            result
+        }
     }
 }
 
@@ -49,21 +57,29 @@ impl Stage<Vec<u32>> for Prepare {
 pub(super) struct Effect {
     pub reply: Reply,
     pub calls: usize,
+    pub pending: Option<u32>,
 }
 
 impl Stage<Vec<u32>> for Effect {
     type Input = u32;
     type Output = u32;
     type Error = Fault;
-    type State = u32;
 
-    fn start(input: u32) -> Self::State {
-        input
-    }
-
-    fn step(&mut self, context: &mut Vec<u32>, state: &mut Self::State) -> StepResult<u32, Fault> {
+    fn step(&mut self, context: &mut Vec<u32>, input: &mut Option<u32>) -> StepResult<u32, Fault> {
+        if self.pending.is_none() {
+            self.pending = input.take();
+        }
+        let Some(value) = self.pending else {
+            return Ok(StepOutcome::InProgress);
+        };
         self.calls += 1;
-        context.push(*state);
-        self.reply.outcome(*state)
+        context.push(value);
+        {
+            let result = self.reply.outcome(value);
+            if matches!(result, Ok(StepOutcome::Complete(_))) {
+                self.pending = None;
+            }
+            result
+        }
     }
 }

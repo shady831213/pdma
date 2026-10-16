@@ -14,6 +14,7 @@ struct Tail {
     release: Rc<Cell<bool>>,
     completed: Rc<Cell<usize>>,
     dropped: Rc<Cell<bool>>,
+    state: Option<TailState>,
 }
 
 struct TailState {
@@ -33,25 +34,36 @@ impl<M> Stage<pdma_model_dma::ExecutionContext<'_, M>> for Tail {
     type Input = Option<pdma_model_dma::Completion>;
     type Output = Option<pdma_model_dma::Completion>;
     type Error = pdma_model_dma::Error;
-    type State = TailState;
-
-    fn start(input: Self::Input) -> Self::State {
-        TailState {
-            completion: input,
-            dropped: None,
-        }
-    }
-
     fn step(
         &mut self,
-        _: &mut pdma_model_dma::ExecutionContext<'_, M>,
-        state: &mut Self::State,
+        context: &mut pdma_model_dma::ExecutionContext<'_, M>,
+        input: &mut Option<Self::Input>,
     ) -> hardware_interface_pipeline::StepResult<Self::Output, Self::Error> {
+        if self.state.is_none() && input.is_none() {
+            return Ok(StepOutcome::InProgress);
+        }
+        if let Err(error) = context.lifecycle() {
+            if self.state.take().is_none() {
+                input.take();
+            }
+            return Ok(StepOutcome::Complete(Err(error)));
+        }
+        if self.state.is_none() {
+            let Some(completion) = input.take() else {
+                return Ok(StepOutcome::InProgress);
+            };
+            self.state = Some(TailState {
+                completion,
+                dropped: Some(Rc::clone(&self.dropped)),
+            });
+        }
         self.entered.set(true);
-        state.dropped = Some(Rc::clone(&self.dropped));
         Ok(if self.release.get() {
             self.completed.set(self.completed.get() + 1);
-            StepOutcome::Complete(Ok(state.completion.take()))
+            StepOutcome::Complete(Ok(self
+                .state
+                .take()
+                .and_then(|mut state| state.completion.take())))
         } else {
             StepOutcome::InProgress
         })
@@ -73,17 +85,18 @@ fn reset_after_committed_chunk_retires_hardware_while_custom_tail_is_pending() -
     let release = Rc::new(Cell::new(false));
     let completed = Rc::new(Cell::new(0));
     let dropped = Rc::new(Cell::new(false));
-    let sink = Then::new(
-        WriteCopy,
+    let sink: Then<_, _, Option<pdma_model_dma::Completion>> = Then::new(
+        WriteCopy::default(),
         Tail {
             entered: Rc::clone(&entered),
             release: Rc::clone(&release),
             completed: Rc::clone(&completed),
             dropped: Rc::clone(&dropped),
+            state: None,
         },
     );
     let pipeline = Then::new(
-        Then::new(PrepareChunk, ReadCopy),
+        Then::new(PrepareChunk::default(), ReadCopy::default()),
         Then::new(
             sink.upstream,
             Then::new(

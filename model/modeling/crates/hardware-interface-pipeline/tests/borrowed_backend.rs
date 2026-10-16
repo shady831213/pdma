@@ -33,14 +33,18 @@ impl Stage<u32> for IncrementWhenReady {
     type Input = ();
     type Output = u32;
     type Error = Infallible;
-    type State = ();
 
-    fn start((): Self::Input) -> Self::State {}
-
-    fn step(&mut self, value: &mut u32, (): &mut Self::State) -> StepResult<u32, Infallible> {
+    fn step(
+        &mut self,
+        value: &mut u32,
+        input: &mut Option<Self::Input>,
+    ) -> StepResult<u32, Infallible> {
         if *value == 0 {
             return Ok(StepOutcome::InProgress);
         }
+        let Some(()) = input.take() else {
+            return Ok(StepOutcome::InProgress);
+        };
         *value += 1;
         Ok(StepOutcome::Complete(Ok(*value)))
     }

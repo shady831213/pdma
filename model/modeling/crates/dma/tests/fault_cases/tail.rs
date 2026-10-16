@@ -1,5 +1,5 @@
 use super::*;
-use hardware_interface_pipeline::{HardwareDriver, RunError, Stage, StepResult, Then};
+use hardware_interface_pipeline::{HardwareDriver, Stage, StepResult, Then};
 use pdma_model_dma::{Completion, Error, ExecutionContext, PrepareChunk, ReadCopy, WriteCopy};
 use std::{cell::Cell, rc::Rc};
 
@@ -9,16 +9,14 @@ impl Stage<ExecutionContext<'_, Paged>> for ObserveCompletion {
     type Input = Option<Completion>;
     type Output = Option<Completion>;
     type Error = Error;
-    type State = Option<Self::Input>;
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
     fn step(
         &mut self,
         _: &mut ExecutionContext<'_, Paged>,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, Error> {
-        let completion = state.take().ok_or(RunError::Exhausted)?;
+        let Some(completion) = input.take() else {
+            return Ok(StepOutcome::InProgress);
+        };
         if completion.is_some() {
             self.0.set(self.0.get() + 1);
         }
@@ -40,11 +38,11 @@ fn resumed_write_uses_the_same_custom_completion_tail_as_healthy_write() -> Test
             device.memory.missing.set(Some((0x1300, true)));
         }
         let count = Rc::new(Cell::new(0));
-        let chunk = Then::new(PrepareChunk, ReadCopy);
+        let chunk = Then::new(PrepareChunk::default(), ReadCopy::default());
         let mut hardware = device.hardware_with(Then::new(
             chunk,
             Then::new(
-                WriteCopy,
+                WriteCopy::default(),
                 Then::new(
                     pdma_model_dma::CompletionInput,
                     Then::new(ObserveCompletion(Rc::clone(&count)), device.responses()),

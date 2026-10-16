@@ -3,7 +3,7 @@
 /// Shared hardware test fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{Operation, RunError, Stage, StepOutcome, StepResult, Then};
+use hardware_interface_pipeline::{Operation, Stage, StepOutcome, StepResult, Then};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::{CompletionInfo, Response, ResponseInfoValues, ResponseStatus};
 use pdma_model_dma::{Error, ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy};
@@ -15,19 +15,14 @@ impl Stage<ExecutionContext<'_, SharedMemory>> for FillChunk {
     type Input = Option<Payload>;
     type Output = Option<Payload>;
     type Error = Error;
-    type State = Option<Self::Input>;
-
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
 
     fn step(
         &mut self,
         _: &mut ExecutionContext<'_, SharedMemory>,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, Error> {
-        let Some(mut payload) = state.take() else {
-            return Err(RunError::Exhausted);
+        let Some(mut payload) = input.take() else {
+            return Ok(StepOutcome::InProgress);
         };
         if let Some(payload) = &mut payload {
             match payload.bytes_mut() {
@@ -49,9 +44,12 @@ fn transform_can_modify_only_the_active_chunk_and_cannot_forge_its_length() -> T
     memory.write(0x12ff.into(), MemoryAlignment::ONE, &[0xaa; 6])?;
     let descriptor = command();
     submit(&mut device, &memory, descriptor)?;
-    let read = Then::new(PrepareChunk, Then::new(ReadCopy, FillChunk));
+    let read = Then::new(
+        PrepareChunk::default(),
+        Then::new(ReadCopy::default(), FillChunk),
+    );
     let write = Then::new(
-        WriteCopy,
+        WriteCopy::default(),
         Then::new(pdma_model_dma::CompletionInput, device.responses()),
     );
     let pipeline = Then::new(read, write);

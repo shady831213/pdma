@@ -1,5 +1,5 @@
 use super::*;
-use hardware_interface_pipeline::{RunError, Stage, StepResult, Then};
+use hardware_interface_pipeline::{Stage, StepResult, Then};
 use pdma_model_dma::{
     CheckRanges, Error, ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy,
 };
@@ -10,17 +10,13 @@ impl Stage<ExecutionContext<'_, Paged>> for InvertPayload {
     type Input = Option<Payload>;
     type Output = Option<Payload>;
     type Error = Error;
-    type State = Option<Option<Payload>>;
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
     fn step(
         &mut self,
         _: &mut ExecutionContext<'_, Paged>,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, Error> {
-        let Some(mut work) = state.take() else {
-            return Err(RunError::Exhausted);
+        let Some(mut work) = input.take() else {
+            return Ok(StepOutcome::InProgress);
         };
         if let Some(payload) = &mut work {
             match payload.bytes_mut() {
@@ -48,12 +44,15 @@ fn transformed_resume(replace_service: bool) -> TestResult {
     let command = streams(&device)?;
     device.memory.missing.set(Some((0x1343, true)));
     submit(&mut device, command, 0)?;
-    let chunk = Then::new(PrepareChunk, Then::new(ReadCopy, InvertPayload));
+    let chunk = Then::new(
+        PrepareChunk::default(),
+        Then::new(ReadCopy::default(), InvertPayload),
+    );
     let execution = chunk;
     let pipeline = Then::new(
         execution,
         Then::new(
-            WriteCopy,
+            WriteCopy::default(),
             Then::new(pdma_model_dma::CompletionInput, device.responses()),
         ),
     );
@@ -83,11 +82,14 @@ fn transformed_resume(replace_service: bool) -> TestResult {
     assert_eq!(fault_status(&mut device)?, 1);
     device.memory.missing.set(None);
     if replace_service {
-        let chunk = Then::new(PrepareChunk, Then::new(ReadCopy, InvertPayload));
+        let chunk = Then::new(
+            PrepareChunk::default(),
+            Then::new(ReadCopy::default(), InvertPayload),
+        );
         engine = device.hardware_with(Then::new(
             chunk,
             Then::new(
-                WriteCopy,
+                WriteCopy::default(),
                 Then::new(pdma_model_dma::CompletionInput, device.responses()),
             ),
         ));
@@ -137,10 +139,11 @@ fn standalone_range_validation_cannot_consume_parked_work() -> TestResult {
     submit(&mut device, command, 0)?;
     device.until(|dma| Ok(fault_status(dma)? == 1))?;
     // When: an empty standalone invocation has no accepted work.
-    let mut state = <CheckRanges as Stage<ExecutionContext<'_, Paged>>>::start(None);
+    let mut state = Some(None);
+    let mut validation = CheckRanges::default();
     let mut complete = false;
     for _ in 0..16 {
-        if let StepOutcome::Complete(result) = CheckRanges.step(
+        if let StepOutcome::Complete(result) = validation.step(
             &mut device
                 .dma
                 .execution_context(pdma_model_contract::dma::ChannelId::new(0))?,

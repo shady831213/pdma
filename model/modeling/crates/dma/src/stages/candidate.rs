@@ -3,13 +3,29 @@ use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::ring::Ring;
 
+/// Non-owning identity of the accepted task at a channel's retained consumer position.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RetainedTask {
+    pub(crate) work: Work,
+    pub(crate) consumer: u32,
+}
+
+impl RetainedTask {
+    /// Channel retaining the accepted task.
+    pub const fn channel(self) -> ChannelId {
+        self.work.channel
+    }
+}
+
 /// Non-owning request for fetching or continuing shared command execution.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommandRequest {
     /// Fetch the channel's current command when the request is accepted.
     Fetch(CommandSnapshot),
     /// Resume the channel's already accepted, parked command.
-    Resume(Work),
+    Resume(RetainedTask),
+    /// Continue the task that still owns the shared execution grant.
+    Continue(RetainedTask),
 }
 
 impl CommandRequest {
@@ -17,7 +33,7 @@ impl CommandRequest {
     pub const fn channel(self) -> ChannelId {
         match self {
             Self::Fetch(snapshot) => snapshot.work.channel,
-            Self::Resume(work) => work.channel,
+            Self::Resume(task) | Self::Continue(task) => task.work.channel,
         }
     }
 }
@@ -37,11 +53,15 @@ impl<M, SB> Stage<Dma<M, SB>> for Candidate {
     type Input = ();
     type Output = Option<CommandRequest>;
     type Error = Error;
-    type State = ();
 
-    fn start((): ()) {}
-
-    fn step(&mut self, device: &mut Dma<M, SB>, (): &mut ()) -> StepResult<Self::Output, Error> {
+    fn step(
+        &mut self,
+        device: &mut Dma<M, SB>,
+        input: &mut Option<()>,
+    ) -> StepResult<Self::Output, Error> {
+        if input.take().is_none() {
+            return Ok(StepOutcome::InProgress);
+        }
         Ok(StepOutcome::Complete(device.command_request(self.0)))
     }
 }
@@ -53,8 +73,13 @@ impl<M, SB> Dma<M, SB> {
     /// Returns `Error::Unmapped` for an absent channel.
     pub fn command_request(&self, id: ChannelId) -> Result<Option<CommandRequest>, Error> {
         let channel = self.channels.get(id.index()).ok_or(Error::Unmapped)?;
-        if self.active.is_some() {
-            return Ok(None);
+        if let Some(work) = self.active {
+            return Ok(
+                (work.channel == id).then_some(CommandRequest::Continue(RetainedTask {
+                    work,
+                    consumer: channel.command.pointers().consumer,
+                })),
+            );
         }
         if self.halted()
             || self.resetting()
@@ -79,7 +104,10 @@ impl<M, SB> Dma<M, SB> {
             generation: channel.generation,
         };
         Ok(if channel.work.is_some() {
-            Some(CommandRequest::Resume(work))
+            Some(CommandRequest::Resume(RetainedTask {
+                work,
+                consumer: channel.command.pointers().consumer,
+            }))
         } else if channel.command.pointers().is_empty() {
             None
         } else {

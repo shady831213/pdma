@@ -27,16 +27,11 @@ impl Stage<Context> for Upstream {
     type Input = Result<OwnedInput, OwnedError>;
     type Error = OwnedError;
     type Output = OwnedInput;
-    type State = Option<Self::Input>;
-
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
 
     fn step(
         &mut self,
         _: &mut Context,
-        state: &mut Self::State,
+        state: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, Self::Error> {
         self.calls.set(self.calls.get() + 1);
         state.take().map_or(Err(RunError::Exhausted), |value| {
@@ -48,8 +43,10 @@ impl Stage<Context> for Upstream {
 #[derive(Debug)]
 struct Downstream {
     calls: Rc<Cell<usize>>,
+    pending: Option<DownstreamState>,
 }
 
+#[derive(Debug)]
 struct DownstreamState {
     pending_remaining: usize,
     input: OwnedInput,
@@ -59,21 +56,23 @@ impl Stage<Context> for Downstream {
     type Input = OwnedInput;
     type Error = OwnedError;
     type Output = OwnedOutput;
-    type State = DownstreamState;
-
-    fn start(input: Self::Input) -> Self::State {
-        input.1.set(input.1.get() + 1);
-        DownstreamState {
-            pending_remaining: 100,
-            input,
-        }
-    }
 
     fn step(
         &mut self,
         _: &mut Context,
-        state: &mut Self::State,
+        input: &mut Option<Self::Input>,
     ) -> StepResult<Self::Output, Self::Error> {
+        if self.pending.is_none() {
+            let Some(input) = input.take() else {
+                return Ok(StepOutcome::InProgress);
+            };
+            input.1.set(input.1.get() + 1);
+            self.pending = Some(DownstreamState {
+                pending_remaining: 100,
+                input,
+            });
+        }
+        let mut state = self.pending.take().ok_or(RunError::Exhausted)?;
         self.calls.set(self.calls.get() + 1);
         if state.pending_remaining == 0 {
             Ok(StepOutcome::Complete(Ok(OwnedOutput(format!(
@@ -82,6 +81,7 @@ impl Stage<Context> for Downstream {
             )))))
         } else {
             state.pending_remaining -= 1;
+            self.pending = Some(state);
             Ok(StepOutcome::InProgress)
         }
     }
@@ -96,8 +96,9 @@ fn downstream_pending_starts_once_without_replaying_upstream() {
     let upstream = Upstream {
         calls: Rc::clone(&upstream_calls),
     };
-    let mut pipeline: Then<Upstream, Downstream> = upstream.then(Downstream {
+    let mut pipeline: Then<Upstream, Downstream, OwnedInput> = upstream.then(Downstream {
         calls: Rc::clone(&downstream_calls),
+        pending: None,
     });
     let mut operation = Operation::new(Ok(OwnedInput(
         "upstream input".to_owned(),
@@ -108,10 +109,10 @@ fn downstream_pending_starts_once_without_replaying_upstream() {
     // When: the consumer transitions, discards unfinished outcomes, and resumes to completion.
     let transition = operation.step(&mut pipeline, &mut context);
 
-    // Then: starting downstream state is a boundary and does not poll downstream hardware.
+    // Then: buffering the downstream offer is a boundary without starting downstream hardware.
     assert_eq!(transition, Ok(StepOutcome::InProgress));
     assert_eq!(upstream_calls.get(), 1);
-    assert_eq!(starts.get(), 1);
+    assert_eq!(starts.get(), 0);
     assert_eq!(downstream_calls.get(), 0);
     println!(
         "transition upstream={} starts={} downstream={}",
@@ -158,6 +159,7 @@ fn adverse_upstream_error_skips_downstream_and_remains_exhausted() {
     };
     let mut pipeline = upstream.then(Downstream {
         calls: Rc::clone(&downstream_calls),
+        pending: None,
     });
     let mut operation = Operation::new(Err(OwnedError("upstream error".to_owned())));
     let mut context = Context;

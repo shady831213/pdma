@@ -5,8 +5,8 @@ use crate::{Operation, RunError, Stage, StepOutcome, StepResult};
 /// External driving state for successive finite unit-input, unit-output services.
 ///
 /// This is not a stage: only an external driving step starts a fresh invocation
-/// after the previous one succeeds. Unfinished invocation state and terminal
-/// errors survive cancellation of an asynchronous driving future.
+/// after the previous one succeeds. Hardware retains accepted work; the driver
+/// retains pending input and terminal errors across cancellation of a driving future.
 ///
 /// A driver cannot be nested inside a pipeline:
 ///
@@ -28,12 +28,13 @@ use crate::{Operation, RunError, Stage, StepOutcome, StepResult};
 /// ```
 pub struct HardwareDriver<S: Stage<C, Input = (), Output = ()>, C> {
     state: DriverState<S, C>,
+    run_error: Option<RunError>,
 }
 
 enum DriverState<S: Stage<C, Input = (), Output = ()>, C> {
     Ready,
     Running(Operation<S, C>),
-    Complete(Option<Result<S::Error, RunError>>),
+    Complete(Option<S::Error>),
 }
 
 impl<S: Stage<C, Input = (), Output = ()>, C> HardwareDriver<S, C> {
@@ -41,10 +42,11 @@ impl<S: Stage<C, Input = (), Output = ()>, C> HardwareDriver<S, C> {
     pub const fn new() -> Self {
         Self {
             state: DriverState::Ready,
+            run_error: None,
         }
     }
 
-    /// Reports whether a stage failure or call error stopped this driver.
+    /// Reports whether a terminal stage failure stopped this driver.
     pub const fn is_complete(&self) -> bool {
         matches!(self.state, DriverState::Complete(_))
     }
@@ -52,8 +54,8 @@ impl<S: Stage<C, Input = (), Output = ()>, C> HardwareDriver<S, C> {
     /// Performs one bounded hardware step, starting a service when needed.
     ///
     /// Successful service completion returns `InProgress`; a new invocation
-    /// starts only on a later call. Stage errors and call errors stop driving,
-    /// are delivered once, and leave subsequent calls exhausted.
+    /// starts only on a later call. Stage errors terminate the driver. Call errors
+    /// are delivered once and retain the invocation for subsequent driving.
     pub fn step(&mut self, hardware: &mut S, context: &mut C) -> StepResult<(), S::Error> {
         match self.advance(hardware, context)? {
             StepOutcome::InProgress => Ok(StepOutcome::InProgress),
@@ -66,9 +68,12 @@ impl<S: Stage<C, Input = (), Output = ()>, C> HardwareDriver<S, C> {
         }
     }
 
-    pub(super) const fn take_failure(&mut self) -> Option<Result<S::Error, RunError>> {
+    pub(super) fn take_failure(&mut self) -> Option<Result<S::Error, RunError>> {
+        if let Some(error) = self.run_error.take() {
+            return Some(Err(error));
+        }
         match &mut self.state {
-            DriverState::Complete(failure) => failure.take(),
+            DriverState::Complete(failure) => failure.take().map(Ok),
             DriverState::Ready | DriverState::Running(_) => None,
         }
     }
@@ -78,6 +83,9 @@ impl<S: Stage<C, Input = (), Output = ()>, C> HardwareDriver<S, C> {
         hardware: &mut S,
         context: &mut C,
     ) -> StepResult<(), Infallible> {
+        if self.run_error.is_some() {
+            return Ok(StepOutcome::Complete(Ok(())));
+        }
         let mut operation = match std::mem::replace(&mut self.state, DriverState::Complete(None)) {
             DriverState::Ready => Operation::new(()),
             DriverState::Running(operation) => operation,
@@ -101,11 +109,12 @@ impl<S: Stage<C, Input = (), Output = ()>, C> HardwareDriver<S, C> {
                 Ok(StepOutcome::InProgress)
             }
             Ok(StepOutcome::Complete(Err(error))) => {
-                self.state = DriverState::Complete(Some(Ok(error)));
+                self.state = DriverState::Complete(Some(error));
                 Ok(StepOutcome::Complete(Ok(())))
             }
             Err(error) => {
-                self.state = DriverState::Complete(Some(Err(error)));
+                self.state = DriverState::Running(operation);
+                self.run_error = Some(error);
                 Ok(StepOutcome::Complete(Ok(())))
             }
         }

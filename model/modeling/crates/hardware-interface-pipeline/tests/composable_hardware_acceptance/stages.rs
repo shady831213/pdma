@@ -53,16 +53,11 @@ impl Stage<Environment> for Decode {
     type Input = Request;
     type Output = Decoded;
     type Error = Infallible;
-    type State = Option<Request>;
-
-    fn start(input: Request) -> Self::State {
-        Some(input)
-    }
 
     fn step(
         &mut self,
         _: &mut Environment,
-        state: &mut Self::State,
+        state: &mut Option<Self::Input>,
     ) -> StepResult<Decoded, Infallible> {
         let Some(Request { id, bytes }) = state.take() else {
             return Err(RunError::Exhausted);
@@ -76,16 +71,11 @@ impl Stage<Environment> for Compute {
     type Input = Decoded;
     type Output = Executed;
     type Error = Infallible;
-    type State = Option<Decoded>;
-
-    fn start(input: Decoded) -> Self::State {
-        Some(input)
-    }
 
     fn step(
         &mut self,
         _: &mut Environment,
-        state: &mut Self::State,
+        state: &mut Option<Self::Input>,
     ) -> StepResult<Executed, Infallible> {
         let Some(Decoded { id, bytes }) = state.take() else {
             return Err(RunError::Exhausted);
@@ -103,16 +93,11 @@ impl Stage<Environment> for Publish {
     type Input = Executed;
     type Output = Response;
     type Error = Infallible;
-    type State = Option<Executed>;
-
-    fn start(input: Executed) -> Self::State {
-        Some(input)
-    }
 
     fn step(
         &mut self,
         environment: &mut Environment,
-        state: &mut Self::State,
+        state: &mut Option<Self::Input>,
     ) -> StepResult<Response, Infallible> {
         if !environment.writable {
             return Ok(StepOutcome::InProgress);

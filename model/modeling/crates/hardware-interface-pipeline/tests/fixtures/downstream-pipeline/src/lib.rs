@@ -9,9 +9,8 @@
 //!     type Input = ();
 //!     type Output = u32;
 //!     type Error = Infallible;
-//!     type State = ();
-//!     fn start((): ()) {}
-//!     fn step(&mut self, _: &mut (), _: &mut ()) -> StepResult<u32, Infallible> {
+//!     fn step(&mut self, _: &mut (), input: &mut Option<()>) -> StepResult<u32, Infallible> {
+//!         let Some(()) = input.take() else { return Ok(StepOutcome::InProgress); };
 //!         Ok(StepOutcome::Complete(Ok(42)))
 //!     }
 //! }
@@ -21,9 +20,8 @@
 //!     type Input = String;
 //!     type Output = ();
 //!     type Error = Infallible;
-//!     type State = String;
-//!     fn start(input: String) -> String { input }
-//!     fn step(&mut self, _: &mut (), _: &mut String) -> StepResult<(), Infallible> {
+//!     fn step(&mut self, _: &mut (), input: &mut Option<String>) -> StepResult<(), Infallible> {
+//!         let Some(_) = input.take() else { return Ok(StepOutcome::InProgress); };
 //!         Ok(StepOutcome::Complete(Ok(())))
 //!     }
 //! }

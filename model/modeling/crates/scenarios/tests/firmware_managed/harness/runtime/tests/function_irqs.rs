@@ -57,7 +57,7 @@ async fn pending_dma_notification_keeps_old_destination_after_reset_and_regrant(
         let executor = AsyncExecutor::new(Driver(Arc::clone(&system.shared)));
         let mut hardware = system.hardware;
         executor
-            .drive(&mut hardware, &mut HardwareDriver::new())
+            .drive(hardware.as_mut(), &mut HardwareDriver::new())
             .await
     };
     let program = async {

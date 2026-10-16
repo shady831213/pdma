@@ -786,3 +786,56 @@ instead of stopping at response publication, since publication and retirement ar
 now separate dataflow interactions. This changes no wire layout, fault reporting,
 memory ownership or software reset completion requirement. The generic pipeline
 crate and its support for unit output remain unchanged.
+
+## 16. Command execution owns the chunk-level continuation (approved, not implemented)
+
+The next implementation session will separate command-level execution from its
+chunk-level child stages. This is an agreed direction, not a description of the
+current graph or a change to the software-visible contract.
+
+At checkpoint f4fe857c9c57bb613cd374e2082d8da40f8c2cf2, a healthy intermediate chunk
+write updates retained channel progress and returns a successful Flow without a
+command completion. CompletionInput and Responses forward that empty result to
+Retire, which clears invocation residency while retaining the accepted command
+and active grant. Then/Fan/Hardware complete the finite invocation. On the next
+external driver call, Candidate sees the active command and emits Continue; the
+entire outer admission/execution path runs again.
+
+Repeated end-to-end counter runs observed 712 hardware interactions for one
+16 KiB linear copy, versus 1174 at the initial binary-state checkpoint and 203 at
+the older Pending checkpoint. Current execution reads the descriptor once and
+performs one new RR selection, but invokes Fetch and Install 64 times, including
+63 Continue selections. Backend access counts and byte totals match the old
+implementation. Empty Fan planning has already been eliminated in this workload.
+These observations distinguish repeated control-path traversal from repeated
+descriptor or payload accesses; they do not quantify allocator or scheduler CPU
+shares. The comparison includes the complete scenario, not isolated hardware ticks.
+
+The state lifetimes currently differ: command progress and its grant survive the
+whole command, but local chunk data and the enclosing invocation/residency both
+end after each chunk. Continue reconnects those lifetimes. Merely retaining more
+data does not retain the outer continuation once it has reported Complete.
+
+The intended hierarchy is admission/validation, then a command-execution stage,
+then response/retirement as appropriate. Command execution contains the chunk
+preparation, read, optional transform and write stages. Each child may Complete
+its own chunk input while command execution remains InProgress. A normal
+intermediate chunk must not restart outer admission or arbitration. Command
+progress may remain in shared hardware context; do not duplicate it in a wrapper.
+Fault parking and reset/error termination remain distinct exit paths: parking
+must release the shared engine for peers, preserve concrete checkpoints and
+produce no fault response; reset must wait for actual affected work to exit.
+
+One unresolved implementation point is how the retained command naturally
+produces the next chunk and drives its child data path. Current Then transfers
+one output per accepted input and, after upstream completion, advances only the
+downstream child. Changing an intermediate write to InProgress alone would stall
+without producing another chunk. Validate the concrete composition before
+deciding whether existing framework capabilities suffice; do not preemptively
+add a combinator or claim that extra state alone resolves this relationship.
+
+Preserve bounded stepping, typed dataflow, child-private continuations and
+backpressure. Do not restore Repeat, external flush, a centralized phase-dispatch
+controller, or downstream calls that advance upstream stages. Performance gains
+should follow the corrected hardware organization, not silently collapsed tick
+boundaries. Implementation is deferred to the next session by user request.

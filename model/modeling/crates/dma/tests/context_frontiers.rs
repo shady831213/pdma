@@ -36,7 +36,7 @@ fn linear_command_does_not_reference_ignored_sg_selector() -> TestResult {
     )?;
     // When
     dma.abort_context(ContextId::new(7), &[ChannelId::new(0)])?;
-    let mut pipeline = dma.service();
+    let mut pipeline = dma.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..128 {
         let _ = operation.step(&mut pipeline, &mut dma);
@@ -83,7 +83,7 @@ fn later_unrelated_publication_does_not_extend_the_drain_frontier() -> TestResul
         base + CommandRegisters::PRODUCER.offset(),
         &2_u32.to_le_bytes(),
     )?;
-    let mut pipeline = dma.service();
+    let mut pipeline = dma.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     // When
     for _ in 0..128 {

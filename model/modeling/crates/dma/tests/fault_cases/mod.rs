@@ -3,6 +3,7 @@ mod chunks;
 mod composition;
 mod control;
 mod lifecycle;
+mod local;
 mod memory;
 mod peers;
 mod resume;
@@ -17,7 +18,7 @@ use pdma_model_contract::dma::{
     ChannelBlock, ChannelRegisters, Command, CommandRegisters, Endpoint, Response, ResponseRaw,
     ResponseRegisters, ResponseStatus, Segment,
 };
-use pdma_model_dma::{Dma, Service};
+use pdma_model_dma::{Dma, Hardware};
 
 const CMD: usize = ChannelBlock::ALIGNMENT + ChannelBlock::COMMAND.offset();
 const RESP: usize = ChannelBlock::ALIGNMENT + ChannelBlock::RESPONSE.offset();
@@ -25,8 +26,8 @@ const CTRL: usize = ChannelBlock::ALIGNMENT + ChannelBlock::CONTROL.offset();
 
 struct Fixture {
     dma: Dma<Paged>,
-    pipeline: Service,
-    operation: hardware_interface_pipeline::HardwareDriver<Service, Dma<Paged>>,
+    pipeline: Hardware,
+    operation: hardware_interface_pipeline::HardwareDriver<Hardware, Dma<Paged>>,
 }
 
 impl std::ops::Deref for Fixture {
@@ -85,7 +86,7 @@ fn setup() -> TestResult<Fixture> {
         0x1100,
         2,
     )?;
-    let pipeline = dma.service();
+    let pipeline = dma.hardware();
     Ok(Fixture {
         dma,
         pipeline,

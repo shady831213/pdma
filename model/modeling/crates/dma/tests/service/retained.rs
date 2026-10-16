@@ -8,8 +8,7 @@ use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, ResponseRegisters,
 };
 use pdma_model_dma::{
-    Completion, Dma, Error, ExecutionError, Payload, PrepareChunk, Publish, ReadCopy, ResetControl,
-    Service, WriteCopy,
+    Completion, Dma, Error, Hardware, Payload, PrepareChunk, Publish, ReadCopy, WriteCopy,
 };
 
 fn payload(device: &mut Dma<SharedMemory>) -> TestResult<Payload> {
@@ -51,19 +50,8 @@ fn reset_retires_channel_work_while_an_old_token_is_retained() -> TestResult {
         };
         memory.write(0x1300.into(), MemoryAlignment::ONE, &[0xaa; 4])?;
         device.write(RESET, &1_u32.to_le_bytes())?;
-        let _ = ResetControl.step(&mut device, &mut ())?;
-        assert_eq!(read_word(&mut device, RESET)?, 1);
-        let mut service = device.service();
-        let mut cleanup = Operation::new(());
-        // When: explicit hardware cleanup runs while the typed value remains retained.
-        for _ in 0..128 {
-            if let StepOutcome::Complete(result) = cleanup.step(&mut service, &mut device)? {
-                result?;
-                break;
-            }
-        }
+        // When: reset cleans nonresident work while the typed value remains retained.
         // Then: stale write and publication inputs cannot access memory or retire new work.
-        assert!(cleanup.is_complete());
         assert_eq!(read_word(&mut device, RESET)?, 0);
         match retained {
             Retained::Payload(bytes) => assert!(matches!(
@@ -71,14 +59,14 @@ fn reset_retires_channel_work_while_an_old_token_is_retained() -> TestResult {
                     &mut WriteCopy,
                     &mut device.execution_context(ChannelId::new(0))?
                 )?,
-                StepOutcome::Complete(Err(ExecutionError::Rejected(Error::Reset)))
+                StepOutcome::Complete(Err(Error::Reset))
             )),
             Retained::Completion(completion) => assert!(matches!(
                 Operation::new(completion).step(
                     &mut Publish::new(ChannelId::new(0)),
                     &mut device.execution_context(ChannelId::new(0))?
                 )?,
-                StepOutcome::Complete(Err(ExecutionError::Rejected(Error::Reset)))
+                StepOutcome::Complete(Err(Error::Reset))
             )),
         }
         assert_eq!(
@@ -96,8 +84,8 @@ fn stale_work_cannot_retire_or_write_a_newer_accepted_command() -> TestResult {
     submit(&mut device, &memory, command())?;
     let old_work = payload(&mut device)?;
     device.write(RESET, &1_u32.to_le_bytes())?;
-    let mut service = device.service();
-    let mut old = <Service as Stage<Dma<SharedMemory>>>::start(());
+    let mut service = device.hardware();
+    let mut old = <Hardware as Stage<Dma<SharedMemory>>>::start(());
     for _ in 0..128 {
         if let StepOutcome::Complete(result) = service.step(&mut device, &mut old)? {
             result?;
@@ -147,7 +135,7 @@ fn stale_work_cannot_retire_or_write_a_newer_accepted_command() -> TestResult {
             &mut WriteCopy,
             &mut device.execution_context(ChannelId::new(0))?
         )?,
-        StepOutcome::Complete(Err(ExecutionError::Rejected(Error::Reset)))
+        StepOutcome::Complete(Err(Error::Reset))
     ));
     assert_eq!(
         service.step(&mut device, &mut old),

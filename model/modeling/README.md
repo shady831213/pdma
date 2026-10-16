@@ -91,7 +91,7 @@ backend errors. New platform error categories need no generic runtime change.
 | `crates/contract/src/bin/pdma-abi-header.rs` | Current C11 header generation through schema exporters. |
 | `crates/dma/src/channel.rs` | Channel registers, rings, IRQ and private accepted-work state. |
 | `crates/dma/src/channel/mmio.rs` | Generated block routing and software-write effects. |
-| `crates/dma/src/stages.rs` | Shared dataflow assembly and independent top-level hardware units. |
+| `crates/dma/src/stages.rs` | One connected command admission and execution pipeline. |
 | `crates/dma/src/stages/fetch.rs` | Revalidated command acceptance into channel-owned state. |
 | `crates/hardware-interface-pipeline/src/combinators/` | Typed sequencing, gathering, arbitration and distribution. |
 | `crates/dma/src/arbitration.rs` | PDMA round-robin selection policy. |
@@ -118,20 +118,25 @@ backend errors. New platform error categories need no generic runtime change.
 | `crates/scenarios/tests/single_channel/software/` | Complete software program, buffer allocation and interrupt handler. |
 | `crates/scenarios/tests/multi_channel/` | Three-channel reset isolation through the same hardware/software/harness separation. |
 
-`device.service()` assembles fresh command admission, shared chunk execution
-and independent IRQ/reset units. Custom execution uses ordinary Then composition
-with an explicit payload boundary:
+`device.hardware()` returns one finite connected admission-to-execution graph.
+Custom execution supplies a complete ordinary
+stage graph, with explicit data and completion boundaries:
 
 ```rust
 let read = Then::new(PrepareChunk, ReadCopy);
-let write = Then::new(WriteCopy, device.responses());
-device.service_with(Then::new(read, write))
+let publish = Then::new(CompletionInput, device.responses());
+let write = Then::new(WriteCopy, publish);
+device.hardware_with(Then::new(read, write))
 ```
 
-A transform composes after ReadCopy inside the read graph. The graph has the
-shape `Then<ReadGraph, Then<WriteCopy, CompletionTail>>`; application stages can
-compose into the completion tail. A write-fault retry enters that same write
-graph, including its custom tail, without repeating the read or transform.
+A transform composes after ReadCopy. Application stages observing completion
+compose after CompletionInput and before or after publication as appropriate.
+The data-path constructor accepts the complete graph without inspecting or rearranging its internal
+Then structure. A write-fault retry restores retained bytes at
+WriteCopy's own input boundary and continues through that same completion tail.
+The upstream graph carries empty inputs, not the retained payload; it performs
+no repeated read or valid-data transformation. Option-based custom stages must
+distinguish an empty input from a payload, just as on ordinary empty passes.
 
 Channel is a persistent hardware object, not a pipeline. It retains the accepted
 descriptor ledger, validated traversal and concrete fault checkpoints. Current
@@ -166,9 +171,10 @@ These values have private metadata and are not clonable. Transform code accesses
 `Payload::bytes_mut()`, not a global scratch lookup, and cannot resize the payload
 or replace validated addresses, lengths or response metadata.
 
-Stopping execution errors carry a real error completion and short-circuit normal
-data processing through Then's existing failure path. They enter the same configured
-completion tail; a failed read does not fabricate payload bytes for a transform.
+Stopping command errors retain a real completion in channel-owned hardware storage
+and emit no normal data. The completion input merges this retained response into
+the same configured completion tail; a failed read does not fabricate payload
+bytes for a transform or require the top level to select a response stage.
 Lifecycle rejection, channel/device fatal and repairable PageFault keep distinct
 handling. A successful empty transfer remains normal completion.
 
@@ -177,7 +183,8 @@ Descriptor, payload and publication stages implement
 Channel, the memory port and required lifecycle guards; it has no device MMIO
 layout, arbitration policy or maintenance controller. Its borrow ends each step,
 so the next step observes intervening reset, enable and fault changes. Candidate
-and device-wide maintenance retain the broader context they actually need.
+retains the broader context it actually needs. Lifecycle transitions notify the
+context-maintenance owner when its observed channel state changes.
 
 The engine's active grant backpressures admission while command work remains.
 Subsequent finite chunk passes use installed traversal, not another Fetch or range
@@ -189,18 +196,33 @@ Payload PageFault ends the current finite path without response or DMA IRQ.
 A read checkpoint retains the concrete unread Chunk. A write checkpoint retains
 the already read/transformed Payload. Both keep command traversal and accepted
 references alive while releasing shared execution capacity. Resume arbitrates
-the parked task again and enters the appropriate dataflow boundary; it does not
-refetch, revalidate or transform retained write bytes. Even immediate RESUME cannot
+the parked task again. ReadCopy and WriteCopy consume their respective checkpoints
+at their own boundaries; the top level does not interpret a retry phase. This does
+not refetch, revalidate or transform retained write bytes. Even immediate RESUME cannot
 revive a failed path. The assembly can be replaced while parked because checkpoints
 are concrete hardware data, not saved Rust stage continuations.
 
-The top-level Service explicitly advances IRQ and reset units each external tick,
-including idle or stalled command processing. Neither is nested in AfterEach or
-dependent on another leaf's internal step count. Reset clears affected hardware
-work and prevents old tagged effects before acknowledging; unrelated disabled
-work does not block cleanup. Rust invocation destructor timing is not the reset
-predicate. See the [reset contract](docs/reset.md) for software memory lifetime
-and the RTL obligation to drain every affected outstanding transaction.
+Admission and execution are connected by ordinary Then dataflow. Grant forwards
+selected or already active work; Install forwards its chunk request rather than
+dropping it and waiting for a separate execution round. The data-path wrapper only
+adapts its unit input and treats reset/halt/channel-fatal termination as the end of
+that invocation, not permanent simulation failure. It neither steps sibling units
+nor interprets their results. An old faulted invocation drains before the external
+driver can restart admission and reacquire its grant.
+
+Channel source mutations update IRQ causes directly. Publication retires completed
+work; stopping and reset operations release the storage they own. Context
+maintenance observes acceptance, cursor advancement, suspension and retirement;
+Fetch discards unstarted Abort-target descriptors within the captured frontier.
+These operations are not independently driven pipelines.
+
+Reset is an out-of-band flush handshake. Idle scopes can clear their storage and
+complete immediately. A selected scope remains busy until its resident execution
+state has been flushed, independently of downstream data backpressure. Completion
+has no minimum latency, but always means that affected old work can no longer act.
+Runtime/harness wiring supplies none of this policy. See the
+[reset contract](docs/reset.md) for software memory lifetime and the RTL obligation
+to drain every affected outstanding transaction.
 
 Fan remains finite N-to-M value flow: unfinished input/output states and unconsumed
 completed values belong to its invocation. Policy validates routing before effects;

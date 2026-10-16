@@ -17,7 +17,7 @@ impl Publish {
 impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for Publish {
     type Input = Completion;
     type Output = ();
-    type Error = crate::ExecutionError;
+    type Error = crate::Error;
     type State = Option<Completion>;
     fn start(input: Self::Input) -> Self::State {
         Some(input)
@@ -26,17 +26,17 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for Publish {
         &mut self,
         context: &mut ExecutionContext<'_, M, SB>,
         state: &mut Self::State,
-    ) -> StepResult<(), crate::ExecutionError> {
+    ) -> StepResult<(), crate::Error> {
         let completion = state.as_ref().ok_or(RunError::Exhausted)?;
         let work = completion.work;
         if work.channel() != self.channel {
             *state = None;
-            return Ok(StepOutcome::Complete(Err(Error::Routing.into())));
+            return Ok(StepOutcome::Complete(Err(Error::Routing)));
         }
         match context.ready(work) {
             Err(error) => {
                 *state = None;
-                return Ok(StepOutcome::Complete(Err(error.into())));
+                return Ok(StepOutcome::Complete(Err(error)));
             }
             Ok(false) => return Ok(StepOutcome::InProgress),
             Ok(true) => {}
@@ -60,16 +60,16 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for Publish {
                 if *context.active == Some(work) {
                     *context.active = None;
                 }
+                context.changed();
                 *state = None;
                 Ok(StepOutcome::Complete(Ok(())))
             }
             Ok(false) => Ok(StepOutcome::InProgress),
             Err(fatal) => {
                 context.selected.latch(fatal);
+                context.changed();
                 *state = None;
-                Ok(StepOutcome::Complete(
-                    Err(Error::ChannelFatal(fatal).into()),
-                ))
+                Ok(StepOutcome::Complete(Err(Error::ChannelFatal(fatal))))
             }
         }
     }

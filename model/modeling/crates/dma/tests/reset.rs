@@ -3,13 +3,12 @@
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{Operation, StepOutcome};
+use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelRegisters, CommandRegisters, DmaAdmin, DmaControl, DmaDiscovery, Endpoint,
     ResponseRegisters,
 };
-use pdma_model_dma::ResetControl;
 use support::{TestResult, command, read_word, setup, submit};
 
 #[test]
@@ -17,7 +16,7 @@ fn reset_invalidates_a_retained_copy_without_rolling_back_memory() -> TestResult
     // Given: an accepted operation and externally written payload bytes.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let mut hardware = device.service();
+    let mut hardware = device.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let mut accepted = false;
     for _ in 0..16 {
@@ -96,8 +95,6 @@ fn channel_reset_cannot_clear_device_fatal() -> TestResult {
     let reset = pdma_model_contract::dma::ChannelId::new(0)
         .admin_offset(1)
         .ok_or("admin offset")?;
-    assert_eq!(read_word(&mut device, reset)?, 1);
-    let _ = Operation::new(()).step(&mut ResetControl, &mut device)?;
     assert_eq!(read_word(&mut device, reset)?, 0);
     // Then: device fatal survives until a whole-device reset.
     assert!(device.irq());
@@ -113,8 +110,6 @@ fn channel_reset_cannot_clear_device_fatal() -> TestResult {
         &1_u32.to_le_bytes(),
     )?;
     let reset = (DmaDiscovery::EXTENT + DmaAdmin::CONTROL.offset()) + DmaControl::RESET.offset();
-    assert_eq!(read_word(&mut device, reset)?, 1);
-    let _ = Operation::new(()).step(&mut ResetControl, &mut device)?;
     assert_eq!(read_word(&mut device, reset)?, 0);
     assert!(!device.irq());
     assert_eq!(
@@ -142,7 +137,7 @@ fn reset_after_committed_chunk_discards_remaining_copy_after_reconfiguration() -
         input.copy_length = 512;
         input.destination = Endpoint::linear(0x1600, 0);
         submit(&mut device, &memory, input)?;
-        let mut hardware = device.service();
+        let mut hardware = device.hardware();
         let mut operation = hardware_interface_pipeline::HardwareDriver::new();
         let mut first_committed = false;
         let mut first_chunk = [0; 256];

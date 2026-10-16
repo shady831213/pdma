@@ -10,7 +10,7 @@ pub struct PrepareChunk;
 impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for PrepareChunk {
     type Input = Option<ChunkInput>;
     type Output = Option<Chunk>;
-    type Error = crate::ExecutionError;
+    type Error = crate::Error;
     type State = Option<Self::Input>;
     fn start(input: Self::Input) -> Self::State {
         Some(input)
@@ -19,7 +19,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for PrepareChun
         &mut self,
         context: &mut ExecutionContext<'_, M, SB>,
         state: &mut Self::State,
-    ) -> StepResult<Self::Output, crate::ExecutionError> {
+    ) -> StepResult<Self::Output, crate::Error> {
         let Some(input) = state.as_mut().ok_or(RunError::Exhausted)? else {
             *state = None;
             return Ok(StepOutcome::Complete(Ok(None)));
@@ -30,12 +30,14 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for PrepareChun
             Ok(false) => return Ok(StepOutcome::InProgress),
             Err(error) => {
                 *state = None;
-                return Ok(StepOutcome::Complete(Err(error.into())));
+                return Ok(StepOutcome::Complete(Err(error)));
             }
         }
-        if let Some(chunk) = input.retry.take() {
+        let accepted = context.selected.work.as_ref().ok_or(RunError::Exhausted)?;
+        if accepted.unread.is_some() || accepted.payload.is_some() || accepted.completion.is_some()
+        {
             *state = None;
-            return Ok(StepOutcome::Complete(Ok(Some(chunk))));
+            return Ok(StepOutcome::Complete(Ok(None)));
         }
         let progress = context
             .selected
@@ -57,9 +59,9 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for PrepareChun
                 response: progress.response(),
             };
             *state = None;
-            return Ok(StepOutcome::Complete(Err(
-                crate::ExecutionError::CommandFailed(completion),
-            )));
+            return Ok(StepOutcome::Complete(
+                context.complete(completion).map(|()| None),
+            ));
         }
         let Some((source, destination, length)) = span else {
             return Ok(StepOutcome::InProgress);

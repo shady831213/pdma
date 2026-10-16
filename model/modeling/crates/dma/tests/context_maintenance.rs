@@ -13,7 +13,7 @@ fn abort_discards_unstarted_work_without_response_space() -> TestResult {
     // Given
     let (mut dma, memory) = setup(0x1100, 1)?;
     submit(&mut dma, &memory, command())?;
-    let mut pipeline = dma.service();
+    let mut pipeline = dma.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..128 {
         let _ = operation.step(&mut pipeline, &mut dma)?;
@@ -60,7 +60,7 @@ fn abort_waits_for_accepted_command_and_preserves_its_normal_response() -> TestR
     submit(&mut dma, &memory, input)?;
     let consumer =
         ChannelId::new(0).register_offset(1).ok_or("layout")? + CommandRegisters::CONSUMER.offset();
-    let mut pipeline = dma.service();
+    let mut pipeline = dma.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..32 {
         let _ = operation.step(&mut pipeline, &mut dma)?;
@@ -131,7 +131,7 @@ fn failed_drain_returns_channel_and_releases_reset_interlock() -> TestResult {
         dma.write(reset, &1_u32.to_le_bytes()),
         Err(pdma_model_dma::Error::MaintenanceInProgress)
     );
-    let mut pipeline = dma.service();
+    let mut pipeline = dma.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..128 {
         let _ = operation.step(&mut pipeline, &mut dma)?;

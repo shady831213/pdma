@@ -1,17 +1,19 @@
-use crate::channel::Continuation;
 use crate::{Channel, Dma, Error, Work};
 use hardware_interface_runtime::BoundMemory;
 use pdma_model_contract::dma::{ChannelId, ContextId, DmaAccess};
 
-/// Borrowed execution resources, excluding device MMIO, arbitration and maintenance.
+/// Borrowed channel execution resources with owner lifecycle observation.
 #[derive(Debug)]
 pub struct ExecutionContext<'a, M, S = ()> {
     pub(crate) selected: &'a mut Channel,
     pub(crate) id: ChannelId,
+    pub(crate) generation: u64,
     pub(crate) memory: &'a M,
     pub(crate) sideband: fn(DmaAccess) -> S,
     pub(crate) halted: bool,
     pub(crate) active: &'a mut Option<Work>,
+    pub(crate) abort_context: Option<ContextId>,
+    pub(crate) maintenance: &'a mut Option<crate::Maintenance>,
 }
 
 impl<M, S> Dma<M, S> {
@@ -21,18 +23,58 @@ impl<M, S> Dma<M, S> {
         id: ChannelId,
     ) -> Result<ExecutionContext<'_, M, S>, Error> {
         let halted = self.halted() || self.resetting();
+        let selected = self.channels.get_mut(id.index()).ok_or(Error::Unmapped)?;
+        let abort_context = self
+            .maintenance
+            .as_ref()
+            .filter(|maintenance| {
+                maintenance.abort
+                    && maintenance.result == Ok(false)
+                    && maintenance.frontiers.iter().any(|frontier| {
+                        frontier.channel == id
+                            && selected
+                                .command
+                                .pointers()
+                                .consumer
+                                .wrapping_sub(frontier.consumer)
+                                < frontier.pending
+                    })
+            })
+            .map(|maintenance| maintenance.context);
         Ok(ExecutionContext {
-            selected: self.channels.get_mut(id.index()).ok_or(Error::Unmapped)?,
+            generation: selected.generation,
+            selected,
             id,
             memory: &self.memory,
             sideband: self.sideband,
             halted,
             active: &mut self.active,
+            abort_context,
+            maintenance: &mut self.maintenance,
         })
     }
 }
 
 impl<M, S> ExecutionContext<'_, M, S> {
+    pub(crate) fn changed(&mut self) {
+        if let Some(maintenance) = self.maintenance {
+            maintenance.observe(self.id, self.selected, *self.active, self.halted);
+            maintenance.finish_observation();
+        }
+    }
+    pub(crate) const fn work(&self) -> Work {
+        Work {
+            channel: self.id,
+            generation: self.generation,
+        }
+    }
+    pub(crate) fn checkpoint_ready(&mut self) -> Result<bool, Error> {
+        let work = self.work();
+        if *self.active != Some(work) {
+            return Ok(false);
+        }
+        self.ready(work)
+    }
     /// Installs validated traversal once and returns its first chunk request.
     pub fn install_progress(
         &mut self,
@@ -75,21 +117,22 @@ impl<M, S> ExecutionContext<'_, M, S> {
         )
     }
 
-    pub(crate) fn retain(&mut self, work: Work, continuation: Continuation) -> Result<(), Error> {
-        self.channel(work)?
-            .work
-            .as_mut()
-            .ok_or(Error::Reset)?
-            .continuation = Some(continuation);
-        Ok(())
-    }
-
-    pub(crate) fn park(&mut self, work: Work, continuation: Continuation) -> Result<(), Error> {
-        self.retain(work, continuation)?;
+    pub(crate) fn park(&mut self, work: Work) -> Result<(), Error> {
         self.channel(work)?.suspend();
         if *self.active == Some(work) {
             *self.active = None;
         }
+        self.changed();
+        Ok(())
+    }
+
+    pub(crate) fn complete(&mut self, completion: crate::Completion) -> Result<(), Error> {
+        let work = completion.work;
+        self.channel(work)?
+            .work
+            .as_mut()
+            .ok_or(Error::Reset)?
+            .completion = Some(completion);
         Ok(())
     }
 }

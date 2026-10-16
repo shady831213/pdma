@@ -43,7 +43,7 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
     let memory = allocator.memory_access();
     memory.write(source, alignment, b"retained")?;
     let device = Dma::new(memory.clone(), 1)?;
-    let mut stage = device.service();
+    let mut stage = device.hardware();
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
@@ -92,11 +92,6 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
         [0; 8]
     );
     assert!(executor.run(&mut stage, &mut operation).await.is_ok());
-    let mut execution = Operation::new(());
-    executor
-        .run(&mut stage, &mut execution)
-        .await
-        .map_err(|error| format!("{error:?}"))?;
 
     // Then: the accepted descriptor yields one response and the correct copied payload.
     assert_eq!(

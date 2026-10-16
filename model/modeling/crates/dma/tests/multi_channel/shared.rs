@@ -25,7 +25,7 @@ fn arbiter_accepts_no_peer_command_until_selected_command_finishes() -> TestResu
         )?;
         submit(&mut device, index, u64::try_from(index)?)?;
     }
-    let mut hardware = device.service();
+    let mut hardware = device.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let mut first_write = false;
     // When: A reaches its first committed chunk, before response publication.

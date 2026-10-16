@@ -36,22 +36,15 @@ pub struct CopyProgress {
     pub(crate) progress: CopyState,
 }
 
-/// A new traversal pass or the concrete chunk retained at a read fault.
+/// A request for the next bounded traversal pass.
 #[derive(Debug)]
 pub struct ChunkInput {
     pub(crate) work: Work,
-    pub(crate) retry: Option<Chunk>,
 }
 
 impl ChunkInput {
     pub(crate) const fn next(work: Work) -> Self {
-        Self { work, retry: None }
-    }
-    pub(crate) const fn retry(chunk: Chunk) -> Self {
-        Self {
-            work: chunk.work,
-            retry: Some(chunk),
-        }
+        Self { work }
     }
     /// Channel whose retained traversal or read checkpoint is requested.
     pub const fn channel(&self) -> ChannelId {

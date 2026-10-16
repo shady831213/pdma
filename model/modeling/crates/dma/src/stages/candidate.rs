@@ -62,7 +62,15 @@ impl<M, SB> Dma<M, SB> {
             || channel.resetting()
             || channel.halted()
             || channel.registers.values.fault_status.faulted()
-            || channel.response.pointers().pending() >= channel.response.capacity()
+            || (channel.response.pointers().pending() >= channel.response.capacity()
+                && !self.maintenance.as_ref().is_some_and(|maintenance| {
+                    maintenance.abort
+                        && maintenance.result == Ok(false)
+                        && maintenance
+                            .frontiers
+                            .iter()
+                            .any(|frontier| frontier.channel == id && !frontier.passed)
+                }))
         {
             return Ok(None);
         }

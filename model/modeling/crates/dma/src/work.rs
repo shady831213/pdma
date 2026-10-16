@@ -1,5 +1,5 @@
-use crate::Dma;
-use pdma_model_contract::dma::{ChannelId, FaultStatusValues};
+use crate::{Dma, Error};
+use pdma_model_contract::dma::ChannelId;
 
 /// Non-owning channel identity and reset generation for one hardware work snapshot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -15,32 +15,76 @@ impl Work {
     }
 }
 
-impl<M, SB> Dma<M, SB> {
-    pub(crate) fn retire_stopped_work(&mut self) {
+impl<M, S> Dma<M, S> {
+    pub(crate) fn invocation_error(&self, work: Work) -> Option<Error> {
+        let Some(channel) = self.channels.get(work.channel.index()) else {
+            return Some(Error::Unmapped);
+        };
+        if channel.generation != work.generation || channel.resetting() {
+            return Some(Error::Reset);
+        }
+        let aborted = self.active != Some(work)
+            && self.maintenance.as_ref().is_some_and(|maintenance| {
+                maintenance.abort
+                    && maintenance.result == Ok(false)
+                    && maintenance
+                        .frontiers
+                        .iter()
+                        .any(|frontier| frontier.channel == work.channel)
+                    && channel.accepted_command().is_some_and(|command| {
+                        crate::references(command).contains(&Some(maintenance.context))
+                    })
+            });
+        (self.halted() || channel.halted() || aborted).then_some(Error::Halted)
+    }
+    pub(crate) fn release_invocation(&mut self, work: Work) {
         let halted = self.halted();
-        for (index, channel) in self.channels.iter_mut().enumerate() {
-            let aborted = self.active.is_none_or(|work| work.channel.index() != index)
-                && self.maintenance.as_ref().is_some_and(|maintenance| {
-                    maintenance.abort
-                        && maintenance.result == Ok(false)
-                        && maintenance
-                            .frontiers
-                            .iter()
-                            .any(|frontier| frontier.channel.index() == index)
-                        && channel.work.as_ref().is_some_and(|work| {
-                            crate::references(&work.command).contains(&Some(maintenance.context))
-                        })
-                });
-            if channel.resetting() || channel.halted() || halted || aborted {
-                channel.work = None;
-                channel.registers.values.fault_status = FaultStatusValues::new(0);
-                if self
-                    .active
-                    .is_some_and(|work| work.channel.index() == index)
-                {
-                    self.active = None;
-                }
+        let abort_context = self
+            .maintenance
+            .as_ref()
+            .filter(|maintenance| {
+                maintenance.abort
+                    && maintenance.result == Ok(false)
+                    && maintenance
+                        .frontiers
+                        .iter()
+                        .any(|frontier| frontier.channel == work.channel)
+            })
+            .map(|maintenance| maintenance.context);
+        if let Some(channel) = self.channels.get_mut(work.channel.index()) {
+            if channel.resident != Some(work) {
+                return;
             }
+            channel.resident = None;
+            if halted
+                || channel.halted()
+                || (self.active != Some(work)
+                    && abort_context.is_some_and(|context| {
+                        channel.accepted_command().is_some_and(|command| {
+                            crate::references(command).contains(&Some(context))
+                        })
+                    }))
+            {
+                channel.retire();
+            }
+            if channel.resetting() {
+                channel.finish_reset();
+            }
+        }
+        self.release_invalid_grant();
+        self.finish_device_reset();
+        self.observe_channel(work.channel);
+    }
+
+    pub(crate) fn release_invalid_grant(&mut self) {
+        if self.active.is_some_and(|work| {
+            self.channels
+                .get(work.channel.index())
+                .is_none_or(|channel| {
+                    channel.generation != work.generation || channel.work.is_none()
+                })
+        }) {
+            self.active = None;
         }
     }
 }

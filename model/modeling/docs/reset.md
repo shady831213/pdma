@@ -17,8 +17,10 @@ The channel and device `Reset` registers have the same read/write protocol:
 | Software repeats one while busy | Coalesce with the pending request. |
 | Hardware clears to zero | Affected accepted work has retired and reset state is installed. |
 
-The request write does not finish reset, even for an idle channel. Hardware must
-step to perform cleanup. While busy, otherwise valid configuration/control/ring writes
+There is no minimum busy duration and software need not observe one before zero.
+An idle scope can complete during request handling, after its state is cleared.
+A scope with resident pipeline work remains busy until that work is flushed and
+cleanup is acknowledged. While busy, otherwise valid configuration/control/ring writes
 are rejected with `Error::ResetInProgress`, apart from the reset protocol itself;
 register reads remain available. Software may configure and enable the scope again
 after it observes completion.
@@ -45,10 +47,10 @@ reset does not retract them.
 
 ## How the current model reaches completion
 
-`Dma::service()` assembles finite candidate/selection/execution dataflow and
-independent IRQ/reset hardware units. External HardwareDriver supplies subsequent
-service inputs. Reset checks advance on every top-level tick, including idle or
-unfinished command processing; they do not depend on an AfterEach child-step hook.
+`Dma::hardware()` returns one connected data pipeline. An ordinary external
+HardwareDriver advances it; runtime does not schedule separate lifecycle stages.
+Reset is an out-of-band request to the owning hardware state, not a data item
+waiting for downstream readiness. IRQ causes update at their source mutations.
 
 Channel owns the accepted descriptor ledger, installed traversal and any concrete
 read/write fault checkpoint. Fetch advances consumer and installs the ledger in
@@ -60,30 +62,42 @@ reset before each effect. No leaf invokes another stage.
 A healthy command retains its hardware grant across finite chunk passes. The
 occupied execution unit backpressures command admission; ordinary stages prepare,
 read, optionally transform and write one chunk before the next pass. Reset still
-advances independently every top-level tick and access guards apply throughout.
+does not wait for downstream readiness and access guards apply throughout.
 Chunk completion is not reset completion or accepted-command retirement.
 
 Payload fault ends the current finite execution path, releases the shared grant
 and leaves the concrete hardware task in Channel. Resume derives new work from
 that state. A failed write retries from retained transformed scratch without
-refetching or replaying Read/Transform. It enters the same configured write tail,
-including custom downstream stages. No generic child continuation owns the task.
+refetching or replaying successful Read/Transform work. WriteCopy consumes its
+retained payload at its local input, then uses the same configured completion tail.
+Upstream empty inputs are bubbles, not reissued payload. No generic child
+continuation owns the task and no controller chooses the stage to resume.
 An early RESUME does not restore the released grant of the old invocation; that
 invocation must exit before arbitration starts the resumed one.
-Finite service completion is not command retirement while Channel still has work.
+Finite data-path completion is not command retirement while Channel still has work.
 
-Reset cleanup clears affected channel-owned work before acknowledging. A stale
-pipeline token cannot issue new effects after generation invalidation, even if its
-Rust invocation object remains alive. An arbitrary custom state's destructor is
-not a hardware drain predicate. Custom hardware with persistent resources must
-represent those resources and their retirement conditions explicitly in hardware
-state, rather than hide them in a stage wrapper. A disabled active peer must not
-prevent another channel's reset or parked Abort cleanup.
+The selected execution boundary retains the identity of pipeline-resident work,
+separately from the accepted command and shared execution grant. Publication or
+parking can release the grant before all invocation-local state has exited.
+Reset first prevents admission and invalidates old work. If the scope has resident
+pipeline state, that boundary flushes its retained state before acknowledging
+retirement; it does not wait for a stalled child to return Complete. In hardware
+this corresponds to clearing affected valid/storage state through the reset
+control path, independently of data backpressure. In this synchronous model the
+retained Rust state is dropped before the owner's flush acknowledgement.
+
+If no pipeline state resides in the scope, its owner can clear retained channel
+state and acknowledge immediately. An unrelated stalled channel therefore cannot
+delay an idle channel's reset. Device completion waits for all affected scopes.
+A stale externally retained data token cannot issue effects after generation
+invalidation. Custom hardware with additional persistent resources must represent
+their retirement conditions explicitly; dropping arbitrary Rust objects is not
+a substitute for draining external bus transactions.
 
 `MemoryAccess` calls are synchronous and finish within a hardware step. MMIO has
 exclusive device access, so a reset request occurs between steps, not halfway through
 a memory call. Thus the model has no bus transactions, outstanding read/write queues,
-cycle timing or artificial drain delay. Cleanup retires channel-owned task state;
+cycle timing or artificial drain delay. Cleanup retires channel-owned and pipeline-resident task state;
 the completion guarantee covers every affected memory path.
 
 Channel generation increments once for a new reset request. Repeated requests do
@@ -91,20 +105,24 @@ not advance it, and cleanup does not zero it. Work tags retain the generation so
 custom stages can reject stale work even after reconfiguration. This
 is an additional stale-task guard, not the reset acknowledgment predicate.
 
-Custom finite graphs use `Dma::service_with` and ordinary composition. Their stages
+Custom finite graphs use `Dma::hardware_with` and ordinary composition. Their stages
 receive concrete chunk, payload or completion data and a selected borrowed
 ExecutionContext, not the full Dma. Standard memory and publication stages check
 the private generation-bound identity before effects; a transform may modify
 owned bytes but cannot replace their geometry or identity. Persistent custom
 hardware effects need explicit storage and retirement rules. Merely dropping a
 software waiter or pipeline invocation does not request reset or clear the
-accepted task. Conversely, retaining obsolete data does not prevent hardware
-cleanup once it has no authority to issue further effects.
+accepted task. Externally retained obsolete data does not prevent hardware cleanup
+once it has no authority to issue effects, but an active selected invocation must
+acknowledge its flush before reset completes.
 
 ## Software waiting and memory lifetime
 
 Direct-DMA Host `Channel::reset(self)` and `Channel::reset_dma(self)` consume the driver,
-write the request and repeatedly read the same reset register until zero. Reset waits
+write the request and repeatedly read the same reset register until zero. The first
+read may already return zero. The transport must order that read after acceptance
+of the request write; reading an old zero before the request arrives is not a
+completion observation. Reset waits
 have no driver-imposed CPU affinity; the supplied bus enforces any resource-specific
 access restriction. Busy polls cooperatively yield so the
 independently driven hardware can progress. A successful return means hardware
@@ -172,5 +190,5 @@ These tests specify the observable contract; this list is not a test-run report.
 | [`dma/tests/reset_protocol.rs`](../crates/dma/tests/reset_protocol.rs) | Visible busy state, rejected configuration, channel-owned work cleanup, repeated/zero writes and device reset scope. |
 | [`dma/tests/multi_channel/reset_boundaries.rs`](../crates/dma/tests/multi_channel/reset_boundaries.rs) | Reset across command/payload/response interactions, preserved peer work and fresh configuration. |
 | [`dma/tests/multi_channel/scatter_gather_reset.rs`](../crates/dma/tests/multi_channel/scatter_gather_reset.rs) | SG access boundaries and absence of stale interactions after completion. |
-| [`host/tests/reset_handshake.rs`](../crates/host/tests/reset_handshake.rs) | Polling after write acknowledgment, completion, read errors, CPU checks and cancellation. |
+| [`host/tests/reset_handshake/main.rs`](../crates/host/tests/reset_handshake/main.rs) | Polling after write acknowledgment, completion, read errors, CPU checks and cancellation. |
 | [`scenarios/tests/multi_channel/cases.rs`](../crates/scenarios/tests/multi_channel/cases.rs) | Independently driven hardware/software reset isolation, fresh work and device-wide reset. |

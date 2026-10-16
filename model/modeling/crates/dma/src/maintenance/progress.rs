@@ -1,106 +1,81 @@
 use super::MaintenanceError;
-use crate::{Dma, references};
-use hardware_interface_runtime::MemoryAccess;
+use crate::{Channel, Dma, Maintenance, Work, references};
+use pdma_model_contract::dma::ChannelId;
 
-impl<M, S> Dma<M, S> {
-    pub(crate) fn refresh_maintenance(&mut self) {
-        let halted = self.halted() || self.resetting();
-        let Some(maintenance) = &mut self.maintenance else {
-            return;
-        };
-        if maintenance.result != Ok(false) {
+impl Maintenance {
+    pub(crate) fn observe(
+        &mut self,
+        id: ChannelId,
+        channel: &Channel,
+        active: Option<Work>,
+        halted: bool,
+    ) {
+        if self.result != Ok(false) {
             return;
         }
-        let mut failure = None;
-        for frontier in &mut maintenance.frontiers {
-            let Some(channel) = self.channels.get(frontier.channel.index()) else {
-                frontier.failed = true;
-                failure.get_or_insert(MaintenanceError::InvalidChannel(frontier.channel));
-                continue;
-            };
-            let active = self
-                .active
-                .as_ref()
-                .is_some_and(|active| active.channel() == frontier.channel);
-            let parked_target = channel
+        for frontier in self
+            .frontiers
+            .iter_mut()
+            .filter(|frontier| frontier.channel == id)
+        {
+            let active = active.is_some_and(|work| work.channel == id);
+            let target = channel
                 .accepted_command()
-                .is_some_and(|task| references(task).contains(&Some(maintenance.context)));
+                .is_some_and(|task| references(task).contains(&Some(self.context)));
             let blocked = channel.accepted_command().is_some()
                 && !active
-                && (!frontier.passed || parked_target)
-                && !(maintenance.abort && parked_target);
-            if halted
+                && (!frontier.passed || target)
+                && !(self.abort && target);
+            frontier.failed |= halted
                 || channel.halted()
                 || channel.resetting()
                 || channel.generation != frontier.generation
                 || blocked
-                || ((!frontier.passed || active) && !channel.enabled())
-            {
-                frontier.failed = true;
-                failure.get_or_insert(MaintenanceError::ChannelStopped(frontier.channel));
-            }
+                || ((!frontier.passed || active) && !channel.enabled());
             frontier.passed |= channel
                 .command
                 .pointers()
                 .consumer
                 .wrapping_sub(frontier.consumer)
                 >= frontier.pending;
+            frontier.referenced = target;
         }
-        if let Some(failure) = failure {
-            maintenance.result = Err(failure);
-        } else if maintenance.frontiers.iter().all(|f| f.passed)
-            && !self.channels.iter().any(|channel| {
-                channel
-                    .accepted_command()
-                    .is_some_and(|task| references(task).contains(&Some(maintenance.context)))
-            })
+    }
+
+    pub(crate) fn finish_observation(&mut self) {
+        if self.result != Ok(false) {
+            return;
+        }
+        if let Some(frontier) = self.frontiers.iter().find(|frontier| frontier.failed) {
+            self.result = Err(MaintenanceError::ChannelStopped(frontier.channel));
+        } else if self
+            .frontiers
+            .iter()
+            .all(|frontier| frontier.passed && !frontier.referenced)
         {
-            maintenance.result = Ok(true);
+            self.result = Ok(true);
         }
     }
 }
 
-impl<M: MemoryAccess<S>, S> Dma<M, S> {
-    pub(crate) fn discard_aborted(&mut self) -> bool {
-        self.refresh_maintenance();
-        let Some(maintenance) = &self.maintenance else {
-            return false;
-        };
-        if maintenance.result != Ok(false) || !maintenance.abort || self.active.is_some() {
-            return false;
+impl<M, S> Dma<M, S> {
+    pub(crate) fn observe_channel(&mut self, id: ChannelId) {
+        let halted = self.halted() || self.resetting();
+        if let (Some(maintenance), Some(channel)) =
+            (&mut self.maintenance, self.channels.get(id.index()))
+        {
+            maintenance.observe(id, channel, self.active, halted);
+            maintenance.finish_observation();
         }
-        let context = maintenance.context;
-        for index in 0..maintenance.frontiers.len() {
-            let Some(frontier) = self
-                .maintenance
-                .as_ref()
-                .and_then(|m| m.frontiers.get(index))
-            else {
-                return false;
-            };
-            if frontier.passed {
-                continue;
+    }
+
+    pub(crate) fn refresh_maintenance(&mut self) {
+        let halted = self.halted() || self.resetting();
+        if let Some(maintenance) = &mut self.maintenance {
+            for (index, channel) in self.channels.iter().enumerate() {
+                maintenance.observe(ChannelId::new(index), channel, self.active, halted);
             }
-            let id = frontier.channel;
-            let Ok(selected) = self.channel_context(id) else {
-                return false;
-            };
-            match selected.channel.command.peek(&selected.memory) {
-                Ok(Some(command)) if references(&command).contains(&Some(context)) => {
-                    if let Err(fatal) = selected.channel.command.consume() {
-                        selected.channel.latch(fatal);
-                    }
-                    self.refresh_maintenance();
-                    return true;
-                }
-                Ok(Some(_) | None) => {}
-                Err(fatal) => {
-                    selected.channel.latch(fatal);
-                    selected.channel.update_irq();
-                }
-            }
+            maintenance.finish_observation();
         }
-        self.refresh_maintenance();
-        false
     }
 }

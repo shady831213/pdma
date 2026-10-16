@@ -104,6 +104,7 @@ impl<M, S> Dma<M, S> {
                 pending: pointers.pending(),
                 passed: pointers.is_empty(),
                 failed: false,
+                referenced: false,
             });
         }
         self.maintenance = Some(Maintenance {
@@ -112,6 +113,19 @@ impl<M, S> Dma<M, S> {
             frontiers,
             result: Ok(false),
         });
+        if abort {
+            for (index, channel) in self.channels.iter_mut().enumerate() {
+                if channels.contains(&ChannelId::new(index))
+                    && channel.resident.is_none()
+                    && self.active.is_none_or(|work| work.channel.index() != index)
+                    && channel
+                        .accepted_command()
+                        .is_some_and(|command| crate::references(command).contains(&Some(context)))
+                {
+                    channel.retire();
+                }
+            }
+        }
         self.refresh_maintenance();
         Ok(())
     }

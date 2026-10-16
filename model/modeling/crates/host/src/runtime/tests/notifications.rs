@@ -1,8 +1,7 @@
 use super::{Model, TestResult};
-use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
 use hardware_interface_runtime::{InterruptSource, RegisterAccess};
 use pdma_model_contract::dma::DmaControl;
-use pdma_model_dma::{Dma, ResetControl};
+use pdma_model_dma::Dma;
 
 #[tokio::test]
 async fn emitted_notification_survives_device_reset_and_is_claimed_once() -> TestResult {
@@ -28,18 +27,6 @@ async fn emitted_notification_survives_device_reset_and_is_claimed_once() -> Tes
             &1_u32.to_le_bytes(),
         )
         .await?;
-    let outcome = model
-        .interact(|device| {
-            assert!(matches!(
-                Operation::new(()).step(&mut ResetControl, device),
-                Ok(StepOutcome::Complete(Ok(())))
-            ));
-            Ok(StepOutcome::<(), std::convert::Infallible>::Complete(
-                Ok(()),
-            ))
-        })
-        .await?;
-    assert!(matches!(outcome, Ok(StepOutcome::Complete(Ok(())))));
     // Then: reset cannot retract an already emitted notification or cause repeat delivery.
     assert!(model.claim(()).await?.is_some());
     assert!(model.claim(()).await?.is_none());

@@ -1,8 +1,6 @@
 use super::*;
 use hardware_interface_pipeline::{HardwareDriver, RunError, Stage, StepResult, Then};
-use pdma_model_dma::{
-    Completion, ExecutionContext, ExecutionError, PrepareChunk, ReadCopy, WriteCopy,
-};
+use pdma_model_dma::{Completion, Error, ExecutionContext, PrepareChunk, ReadCopy, WriteCopy};
 use std::{cell::Cell, rc::Rc};
 
 struct ObserveCompletion(Rc<Cell<usize>>);
@@ -10,7 +8,7 @@ struct ObserveCompletion(Rc<Cell<usize>>);
 impl Stage<ExecutionContext<'_, Paged>> for ObserveCompletion {
     type Input = Option<Completion>;
     type Output = Option<Completion>;
-    type Error = ExecutionError;
+    type Error = Error;
     type State = Option<Self::Input>;
     fn start(input: Self::Input) -> Self::State {
         Some(input)
@@ -19,7 +17,7 @@ impl Stage<ExecutionContext<'_, Paged>> for ObserveCompletion {
         &mut self,
         _: &mut ExecutionContext<'_, Paged>,
         state: &mut Self::State,
-    ) -> StepResult<Self::Output, ExecutionError> {
+    ) -> StepResult<Self::Output, Error> {
         let completion = state.take().ok_or(RunError::Exhausted)?;
         if completion.is_some() {
             self.0.set(self.0.get() + 1);
@@ -43,11 +41,14 @@ fn resumed_write_uses_the_same_custom_completion_tail_as_healthy_write() -> Test
         }
         let count = Rc::new(Cell::new(0));
         let chunk = Then::new(PrepareChunk, ReadCopy);
-        let mut hardware = device.service_with(Then::new(
+        let mut hardware = device.hardware_with(Then::new(
             chunk,
             Then::new(
                 WriteCopy,
-                Then::new(ObserveCompletion(Rc::clone(&count)), device.responses()),
+                Then::new(
+                    pdma_model_dma::CompletionInput,
+                    Then::new(ObserveCompletion(Rc::clone(&count)), device.responses()),
+                ),
             ),
         ));
         let mut driver = HardwareDriver::new();

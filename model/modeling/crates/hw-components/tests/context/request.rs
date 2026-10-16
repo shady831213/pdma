@@ -130,7 +130,7 @@ fn pending_request_cannot_be_replaced_or_have_its_binding_invalidated() {
     );
     assert_eq!(read(&mut table, valid), 1);
     dma.signal_fatal();
-    let mut pipeline = dma.service();
+    let mut pipeline = dma.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..8 {
         let _ = operation.step(&mut pipeline, &mut dma);

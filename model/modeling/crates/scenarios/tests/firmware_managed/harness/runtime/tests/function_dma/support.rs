@@ -8,7 +8,7 @@ use pdma_model_contract::dma::{
     ResponseRegisters,
 };
 use pdma_model_contract::hw_components::windows::WindowControl;
-use pdma_model_dma::{Dma, Service};
+use pdma_model_dma::Dma;
 use pdma_model_hw_components::windows::ChannelWindows;
 use std::sync::{Arc, Mutex};
 
@@ -17,7 +17,7 @@ pub(super) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 /// DMA wired to Function-selected memory capabilities.
 pub(super) type Hardware = Dma<RoutedMemory<SharedMemory>, pdma_model_contract::dma::DmaAccess>;
 /// Finite DMA service over the fixture's Function-selected memory.
-pub(super) type Pipeline = Service;
+pub(super) type Pipeline = pdma_model_dma::Hardware;
 /// Permission-bank placement in these hardware fixtures.
 pub(super) const WINDOWS: usize = 0x10_0000;
 

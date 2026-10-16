@@ -1,7 +1,7 @@
 use super::*;
 use hardware_interface_pipeline::{RunError, Stage, StepResult, Then};
 use pdma_model_dma::{
-    CheckRanges, ExecutionContext, ExecutionError, Payload, PrepareChunk, ReadCopy, WriteCopy,
+    CheckRanges, Error, ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy,
 };
 
 pub(super) struct InvertPayload;
@@ -9,7 +9,7 @@ pub(super) struct InvertPayload;
 impl Stage<ExecutionContext<'_, Paged>> for InvertPayload {
     type Input = Option<Payload>;
     type Output = Option<Payload>;
-    type Error = ExecutionError;
+    type Error = Error;
     type State = Option<Option<Payload>>;
     fn start(input: Self::Input) -> Self::State {
         Some(input)
@@ -18,14 +18,14 @@ impl Stage<ExecutionContext<'_, Paged>> for InvertPayload {
         &mut self,
         _: &mut ExecutionContext<'_, Paged>,
         state: &mut Self::State,
-    ) -> StepResult<Self::Output, ExecutionError> {
+    ) -> StepResult<Self::Output, Error> {
         let Some(mut work) = state.take() else {
             return Err(RunError::Exhausted);
         };
         if let Some(payload) = &mut work {
             match payload.bytes_mut() {
                 Ok(bytes) => bytes.iter_mut().for_each(|byte| *byte = !*byte),
-                Err(error) => return Ok(StepOutcome::Complete(Err(error.into()))),
+                Err(error) => return Ok(StepOutcome::Complete(Err(error))),
             }
         }
         Ok(StepOutcome::Complete(Ok(work)))
@@ -50,8 +50,14 @@ fn transformed_resume(replace_service: bool) -> TestResult {
     submit(&mut device, command, 0)?;
     let chunk = Then::new(PrepareChunk, Then::new(ReadCopy, InvertPayload));
     let execution = chunk;
-    let pipeline = Then::new(execution, Then::new(WriteCopy, device.responses()));
-    let mut engine = device.service_with(pipeline);
+    let pipeline = Then::new(
+        execution,
+        Then::new(
+            WriteCopy,
+            Then::new(pdma_model_dma::CompletionInput, device.responses()),
+        ),
+    );
+    let mut engine = device.hardware_with(pipeline);
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..256 {
         assert!(matches!(
@@ -78,7 +84,13 @@ fn transformed_resume(replace_service: bool) -> TestResult {
     device.memory.missing.set(None);
     if replace_service {
         let chunk = Then::new(PrepareChunk, Then::new(ReadCopy, InvertPayload));
-        engine = device.service_with(Then::new(chunk, Then::new(WriteCopy, device.responses())));
+        engine = device.hardware_with(Then::new(
+            chunk,
+            Then::new(
+                WriteCopy,
+                Then::new(pdma_model_dma::CompletionInput, device.responses()),
+            ),
+        ));
         operation = hardware_interface_pipeline::HardwareDriver::new();
         device.memory.memory.write(
             0x1000.into(),

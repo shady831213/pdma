@@ -11,8 +11,11 @@ fn nested_admin_bank_preserves_selection_and_absolute_misses()
     let mut device = Dma::new((), 1021)?;
     // When: the last channel's reset is requested through its administrative aperture.
     device.write_admin(4096, &1_u32.to_le_bytes())?;
-    // Then: only that channel is busy, and misses retain the root address and output.
-    for (address, expected) in [(16, 0), (4092, 0), (4096, 1)] {
+    // Then: only that channel reset, and misses retain the root address and output.
+    for (index, channel) in device.channels.iter().enumerate() {
+        assert_eq!(channel.generation, u64::from(index == 1020));
+    }
+    for (address, expected) in [(16, 0), (4092, 0), (4096, 0)] {
         let mut out = [0; 4];
         device.read_admin(address, &mut out)?;
         assert_eq!(u32::from_le_bytes(out), expected);

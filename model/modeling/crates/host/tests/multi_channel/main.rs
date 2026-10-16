@@ -2,7 +2,7 @@
 
 mod instances;
 
-use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
+use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
@@ -10,7 +10,7 @@ use hardware_interface_runtime::{
 use pdma_model_contract::dma::{
     ChannelId, Command, CompletionFlagsValues, DmaRegisters, Endpoint, Response,
 };
-use pdma_model_dma::{Dma, ResetControl};
+use pdma_model_dma::Dma;
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
 };
@@ -22,27 +22,6 @@ use std::sync::{
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 const COUNT: usize =
     DmaRegisters::DISCOVERY.offset() + pdma_model_contract::dma::DmaDiscovery::CHANNEL_NUM.offset();
-
-async fn with_idle_hardware<F: std::future::Future>(
-    model: &Model<SharedMemoryAccess>,
-    software: F,
-) -> F::Output {
-    let mut control = ResetControl;
-    tokio::pin!(software);
-    loop {
-        tokio::select! {
-            result = &mut software => return result,
-            result = model.interact(|device| {
-                assert!(matches!(Operation::new(()).step(&mut control, device), Ok(StepOutcome::Complete(Ok(())))));
-                Ok(StepOutcome::<(), std::convert::Infallible>::Complete(Ok(())))
-            }) => {
-                let Ok(outcome) = result;
-                assert!(matches!(outcome, Ok(StepOutcome::Complete(Ok(())))));
-                tokio::task::yield_now().await;
-            }
-        }
-    }
-}
 
 fn allocator() -> SharedMemoryAllocator {
     SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000))
@@ -159,56 +138,52 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
     let allocator = allocator();
     let memory = allocator.memory_access();
     let device = Dma::new(memory.clone(), 3)?;
-    let mut hardware = device.service();
+    let mut hardware = device.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
-    with_idle_hardware(
-        &model,
-        cpu.run_main(async {
-            let mut channels = Vec::new();
-            for index in 0..3 {
-                let mut channel =
-                    Channel::setup(model.clone(), memory.clone(), config(&allocator, index)?)
-                        .await?;
-                channel
-                    .submit(Command {
-                        copy_length: 0,
-                        sg_context: 0,
-                        flags: CompletionFlagsValues::default(),
-                        id: u64::try_from(index)?,
-                        source: Endpoint::linear(0, 0),
-                        destination: Endpoint::linear(0, 0),
-                    })
-                    .await?;
-                channels.push(channel);
-            }
-            // When: only channel zero is reset before hardware processes the pending work.
-            channels.remove(0).reset().await?;
-            // Then: the other two drivers retain their submissions and distinct completions.
-            for (index, channel) in (1..3).zip(&mut channels) {
-                let mut completed = None;
-                for _ in 0..256 {
-                    assert!(matches!(
-                        model
-                            .interact(|device| operation.step(&mut hardware, device))
-                            .await?,
-                        Ok(StepOutcome::InProgress)
-                    ));
-                    completed = channel.response().await?;
-                    if completed.is_some() {
-                        break;
-                    }
+    cpu.run_main(async {
+        let mut channels = Vec::new();
+        for index in 0..3 {
+            let mut channel =
+                Channel::setup(model.clone(), memory.clone(), config(&allocator, index)?).await?;
+            channel
+                .submit(Command {
+                    copy_length: 0,
+                    sg_context: 0,
+                    flags: CompletionFlagsValues::default(),
+                    id: u64::try_from(index)?,
+                    source: Endpoint::linear(0, 0),
+                    destination: Endpoint::linear(0, 0),
+                })
+                .await?;
+            channels.push(channel);
+        }
+        // When: only channel zero is reset before hardware processes the pending work.
+        channels.remove(0).reset().await?;
+        // Then: the other two drivers retain their submissions and distinct completions.
+        for (index, channel) in (1..3).zip(&mut channels) {
+            let mut completed = None;
+            for _ in 0..256 {
+                assert!(matches!(
+                    model
+                        .interact(|device| operation.step(&mut hardware, device))
+                        .await?,
+                    Ok(StepOutcome::InProgress)
+                ));
+                completed = channel.response().await?;
+                if completed.is_some() {
+                    break;
                 }
-                assert_eq!(
-                    completed.map(|response| response.id),
-                    Some(u64::try_from(index)?)
-                );
-                assert_eq!(channel.response().await?, None);
             }
-            Ok::<_, Box<dyn std::error::Error>>(())
-        }),
-    )
+            assert_eq!(
+                completed.map(|response| response.id),
+                Some(u64::try_from(index)?)
+            );
+            assert_eq!(channel.response().await?, None);
+        }
+        Ok::<_, Box<dyn std::error::Error>>(())
+    })
     .await
 }
 
@@ -243,10 +218,10 @@ async fn channel_count_is_read_only_and_survives_both_reset_scopes() -> TestResu
             .await,
         Err(pdma_model_dma::Error::Access),
     );
-    with_idle_hardware(&model, cpu.run_main(first.reset())).await?;
+    cpu.run_main(first.reset()).await?;
     model.read(u32::try_from(COUNT)?, &mut bytes).await?;
     assert_eq!(u32::from_le_bytes(bytes), 3);
-    with_idle_hardware(&model, cpu.run_main(second.reset_dma())).await?;
+    cpu.run_main(second.reset_dma()).await?;
     // Then: immutable hardware discovery remains available after device reset.
     model.read(u32::try_from(COUNT)?, &mut bytes).await?;
     assert_eq!(u32::from_le_bytes(bytes), 3);

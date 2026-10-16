@@ -228,11 +228,12 @@ Arbitrary custom invocation-state suspension is deliberately no longer an API
 guarantee: persistent custom work must have explicit hardware ownership.
 
 AfterEach was also removed. It attached maintenance to another child's step count,
-and could hold that child's result while maintenance progressed. IRQ and reset are
-instead independent hardware units explicitly advanced by the top-level assembly
-on each tick, including idle/stalled command progress. Then still expresses data
-dependencies; FanIn/Arbitrate and FanOut/Dispatch retain selection/routing. No
-generic replacement callback wrapper or PDMA policy in runtime is introduced.
+and could hold that child's result while maintenance progressed. The subsequent
+independently driven lifecycle-unit design was also rejected (section 12).
+IRQ now updates at source mutations; reset uses owner cleanup and an out-of-band
+pipeline flush handshake. Then expresses data dependencies; FanIn/Arbitrate and
+FanOut/Dispatch retain selection/routing. No generic replacement callback wrapper
+or PDMA policy in runtime is introduced.
 
 Reset completion now observes concrete channel-owned work cleanup and generation
 guards, not arbitrary Rust destructor timing. The synchronous model still guards
@@ -552,3 +553,112 @@ transformation at the write boundary. Resume must preserve those boundaries
 without a global program counter or a renamed controller wrapper. IRQ, reset
 and maintenance must remain independently progressed. This follow-up is deferred
 to the next review session; it is not implemented by this checkpoint.
+
+## 11. Recover at local data boundaries instead of global dispatch
+
+The follow-up removes Service's semantic phase selection. Top-level assembly has
+fixed admission and execution graphs, advanced independently within each finite
+round. It retains each graph's ordinary invocation state, not an enum selecting
+Fresh, Execution, RetryWrite or Completion. The selected-context projection borrows
+one channel's resources for a whole graph; it does not interpret recovery state
+or reach inside nested Then objects. Arbitration grants the shared resource to a
+channel, not to an instruction naming the next stage.
+
+Unread chunks and already transformed payloads occupy separate concrete checkpoint
+slots. ReadCopy and WriteCopy consume their own slot after the parked channel has
+reacquired the grant. A write retry therefore delivers no valid bytes to Read or
+Transform. Those stages can still receive empty inputs: the contract prohibits
+repeated data processing, not invocation with None. Treating every empty invocation
+as a real payload operation would already be invalid for the normal optional flow.
+The same configured tail still receives each chunk's optional completion.
+
+Stopping command failures retain their actual response in channel-owned storage
+and emit no normal chunk/payload. A fixed completion input after WriteCopy merges
+that response into the configured tail. This replaces CommandFailed exception
+routing and its top-level jump to a nested downstream stage. Hardware rejection
+and reset remain ordinary errors; PageFault still parks with no response. No
+fabricated bytes, second retry graph or generic framework extension is needed.
+
+Each graph's source runs once per finite round. Both paths drain before the next
+round supplies new ingress. This prevents immediate software RESUME from letting
+the old faulted invocation consume a new grant. Healthy commands retain their
+grant and traversal between chunks; occupied admission can process empty candidate
+sweeps but cannot select a new owner, advance RR fairness state or fetch another
+descriptor. Skipping harmless Rust calls is not a reason to introduce another
+control wrapper. This change makes no throughput or cycle-timing claim.
+
+Accepted descriptor ownership remains independent of checkpoint location and local
+stage state. Reset and context maintenance observe that ledger until publication
+or explicit retirement. IRQ/reset/maintenance continue advancing while a graph is
+disabled or stalled. The local recovery regressions exercise ReadCopy/WriteCopy
+directly after regrant, so correctness cannot depend on Service choosing the
+failed stage on their behalf.
+
+Review also identified that the completion merge must be available to independent
+stage assemblies, not hidden in Service. CompletionInput is an explicit data-path
+stage before the application completion tail. With local checkpoint intake,
+service_with no longer needs to know the read/write/tail nesting: it accepts one
+complete opaque execution graph. This removes both nested-child dispatch and
+constructor-time dependence on a particular Then shape. Standalone error-response
+tests cover the same graph without relying on Service to supply missing wiring.
+
+## 12. Remove Service and return lifecycle behavior to hardware owners
+
+The two-path Service still imposed a shared completion round on admission and
+execution. Install discarded its ChunkInput and a separate ChunkSource reconstructed
+it from active state, so this barrier compensated for a disconnected data boundary.
+The next correction connects admission, Fetch, CheckRanges, Install and execution
+through ordinary Then. Install forwards its result. An occupied engine forwards
+its current owner with no new descriptor, avoiding refetch or validation of an
+already accepted command. Resume only reacquires ownership; read/write recovery
+remains local. One complete data invocation drains before ingress can restart.
+
+The first attempt split retirement, context maintenance, data, IRQ and reset into
+independently driven units and added generic group driving. User review rejected
+that design: DMA should expose one hardware pipeline, and a source-state update
+does not become a separate pipeline merely because it must occur while data is
+stalled. The group implementation, API, callers and group-only tests are removed.
+
+Channel publication, fatal latching and MMIO source changes now refresh IRQ causes
+directly. Notification edges and mask/no-replay rules remain unchanged. Resource
+retirement belongs to the operations that complete or discard work. Context
+maintenance observes those transitions; unstarted Abort descriptors are consumed
+by Fetch, not a parallel scanner. The ordinary external driver knows only the
+single DMA pipeline and its finite invocations.
+
+Reset exposed the important distinction between dataflow and control. A downstream
+InProgress represents backpressure: placing reset at the start of a sequential
+Then cannot service it while the downstream is stalled. A periodic global cleanup
+sweep would only hide the old controller. Instead, reset blocks admission and
+requests a flush of the affected hardware storage. The selected boundary releases
+its actual invocation state before acknowledging that flush, without requiring
+the child to become data-ready. A channel with no resident pipeline state can
+clear its own retained storage immediately; a peer's stalled dataflow is irrelevant.
+
+Accepted-command ownership, the active execution grant and pipeline residency have
+different lifetimes. Publishing or parking can release the grant while a tail is
+still resident. Reset acknowledgement must cover that resident state, not merely
+an empty accepted ledger. The model drops the flushed invocation state as the
+representation of invalidating those hardware slots. Additional external protocol
+obligations must still be drained; Rust destructor execution does not prove that.
+
+The software contract is request followed by an ordered observation of completion.
+It never requires observing busy first, and promises no minimum busy duration.
+The former idle-busy-until-another-model-step test encoded an implementation timing
+choice, not an architectural requirement. Its replacement checks actual cleared
+state and safe reuse. Tests also require a stalled old tail to be flushed rather
+than finish after reset, preserve peer work and committed writes, and reject stale
+effects after reconfiguration. See reset.md for the normative contract.
+
+DMA reset/halt/channel-fatal termination remains local to the data graph's error
+boundary; unexpected graph errors remain terminal. No sibling-stage scheduling,
+new combinator, new runtime policy or admission/execution round barrier is needed.
+
+Connecting the full graph also exposed an acceptance-identity edge case. A raw,
+non-owning candidate snapshot can be revalidated by Fetch against a new generation.
+Once Grant has transferred a selection into the execution graph, however, that
+resident invocation retains its identity. Reset flushes it; new work is selected
+again rather than silently retagging live state. Regression coverage includes
+normal and read-error responses after reset/reconfiguration before acceptance,
+as well as rejection of stale accepted work. Tests do not require a reset channel
+to keep its former arbitration position ahead of eligible peers.

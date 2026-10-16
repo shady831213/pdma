@@ -66,7 +66,7 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
         scatter_gather(&allocator, [&[0; 2], &[0; 6]])?;
     let memory = allocator.memory_access();
     let device = Dma::new(memory.clone(), 1)?;
-    let mut stage = device.service();
+    let mut hardware = device.hardware();
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
@@ -107,7 +107,7 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
             }
             Ok(false)
         } => observed?,
-        result = executor.drive(&mut stage, &mut operation) => {
+        result = executor.drive(&mut hardware, &mut operation) => {
             return Err(format!("hardware terminated: {result:?}").into());
         },
     };
@@ -119,7 +119,7 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
     memory.write(source_first, MemoryAlignment::ONE, b"XX")?;
     tokio::select! {
         ready = model.wait_ready() => ready?,
-        result = executor.drive(&mut stage, &mut operation) => {
+        result = executor.drive(&mut hardware, &mut operation) => {
             return Err(format!("hardware terminated: {result:?}").into());
         },
     }

@@ -68,6 +68,12 @@ transactions. Before reporting reset/drain complete it must retire **all** affec
 transactions and retained work, not only the currently visible request. Neither
 reset nor fatal implies rollback of externally completed writes.
 
+Reset completion has no minimum latency. Software requests reset and observes
+completion through correctly ordered MMIO; it need not first observe busy.
+Reset control must not be blocked by data-path backpressure. Affected resident
+pipeline state must be flushed and external obligations drained before completion,
+while a scope with no such state may complete as soon as its configuration is reset.
+
 RTL design must additionally fix bus protocols, CDC, outstanding transaction
 accounting, reset domains, physical interrupt transport and cache-ordering
 mechanisms. Those decisions must implement the platform obligations here; the

@@ -24,9 +24,9 @@ fn admission_and_completed_chunk_passes_preserve_descriptor_and_backpressure() -
     submit(&mut device, &memory, descriptor)?;
     let cmd = ChannelBlock::ALIGNMENT + ChannelBlock::COMMAND.offset();
     let resp = ChannelBlock::ALIGNMENT + ChannelBlock::RESPONSE.offset();
-    let mut service = device.service();
-    // When: admission completes, then individual chunk invocations complete.
-    for expected_prefix in [0, COPY_CHUNK_BYTES, COPY_CHUNK_BYTES * 2, LENGTH] {
+    let mut service = device.hardware();
+    // When: the connected admission/execution graph completes each chunk invocation.
+    for expected_prefix in [COPY_CHUNK_BYTES, COPY_CHUNK_BYTES * 2, LENGTH] {
         let mut operation = Operation::new(());
         for _ in 0..256 {
             if let StepOutcome::Complete(result) = operation.step(&mut service, &mut device)? {

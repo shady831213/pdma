@@ -61,7 +61,7 @@ pub async fn run(injection: FaultInjection, input: software::Input<'_>) -> TestR
         SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(first_address));
     let faulted = Arc::new(UnmappedRing::new(allocator.memory_access()));
     let access = SharedMemoryAccess::from(Arc::clone(&faulted));
-    let (device, stage) = hardware::assemble(access.clone())?;
+    let (device, hardware) = hardware::assemble(access.clone())?;
     let model = Model::new(device);
     let channel_base = ChannelId::new(0)
         .register_offset(1)
@@ -99,7 +99,7 @@ pub async fn run(injection: FaultInjection, input: software::Input<'_>) -> TestR
         .await
     });
     let ((program, summary), worker) = lifecycle::run(
-        hardware::drive(model.clone(), stage),
+        hardware::drive(model.clone(), hardware),
         Box::pin(async { execution.await.map_err(Into::into) }),
     )
     .await?;

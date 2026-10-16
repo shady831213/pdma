@@ -240,10 +240,15 @@ No saved generic child continuation or per-channel engine is required.
 Ordinary stages prepare a chunk and pass its data through Read/optional Transform/Write.
 The finite chunk pass may complete without retiring the command. Shared execution
 occupancy backpressures admission until terminal retirement or fault, so healthy
-chunks do not reenter arbitration. Even early RESUME requires a new grant before
+chunks do not acquire another grant or refetch the descriptor. Admission may still
+advance empty candidate sweeps without changing the selected owner or RR state.
+Even early RESUME requires a new grant before
 more payload access; faulted task state remains in Channel, not a combinator.
-Fresh command validation is not repeated on resume. Retained write payload enters
-the same configured write/publication tail, bypassing only completed read/transform.
+Fresh command validation is not repeated on resume. ReadCopy/WriteCopy consume
+their own concrete checkpoint after regrant. Retained write payload is not sent
+through Read/Transform again; those stages may receive empty bubbles before the
+same write/publication path consumes the saved bytes. No global controller selects
+the failed stage or jumps into a nested graph.
 Reuse existing pipeline/runtime components. Inject test page
 presence and fault reports through the platform backend; these are not a true MMU.
 Scenario software owns allocation, fault handling, repair and MMIO resume. Memory

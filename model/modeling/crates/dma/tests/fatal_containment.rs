@@ -20,7 +20,7 @@ fn active_copy_fatal_stops_next_memory_access_and_reset_retires_old_work() -> su
     command.source = Endpoint::linear(0x1200, 0);
     command.destination = Endpoint::linear(0x1600, 0);
     support::submit(&mut dma, &memory, command)?;
-    let mut pipeline = dma.service();
+    let mut pipeline = dma.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let mut prefix = [0; 256];
     for _ in 0..64 {

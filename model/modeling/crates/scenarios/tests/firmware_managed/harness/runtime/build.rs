@@ -139,7 +139,7 @@ where
         };
         let dma =
             Dma::with_sideband(routed, channel_count, |access| access).map_err(BuildError::Dma)?;
-        let pipeline = dma.service();
+        let hardware = dma.hardware();
         let invalid = || BuildError::Platform(PlatformConfigError::AddressSpace);
         let firmware =
             FirmwareStatus::new(usize::try_from(addresses.firmware).map_err(|_| invalid())?);
@@ -206,7 +206,7 @@ where
         Ok((
             Self {
                 shared,
-                pipeline,
+                hardware,
                 firmware_runtime: InterruptRuntime::new(Arc::clone(&firmware_cpu), firmware_source),
                 firmware_cpu,
                 firmware_memory,

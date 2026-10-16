@@ -2,22 +2,25 @@
 
 use hardware_interface_pipeline::{AsyncExecutor, AsyncRunError, HardwareDriver};
 use hardware_interface_runtime::SharedMemoryAccess;
-use pdma_model_dma::{Dma, Service};
+use pdma_model_dma::{Dma, Hardware};
 use pdma_model_host::runtime::Model;
 
 use crate::TestResult;
 
 pub(super) fn assemble(
     memory: SharedMemoryAccess,
-) -> TestResult<(Model<SharedMemoryAccess>, Service)> {
+) -> TestResult<(Model<SharedMemoryAccess>, Hardware)> {
     let device = Dma::new(memory, 3)?;
-    let stage = device.service();
-    Ok((Model::new(device), stage))
+    let hardware = device.hardware();
+    Ok((Model::new(device), hardware))
 }
 
-pub(super) async fn drive(model: Model<SharedMemoryAccess>, mut stage: Service) -> TestResult {
+pub(super) async fn drive(model: Model<SharedMemoryAccess>, mut hardware: Hardware) -> TestResult {
     let executor = AsyncExecutor::new(model);
-    match executor.drive(&mut stage, &mut HardwareDriver::new()).await {
+    match executor
+        .drive(&mut hardware, &mut HardwareDriver::new())
+        .await
+    {
         Ok(()) => Err("sustained hardware worker unexpectedly completed".into()),
         Err(AsyncRunError::Stage(error)) => Err(error.into()),
         Err(AsyncRunError::Run(error)) => Err(error.into()),

@@ -18,7 +18,10 @@ pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 pub fn chunk_pipeline<M>(device: &Dma<M>) -> Pipeline {
     Then::new(
         Then::new(PrepareChunk, ReadCopy),
-        Then::new(WriteCopy, device.responses()),
+        Then::new(
+            WriteCopy,
+            Then::new(pdma_model_dma::CompletionInput, device.responses()),
+        ),
     )
 }
 
@@ -136,24 +139,21 @@ pub fn submit(
     Ok(())
 }
 
-/// Drive finite service transactions to one published response within a fixed bound.
+/// Drive the hardware pipeline to one published response within a fixed bound.
 pub fn run(device: &mut Dma<SharedMemory>) -> TestResult {
-    let mut hardware = device.service();
-    let mut operation = Operation::new(());
+    let mut hardware = device.hardware();
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let producer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
         + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
         + ResponseRegisters::PRODUCER.offset();
     let initial = read_word(device, producer)?;
     for _ in 0..1024 {
-        match operation.step(&mut hardware, device)? {
-            StepOutcome::InProgress => {}
-            StepOutcome::Complete(result) => {
-                result?;
-                if read_word(device, producer)? != initial {
-                    return Ok(());
-                }
-                operation = Operation::new(());
-            }
+        if let StepOutcome::Complete(result) = operation.step(&mut hardware, device)? {
+            result?;
+            return Err("hardware stopped before response".into());
+        }
+        if read_word(device, producer)? != initial {
+            return Ok(());
         }
     }
     Err("pipeline exceeded interaction bound".into())

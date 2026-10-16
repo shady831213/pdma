@@ -1,4 +1,3 @@
-use crate::channel::Continuation;
 use crate::{COPY_CHUNK_BYTES, Chunk, Completion, ExecutionContext, MemoryFailure, Payload};
 use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
@@ -14,7 +13,7 @@ where
 {
     type Input = Option<Chunk>;
     type Output = Option<Payload>;
-    type Error = crate::ExecutionError;
+    type Error = crate::Error;
     type State = Option<Self::Input>;
     fn start(input: Self::Input) -> Self::State {
         Some(input)
@@ -23,7 +22,25 @@ where
         &mut self,
         context: &mut ExecutionContext<'_, M, SB>,
         state: &mut Self::State,
-    ) -> StepResult<Self::Output, crate::ExecutionError> {
+    ) -> StepResult<Self::Output, crate::Error> {
+        if state.as_ref().ok_or(RunError::Exhausted)?.is_none() {
+            match context.checkpoint_ready() {
+                Ok(true) => {
+                    *state = Some(
+                        context
+                            .selected
+                            .work
+                            .as_mut()
+                            .and_then(|accepted| accepted.unread.take()),
+                    );
+                }
+                Ok(false) => {}
+                Err(error) => {
+                    *state = None;
+                    return Ok(StepOutcome::Complete(Err(error)));
+                }
+            }
+        }
         let Some(chunk) = state.as_ref().ok_or(RunError::Exhausted)? else {
             *state = None;
             return Ok(StepOutcome::Complete(Ok(None)));
@@ -33,7 +50,7 @@ where
             Ok(false) => return Ok(StepOutcome::InProgress),
             Err(error) => {
                 *state = None;
-                return Ok(StepOutcome::Complete(Err(error.into())));
+                return Ok(StepOutcome::Complete(Err(error)));
             }
         }
         let mut bytes = [0; COPY_CHUNK_BYTES];
@@ -49,10 +66,14 @@ where
                         let Some(Some(chunk)) = state.take() else {
                             return Err(RunError::Exhausted);
                         };
-                        let result = context
-                            .park(chunk.work, Continuation::Read(chunk))
-                            .map(|()| None)
-                            .map_err(crate::ExecutionError::from);
+                        let work = chunk.work;
+                        context
+                            .selected
+                            .work
+                            .as_mut()
+                            .ok_or(RunError::Exhausted)?
+                            .unread = Some(chunk);
+                        let result = context.park(work).map(|()| None);
                         return Ok(StepOutcome::Complete(result));
                     }
                     MemoryFailure::Access => {
@@ -67,9 +88,9 @@ where
                             response: progress.response_with(ResponseStatus::ReadError),
                         };
                         *state = None;
-                        return Ok(StepOutcome::Complete(Err(
-                            crate::ExecutionError::CommandFailed(completion),
-                        )));
+                        return Ok(StepOutcome::Complete(
+                            context.complete(completion).map(|()| None),
+                        ));
                     }
                 }
             }
@@ -91,7 +112,7 @@ where
 {
     type Input = Option<Payload>;
     type Output = Option<Completion>;
-    type Error = crate::ExecutionError;
+    type Error = crate::Error;
     type State = Option<Self::Input>;
     fn start(input: Self::Input) -> Self::State {
         Some(input)
@@ -100,7 +121,26 @@ where
         &mut self,
         context: &mut ExecutionContext<'_, M, SB>,
         state: &mut Self::State,
-    ) -> StepResult<Self::Output, crate::ExecutionError> {
+    ) -> StepResult<Self::Output, crate::Error> {
+        if state.as_ref().ok_or(RunError::Exhausted)?.is_none() {
+            match context.checkpoint_ready() {
+                Ok(true) => {
+                    *state = Some(
+                        context
+                            .selected
+                            .work
+                            .as_mut()
+                            .and_then(|accepted| accepted.payload.take())
+                            .map(|payload| *payload),
+                    );
+                }
+                Ok(false) => {}
+                Err(error) => {
+                    *state = None;
+                    return Ok(StepOutcome::Complete(Err(error)));
+                }
+            }
+        }
         let Some(payload) = state.as_ref().ok_or(RunError::Exhausted)? else {
             *state = None;
             return Ok(StepOutcome::Complete(Ok(None)));
@@ -111,7 +151,7 @@ where
             Ok(false) => return Ok(StepOutcome::InProgress),
             Err(error) => {
                 *state = None;
-                return Ok(StepOutcome::Complete(Err(error.into())));
+                return Ok(StepOutcome::Complete(Err(error)));
             }
         }
         if payload.chunk.length > 0 {
@@ -119,7 +159,7 @@ where
                 Ok(bytes) => bytes,
                 Err(error) => {
                     *state = None;
-                    return Ok(StepOutcome::Complete(Err(error.into())));
+                    return Ok(StepOutcome::Complete(Err(error)));
                 }
             };
             match context
@@ -135,7 +175,7 @@ where
                         .ok_or(RunError::Exhausted)?;
                     if let Err(error) = progress.commit(payload.chunk.length) {
                         *state = None;
-                        return Ok(StepOutcome::Complete(Err(error.into())));
+                        return Ok(StepOutcome::Complete(Err(error)));
                     }
                 }
                 Err(error) => match error.into() {
@@ -143,12 +183,13 @@ where
                         let Some(Some(payload)) = state.take() else {
                             return Err(RunError::Exhausted);
                         };
-                        return Ok(StepOutcome::Complete(
-                            context
-                                .park(work, Continuation::Write(Box::new(payload)))
-                                .map(|()| None)
-                                .map_err(crate::ExecutionError::from),
-                        ));
+                        context
+                            .selected
+                            .work
+                            .as_mut()
+                            .ok_or(RunError::Exhausted)?
+                            .payload = Some(Box::new(payload));
+                        return Ok(StepOutcome::Complete(context.park(work).map(|()| None)));
                     }
                     MemoryFailure::Access => {
                         let progress = context
@@ -171,7 +212,6 @@ where
         let accepted = context.selected.work.as_mut().ok_or(RunError::Exhausted)?;
         let progress = accepted.progress.as_ref().ok_or(RunError::Exhausted)?;
         if progress.remaining > 0 {
-            accepted.continuation = Some(Continuation::Next);
             Ok(StepOutcome::Complete(Ok(None)))
         } else {
             Ok(StepOutcome::Complete(Ok(Some(Completion {

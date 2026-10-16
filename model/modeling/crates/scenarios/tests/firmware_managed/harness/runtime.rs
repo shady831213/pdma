@@ -23,7 +23,7 @@ use hardware_interface_runtime::{
 };
 use memory::RoutedMemory;
 use pdma_model_contract::dma::DmaAccess;
-use pdma_model_dma::{Dma, Service};
+use pdma_model_dma::Dma;
 use pdma_model_host::runtime::Irq;
 use pdma_model_hw_components::{
     context::ContextTable, control::ControlChannel, firmware::FirmwareStatus,
@@ -75,7 +75,7 @@ where
     M::Error: Into<pdma_model_dma::MemoryFailure>,
 {
     shared: Arc<Shared<M>>,
-    pipeline: Service,
+    hardware: pdma_model_dma::Hardware,
     firmware_runtime: InterruptRuntime<PendingInterrupt<ControlIrq>>,
     firmware_cpu: Arc<SoftwareCpu>,
     firmware_memory: memory::ControlMemory<M>,

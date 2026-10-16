@@ -30,8 +30,13 @@ fn chunked_transform(fault: bool) -> TestResult {
         device.memory.missing.set(Some((0x1900, true)));
     }
     let chunks = Then::new(PrepareChunk, Then::new(ReadCopy, InvertPayload));
-    let mut service =
-        device.service_with(Then::new(chunks, Then::new(WriteCopy, device.responses())));
+    let mut service = device.hardware_with(Then::new(
+        chunks,
+        Then::new(
+            WriteCopy,
+            Then::new(pdma_model_dma::CompletionInput, device.responses()),
+        ),
+    ));
     let mut operation = Operation::new(());
     let mut resumed = false;
     let mut released_accesses = None;

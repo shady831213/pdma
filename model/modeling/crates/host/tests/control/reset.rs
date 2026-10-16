@@ -1,7 +1,6 @@
 use super::{
     AsyncExecutor, Channel, ChannelConfig, ChannelRegisters, Command, CompletionFlagsValues,
     DmaControl, DmaFatalCode, Endpoint, Model, RegisterAccess, SoftwareCpu, fixture,
-    with_idle_hardware,
 };
 
 #[tokio::test]
@@ -23,17 +22,15 @@ async fn reset_operations_can_run_on_another_cpu() -> Result<(), Box<dyn std::er
             ))
             .await?;
         // When: another CPU requests reset and waits for hardware cleanup.
-        with_idle_hardware(
-            &model,
-            other.run_main(async {
+        other
+            .run_main(async {
                 if whole_dma {
                     channel.reset_dma().await
                 } else {
                     channel.reset().await
                 }
-            }),
-        )
-        .await?;
+            })
+            .await?;
         // Then: both reset scopes leave disabled hardware ready for fresh configuration.
         let mut enable = [0; 4];
         model
@@ -56,7 +53,7 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: a configured channel with one published response.
     let (device, memory, rings) = fixture()?;
-    let mut stage = device.service();
+    let mut hardware = device.hardware();
     let model = Model::new(device);
     let executor = AsyncExecutor::new(model.clone());
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
@@ -125,7 +122,7 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
     };
     tokio::select! {
         result = software => result,
-        result = executor.drive(&mut stage, &mut operation) => Err(format!("hardware terminated: {result:?}").into()),
+        result = executor.drive(&mut hardware, &mut operation) => Err(format!("hardware terminated: {result:?}").into()),
     }
 }
 
@@ -148,7 +145,7 @@ async fn device_reset_leaves_disabled_hardware_for_fresh_setup()
         .await?;
     // When: software requests whole-device reset.
     cpu.run_main(channel.set_dma_irq_enabled(true)).await?;
-    with_idle_hardware(&model, cpu.run_main(channel.reset_dma())).await?;
+    cpu.run_main(channel.reset_dma()).await?;
     // Then: both scopes are disabled and a fresh driver sees healthy hardware.
     for offset in [
         (pdma_model_contract::dma::ChannelBlock::ALIGNMENT

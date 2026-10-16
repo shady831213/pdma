@@ -22,7 +22,7 @@ pub(super) async fn run(scenario: Scenario, payload: &[u8]) -> TestResult<Report
     let storage = Arc::new(SharedMemory::new());
     let allocator = SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(0x1000));
     let memory = allocator.memory_access();
-    let (device, stage) = crate::hardware::assemble(memory.clone())?;
+    let (device, hardware) = crate::hardware::assemble(memory.clone())?;
     let model = Model::new(device);
     let runtime = InterruptRuntime::new(Arc::new(SoftwareCpu::new()), model.clone());
     assert!(storage.regions().is_empty());
@@ -40,7 +40,7 @@ pub(super) async fn run(scenario: Scenario, payload: &[u8]) -> TestResult<Report
         .await
     });
     let ((outcome, summary), worker) = lifecycle::run(
-        crate::hardware::drive(model.clone(), stage),
+        crate::hardware::drive(model.clone(), hardware),
         Box::pin(async { execution.await.map_err(Into::into) }),
     )
     .await?;

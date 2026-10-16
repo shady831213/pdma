@@ -9,8 +9,7 @@ use hardware_interface_pipeline::{
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_dma::{
-    CheckRanges, Error, ExecutionContext, ExecutionError, Payload, PrepareChunk, Publish, ReadCopy,
-    WriteCopy,
+    CheckRanges, Error, ExecutionContext, Payload, PrepareChunk, Publish, ReadCopy, WriteCopy,
 };
 use support::{TestResult, command, setup, submit};
 
@@ -19,7 +18,7 @@ struct InvertPayload;
 impl Stage<ExecutionContext<'_, SharedMemory>> for InvertPayload {
     type Input = Option<Payload>;
     type Output = Option<Payload>;
-    type Error = ExecutionError;
+    type Error = Error;
     type State = Option<Self::Input>;
     fn start(input: Self::Input) -> Self::State {
         Some(input)
@@ -28,12 +27,12 @@ impl Stage<ExecutionContext<'_, SharedMemory>> for InvertPayload {
         &mut self,
         _: &mut ExecutionContext<'_, SharedMemory>,
         state: &mut Self::State,
-    ) -> StepResult<Self::Output, ExecutionError> {
+    ) -> StepResult<Self::Output, Error> {
         let mut payload = state.take().ok_or(RunError::Exhausted)?;
         if let Some(payload) = &mut payload {
             match payload.bytes_mut() {
                 Ok(bytes) => bytes.iter_mut().for_each(|byte| *byte = !*byte),
-                Err(error) => return Ok(StepOutcome::Complete(Err(error.into()))),
+                Err(error) => return Ok(StepOutcome::Complete(Err(error))),
             }
         }
         Ok(StepOutcome::Complete(Ok(payload)))
@@ -51,8 +50,11 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
     )?;
     submit(&mut device, &memory, command())?;
     let read = Then::new(PrepareChunk, Then::new(ReadCopy, InvertPayload));
-    let write = Then::new(WriteCopy, device.responses());
-    let mut hardware = device.service_with(Then::new(read, write));
+    let write = Then::new(
+        WriteCopy,
+        Then::new(pdma_model_dma::CompletionInput, device.responses()),
+    );
+    let mut hardware = device.hardware_with(Then::new(read, write));
     let mut driver = HardwareDriver::new();
     // When: ordinary stages pass actual payload data through the inserted transform.
     for _ in 0..128 {
@@ -85,10 +87,7 @@ fn independently_composed_execution_obeys_device_fatal() -> TestResult {
         &mut device.execution_context(ChannelId::new(0))?,
     )?;
     // Then: global fatal still invalidates work without exposing the whole DMA.
-    assert!(matches!(
-        result,
-        StepOutcome::Complete(Err(ExecutionError::Rejected(Error::Halted)))
-    ));
+    assert!(matches!(result, StepOutcome::Complete(Err(Error::Halted))));
     Ok(())
 }
 
@@ -118,7 +117,7 @@ fn rejected_publication_consumes_its_transient_stage_state() -> TestResult {
     // When: publication rejects the actual completion's destination.
     assert_eq!(
         publish.step(&mut context, &mut state)?,
-        StepOutcome::Complete(Err(ExecutionError::Rejected(Error::Routing)))
+        StepOutcome::Complete(Err(Error::Routing))
     );
     // Then: the terminal state remains exhausted even without Operation owning it.
     assert_eq!(

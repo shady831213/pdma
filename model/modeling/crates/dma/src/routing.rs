@@ -8,8 +8,8 @@ use hardware_interface_runtime::MemoryAccess;
 #[derive(Debug)]
 struct RouteResponse;
 
-impl Route<Completion, crate::ExecutionError> for RouteResponse {
-    fn target(&mut self, input: &Completion) -> Result<usize, crate::ExecutionError> {
+impl Route<Completion, crate::Error> for RouteResponse {
+    fn target(&mut self, input: &Completion) -> Result<usize, crate::Error> {
         Ok(input.channel().index())
     }
 }
@@ -33,7 +33,7 @@ impl Responses {
 impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for Responses {
     type Input = Option<Completion>;
     type Output = ();
-    type Error = crate::ExecutionError;
+    type Error = crate::Error;
     type State = Option<Option<FanState<Option<Completion>, Completion, Option<Completion>, ()>>>;
 
     fn start(input: Self::Input) -> Self::State {
@@ -44,7 +44,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for Responses {
         &mut self,
         device: &mut ExecutionContext<'_, M, SB>,
         state: &mut Self::State,
-    ) -> StepResult<(), crate::ExecutionError> {
+    ) -> StepResult<(), crate::Error> {
         let Some(fan) = state.as_mut() else {
             return Err(RunError::Exhausted);
         };
@@ -57,7 +57,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for Responses {
             Ok(StepOutcome::Complete(result)) => {
                 *state = None;
                 Ok(StepOutcome::Complete(
-                    result.map(|_| ()).map_err(crate::ExecutionError::from),
+                    result.map(|_| ()).map_err(crate::Error::from),
                 ))
             }
             Err(error) => {
@@ -74,7 +74,7 @@ struct ResponseValue;
 impl<M, SB> Stage<ExecutionContext<'_, M, SB>> for ResponseValue {
     type Input = Completion;
     type Output = Completion;
-    type Error = crate::ExecutionError;
+    type Error = crate::Error;
     type State = Option<Completion>;
     fn start(input: Completion) -> Self::State {
         Some(input)
@@ -83,7 +83,7 @@ impl<M, SB> Stage<ExecutionContext<'_, M, SB>> for ResponseValue {
         &mut self,
         _: &mut ExecutionContext<'_, M, SB>,
         state: &mut Self::State,
-    ) -> StepResult<Completion, crate::ExecutionError> {
+    ) -> StepResult<Completion, crate::Error> {
         Ok(StepOutcome::Complete(Ok(state
             .take()
             .ok_or(RunError::Exhausted)?)))

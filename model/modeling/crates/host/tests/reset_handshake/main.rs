@@ -1,80 +1,26 @@
 //! Reset completion belongs to hardware even when software stops waiting.
 
-use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
-use hardware_interface_runtime::{RegisterAccess, SharedMemory, SharedMemoryAccess, SoftwareCpu};
+pub mod support;
+
+use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
+use hardware_interface_runtime::{RegisterAccess, SoftwareCpu};
 use pdma_model_contract::dma::{ChannelId, DmaControl};
-use pdma_model_dma::{Dma, ResetControl};
-use pdma_model_host::{
-    Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
-};
+use pdma_model_host::DmaError as Error;
 use std::{
     future::{Future, poll_fn},
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::atomic::Ordering,
     task::Poll,
 };
-
-struct ReadFailureBus {
-    model: Model<SharedMemoryAccess>,
-    fail: Arc<AtomicBool>,
-}
-
-impl RegisterAccess for ReadFailureBus {
-    type Error = pdma_model_dma::Error;
-
-    async fn read(&self, offset: u32, response: &mut [u8]) -> Result<(), Self::Error> {
-        if self.fail.load(Ordering::SeqCst) {
-            return Err(pdma_model_dma::Error::Unmapped);
-        }
-        self.model.read(offset, response).await
-    }
-
-    async fn write(&self, offset: u32, request: &[u8]) -> Result<(), Self::Error> {
-        self.model.write(offset, request).await
-    }
-}
-
-async fn fixture(
-    cpu: &SoftwareCpu,
-) -> Result<
-    (
-        Channel<ReadFailureBus, SharedMemoryAccess>,
-        Model<SharedMemoryAccess>,
-        Arc<AtomicBool>,
-    ),
-    Box<dyn std::error::Error>,
-> {
-    let memory = SharedMemoryAccess::from(Arc::new(SharedMemory::new()));
-    let model = Model::new(Dma::new(memory.clone(), 2)?);
-    let fail = Arc::new(AtomicBool::new(false));
-    let channel = cpu
-        .run_main(Channel::setup(
-            ReadFailureBus {
-                model: model.clone(),
-                fail: Arc::clone(&fail),
-            },
-            memory,
-            ChannelConfig {
-                id: ChannelId::new(1),
-                rings: Rings {
-                    command: RingConfig::new(0x1000, 1)?,
-                    response: RingConfig::new(0x2000, 1)?,
-                },
-            },
-        ))
-        .await?;
-    Ok((channel, model, fail))
-}
+use support::fixture;
 
 #[tokio::test]
 async fn reset_stays_pending_after_write_acknowledgement() -> Result<(), Box<dyn std::error::Error>>
 {
-    // Given: no hardware operation is running to finish either reset scope.
+    // Given: accepted work remains resident while the pipeline is suspended.
     for whole_device in [false, true] {
         let cpu = SoftwareCpu::new();
-        let (channel, _model, _fail) = fixture(&cpu).await?;
+        let fixture = fixture(&cpu).await?;
+        let channel = fixture.channel;
         let reset = async move {
             if whole_device {
                 channel.reset_dma().await
@@ -101,8 +47,9 @@ async fn reset_read_failure_is_returned_to_software() -> Result<(), Box<dyn std:
     // Given: reset writes succeed but subsequent status reads fail.
     for whole_device in [false, true] {
         let cpu = SoftwareCpu::new();
-        let (channel, _model, fail) = fixture(&cpu).await?;
-        fail.store(true, Ordering::SeqCst);
+        let fixture = fixture(&cpu).await?;
+        let channel = fixture.channel;
+        fixture.fail.store(true, Ordering::SeqCst);
         // When: software waits for reset completion.
         let result = cpu
             .run_main(async move {
@@ -129,7 +76,9 @@ async fn reset_wait_can_migrate_but_still_requires_hardware_completion()
     for whole_device in [false, true] {
         let owner = SoftwareCpu::new();
         let other = SoftwareCpu::new();
-        let (channel, model, _fail) = fixture(&owner).await?;
+        let mut fixture = fixture(&owner).await?;
+        let channel = fixture.channel;
+        let model = fixture.model;
         let reset = async move {
             if whole_device {
                 channel.reset_dma().await
@@ -151,20 +100,14 @@ async fn reset_wait_can_migrate_but_still_requires_hardware_completion()
                 .await
                 .is_pending()
         );
-        let mut control = ResetControl;
-        let mut operation = Operation::new(());
-        let Ok(cleanup) = model
-            .interact(|dma| {
-                assert!(matches!(
-                    operation.step(&mut control, dma),
-                    Ok(StepOutcome::Complete(Ok(())))
-                ));
-                Ok(StepOutcome::<(), std::convert::Infallible>::Complete(
-                    Ok(()),
-                ))
-            })
-            .await;
-        assert!(matches!(cleanup, Ok(StepOutcome::Complete(Ok(())))));
+        for _ in 0..128 {
+            assert!(matches!(
+                model
+                    .interact(|dma| fixture.driver.step(&mut fixture.hardware, dma))
+                    .await?,
+                Ok(StepOutcome::InProgress)
+            ));
+        }
         // Then: switching CPU cannot finish reset early; actual hardware cleanup does.
         other.run_main(reset).await?;
     }
@@ -177,7 +120,9 @@ async fn cancelling_reset_wait_preserves_hardware_request() -> Result<(), Box<dy
     // Given: reset was accepted and hardware has not run cleanup.
     for whole_device in [false, true] {
         let cpu = SoftwareCpu::new();
-        let (channel, model, _fail) = fixture(&cpu).await?;
+        let fixture = fixture(&cpu).await?;
+        let channel = fixture.channel;
+        let model = fixture.model;
         {
             let reset = async move {
                 if whole_device {
@@ -217,7 +162,9 @@ async fn reset_completes_only_after_hardware_clears_its_scope()
     // Given: software is waiting while the requested reset scope remains busy.
     for whole_device in [false, true] {
         let cpu = SoftwareCpu::new();
-        let (channel, model, _fail) = fixture(&cpu).await?;
+        let mut fixture = fixture(&cpu).await?;
+        let channel = fixture.channel;
+        let model = fixture.model;
         let reset = async move {
             if whole_device {
                 channel.reset_dma().await
@@ -231,19 +178,15 @@ async fn reset_completes_only_after_hardware_clears_its_scope()
                 .await
                 .is_pending()
         );
-        // When: the independent hardware driver executes idle reset cleanup.
-        let outcome = model
-            .interact(|device| {
-                assert!(matches!(
-                    Operation::new(()).step(&mut ResetControl, device),
-                    Ok(StepOutcome::Complete(Ok(())))
-                ));
-                Ok(StepOutcome::<(), std::convert::Infallible>::Complete(
-                    Ok(()),
-                ))
-            })
-            .await?;
-        assert!(matches!(outcome, Ok(StepOutcome::Complete(Ok(())))));
+        // When: the retained pipeline advances and flushes its accepted work.
+        for _ in 0..128 {
+            assert!(matches!(
+                model
+                    .interact(|dma| fixture.driver.step(&mut fixture.hardware, dma))
+                    .await?,
+                Ok(StepOutcome::InProgress)
+            ));
+        }
         // Then: observing the hardware-cleared bit completes the existing wait.
         cpu.run_main(reset).await?;
     }

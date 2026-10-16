@@ -1,6 +1,8 @@
 //! Host interrupt controls and explicit reset recovery.
 
-use hardware_interface_pipeline::{AsyncExecutor, AsyncInteractionBackend, Operation, StepOutcome};
+use hardware_interface_pipeline::{
+    AsyncExecutor, AsyncInteractionBackend, HardwareDriver, StepOutcome,
+};
 use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
@@ -15,27 +17,6 @@ use std::sync::Arc;
 
 mod capabilities;
 mod reset;
-
-async fn with_idle_hardware<F: std::future::Future>(
-    model: &Model<SharedMemoryAccess>,
-    software: F,
-) -> F::Output {
-    let mut control = pdma_model_dma::ResetControl;
-    tokio::pin!(software);
-    loop {
-        tokio::select! {
-            result = &mut software => return result,
-            result = model.interact(|device| {
-                assert!(matches!(Operation::new(()).step(&mut control, device), Ok(StepOutcome::Complete(Ok(())))));
-                Ok(StepOutcome::<(), std::convert::Infallible>::Complete(Ok(())))
-            }) => {
-                let Ok(outcome) = result;
-                assert!(matches!(outcome, Ok(StepOutcome::Complete(Ok(())))));
-                tokio::task::yield_now().await;
-            }
-        }
-    }
-}
 
 fn fixture()
 -> Result<(Dma<SharedMemoryAccess>, SharedMemoryAccess, Rings), Box<dyn std::error::Error>> {
@@ -139,7 +120,7 @@ async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: both routine completion events are masked.
     let (device, memory, rings) = fixture()?;
-    let mut stage = device.service();
+    let mut hardware = device.hardware();
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
@@ -164,18 +145,21 @@ async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
     }))
     .await?;
     // When: hardware publishes a masked IOC completion and software unmasks.
-    for _ in 0..8 {
-        AsyncExecutor::new(model.clone())
-            .run(&mut stage, &mut Operation::new(()))
-            .await
-            .map_err(|error| format!("{error:?}"))?;
-        if cpu
-            .run_main(channel.irq_cause())
-            .await?
-            .response_non_empty()
-        {
-            break;
+    let executor = AsyncExecutor::new(model.clone());
+    let mut driver = HardwareDriver::new();
+    tokio::select! {
+        result = executor.drive(&mut hardware, &mut driver) => {
+            return Err(format!("hardware stopped: {result:?}").into());
         }
+        result = async {
+            for _ in 0..512 {
+                if cpu.run_main(channel.irq_cause()).await?.response_non_empty() {
+                    return Ok::<(), Box<dyn std::error::Error>>(());
+                }
+                tokio::task::yield_now().await;
+            }
+            Err("completion cause watchdog".into())
+        } => result?,
     }
     cpu.run_main(channel.set_irq_mask(ChannelIrqMaskValues::default()))
         .await?;
@@ -228,7 +212,7 @@ async fn dma_fatal_is_visible_after_unmask_without_replaying_notification()
         cpu.run_main(channel.dma_fatal()).await?,
         DmaFatalCode::Internal
     );
-    with_idle_hardware(&model, cpu.run_main(channel.reset_dma())).await?;
+    cpu.run_main(channel.reset_dma()).await?;
     let channel = cpu
         .run_main(Channel::setup(
             model,

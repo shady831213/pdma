@@ -194,10 +194,11 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   implementations belong under stages. DMA-wide Work identity,
   guarded access and retirement helpers belong in the DMA-level work module.
   Do not place shared execution stages under channel to accommodate visibility.
-  Service composes command admission through FanIn using channel-targeted Candidate
+  The data path composes command admission through FanIn using channel-targeted Candidate
   inputs and Arbitrate::snapshots with DMA's RoundRobin selector. Fresh selection
-  enters Fetch then CheckRanges; a resumed checkpoint skips that path. Its separate
-  shared execution path advances concrete typed chunk data. RoundRobin implements
+  enters Fetch then CheckRanges; a resumed request grants the channel and produces
+  no new descriptor. Install forwards the new or retained chunk request into the
+  same Then-connected execution graph. RoundRobin implements
   Arbitration, not FanPolicy; snapshot disposal belongs to the generic adapter.
   Candidates emit non-owning observations and do not consume descriptors. The
   selected work is revalidated before acceptance. Descriptor, execution and
@@ -208,11 +209,17 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   state into a second context. The borrowed context never escapes a step.
   No hardware leaf invokes another stage. Reuse Then for dataflow and FanOut with
   Dispatch for channel-bound publication; do not add CommandScope, a second engine,
-  a centralized step-dispatch switch or a wrapper around arbitrary child execution.
-  Complete hardware assembly uses Dma::service(); scenarios retain an external
-  HardwareDriver and use AsyncExecutor::drive, then abort/join after software finishes.
-  Service is finite, even when idle; only the external driver supplies subsequent
-  top-level inputs. HardwareDriver is not a Stage or a composable feedback mechanism.
+  a centralized step-dispatch switch or a wrapper that selects child execution phases.
+  A selected-context projection may borrow resources for a whole graph, but must
+  not interpret checkpoints, synthesize ThenState or step nested Then children.
+  Dma::hardware() returns one connected pipeline driven by HardwareDriver and
+  AsyncExecutor::drive. Scenarios abort/join after software finishes. No group
+  driver, independent lifecycle-stage tuple or runtime lifecycle policy is needed.
+  Hardware contains one Then graph and its local terminal-error boundary, not
+  sibling-unit state or lifecycle coordination. Its finite invocation drains
+  before the external driver restarts admission; no old faulted path may consume
+  a newly reacquired grant. Do not recreate Service, separate admission/execution
+  round barriers or a global phase selector under another name.
   Do not recreate command-local
   completion/reset/fault recovery in a scenario-side loop. Single-command boundary
   tests may assemble existing stages in test fixtures, not a production factory.
@@ -224,30 +231,42 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   requests cleanup; read one means busy; only hardware clears zero after affected accepted
   work retires. Zero writes do nothing and repeated requests coalesce. Reject configuration
   writes in a busy scope with `Error::ResetInProgress`; retain read access.
-  IRQ refresh and reset cleanup are independent hardware units advanced at the
-  top level on every external tick, including idle or stalled command progress.
-  Neither depends on a per-child-step AfterEach wrapper or belongs in runtime.
+  No minimum busy duration or extra model step is part of the software contract.
+  Idle/parked scopes without resident pipeline state can complete on request after
+  cleanup. A resident selected invocation must flush its actual local state before
+  acknowledging reset, independently of data readiness. Track resident identity
+  separately from accepted ownership and active grant; publication or parking can
+  release the grant while invocation-local state still exists. Do not clear the
+  ledger and acknowledge reset while leaving a live old invocation to finish later.
+  IRQ causes update in source-owning operations. Context maintenance observes owner
+  transitions; descriptor reads/discards belong to Fetch. No global tick sweep,
+  per-child-step AfterEach replacement or runtime cleanup policy is allowed.
   Track accepted channel/generation ownership until real hardware work retires;
   generation invalidation alone is not completion. A payload fault completes this
   finite execution path while retaining concrete Channel state and releasing the
-  shared grant. Resume starts fresh stage invocations from the retained hardware
-  action, without refetching, restarting validation or repeating completed reads
-  and transforms. A failed write retains transformed scratch and retries Write.
+  shared grant. Resume permits a new grant; the read and write stages consume
+  their own retained checkpoints without refetching, restarting validation or
+  repeating completed reads and valid-data transforms. A failed write retains
+  transformed scratch at the write boundary, not a next-stage instruction.
   A healthy command retains hardware state and its grant across finite chunk passes,
   not one command-lifetime Rust invocation. Separate command admission from active
   execution: occupied execution backpressures candidate/arbitration/Fetch while
   ordinary stages prepare, read, transform and write the current chunk. Completing
   a chunk pass does not retire the command or release its grant. Subsequent external
-  ticks advance retained hardware state without frontend reentry. A fault releases
+  ticks advance retained hardware state without another grant, descriptor fetch
+  or validation. Empty candidate sweeps cannot advance RR state. A fault releases
   the grant; even immediate RESUME requires new arbitration before more payload work.
   Reset/Abort cleanup must progress despite a disabled peer.
-  Custom graphs use Dma::service_with with ordinary
-  Then<ReadGraph, Then<WriteCopy, CompletionTail>> composition. The boundaries
-  are Payload and Completion. Stopping command errors bypass normal data stages
-  and enter the same completion tail with their actual response; they must not
-  fabricate successful chunks or payload bytes. A write-fault retry
-  resumes the same downstream hardware object, including custom tail stages,
-  without reentering read/transform or using a separate hardcoded retry pipeline.
+  Dma::hardware_with accepts a complete execution graph, with Option<ChunkInput>
+  input and unit output over the narrow ExecutionContext. Do not require a specific
+  nested Then shape or extract child hardware from a caller's graph. Ordinary
+  composition connects Payload and Completion boundaries; CompletionInput merges
+  retained errors before the chosen completion tail. Stopping command errors retain their actual response
+  in channel storage and emit no successful chunk/payload. The completion input
+  merges that response into the same tail through fixed dataflow. A write-fault
+  retry supplies retained payload locally to the same WriteCopy hardware object;
+  upstream stages may see None bubbles but must not reprocess retained bytes.
+  Do not use a separate hardcoded retry pipeline or top-level error-to-stage routing.
   Fresh validation runs once; later chunks use installed hardware traversal.
   Stage outputs and payload geometry are owned, non-clonable and not publicly
   forgeable. Transforms may modify the bounded payload bytes, not addresses/length.

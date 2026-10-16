@@ -31,6 +31,7 @@ pub struct Channel {
     pub(crate) irq: bool,
     pub(crate) generation: u64,
     pub(crate) work: Option<Accepted>,
+    pub(crate) resident: Option<crate::Work>,
 }
 
 impl Default for Channel {
@@ -44,11 +45,16 @@ impl Default for Channel {
             irq: false,
             generation: 0,
             work: None,
+            resident: None,
         }
     }
 }
 
 impl Channel {
+    pub(crate) fn retire(&mut self) {
+        self.work = None;
+        self.registers.values.fault_status = FaultStatusValues::new(0);
+    }
     pub(crate) const fn suspend(&mut self) {
         self.registers.values.fault_status = FaultStatusValues::new(1);
     }
@@ -57,6 +63,7 @@ impl Channel {
         if self.registers.values.fatal.code() == Ok(ChannelFatalCode::None) {
             self.registers.values.fatal = self.registers.values.fatal.with_code(fatal.code());
             self.irq |= self.registers.values.irq_enable.raw() != 0;
+            self.update_irq();
         }
     }
 
@@ -81,12 +88,16 @@ impl Channel {
             && ((was_empty && !mask.response_non_empty())
                 || (response.flags.ioc && !mask.ioc())
                 || error);
+        self.update_irq();
     }
 
     pub(crate) fn request_reset(&mut self) {
         if !self.resetting() {
             self.generation = self.generation.wrapping_add(1);
             self.admin.values.reset = ResetValues::new(1);
+            if self.resident.is_none() {
+                self.finish_reset();
+            }
         }
     }
 
@@ -116,7 +127,9 @@ impl Channel {
 #[derive(Debug)]
 pub(crate) struct Accepted {
     pub(crate) command: Command,
-    pub(crate) continuation: Option<Continuation>,
+    pub(crate) unread: Option<crate::Chunk>,
+    pub(crate) payload: Option<Box<crate::Payload>>,
+    pub(crate) completion: Option<crate::Completion>,
     pub(crate) progress: Option<CopyState>,
 }
 
@@ -129,13 +142,6 @@ pub(crate) struct CopyState {
     pub(crate) remaining: u64,
     bytes_completed: u64,
     pub(crate) status: ResponseStatus,
-}
-
-#[derive(Debug)]
-pub(crate) enum Continuation {
-    Next,
-    Read(crate::Chunk),
-    Write(Box<crate::Payload>),
 }
 
 #[derive(Debug)]

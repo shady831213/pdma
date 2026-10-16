@@ -98,7 +98,7 @@ fn idle_or_fatal_devices_keep_driving_without_memory_or_queue_effects()
             if fatal {
                 device.signal_fatal();
             }
-            let mut hardware = device.service();
+            let mut hardware = device.hardware();
             let mut driver = HardwareDriver::new();
 
             // When: repeated ticks advance the complete hardware assembly.

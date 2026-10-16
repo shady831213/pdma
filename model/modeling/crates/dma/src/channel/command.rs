@@ -84,17 +84,6 @@ impl CommandRing {
         )
     }
 
-    pub(crate) fn pop(
-        &mut self,
-        memory: &impl MemoryAccess,
-    ) -> Result<Option<Command>, ChannelFatal> {
-        let command = self.peek(memory)?;
-        if command.is_some() {
-            self.consume()?;
-        }
-        Ok(command)
-    }
-
     pub(crate) fn peek(&self, memory: &impl MemoryAccess) -> Result<Option<Command>, ChannelFatal> {
         let pointers = self.pointers();
         if pointers.is_empty() {

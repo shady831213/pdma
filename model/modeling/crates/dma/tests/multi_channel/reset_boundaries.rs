@@ -92,7 +92,7 @@ fn reset_at_each_interaction_boundary_preserves_only_valid_work() -> TestResult 
         for selected in [true, false] {
             // Given: A owns the shared engine and B/C are queued, at an observed interaction boundary.
             let mut device = setup()?;
-            let mut hardware = device.service();
+            let mut hardware = device.hardware();
             let mut operation = hardware_interface_pipeline::HardwareDriver::new();
             let mut ready = false;
             for _ in 0..128 {
@@ -141,7 +141,7 @@ fn reset_at_each_interaction_boundary_preserves_only_valid_work() -> TestResult 
                 .admin_offset(3)
                 .ok_or("admin offset")?;
             device.write(reset, &1_u32.to_le_bytes())?;
-            assert_eq!(word(&mut device, reset)?, 1);
+            assert_eq!(word(&mut device, reset)?, u32::from(selected));
             for _ in 0..32 {
                 assert!(matches!(
                     operation.step(&mut hardware, &mut device)?,

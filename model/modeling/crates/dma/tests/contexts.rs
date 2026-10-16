@@ -138,7 +138,7 @@ fn identical_addresses_use_independent_ring_sg_source_and_destination_spaces() -
     ] {
         dma.write(base + offset, &1_u32.to_le_bytes())?;
     }
-    let mut pipeline = dma.service();
+    let mut pipeline = dma.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     // When
     for _ in 0..128 {

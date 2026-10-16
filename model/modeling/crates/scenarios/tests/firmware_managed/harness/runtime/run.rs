@@ -42,7 +42,7 @@ where
                 .map_err(RunError::Firmware)
         });
         let hardware = async {
-            let mut pipeline = self.pipeline;
+            let mut pipeline = self.hardware;
             let executor = AsyncExecutor::new(Driver(self.shared));
             let mut driver = Box::new(HardwareDriver::new());
             executor

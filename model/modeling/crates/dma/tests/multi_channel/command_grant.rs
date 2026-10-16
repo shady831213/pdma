@@ -1,5 +1,5 @@
 use super::support::{TestResult, configure, submit, word};
-use hardware_interface_pipeline::{Operation, StepOutcome};
+use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
@@ -7,7 +7,7 @@ use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, Response, ResponseRegisters,
     ResponseStatus,
 };
-use pdma_model_dma::{Dma, ResetControl};
+use pdma_model_dma::Dma;
 
 #[test]
 fn sustained_loop_reselects_if_disabled_before_fetch() -> TestResult {
@@ -38,7 +38,7 @@ fn reselect_before_fetch(reset: bool) -> TestResult {
         let peer = peer.ok_or("peer channel")?;
         let third = third.ok_or("third channel")?;
         let consumer = ChannelBlock::COMMAND.offset() + CommandRegisters::CONSUMER.offset();
-        let mut engine = device.service();
+        let mut engine = device.hardware();
         let mut operation = hardware_interface_pipeline::HardwareDriver::new();
         for _ in 0..prefix {
             assert!(matches!(
@@ -99,10 +99,7 @@ fn reset_and_reconfigure_before_acceptance_uses_the_new_command_generation() -> 
         let consumer = ChannelId::new(0).register_offset(3).ok_or("offset")?
             + ChannelBlock::COMMAND.offset()
             + CommandRegisters::CONSUMER.offset();
-        let peer_consumer = ChannelId::new(1).register_offset(3).ok_or("offset")?
-            + ChannelBlock::COMMAND.offset()
-            + CommandRegisters::CONSUMER.offset();
-        let mut hardware = device.service();
+        let mut hardware = device.hardware();
         let mut operation = hardware_interface_pipeline::HardwareDriver::new();
         for _ in 0..prefix {
             assert!(matches!(
@@ -120,8 +117,12 @@ fn reset_and_reconfigure_before_acceptance_uses_the_new_command_generation() -> 
             &1_u32.to_le_bytes(),
         )?;
         let reset = ChannelId::new(0).admin_offset(3).ok_or("offset")?;
-        assert_eq!(word(&mut device, reset)?, 1);
-        let _ = Operation::new(()).step(&mut ResetControl, &mut device)?;
+        for _ in 0..64 {
+            if word(&mut device, reset)? == 0 {
+                break;
+            }
+            let _ = operation.step(&mut hardware, &mut device)?;
+        }
         assert_eq!(word(&mut device, reset)?, 0);
         configure(&mut device, 0)?;
         submit(&mut device, 0, 99)?;
@@ -150,7 +151,39 @@ fn reset_and_reconfigure_before_acceptance_uses_the_new_command_generation() -> 
         assert_eq!(response.status, ResponseStatus::Success);
         assert_eq!(response.bytes_completed(), 512);
         assert_eq!(word(&mut device, consumer)?, 1);
-        assert_eq!(word(&mut device, peer_consumer)?, 0, "prefix {prefix}");
+        for index in 1..3 {
+            let base = ChannelId::new(index).register_offset(3).ok_or("offset")?;
+            let producer =
+                base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset();
+            for _ in 0..256 {
+                if word(&mut device, producer)? == 1 {
+                    break;
+                }
+                let _ = operation.step(&mut hardware, &mut device)?;
+            }
+            assert_eq!(
+                word(&mut device, producer)?,
+                1,
+                "prefix {prefix}, peer {index}"
+            );
+            assert_eq!(
+                word(
+                    &mut device,
+                    base + ChannelBlock::COMMAND.offset() + CommandRegisters::CONSUMER.offset()
+                )?,
+                1
+            );
+            let raw = device
+                .memory
+                .read_typed::<pdma_model_contract::dma::ResponseRaw>(
+                    MemoryAddress::new(0x1100 + u64::try_from(index)? * 0x1000),
+                    MemoryAlignment::ONE,
+                )?;
+            let response = Response::from_bytes(raw.as_ref())?;
+            assert_eq!(response.id, u64::try_from(index)?);
+            assert_eq!(response.status, ResponseStatus::Success);
+            assert_eq!(response.bytes_completed(), 512);
+        }
     }
     Err("command acceptance exceeded interaction bound".into())
 }

@@ -3,43 +3,14 @@
 /// Shared raw-bus test fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{Operation, Stage, StepOutcome, Then};
+use hardware_interface_pipeline::{Operation, StepOutcome};
+mod service_progress {
+    mod pending_tail;
+}
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::dma::{ChannelBlock, CommandRegisters, Endpoint, ResponseRegisters};
-use pdma_model_dma::{COPY_CHUNK_BYTES, PrepareChunk, ReadCopy, ResetControl, WriteCopy};
-use std::{cell::Cell, rc::Rc};
+use pdma_model_dma::COPY_CHUNK_BYTES;
 use support::{TestResult, command, read_word, setup, submit};
-
-struct Tail {
-    entered: Rc<Cell<bool>>,
-    release: Rc<Cell<bool>>,
-}
-
-impl<M> Stage<pdma_model_dma::ExecutionContext<'_, M>> for Tail {
-    type Input = Option<pdma_model_dma::Completion>;
-    type Output = Option<pdma_model_dma::Completion>;
-    type Error = pdma_model_dma::ExecutionError;
-    type State = Option<Option<pdma_model_dma::Completion>>;
-
-    fn start(input: Self::Input) -> Self::State {
-        Some(input)
-    }
-
-    fn step(
-        &mut self,
-        _: &mut pdma_model_dma::ExecutionContext<'_, M>,
-        state: &mut Self::State,
-    ) -> hardware_interface_pipeline::StepResult<Self::Output, Self::Error> {
-        self.entered.set(true);
-        Ok(if self.release.get() {
-            StepOutcome::Complete(Ok(state
-                .take()
-                .ok_or(hardware_interface_pipeline::RunError::Exhausted)?))
-        } else {
-            StepOutcome::InProgress
-        })
-    }
-}
 
 const CONSUMER: usize =
     ChannelBlock::ALIGNMENT + ChannelBlock::COMMAND.offset() + CommandRegisters::CONSUMER.offset();
@@ -61,7 +32,7 @@ fn finite_service_passes_complete_command_without_fetching_again() -> TestResult
     memory.read(0x1800.into(), MemoryAlignment::ONE, &mut before)?;
     assert_eq!(before, [0; 600]);
     assert_eq!(read_word(&mut device, PRODUCER)?, 0);
-    let mut service = device.service();
+    let mut service = device.hardware();
     // When: finite invocations advance the retained command.
     let mut operation = Operation::new(());
     for _ in 0..256 {
@@ -96,13 +67,12 @@ fn reset_between_chunks_retires_retained_progress() -> TestResult {
     descriptor.destination = Endpoint::linear(0x1800, 0);
     memory.write(0x1400.into(), MemoryAlignment::ONE, &[0x5a; 600])?;
     submit(&mut device, &memory, descriptor)?;
-    let mut service = device.service();
-    let mut operation = Operation::new(());
+    let mut hardware = device.hardware();
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let mut committed = false;
     for _ in 0..256 {
-        if let StepOutcome::Complete(result) = operation.step(&mut service, &mut device)? {
+        if let StepOutcome::Complete(result) = operation.step(&mut hardware, &mut device)? {
             result?;
-            operation = Operation::new(());
         }
         if memory.read_typed::<[u8; 1]>(0x1800.into(), MemoryAlignment::ONE)? == [0x5a] {
             committed = true;
@@ -114,10 +84,9 @@ fn reset_between_chunks_retires_retained_progress() -> TestResult {
     let reset = pdma_model_contract::dma::DmaDiscovery::EXTENT
         + pdma_model_contract::dma::DmaAdmin::CHANNELS_OFFSET;
     device.write(reset, &1_u32.to_le_bytes())?;
-    let _ = ResetControl.step(&mut device, &mut ())?;
     for _ in 0..256 {
-        if let StepOutcome::Complete(result) = operation.step(&mut service, &mut device)? {
-            result?;
+        let _ = operation.step(&mut hardware, &mut device)?;
+        if read_word(&mut device, reset)? == 0 {
             break;
         }
     }
@@ -131,76 +100,6 @@ fn reset_between_chunks_retires_retained_progress() -> TestResult {
         .ok_or("prefix")?
         .fill(0x5a);
     assert_eq!(bytes, expected_bytes);
-    assert_eq!(read_word(&mut device, PRODUCER)?, 0);
-    Ok(())
-}
-
-#[test]
-fn reset_after_committed_chunk_retires_hardware_while_custom_tail_is_pending() -> TestResult {
-    // Given: a non-final chunk published progress while a custom tail remains pending.
-    let (mut device, memory) = setup(0x1100, 2)?;
-    let descriptor = pdma_model_contract::dma::Command {
-        copy_length: u64::try_from(COPY_CHUNK_BYTES * 2)?,
-        source: Endpoint::linear(0x1400, 0),
-        destination: Endpoint::linear(0x1800, 0),
-        ..command()
-    };
-    submit(&mut device, &memory, descriptor)?;
-    let entered = Rc::new(Cell::new(false));
-    let release = Rc::new(Cell::new(false));
-    let sink = Then::new(
-        WriteCopy,
-        Tail {
-            entered: Rc::clone(&entered),
-            release: Rc::clone(&release),
-        },
-    );
-    let pipeline = Then::new(
-        Then::new(PrepareChunk, ReadCopy),
-        Then::new(
-            sink.upstream,
-            Then::new(sink.downstream, device.responses()),
-        ),
-    );
-    let mut service = device.service_with(pipeline);
-    let mut operation = Operation::new(());
-    for _ in 0..256 {
-        if let StepOutcome::Complete(result) = operation.step(&mut service, &mut device)? {
-            result?;
-            operation = Operation::new(());
-        }
-        if entered.get() {
-            break;
-        }
-    }
-    assert!(entered.get());
-    // When: reset arrives after the write but before the tail's terminal step.
-    let reset = pdma_model_contract::dma::DmaDiscovery::EXTENT
-        + pdma_model_contract::dma::DmaAdmin::CHANNELS_OFFSET;
-    device.write(reset, &1_u32.to_le_bytes())?;
-    for _ in 0..12 {
-        if let StepOutcome::Complete(result) = operation.step(&mut service, &mut device)? {
-            result?;
-        }
-        if read_word(&mut device, reset)? == 0 {
-            break;
-        }
-    }
-    assert_eq!(read_word(&mut device, reset)?, 0);
-    assert!(!release.get());
-    release.set(true);
-    for _ in 0..32 {
-        if operation.is_complete() {
-            break;
-        }
-        if let StepOutcome::Complete(result) = operation.step(&mut service, &mut device)? {
-            result?;
-            break;
-        }
-    }
-    // Then: generic tail completion cannot publish or resurrect the retired command.
-    assert!(operation.is_complete());
-    assert_eq!(read_word(&mut device, reset)?, 0);
     assert_eq!(read_word(&mut device, PRODUCER)?, 0);
     Ok(())
 }
@@ -222,13 +121,12 @@ fn reset_at_every_chunk_boundary_retires_without_more_writes() -> TestResult {
             &[0x5a; COPY_CHUNK_BYTES * 3],
         )?;
         submit(&mut device, &memory, descriptor)?;
-        let mut service = device.service();
-        let mut next = Operation::new(());
+        let mut hardware = device.hardware();
+        let mut next = hardware_interface_pipeline::HardwareDriver::new();
         let mut committed = false;
         for _ in 0..256 {
-            if let StepOutcome::Complete(result) = next.step(&mut service, &mut device)? {
+            if let StepOutcome::Complete(result) = next.step(&mut hardware, &mut device)? {
                 result?;
-                next = Operation::new(());
             }
             if memory.read_typed::<[u8; 1]>(0x1800.into(), MemoryAlignment::ONE)? == [0x5a] {
                 committed = true;
@@ -237,9 +135,8 @@ fn reset_at_every_chunk_boundary_retires_without_more_writes() -> TestResult {
         }
         assert!(committed);
         for _ in 0..prefix {
-            if let StepOutcome::Complete(result) = next.step(&mut service, &mut device)? {
+            if let StepOutcome::Complete(result) = next.step(&mut hardware, &mut device)? {
                 result?;
-                next = Operation::new(());
             }
         }
         let mut before = [0; COPY_CHUNK_BYTES * 3];
@@ -248,17 +145,14 @@ fn reset_at_every_chunk_boundary_retires_without_more_writes() -> TestResult {
         let reset = pdma_model_contract::dma::DmaDiscovery::EXTENT
             + pdma_model_contract::dma::DmaAdmin::CHANNELS_OFFSET;
         device.write(reset, &1_u32.to_le_bytes())?;
-        if next.is_complete() {
-            next = Operation::new(());
-        }
         for _ in 0..256 {
-            if let StepOutcome::Complete(result) = next.step(&mut service, &mut device)? {
-                result?;
+            let _ = next.step(&mut hardware, &mut device)?;
+            if read_word(&mut device, reset)? == 0 {
                 break;
             }
         }
         // Then: reset retires the accepted command and no old payload access occurs.
-        assert!(next.is_complete(), "prefix {prefix} stalled");
+        assert!(!next.is_complete(), "prefix {prefix} hardware stopped");
         assert_eq!(read_word(&mut device, reset)?, 0, "prefix {prefix}");
         let mut after = [0; COPY_CHUNK_BYTES * 3];
         memory.read(0x1800.into(), MemoryAlignment::ONE, &mut after)?;

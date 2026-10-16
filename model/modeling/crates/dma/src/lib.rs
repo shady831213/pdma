@@ -30,13 +30,12 @@ pub use maintenance::MaintenanceError;
 pub use memory::{ChannelContext, MemoryFailure};
 use pdma_model_contract::dma::{
     ChannelId, Command, ContextId, DmaAccess, DmaControl, DmaDiscovery, DmaFatalCode,
-    DmaRegistersLayout, EndpointMode, ResetValues,
+    DmaRegistersLayout, EndpointMode,
 };
-pub use reset::ResetControl;
 pub use routing::Responses;
 pub use stages::{
-    Candidate, CheckRanges, CommandRequest, CopyChunk, Execution, ExecutionError, Fetch, Pipeline,
-    PrepareChunk, Publish, ReadCopy, ReadPipeline, Service, UpdateIrq, WriteCopy, WritePipeline,
+    Candidate, CheckRanges, CommandRequest, CompletionInput, CopyChunk, Execution, Fetch, Grant,
+    Hardware, Pipeline, PrepareChunk, Publish, ReadCopy, ReadPipeline, WriteCopy, WritePipeline,
 };
 pub use work::Work;
 
@@ -48,6 +47,7 @@ struct Frontier {
     pending: u32,
     passed: bool,
     failed: bool,
+    referenced: bool,
 }
 
 #[derive(Debug)]
@@ -119,6 +119,13 @@ impl<M, S> Dma<M, S> {
         if self.control.values.fatal.code() == Ok(DmaFatalCode::None) {
             self.control.values.fatal = self.control.values.fatal.with_code(DmaFatalCode::Internal);
             self.interrupt |= self.control.values.irq_enable.raw() != 0;
+            self.refresh_maintenance();
+            for channel in &mut self.channels {
+                if channel.resident.is_none() {
+                    channel.retire();
+                }
+            }
+            self.release_invalid_grant();
         }
     }
 
@@ -128,14 +135,5 @@ impl<M, S> Dma<M, S> {
 
     pub(crate) fn resetting(&self) -> bool {
         self.control.values.reset.request()
-    }
-
-    pub(crate) fn request_reset(&mut self) {
-        if !self.resetting() {
-            self.control.values.reset = ResetValues::new(1);
-            for channel in &mut self.channels {
-                channel.request_reset();
-            }
-        }
     }
 }

@@ -8,7 +8,7 @@ use pdma_model_contract::dma::{
     ChannelBlock, Command, Endpoint, Response, ResponseRaw, ResponseRegisters, ResponseStatus,
 };
 use pdma_model_dma::{
-    Chunk, Completion, ExecutionContext, ExecutionError, Payload, PrepareChunk, ReadCopy, WriteCopy,
+    Chunk, Completion, Error, ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy,
 };
 use std::{cell::Cell, marker::PhantomData, rc::Rc};
 use support::{TestResult, command, read_word, setup, submit};
@@ -17,7 +17,7 @@ struct Observe<T>(Rc<Cell<usize>>, PhantomData<T>);
 impl<T> Stage<ExecutionContext<'_, SharedMemory>> for Observe<T> {
     type Input = Option<T>;
     type Output = Option<T>;
-    type Error = ExecutionError;
+    type Error = Error;
     type State = Option<Self::Input>;
     fn start(input: Self::Input) -> Self::State {
         Some(input)
@@ -26,7 +26,7 @@ impl<T> Stage<ExecutionContext<'_, SharedMemory>> for Observe<T> {
         &mut self,
         _: &mut ExecutionContext<'_, SharedMemory>,
         state: &mut Self::State,
-    ) -> StepResult<Self::Output, ExecutionError> {
+    ) -> StepResult<Self::Output, Error> {
         let value = state.take().ok_or(RunError::Exhausted)?;
         if value.is_some() {
             self.0.set(self.0.get() + 1);
@@ -84,6 +84,47 @@ fn empty_success_is_normal_dataflow_without_payload_access() -> TestResult {
     )
 }
 
+#[test]
+fn standalone_chunk_graph_publishes_the_actual_read_failure() -> TestResult {
+    // Given: accepted traversal whose payload source is inaccessible.
+    let (mut dma, memory) = setup(0x1100, 2)?;
+    let descriptor = Command {
+        source: Endpoint::linear(0x8000, 0),
+        ..command()
+    };
+    submit(&mut dma, &memory, descriptor)?;
+    let id = pdma_model_contract::dma::ChannelId::new(0);
+    let input = support::accept(&mut dma, id)?;
+    let mut graph = support::chunk_pipeline(&dma);
+    let mut operation = hardware_interface_pipeline::Operation::new(Some(input));
+    // When: the standalone graph runs without a Hardware controller.
+    let mut context = dma.execution_context(id)?;
+    for _ in 0..128 {
+        if let StepOutcome::Complete(result) = operation.step(&mut graph, &mut context)? {
+            result?;
+            break;
+        }
+    }
+    // Then: one actual failure response publishes with no fabricated success bytes.
+    assert!(operation.is_complete());
+    assert_eq!(
+        read_word(
+            &mut dma,
+            ChannelBlock::ALIGNMENT
+                + ChannelBlock::RESPONSE.offset()
+                + ResponseRegisters::PRODUCER.offset()
+        )?,
+        1
+    );
+    let raw: ResponseRaw = memory.read_typed(0x1100.into(), MemoryAlignment::ONE)?;
+    let response = Response::from_bytes(raw.as_ref())?;
+    assert_eq!(
+        (response.id, response.status, response.bytes_completed()),
+        (descriptor.id, ResponseStatus::ReadError, 0)
+    );
+    Ok(())
+}
+
 fn check(
     descriptor: Command,
     expected_status: ResponseStatus,
@@ -110,7 +151,10 @@ fn check(
         Observe::<Completion>(Rc::clone(&completions), PhantomData),
         dma.responses(),
     );
-    let mut service = dma.service_with(Then::new(read, Then::new(WriteCopy, tail)));
+    let mut hardware = dma.hardware_with(Then::new(
+        read,
+        Then::new(WriteCopy, Then::new(pdma_model_dma::CompletionInput, tail)),
+    ));
     let mut driver = HardwareDriver::new();
     let producer = ChannelBlock::ALIGNMENT
         + ChannelBlock::RESPONSE.offset()
@@ -118,7 +162,7 @@ fn check(
     // When: the real pipeline reaches its response publication boundary.
     for _ in 0..256 {
         assert_eq!(
-            driver.step(&mut service, &mut dma)?,
+            driver.step(&mut hardware, &mut dma)?,
             StepOutcome::InProgress
         );
         if read_word(&mut dma, producer)? == 1 {

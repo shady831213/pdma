@@ -8,7 +8,7 @@ use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, CompletionFlagsValues,
     ContextId, Endpoint, Response, ResponseRegisters, ResponseStatus, Segment,
 };
-use pdma_model_dma::{Dma, Service};
+use pdma_model_dma::{Dma, Hardware};
 use std::cell::RefCell;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,8 +68,8 @@ impl MemoryAccess for ObservedMemory {
 struct Fixture {
     dma: Dma<ObservedMemory>,
     memory: SharedMemory,
-    pipeline: Service,
-    operation: hardware_interface_pipeline::HardwareDriver<Service, Dma<ObservedMemory>>,
+    pipeline: Hardware,
+    operation: hardware_interface_pipeline::HardwareDriver<Hardware, Dma<ObservedMemory>>,
     normal: Command,
 }
 
@@ -130,7 +130,7 @@ fn full_response_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
         base + CommandRegisters::PRODUCER.offset(),
         &1_u32.to_le_bytes(),
     )?;
-    let mut pipeline = dma.service();
+    let mut pipeline = dma.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..256 {
         assert!(matches!(

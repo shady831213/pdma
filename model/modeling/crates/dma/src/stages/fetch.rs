@@ -32,6 +32,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for Fetch {
             channel: context.id,
             generation: context.selected.generation,
         };
+        let aborting = context.abort_context.is_some();
         let channel = match context.channel(work) {
             Ok(channel) => channel,
             Err(error) => return Ok(StepOutcome::Complete(Err(error))),
@@ -53,7 +54,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for Fetch {
             || channel.work.is_some()
             || channel.command.entry(snapshot.consumer).ok() != Some(snapshot.address)
             || channel.command.pointers().is_empty()
-            || channel.response.pointers().pending() >= channel.response.capacity()
+            || (!aborting && channel.response.pointers().pending() >= channel.response.capacity())
             || context.active.is_some()
         {
             return Ok(StepOutcome::Complete(Ok(None)));
@@ -65,14 +66,40 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for Fetch {
                 context: ContextId::new(context.selected.registers.values.ring_context.raw()),
             }),
         );
-        match context.selected.command.pop(&memory) {
+        match context.selected.command.peek(&memory) {
             Ok(Some(command)) => {
+                if context
+                    .abort_context
+                    .is_some_and(|target| crate::references(&command).contains(&Some(target)))
+                {
+                    if let Err(fatal) = context.selected.command.consume() {
+                        context.selected.latch(fatal);
+                        context.changed();
+                        return Ok(StepOutcome::Complete(Err(Error::ChannelFatal(fatal))));
+                    }
+                    context.changed();
+                    return Ok(StepOutcome::Complete(Ok(None)));
+                }
+                if context.selected.response.pointers().pending()
+                    >= context.selected.response.capacity()
+                {
+                    return Ok(StepOutcome::Complete(Ok(None)));
+                }
+                if let Err(fatal) = context.selected.command.consume() {
+                    context.selected.latch(fatal);
+                    context.changed();
+                    return Ok(StepOutcome::Complete(Err(Error::ChannelFatal(fatal))));
+                }
                 context.selected.work = Some(Accepted {
                     command,
-                    continuation: None,
+                    unread: None,
+                    payload: None,
+                    completion: None,
                     progress: None,
                 });
                 *context.active = Some(work);
+                context.generation = work.generation;
+                context.changed();
                 Ok(StepOutcome::Complete(Ok(Some(FetchedCommand {
                     work,
                     command,
@@ -81,6 +108,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for Fetch {
             Ok(None) => Ok(StepOutcome::Complete(Ok(None))),
             Err(fatal) => {
                 context.selected.latch(fatal);
+                context.changed();
                 Ok(StepOutcome::Complete(Err(Error::ChannelFatal(fatal))))
             }
         }

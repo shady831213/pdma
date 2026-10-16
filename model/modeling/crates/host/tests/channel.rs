@@ -1,6 +1,6 @@
 //! End-to-end host submission and interrupt notification behavior.
 
-use hardware_interface_pipeline::{AsyncExecutor, Operation};
+use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
 use hardware_interface_runtime::{
     InterruptSource, MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
@@ -36,7 +36,7 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
     };
     let memory = allocator.memory_access();
     let device = Dma::new(memory.clone(), 1)?;
-    let mut stage = device.service();
+    let mut hardware = device.hardware();
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
@@ -58,15 +58,7 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
         destination: Endpoint::linear(0, 0),
     }))
     .await?;
-    for _ in 0..8 {
-        AsyncExecutor::new(model.clone())
-            .run(&mut stage, &mut Operation::new(()))
-            .await
-            .map_err(|error| format!("{error:?}"))?;
-        if model.irq() {
-            break;
-        }
-    }
+    until_irq(model.clone(), &mut hardware).await?;
     assert!(model.irq(), "response did not arrive before watchdog");
     let expected = Response {
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
@@ -128,7 +120,7 @@ async fn copy_completes_when_host_submits_and_consumes_response()
     let memory = allocator.memory_access();
     memory.write(source, alignment, b"dma-copy")?;
     let device = Dma::new(memory.clone(), 1)?;
-    let mut stage = device.service();
+    let mut hardware = device.hardware();
     let mut model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
@@ -141,7 +133,6 @@ async fn copy_completes_when_host_submits_and_consumes_response()
             },
         ))
         .await?;
-    let executor = AsyncExecutor::new(model.clone());
 
     // When: a real async worker executes the submitted command.
     cpu.run_main(channel.submit(Command {
@@ -153,15 +144,7 @@ async fn copy_completes_when_host_submits_and_consumes_response()
         destination: Endpoint::linear(destination.raw(), 0),
     }))
     .await?;
-    for _ in 0..8 {
-        executor
-            .run(&mut stage, &mut Operation::new(()))
-            .await
-            .map_err(|error| format!("{error:?}"))?;
-        if model.irq() {
-            break;
-        }
-    }
+    until_irq(model.clone(), &mut hardware).await?;
     assert!(model.irq(), "response did not arrive before watchdog");
     model.wait_ready().await?;
     assert!(model.claim(()).await?.is_some());
@@ -208,7 +191,7 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
     let destination = allocator.allocate(8, alignment)?;
     let memory = allocator.memory_access();
     let device = Dma::new(memory.clone(), 1)?;
-    let mut stage = device.service();
+    let mut hardware = device.hardware();
     let mut model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
@@ -230,18 +213,9 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
         destination: Endpoint::linear(destination.raw(), 0),
     }))
     .await?;
-    let executor = AsyncExecutor::new(model.clone());
 
     // When: response publication fails at the real memory boundary.
-    for _ in 0..8 {
-        executor
-            .run(&mut stage, &mut Operation::new(()))
-            .await
-            .map_err(|error| format!("{error:?}"))?;
-        if model.irq() {
-            break;
-        }
-    }
+    until_irq(model.clone(), &mut hardware).await?;
     assert!(
         model.irq(),
         "fatal notification did not arrive before watchdog"
@@ -263,4 +237,23 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
         ChannelFatalCode::ResponseWrite
     );
     Ok(())
+}
+
+async fn until_irq(
+    model: Model<hardware_interface_runtime::SharedMemoryAccess>,
+    hardware: &mut pdma_model_dma::Hardware,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let executor = AsyncExecutor::new(model.clone());
+    let mut driver = HardwareDriver::new();
+    tokio::select! {
+        result = executor.drive(hardware, &mut driver) => {
+            Err(format!("hardware stopped: {result:?}").into())
+        }
+        () = async {
+            for _ in 0..512 {
+                if model.irq() { break; }
+                tokio::task::yield_now().await;
+            }
+        } => Ok(()),
+    }
 }

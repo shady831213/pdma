@@ -157,7 +157,7 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
             + CommandRegisters::PRODUCER.offset(),
         &2_u32.to_le_bytes(),
     )?;
-    let mut hardware = device.service();
+    let mut hardware = device.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     // When
     for _ in 0..32 {

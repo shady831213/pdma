@@ -20,10 +20,10 @@ pub(super) async fn run(scenario: Scenario) -> TestResult<Report> {
     let storage = Arc::new(SharedMemory::new());
     let allocator = SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(0x1000));
     let memory = allocator.memory_access();
-    let (model, stage) = hardware::assemble(memory.clone())?;
+    let (model, hardware) = hardware::assemble(memory.clone())?;
     let runtime = InterruptRuntime::new(Arc::new(SoftwareCpu::new()), model.clone());
     let mut workers = JoinSet::new();
-    workers.spawn(hardware::drive(model.clone(), stage));
+    workers.spawn(hardware::drive(model.clone(), hardware));
     assert!(storage.regions().is_empty());
     let execution = runtime.run_main(async |interrupts| {
         software::main(

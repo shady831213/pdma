@@ -29,7 +29,7 @@ fn reset_before_regrant_prevents_old_work_from_entering_the_new_space() -> TestR
     work.source = Endpoint::linear(0x1600, 0);
     work.destination = Endpoint::linear(0x1b00, 0);
     publish(&mut dma, &old, (ChannelId::new(0), work))?;
-    let mut pipeline = dma.service();
+    let mut pipeline = dma.hardware();
     let mut driver = HardwareDriver::new();
     for _ in 0..128 {
         if bytes::<1>(&old, 0x1b00)? != [0] {

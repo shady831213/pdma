@@ -6,9 +6,7 @@ pub mod support;
 use hardware_interface_pipeline::{Operation, RunError, Stage, StepOutcome, StepResult, Then};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::{CompletionInfo, Response, ResponseInfoValues, ResponseStatus};
-use pdma_model_dma::{
-    ExecutionContext, ExecutionError, Payload, PrepareChunk, ReadCopy, WriteCopy,
-};
+use pdma_model_dma::{Error, ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy};
 use support::{TestResult, command, setup, submit};
 
 struct FillChunk;
@@ -16,7 +14,7 @@ struct FillChunk;
 impl Stage<ExecutionContext<'_, SharedMemory>> for FillChunk {
     type Input = Option<Payload>;
     type Output = Option<Payload>;
-    type Error = ExecutionError;
+    type Error = Error;
     type State = Option<Self::Input>;
 
     fn start(input: Self::Input) -> Self::State {
@@ -27,7 +25,7 @@ impl Stage<ExecutionContext<'_, SharedMemory>> for FillChunk {
         &mut self,
         _: &mut ExecutionContext<'_, SharedMemory>,
         state: &mut Self::State,
-    ) -> StepResult<Self::Output, ExecutionError> {
+    ) -> StepResult<Self::Output, Error> {
         let Some(mut payload) = state.take() else {
             return Err(RunError::Exhausted);
         };
@@ -37,7 +35,7 @@ impl Stage<ExecutionContext<'_, SharedMemory>> for FillChunk {
                     assert_eq!(bytes.len(), 4);
                     bytes.fill(0x5a);
                 }
-                Err(error) => return Ok(StepOutcome::Complete(Err(error.into()))),
+                Err(error) => return Ok(StepOutcome::Complete(Err(error))),
             }
         }
         Ok(StepOutcome::Complete(Ok(payload)))
@@ -52,9 +50,12 @@ fn transform_can_modify_only_the_active_chunk_and_cannot_forge_its_length() -> T
     let descriptor = command();
     submit(&mut device, &memory, descriptor)?;
     let read = Then::new(PrepareChunk, Then::new(ReadCopy, FillChunk));
-    let write = Then::new(WriteCopy, device.responses());
+    let write = Then::new(
+        WriteCopy,
+        Then::new(pdma_model_dma::CompletionInput, device.responses()),
+    );
     let pipeline = Then::new(read, write);
-    let mut service = device.service_with(pipeline);
+    let mut service = device.hardware_with(pipeline);
     let mut operation = Operation::new(());
     // When: the transform fills its entire exposed slice and normal execution publishes it.
     for _ in 0..128 {

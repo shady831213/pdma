@@ -20,7 +20,7 @@ impl<M, S> Dma<M, S> {
 
     /// Writes a register and applies the owning channel's immediate side effects.
     pub fn write(&mut self, offset: usize, source: &[u8]) -> Result<(), Error> {
-        register_dispatch!(
+        let result = register_dispatch!(
             self.discovery
                 .write(offset, source)
                 .map_err(RegisterAccessError::widen),
@@ -28,7 +28,18 @@ impl<M, S> Dma<M, S> {
             self.write_channels(offset, source),
             self.write_admin(offset, source),
         )
-        .map_err(Error::from)
+        .map_err(Error::from);
+        if result.is_ok() {
+            let id = self
+                .layout
+                .channels()
+                .locate(offset)
+                .map(|(index, _)| pdma_model_contract::dma::ChannelId::new(index));
+            if let Some(id) = id {
+                self.observe_channel(id);
+            }
+        }
+        result
     }
 
     pub(super) fn write_control(
@@ -82,7 +93,11 @@ impl<M, S> Dma<M, S> {
         source: &[u8],
     ) -> Result<(), RegisterAccessError<Error>> {
         let halted = self.halted();
+        let resetting = self.resetting();
         let (channel, offset, maintenance) = self.locate_channel(address)?;
+        if resetting {
+            return Err(RegisterAccessError::Other(Error::ResetInProgress));
+        }
         if halted {
             return Err(RegisterAccessError::Other(Error::Halted));
         }
@@ -110,7 +125,9 @@ impl<M, S> Dma<M, S> {
         source: &[u8],
     ) -> Result<(), RegisterAccessError<Error>> {
         let (channel, offset, maintenance) = self.locate_admin(address)?;
-        channel.write_admin(offset, source, maintenance)
+        channel.write_admin(offset, source, maintenance)?;
+        self.release_invalid_grant();
+        Ok(())
     }
 
     fn locate_channel(

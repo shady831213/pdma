@@ -8,7 +8,7 @@ use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, DmaControl, DmaRegisters,
     ResponseRegisters,
 };
-use pdma_model_dma::{Dma, Error, ResetControl};
+use pdma_model_dma::{Dma, Error};
 use support::{TestResult, command, read_word, setup, submit};
 
 const CHANNEL: usize =
@@ -24,7 +24,7 @@ struct CommandExit;
 impl<M> Stage<pdma_model_dma::ExecutionContext<'_, M>> for CommandExit {
     type Input = ();
     type Output = ();
-    type Error = pdma_model_dma::ExecutionError;
+    type Error = pdma_model_dma::Error;
     type State = ();
 
     fn start((): ()) {}
@@ -33,13 +33,13 @@ impl<M> Stage<pdma_model_dma::ExecutionContext<'_, M>> for CommandExit {
         &mut self,
         _: &mut pdma_model_dma::ExecutionContext<'_, M>,
         (): &mut (),
-    ) -> StepResult<(), pdma_model_dma::ExecutionError> {
+    ) -> StepResult<(), pdma_model_dma::Error> {
         Ok(StepOutcome::Complete(Ok(())))
     }
 }
 
 #[test]
-fn rejected_response_port_does_not_retire_the_command() -> TestResult {
+fn reset_invalidates_a_response_retained_outside_the_pipeline() -> TestResult {
     // Given: a fetched task retained between custom execution and response ports.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
@@ -73,21 +73,29 @@ fn rejected_response_port_does_not_retire_the_command() -> TestResult {
                 &mut device.execution_context(ChannelId::new(0))?,
                 &mut publish
             )?,
-            StepOutcome::Complete(Err(pdma_model_dma::ExecutionError::Rejected(Error::Reset)))
+            StepOutcome::Complete(Err(Error::Reset))
         ) {
             rejected = true;
             break;
         }
     }
-    // Then: response rejection alone cannot acknowledge whole-command cleanup.
+    // Then: reset has cleaned the nonresident command and the stale port cannot publish.
     assert!(rejected);
-    let _ = ResetControl.step(&mut device, &mut ())?;
-    assert_eq!(read_word(&mut device, RESET)?, 1);
+    assert_eq!(read_word(&mut device, RESET)?, 0);
+    assert_eq!(
+        read_word(
+            &mut device,
+            ChannelBlock::ALIGNMENT
+                + ChannelBlock::RESPONSE.offset()
+                + ResponseRegisters::PRODUCER.offset()
+        )?,
+        0
+    );
     Ok(())
 }
 
 #[test]
-fn published_response_retires_hardware_before_custom_command_exit() -> TestResult {
+fn reset_flushes_the_resident_tail_after_response_publication() -> TestResult {
     // Given: a command whose response is published but whose composition has not exited.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
@@ -99,7 +107,7 @@ fn published_response_retires_hardware_before_custom_command_exit() -> TestResul
             Then::new(chunk.downstream.downstream, CommandExit),
         ),
     );
-    let mut hardware = device.service_with(pipeline);
+    let mut hardware = device.hardware_with(pipeline);
     let command = &mut hardware;
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let producer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
@@ -117,9 +125,8 @@ fn published_response_retires_hardware_before_custom_command_exit() -> TestResul
     assert_eq!(read_word(&mut device, producer)?, 1);
     // When: reset is requested before the complete command returns.
     device.write(RESET, &1_u32.to_le_bytes())?;
-    let _ = ResetControl.step(&mut device, &mut ())?;
-    // Then: response publication has released hardware ownership before the generic tail exits.
-    assert_eq!(read_word(&mut device, RESET)?, 0);
+    // Then: the unfinished invocation keeps reset busy until its state is flushed.
+    assert_eq!(read_word(&mut device, RESET)?, 1);
     let mut completed = false;
     for _ in 0..32 {
         assert!(matches!(
@@ -133,43 +140,35 @@ fn published_response_retires_hardware_before_custom_command_exit() -> TestResul
     }
     assert!(completed);
     assert_eq!(read_word(&mut device, producer)?, 0);
-    let _ = ResetControl.step(&mut device, &mut ())?;
     assert_eq!(read_word(&mut device, RESET)?, 0);
     Ok(())
 }
 
 #[test]
-fn idle_reset_is_a_request_until_hardware_steps() -> TestResult {
-    // Given: a configured idle channel and retained hardware loop.
+fn idle_reset_completes_without_a_hardware_step() -> TestResult {
+    // Given: a configured idle channel without a resident invocation.
     let (mut device, _) = setup(0x1100, 2)?;
-    let mut hardware = device.service();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     // When: software requests reset, without stepping hardware yet.
     device.write(RESET, &1_u32.to_le_bytes())?;
-    // Then: busy is visible and reconfiguration is rejected until hardware cleanup.
-    assert_eq!(read_word(&mut device, RESET)?, 1);
-    assert_eq!(
-        device.write(
-            CHANNEL + ChannelRegisters::ENABLE.offset(),
-            &1_u32.to_le_bytes()
-        ),
-        Err(Error::ResetInProgress)
-    );
-    let _ = operation.step(&mut hardware, &mut device)?;
+    // Then: cleanup is already complete and configuration can be written again.
     assert_eq!(read_word(&mut device, RESET)?, 0);
     assert_eq!(
         read_word(&mut device, CHANNEL + ChannelRegisters::ENABLE.offset())?,
         0
     );
+    device.write(
+        ChannelBlock::ALIGNMENT + ChannelBlock::COMMAND.offset() + CommandRegisters::BASE.offset(),
+        &0x1000_u64.to_le_bytes(),
+    )?;
     Ok(())
 }
 
 #[test]
-fn reset_control_cannot_acknowledge_accepted_work_before_retirement() -> TestResult {
+fn reset_stays_busy_until_the_accepted_invocation_is_flushed() -> TestResult {
     // Given: an accepted command whose execution state is still retained.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let mut hardware = device.service();
+    let mut hardware = device.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let consumer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
         + ChannelBlock::COMMAND.offset()
@@ -182,12 +181,15 @@ fn reset_control_cannot_acknowledge_accepted_work_before_retirement() -> TestRes
     }
     assert_eq!(read_word(&mut device, consumer)?, 1);
     device.write(RESET, &1_u32.to_le_bytes())?;
-    // When: only the reset controller advances, without retiring the command.
-    assert!(matches!(
-        ResetControl.step(&mut device, &mut ())?,
-        StepOutcome::Complete(Ok(()))
-    ));
-    // Then: reset remains busy until the retained command loop discards old work.
+    // When: software attempts reconfiguration before the resident state is flushed.
+    assert_eq!(
+        device.write(
+            CHANNEL + ChannelRegisters::ENABLE.offset(),
+            &1_u32.to_le_bytes()
+        ),
+        Err(Error::ResetInProgress)
+    );
+    // Then: reset remains busy until the pipeline discards old work.
     assert_eq!(read_word(&mut device, RESET)?, 1);
     for _ in 0..64 {
         let _ = operation.step(&mut hardware, &mut device)?;
@@ -201,36 +203,53 @@ fn reset_control_cannot_acknowledge_accepted_work_before_retirement() -> TestRes
 
 #[test]
 fn repeated_and_zero_requests_do_not_cancel_or_complete_reset() -> TestResult {
-    // Given: a reset request awaiting its first hardware step.
-    let (mut device, _) = setup(0x1100, 2)?;
+    // Given: a reset request with an accepted invocation still resident.
+    let (mut device, memory) = setup(0x1100, 2)?;
+    submit(&mut device, &memory, command())?;
+    let mut hardware = device.hardware();
+    let mut driver = hardware_interface_pipeline::HardwareDriver::new();
+    let consumer = ChannelBlock::ALIGNMENT
+        + ChannelBlock::COMMAND.offset()
+        + CommandRegisters::CONSUMER.offset();
+    for _ in 0..64 {
+        let _ = driver.step(&mut hardware, &mut device)?;
+        if read_word(&mut device, consumer)? == 1 {
+            break;
+        }
+    }
+    assert_eq!(read_word(&mut device, consumer)?, 1);
     device.write(RESET, &1_u32.to_le_bytes())?;
     // When: software writes zero and repeats the request.
     device.write(RESET, &0_u32.to_le_bytes())?;
     device.write(RESET, &1_u32.to_le_bytes())?;
-    // Then: busy remains asserted; one idle cleanup completes the coalesced request.
+    // Then: busy remains asserted until the same invocation is flushed.
     assert_eq!(read_word(&mut device, RESET)?, 1);
-    let _ = ResetControl.step(&mut device, &mut ())?;
+    for _ in 0..64 {
+        let _ = driver.step(&mut hardware, &mut device)?;
+        if read_word(&mut device, RESET)? == 0 {
+            break;
+        }
+    }
     assert_eq!(read_word(&mut device, RESET)?, 0);
     Ok(())
 }
 
 #[test]
-fn device_reset_subsumes_channel_reset_and_preserves_discovery() -> TestResult {
-    // Given: three idle channels, one with a pending channel reset.
+fn idle_device_reset_preserves_discovery_and_clears_all_scopes() -> TestResult {
+    // Given: three idle channels, one already reset.
     let mut device = Dma::new((), 3)?;
     let reset = ChannelId::new(1).admin_offset(3).ok_or("offset")?;
     device.write(reset, &1_u32.to_le_bytes())?;
     // When: software also requests device reset and tries to clear it.
     device.write(DEVICE_RESET, &1_u32.to_le_bytes())?;
     device.write(DEVICE_RESET, &0_u32.to_le_bytes())?;
-    // Then: all scopes remain busy until hardware completes the device reset.
+    // Then: all scopes complete immediately and discovery remains available.
     for index in 0..3 {
         let address = ChannelId::new(index).admin_offset(3).ok_or("offset")?;
         let mut out = [0; 4];
         device.read(address, &mut out)?;
-        assert_eq!(u32::from_le_bytes(out), 1);
+        assert_eq!(u32::from_le_bytes(out), 0);
     }
-    let _ = ResetControl.step(&mut device, &mut ())?;
     let mut out = [0; 4];
     device.read(DEVICE_RESET, &mut out)?;
     assert_eq!(u32::from_le_bytes(out), 0);

@@ -6,9 +6,12 @@ Host/platform obligations, and explicit model-to-RTL verification boundaries.
 DMA/event recovery. Raw DMA-wide fatal notification goes to firmware; PF receives
 firmware events and coordinates affected VFs.
 
-Next major goal: [firmware-managed DMA](docs/firmware-dma-goal.md), preparing
-SR-IOV, PASID and Function reset boundaries while preserving the ordinary
-configuration. This is a recorded direction, not implemented functionality.
+Next stages in the [roadmap](docs/firmware-dma-goal.md#agreed-next-stages-hsa-aligned-dma):
+HSA-aligned synchronization and signal atomics, then HSA/AQL contract and programming-interface
+convergence, followed by a strict standards review before modeling completion.
+These are planned capabilities, not implemented functionality. The broader
+firmware-managed direction preserves the ordinary configuration and prepares
+SR-IOV, PASID and Function reset integration boundaries.
 The implemented first milestone is the [architecture MVP](docs/firmware-dma-mvp.md): an
 independent firmware-managed assembly that runs a real copy while retaining the
 direct-DMA scenarios. Its [control channel](docs/control-channel.md) now carries

@@ -1,12 +1,14 @@
 # Firmware-managed DMA roadmap
 
 Recorded: 2026-09-15.
-Updated: 2026-10-09.
+Updated: 2026-10-19.
 Status: the architecture MVP, Function-scoped channel management, context selection
 and maintenance, and managed fatal/event recovery are implemented. Actual PCIe/IOMMU
 integration and Function-level reset remain unimplemented. Payload-only retained
 suspension with owner per-channel resume replaces the earlier DSA-like continuation;
-synchronization and fence semantics remain future work.
+synchronization and signal atomics are the next agreed feature scope, followed by
+HSA/AQL contract and programming-interface convergence and a final HSA-based audit.
+These stages are not implemented yet.
 This document records decisions and open questions; it is not an execution plan
 or an instruction to start implementation automatically.
 
@@ -85,20 +87,158 @@ integration with that port or true MMU is included.
 Keep the existing functional abstraction: no bus cycles, transaction IDs,
 outstanding queues or asynchronous memory-transaction model are requested.
 
-### Then: synchronization and fences
+### Agreed next stages: HSA-aligned DMA
 
-Define dependency waits, completion signaling, ordering scope and memory visibility
-separately. Decide which operations belong to DMA commands and which belong to the
-MMU/platform or controlling software. Copy completion must not silently imply cache
-maintenance or TLB invalidation. No fence encoding, new opcode or register is fixed yet.
-Ordered command completion does not require serial physical transactions; future
-parallel execution must preserve replay-safe commit and retirement boundaries.
+Decision, 2026-10-19. The pipeline/command-continuation refactor is complete at
+`ae3b7f3aa76a6d8188d8164d2f9edeb0e39adf8a`. Preserve its hardware ownership,
+typed dataflow and command/chunk completion boundaries; do not reopen framework
+design to add synchronization. Performance measurements did not establish a
+significant inherent penalty from binary step outcomes; removing repeated outer
+command work improved full-scenario performance. No further old-Pending comparison
+is requested.
+
+Use HSA 1.2 as a coherent reference for applicable roles and semantics, rather
+than deriving each queue/synchronization rule independently. HSA conformance,
+actual ROCr integration and AQL wire compatibility are separate claims, not
+consequences of adopting similar names. The stages below record the agreed order,
+not authorization to implement them as part of a documentation update.
+
+#### Stage 1: synchronization and the complete signal-operation set
+
+- Define signal objects, dependency waits, completion signaling and memory ordering
+  from the applicable HSA signal rules. Cover atomic load/store, add/subtract,
+  AND/OR/XOR, exchange and compare-and-swap, including specified return values,
+  widths and legal ordering combinations. This is the complete signal set, not
+  merely the operations initially needed by one scenario.
+- Do not add general-purpose atomic commands on arbitrary memory. HSA signal
+  atomics exclude min/max and wrapinc/wrapdec; RISC-V LR/SC is not part of this
+  feature. Doorbell signals have separate restrictions and belong to Stage 2.
+- Keep HSA signed signal comparisons, runtime wait behavior and AQL Barrier-AND/OR
+  semantics distinct. The previously discussed CUDA cyclic GEQ is not HSA GTE;
+  do not silently mix it into the HSA baseline. Document any deliberate extension.
+- A normal unsatisfied dependency is neither a page fault nor a stopping error.
+  Same-channel successors cannot pass it, but the wait must not retain the shared
+  execution resources needed by other channels to satisfy the dependency. Recheck
+  and scheduling policy must provide progress without a software fault-resume
+  request for ordinary waiting.
+- Drain waits for affected work to complete normally, including dependency waits.
+  Do not return Busy/WouldBlock merely because a condition is currently false;
+  hardware cannot infer that a future signal will never arrive. Software must
+  preserve dependency progress and response consumption while draining. This does
+  not replace existing failure results for page-fault-stopped or erroneous work.
+- Abort/Reset must permit cancellation of waiting work without fabricating a
+  successful signal or satisfying its dependency. Before implementation, specify
+  how recovery remains reachable during a long-running Drain: the existing serial
+  firmware management loop must not indefinitely queue the only cancellation path
+  behind that Drain. The concrete management mechanism is not selected yet.
+- Preserve signal storage, permissions and context bindings while queued, waiting,
+  executing or awaiting retirement. Define fault/error classification and retry
+  boundaries for signal accesses explicitly. A committed signal update must not
+  be repeated because subsequent result publication fails; cancellation does not
+  undo an already committed update.
+
+Memory access remains requester-neutral. PDMA interprets signal operations; the
+generic memory capability provides the indivisible access, without PDMA signal,
+channel, firmware or CPU ownership policy. A single-thread backend may perform
+read/transform/write synchronously without a scheduling or reentrant access boundary
+inside the operation. A concurrently shared backend must serialize the entire
+operation against other accesses to that storage. Neither approach requires a
+modeled bus lock, transaction queue or cycle timing. Preserve existing backend
+capabilities; do not turn a single-thread reference into an assumption that every
+backend has only one accessor.
+
+Terminus is a modeling reference, not a new dependency: its CPU AMO semantics live
+in `terminus`, while `Space` and `Region` storage live in `terminus-spaceport`.
+Its synchronous closure-based AMO operation illustrates the no-interleaving
+boundary. Do not import hart IDs, LR/SC reservation machinery or ISA decoding into
+PDMA or generic memory interfaces.
+
+Model PDMA's required acquire/release effects and atomicity. Specify the visibility
+point required before successful publication and what a consumer may observe after
+acquisition. Cache coherence, cache maintenance, external transaction retirement and
+interconnect ordering remain explicit platform/RTL obligations, not detailed model
+implementations. Existing Copy/ring/reset paths already rely on ordering: consolidate
+their obligations rather than assuming synchronous storage proves arbitrary system
+visibility. Copy completion must not imply cache flush or TLB invalidation.
+
+Before coding, finish the operation/type/order matrix, signal representation and
+authorized access binding, result/error behavior, and management recovery protocol.
+No command encoding, signal handle ABI or standalone Fence opcode is frozen here.
+Independent Fence behavior must add a defined guarantee beyond ordinary ordering;
+the modeling goal is not to recreate a weak-memory cache simulator.
+
+Stage 1 acceptance must demonstrate:
+
+- Dependency -> Copy -> completion -> consumer with the required ordering.
+- A waiting channel does not prevent a peer from generating its dependency;
+  repeated waits and multiple waiters retain correct progress.
+- Every supported signal atomic has input-derived behavioral assertions, including
+  competing updates, returned old values, failed CAS, width and overflow rules.
+- Fault, reset and publication failure cannot replay a committed signal update or
+  release referenced storage prematurely; forbidden accesses preserve isolation.
+- Drain remains incomplete until its dependency resolves; Abort/Reset cancellation
+  remains reachable and clears affected work without a false success notification.
+- Direct and firmware-managed configurations remain usable, with existing Copy,
+  SG, fault/resume, reset, context maintenance and IRQ scenarios preserved.
+
+#### Stage 2: HSA/AQL contract and programming-interface convergence
+
+Review descriptor compactness and software contracts together, not as a mechanical
+64-byte packing exercise. Agent Dispatch is the leading candidate for fixed-function
+PDMA services: its application-defined function type, arguments/parameter pointers,
+return address and completion signal do not require HSAIL execution. Copy service
+codes and parameter formats would still be PDMA-defined. Compare inline common
+operations with indirect SG parameters, including fetch cost, lifetime, context and
+fault handling; reserved AQL fields cannot be repurposed.
+
+Convergence includes agent capability discovery, queue creation/lifecycle, ring
+indices, packet publication/reuse, doorbell signal semantics, completion and error
+reporting. Mapping to the current 104-byte Copy command, 32-bit register cursors
+and response ring is a deliberate protocol migration, not an existing compatibility
+guarantee. Decide how response results relate to completion signals rather than
+silently reporting success through both or removing diagnostics.
+
+Keep software queue, physical channel, execution agent and Function/context identity
+distinct. Define only capabilities PDMA actually provides. A fixed physical-channel
+binding is sufficient for the initial convergence; do not add oversubscription,
+GPU kernel execution, HSAIL, or a replacement runtime. Actual HSA runtime integration
+requires its own selected implementation and end-to-end proof.
+
+Acceptance requires an explicit standards-to-PDMA mapping, justified differences,
+wire/header and queue-publication checks, and real software submission through the
+agreed programming interface. Standard-looking records alone are not compatibility.
+
+#### Stage 3: strict HSA review before modeling completion
+
+Audit every applicable HSA requirement against PDMA's declared role, version and
+capabilities. Maintain a traceable matrix of: implemented requirement with model/test
+evidence; platform/RTL obligation with a verification owner; not-applicable requirement
+with a reason; or intentional deviation with its software impact. Distinguish HSA
+core requirements, AMD extensions and PDMA policy. No unclassified applicable
+requirement may be assumed satisfied by the synchronous backend.
+
+Review signal lifetime/atomics, queue publication and reclamation, completion versus
+visibility, dependency progress, error propagation, cancellation, resource isolation
+and discovery/capability consistency. Apply these rules during development; this
+final review confirms coverage rather than postponing architectural decisions until
+RTL handoff. Full Profile and complete HSA-platform compliance are not implied by
+PDMA's component role.
+
+#### Decision and implementation references
+
+- [HSA System Architecture 1.2](https://hsafoundation.com/wp-content/uploads/2021/02/HSA-SysArch-1.2.pdf): signal restrictions, AQL, queue lifecycle, ordering and forward progress.
+- [HSA Runtime 1.2](https://hsafoundation.com/wp-content/uploads/2021/02/HSA-Runtime-1.2.pdf): signal operations, discovery, queue APIs and Agent Dispatch services.
+- [HSA Multi-vendor 1.1](https://hsafoundation.com/wp-content/uploads/2021/02/HSA-Multivendor-1.1.pdf): platform and vendor-component integration boundaries, not a mandate to implement the entire stack.
+- [Khronos timeline semaphore example](https://docs.vulkan.org/samples/latest/samples/extensions/timeline_semaphore/README.html): unresolved dependencies can block normal queue draining; this supports the distinction from cancellation, not a PDMA Drain ABI.
+- [Terminus AMO access](https://github.com/shady831213/terminus/blob/a873870e4461ff1fd4e453f25783e9f94349b7d4/src/processor/load_store.rs) and [memory storage](https://github.com/shady831213/terminus_spaceport/blob/ab51f87e2dddee6b8bd4e247ee8d98291f271a55/src/memory/region/mod.rs): synchronous modeling reference reviewed for this decision, not an audit of the entire simulator.
 
 ### Deferred
 
 Full PCIe/GPU-MMU integration is not part of the first discussion. Recovery without
 working firmware remains the separate low-priority TBD below. Update the normative
 spec and implement focused scenarios only after the relevant semantics are agreed.
+NPU development is deferred; add no NPU commands, computational ISA, generic compute
+framework or speculative abstractions as part of the stages above.
 
 Reference starting points:
 
@@ -335,9 +475,10 @@ and speculative collections of policy generics.
 - Recovery when firmware or the management transport itself is unavailable remains
   deferred; see the low-priority TBD below. PF events and firmware-mediated DMA/event
   recovery are implemented in [fatal and events](fatal-events.md).
-- Synchronization waits, barrier visibility and any logical-channel scheduling or
-  oversubscription remain future work. Retained physical-channel suspension and
-  owner resume are specified in the page-fault chapter.
+- Synchronization and signal atomics follow Stage 1 above; HSA/AQL wire and software
+  contracts follow Stage 2. Logical-channel scheduling and oversubscription remain
+  separate deferred work. Retained physical-channel suspension and owner resume
+  remain specified in the page-fault chapter.
 - Which features are instance configuration and which have software enable bits.
 
 ## Deferred TBD: subsystem recovery without working firmware
@@ -372,8 +513,10 @@ Retain ordinary copy, SG, fault, reset and interrupt scenarios. Add explicit
 hardware/firmware/host/harness separation and test unauthorized resource access,
 context isolation, queued-context reuse, stale notifications and unaffected channel
 behavior. Page-fault scenarios must cover the retained suspension contract;
-synchronization scenarios await a separate semantic decision. External transaction drain and release remain RTL/platform
-obligations, not a mandate to lower the model to bus-transaction timing.
+synchronization scenarios must cover the agreed Stage 1 requirements after its
+remaining interface decisions are resolved. The final HSA review must trace model
+evidence separately from platform obligations. External transaction drain and release
+remain RTL/platform obligations, not a mandate to lower the model to bus-transaction timing.
 
 ## Reference boundary
 

@@ -10,7 +10,9 @@ mod tests;
 use crate::{Chunk, ChunkInput, Completion, Dma, ExecutionContext, Flow, Payload};
 pub use candidate::{Candidate, CommandRequest, RetainedTask};
 pub use data_path::Hardware;
-pub use execution::{CheckRanges, CompletionInput, PrepareChunk, ReadCopy, WriteCopy};
+pub use execution::{
+    CheckRanges, CommandExecution, CompletionInput, PrepareChunk, ReadCopy, WriteCopy,
+};
 pub use fetch::Fetch;
 use hardware_interface_pipeline::{Stage, Then};
 use pdma_model_contract::dma::ChannelId;
@@ -19,15 +21,11 @@ pub use retire::Retire;
 
 /// One concrete chunk transferred through preparation, read and write.
 pub type CopyChunk = Then<PrepareChunk, Then<ReadCopy, WriteCopy, Flow<Payload>>, Flow<Chunk>>;
-/// Execution of one bounded chunk of already validated hardware traversal.
-pub type Execution = CopyChunk;
-/// Shared execution followed by response dispatch.
-pub type Pipeline = Then<ReadPipeline, WritePipeline, Flow<Payload>>;
-/// Preparation and payload read before optional custom transformation.
-pub type ReadPipeline = Then<PrepareChunk, ReadCopy, Flow<Chunk>>;
-/// Payload write and response publication, shared by fresh and resumed writes.
-pub type WritePipeline =
-    Then<WriteCopy, Then<CompletionInput, Responses, Flow<Completion>>, Flow<Completion>>;
+/// Execution of an accepted command using bounded chunk stages.
+pub type Execution = CommandExecution<CopyChunk>;
+/// Command execution followed by response dispatch.
+pub type Pipeline =
+    Then<Execution, Then<CompletionInput, Responses, Flow<Completion>>, Flow<Completion>>;
 impl<M, SB> Dma<M, SB> {
     /// Builds response dispatch ports bound to this instance's channels.
     pub fn responses(&self) -> Responses {
@@ -57,11 +55,11 @@ impl<M: hardware_interface_runtime::MemoryAccess<SB>, SB> Dma<M, SB> {
         M::Error: Into<crate::MemoryFailure>,
     {
         self.hardware_with(Then::new(
-            Then::new(PrepareChunk::default(), ReadCopy::default()),
-            Then::new(
-                WriteCopy::default(),
-                Then::new(CompletionInput, self.responses()),
-            ),
+            CommandExecution::new(Then::new(
+                PrepareChunk::default(),
+                Then::new(ReadCopy::default(), WriteCopy::default()),
+            )),
+            Then::new(CompletionInput, self.responses()),
         ))
     }
 }

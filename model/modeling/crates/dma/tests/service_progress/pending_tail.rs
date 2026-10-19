@@ -107,14 +107,11 @@ fn reset_after_committed_chunk_retires_hardware_while_custom_tail_is_pending() -
         },
     );
     let pipeline = Then::new(
-        Then::new(PrepareChunk::default(), ReadCopy::default()),
-        Then::new(
-            sink.upstream,
-            Then::new(
-                pdma_model_dma::CompletionInput,
-                Then::new(sink.downstream, device.responses()),
-            ),
-        ),
+        pdma_model_dma::CommandExecution::new(Then::new(
+            Then::new(PrepareChunk::default(), ReadCopy::default()),
+            sink,
+        )),
+        Then::new(pdma_model_dma::CompletionInput, device.responses()),
     );
     let mut hardware = device.hardware_with(pipeline);
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();

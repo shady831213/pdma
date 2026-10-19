@@ -1,4 +1,4 @@
-//! Completed local passes preserve the accepted hardware command and its grant.
+//! Chunk boundaries preserve the accepted command within one hardware invocation.
 
 /// Shared raw-bus fixtures.
 pub mod support;
@@ -10,7 +10,7 @@ use pdma_model_dma::COPY_CHUNK_BYTES;
 use support::{TestResult, command, read_word, setup, submit};
 
 #[test]
-fn admission_and_completed_chunk_passes_preserve_descriptor_and_backpressure() -> TestResult {
+fn command_continuation_preserves_descriptor_and_backpressure_between_chunks() -> TestResult {
     // Given: a command spanning three chunks and a later queued successor.
     const LENGTH: usize = COPY_CHUNK_BYTES * 2 + 88;
     let (mut device, memory) = setup(0x1100, 2)?;
@@ -25,17 +25,20 @@ fn admission_and_completed_chunk_passes_preserve_descriptor_and_backpressure() -
     let cmd = ChannelBlock::ALIGNMENT + ChannelBlock::COMMAND.offset();
     let resp = ChannelBlock::ALIGNMENT + ChannelBlock::RESPONSE.offset();
     let mut service = device.hardware();
-    // When: the connected admission/execution graph completes each chunk invocation.
+    let mut operation = Operation::new(());
+    // When: one command invocation reaches each observable committed chunk boundary.
     for expected_prefix in [COPY_CHUNK_BYTES, COPY_CHUNK_BYTES * 2, LENGTH] {
-        let mut operation = Operation::new(());
         for _ in 0..256 {
             if let StepOutcome::Complete(result) = operation.step(&mut service, &mut device)? {
                 result?;
+            }
+            let address = 0x1800 + u64::try_from(expected_prefix - 1)?;
+            if memory.read_typed::<[u8; 1]>(address.into(), MemoryAlignment::ONE)? == [0x5a] {
                 break;
             }
         }
-        assert!(operation.is_complete(), "local pass did not terminate");
-        // Then: each pass commits only its chunk; later passes never refetch the descriptor.
+        // Then: chunks commit in order without completing or readmitting the command.
+        assert!(!operation.is_complete());
         let mut bytes = [0; LENGTH];
         memory.read(0x1800.into(), MemoryAlignment::ONE, &mut bytes)?;
         let mut expected = [0; LENGTH];
@@ -50,7 +53,7 @@ fn admission_and_completed_chunk_passes_preserve_descriptor_and_backpressure() -
         );
         assert_eq!(
             read_word(&mut device, resp + ResponseRegisters::PRODUCER.offset())?,
-            u32::from(expected_prefix == LENGTH)
+            0
         );
         memory.write(0x1000.into(), MemoryAlignment::ONE, &command().to_bytes()?)?;
         device.write(
@@ -58,5 +61,20 @@ fn admission_and_completed_chunk_passes_preserve_descriptor_and_backpressure() -
             &2_u32.to_le_bytes(),
         )?;
     }
+    for _ in 0..256 {
+        if let StepOutcome::Complete(result) = operation.step(&mut service, &mut device)? {
+            result?;
+            break;
+        }
+    }
+    assert!(operation.is_complete());
+    assert_eq!(
+        read_word(&mut device, cmd + CommandRegisters::CONSUMER.offset())?,
+        1
+    );
+    assert_eq!(
+        read_word(&mut device, resp + ResponseRegisters::PRODUCER.offset())?,
+        1
+    );
     Ok(())
 }

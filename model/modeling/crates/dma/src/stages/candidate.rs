@@ -24,8 +24,6 @@ pub enum CommandRequest {
     Fetch(CommandSnapshot),
     /// Resume the channel's already accepted, parked command.
     Resume(RetainedTask),
-    /// Continue the task that still owns the shared execution grant.
-    Continue(RetainedTask),
 }
 
 impl CommandRequest {
@@ -33,7 +31,7 @@ impl CommandRequest {
     pub const fn channel(self) -> ChannelId {
         match self {
             Self::Fetch(snapshot) => snapshot.work.channel,
-            Self::Resume(task) | Self::Continue(task) => task.work.channel,
+            Self::Resume(task) => task.work.channel,
         }
     }
 }
@@ -73,13 +71,8 @@ impl<M, SB> Dma<M, SB> {
     /// Returns `Error::Unmapped` for an absent channel.
     pub fn command_request(&self, id: ChannelId) -> Result<Option<CommandRequest>, Error> {
         let channel = self.channels.get(id.index()).ok_or(Error::Unmapped)?;
-        if let Some(work) = self.active {
-            return Ok(
-                (work.channel == id).then_some(CommandRequest::Continue(RetainedTask {
-                    work,
-                    consumer: channel.command.pointers().consumer,
-                })),
-            );
+        if self.active.is_some() {
+            return Ok(None);
         }
         if self.halted()
             || self.resetting()

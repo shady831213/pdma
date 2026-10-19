@@ -63,11 +63,11 @@ fn cross_instance_response_port_mismatch_retires_its_original_owner() -> TestRes
     let mut dma = queued_channel(ChannelId::new(1))?;
     let smaller = Dma::new(SharedMemory::new(), 1)?;
     let mut hardware = dma.hardware_with(Then::new(
-        Then::new(PrepareChunk::default(), ReadCopy::default()),
-        Then::new(
+        crate::CommandExecution::new(Then::new(
+            Then::new(PrepareChunk::default(), ReadCopy::default()),
             WriteCopy::default(),
-            Then::new(CompletionInput, smaller.responses()),
-        ),
+        )),
+        Then::new(CompletionInput, smaller.responses()),
     ));
     let mut operation = Operation::new(());
     let mut outcome = None;
@@ -130,11 +130,11 @@ fn raw_error_after_consuming_flow_keeps_residency_until_tail_cleanup() -> TestRe
     // Given: an ordinary copy followed by a tail that consumes its owned result.
     let mut dma = queued_channel(ChannelId::new(1))?;
     let pipeline = Then::new(
-        Then::new(PrepareChunk::default(), ReadCopy::default()),
-        Then::new(
+        crate::CommandExecution::new(Then::new(
+            Then::new(PrepareChunk::default(), ReadCopy::default()),
             WriteCopy::default(),
-            Then::new(CompletionInput, dma.responses()),
-        ),
+        )),
+        Then::new(CompletionInput, dma.responses()),
     );
     let mut hardware = dma.hardware_with(Then::new(
         pipeline,

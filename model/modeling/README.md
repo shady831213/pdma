@@ -123,13 +123,14 @@ stage graph, with explicit data and completion boundaries:
 
 ```rust
 let read = Then::new(PrepareChunk::default(), ReadCopy::default());
+let execute = CommandExecution::new(Then::new(read, WriteCopy::default()));
 let publish = Then::new(CompletionInput, device.responses());
-let write = Then::new(WriteCopy::default(), publish);
-device.hardware_with(Then::new(read, write))
+device.hardware_with(Then::new(execute, publish))
 ```
 
-A transform composes after ReadCopy. Application stages observing completion
-compose after CompletionInput and before or after publication as appropriate.
+A transform composes after ReadCopy inside CommandExecution. Chunk-local stages
+belong inside that composite. Application stages observing command completion
+compose outside it, after CompletionInput and before or after publication as appropriate.
 The data-path constructor accepts the complete graph without inspecting or rearranging its internal
 Then structure. A write-fault retry restores retained bytes at
 WriteCopy's own input boundary and continues through that same completion tail.
@@ -165,7 +166,8 @@ Normal execution dataflow is:
 | CheckRanges -> hardware installation | `Flow<CopyProgress>`: validated traversal |
 | PrepareChunk -> ReadCopy | `Flow<Chunk>`: source/destination spans, selectors and length |
 | ReadCopy -> transform/write | `Flow<Payload>`: actual bounded bytes and chunk geometry |
-| WriteCopy -> publication | `Flow<Completion>`: actual Response and destination identity |
+| WriteCopy -> CommandExecution | `Flow<Completion>`: chunk result, with a Response only at command completion |
+| CommandExecution -> completion tail | `Flow<Completion>`: command exit, including parked/stopped work |
 | Publication/custom tail -> Retire | `Flow<()>`: owner and terminal domain result |
 
 These values have private metadata and are not clonable. Transform code accesses
@@ -197,13 +199,16 @@ remains free to use any output, including unit; only this DMA execution interfac
 requires an ownership-bearing result. Dropping that result is not retirement.
 
 The engine's active grant backpressures peer tasks while command work remains.
-The active task supplies a Continue request. Arbitration holds its existing
-authorization without advancing round-robin priority; fresh and resumed tasks
-compete only after that grant is released. Continuations still traverse the fan
-connection, but do not repeat task selection or descriptor acceptance.
-Subsequent finite chunk passes use installed traversal, not another Fetch or range
-validation. Stage completion means only that local transform has finished; it is
-not command retirement. Publish consumes the real completion, updates its channel's
+CommandExecution retains the accepted invocation while its child stages process
+successive chunks. Each step advances the supplied child graph once; on a completed
+healthy intermediate result it prepares the next input from channel-owned progress
+and stays InProgress. No Continue request or repeated outer admission is needed.
+Fresh and resumed tasks compete only after the grant is released. Completed child
+results terminate execution on an actual completion, domain stop, or released grant;
+retained stopping responses still pass through CompletionInput. Missing traversal
+is a routing error, not permission to restart work. Stage completion means only
+that local transform has finished; it is not command retirement.
+Publish consumes the real completion, updates its channel's
 response/IRQ state and retires accepted ownership only after successful storage.
 
 Payload PageFault ends the current finite path without response or DMA IRQ.

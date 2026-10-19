@@ -116,7 +116,7 @@ impl FetchedCommand {
     }
 }
 
-/// Validated command traversal transferred between finite chunk passes.
+/// Validated command traversal transferred into channel-owned execution state.
 #[derive(Debug)]
 pub struct CopyProgress {
     pub(crate) work: Work,

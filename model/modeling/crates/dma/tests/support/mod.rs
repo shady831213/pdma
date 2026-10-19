@@ -14,14 +14,14 @@ use pdma_model_dma::{
 /// Test harness error propagation.
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
-/// Assembles one typed chunk pass through response publication.
+/// Assembles complete command execution through response publication.
 pub fn chunk_pipeline<M>(device: &Dma<M>) -> Pipeline {
     Then::new(
-        Then::new(PrepareChunk::default(), ReadCopy::default()),
-        Then::new(
-            WriteCopy::default(),
-            Then::new(pdma_model_dma::CompletionInput, device.responses()),
-        ),
+        pdma_model_dma::CommandExecution::new(Then::new(
+            PrepareChunk::default(),
+            Then::new(ReadCopy::default(), WriteCopy::default()),
+        )),
+        Then::new(pdma_model_dma::CompletionInput, device.responses()),
     )
 }
 

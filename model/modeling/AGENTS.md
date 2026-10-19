@@ -197,8 +197,8 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   The data path composes command admission through FanIn using channel-targeted Candidate
   inputs and Arbitrate::snapshots with DMA's RoundRobin selector. Candidates are task
   requests, not channel selections: reject stale head/generation/retained-task
-  position rather than substituting another task. Continue holds an active task's
-  existing authorization without advancing RR; peers remain backpressured. Fresh selection
+  position rather than substituting another task. An active command stays inside
+  its execution continuation and backpressures all candidates. Fresh selection
   enters Fetch then CheckRanges; a resumed request grants the channel and produces
   no new descriptor. Install forwards the new or retained chunk request into the
   same Then-connected execution graph. RoundRobin implements
@@ -257,17 +257,20 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   their own retained checkpoints without refetching, restarting validation or
   repeating completed reads and valid-data transforms. A failed write retains
   transformed scratch at the write boundary, not a next-stage instruction.
-  A healthy command retains hardware state and its grant across finite chunk passes,
-  not one command-lifetime Rust invocation. Separate command admission from active
-  execution: occupied execution backpressures peer candidates while
-  ordinary stages prepare, read, transform and write the current chunk. Completing
-  a chunk pass does not retire the command or release its grant. Subsequent external
-  ticks advance retained hardware state without another grant, descriptor fetch
-  or validation. Empty candidate sweeps cannot advance RR state. A fault releases
+  A healthy command retains hardware state, residency and its grant in one execution
+  invocation. CommandExecution advances its opaque chunk graph once per step;
+  a completed intermediate chunk supplies the next typed input from retained
+  hardware traversal without returning to admission, arbitration or validation.
+  The composite does not inspect child phases or duplicate command progress.
+  Empty candidate sweeps cannot advance RR state. A fault releases
   the grant; even immediate RESUME requires new arbitration before more payload work.
   Reset/Abort cleanup must progress despite a disabled peer.
   Dma::hardware_with accepts a complete execution graph, with Flow<ChunkInput>
   input, Flow<()> output and Infallible domain-error port over ExecutionContext.
+  Put chunk preparation/read/transform/write inside CommandExecution; put
+  CompletionInput and the command completion/publication tail after it. Custom
+  chunk-local tails may be part of the supplied chunk graph. A chunk graph maps
+  Flow<ChunkInput> to Flow<Completion> and must report real command progress.
   Flow is DMA-specific data and ownership metadata, not a generic framework rule;
   ordinary Stage output can still be unit. Custom stages use Flow::map/stop/finish
   to preserve ownership and Flow::lifecycle before effects/readiness checks. There
@@ -301,9 +304,12 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   Fixed copy scratch size is an implementation detail, not a command-size limit.
 - Reuse FanIn/Arbitrate/FanOut/Dispatch/Then for execution composition.
   Repeat and AfterEach are removed. Do not recreate them with renamed combinators,
-  ControlFlow feedback, per-child-step hooks or wrappers that restart completed
-  child pipelines. Do not add Producer/Stream to bind a hardware task's lifetime
-  to a Rust invocation. Each stage handles input/output and local state; persistent
+  ControlFlow feedback, per-child-step hooks or generic repetition wrappers.
+  The approved DMA-local CommandExecution is the narrow exception to the former
+  blanket child-reuse prohibition: it feeds the next chunk into the same completed
+  child graph while retaining command ownership, never selecting child phases or
+  restarting an unfinished child. Do not add a generic Producer/Stream for this.
+  Each stage handles input/output and local state; persistent
   cross-stage state has an explicit hardware owner in context. Combinators connect
   values and express routing/backpressure, not device task lifecycle.
   Express hardware feedback through

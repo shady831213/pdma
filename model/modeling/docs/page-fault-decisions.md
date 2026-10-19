@@ -787,11 +787,11 @@ now separate dataflow interactions. This changes no wire layout, fault reporting
 memory ownership or software reset completion requirement. The generic pipeline
 crate and its support for unit output remain unchanged.
 
-## 16. Command execution owns the chunk-level continuation (approved, not implemented)
+## 16. Command execution owns the chunk-level continuation
 
-The next implementation session will separate command-level execution from its
-chunk-level child stages. This is an agreed direction, not a description of the
-current graph or a change to the software-visible contract.
+User review approved separating command-level execution from its chunk-level
+child stages. The following motivation describes the checkpoint before that change;
+the implementation is described below. The software-visible contract is unchanged.
 
 At checkpoint f4fe857c9c57bb613cd374e2082d8da40f8c2cf2, a healthy intermediate chunk
 write updates retained channel progress and returns a successful Flow without a
@@ -838,4 +838,29 @@ Preserve bounded stepping, typed dataflow, child-private continuations and
 backpressure. Do not restore Repeat, external flush, a centralized phase-dispatch
 controller, or downstream calls that advance upstream stages. Performance gains
 should follow the corrected hardware organization, not silently collapsed tick
-boundaries. Implementation is deferred to the next session by user request.
+boundaries. Implementation was deferred to the next session by user request.
+
+### Implementation
+
+DMA-local CommandExecution now accepts the installed chunk input and owns one
+opaque chunk graph. Each step calls that graph once. An intermediate completed
+result creates the next typed input from existing channel traversal and leaves
+the command invocation InProgress. No parent inspects child phases or clears
+private state. CheckRanges and Install stay outside this composite and run once;
+CompletionInput and command-completion tails also stay outside. Per-chunk custom
+stages, including stalls, may be composed inside the child graph.
+
+An empty child result alone does not imply continuation. A retained stop, released
+grant, or stored stopping response ends this execution path; a next chunk requires
+valid lifecycle and installed traversal with remaining bytes. A real completion
+is forwarded unchanged. Fault parking therefore exits even if software has already
+written RESUME, since that does not restore the old grant. Raw driving errors
+preserve the pending input and child's continuation; reset is handled by child
+steps and subsequent ordinary retirement, not forced cleanup by the composite.
+
+Continue requests and their RR special case are removed. Occupied execution
+backpressures all candidates; fresh or resumed work is arbitrated after the owner
+releases its grant. The generic pipeline crate is unchanged. This is a narrow
+DMA-specific exception to the earlier blanket ban on reusing completed child
+graphs, justified by explicit command/chunk lifetime separation; it does not
+authorize a generic Repeat, Stream, or device-phase controller.

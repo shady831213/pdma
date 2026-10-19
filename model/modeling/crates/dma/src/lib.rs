@@ -34,9 +34,9 @@ use pdma_model_contract::dma::{
     DmaRegistersLayout, EndpointMode,
 };
 pub use stages::{
-    Candidate, CheckRanges, CommandRequest, CompletionInput, CopyChunk, Execution, Fetch, Hardware,
-    Pipeline, PrepareChunk, Publish, ReadCopy, ReadPipeline, Responses, RetainedTask, Retire,
-    WriteCopy, WritePipeline,
+    Candidate, CheckRanges, CommandExecution, CommandRequest, CompletionInput, CopyChunk,
+    Execution, Fetch, Hardware, Pipeline, PrepareChunk, Publish, ReadCopy, Responses, RetainedTask,
+    Retire, WriteCopy,
 };
 pub use work::Work;
 

@@ -19,7 +19,7 @@ const PRODUCER: usize = ChannelBlock::ALIGNMENT
     + ResponseRegisters::PRODUCER.offset();
 
 #[test]
-fn finite_service_passes_complete_command_without_fetching_again() -> TestResult {
+fn one_command_invocation_completes_all_chunks_without_fetching_again() -> TestResult {
     // Given: a descriptor requiring three bounded copy interactions.
     let (mut device, memory) = setup(0x1100, 2)?;
     let mut descriptor = command();
@@ -33,15 +33,13 @@ fn finite_service_passes_complete_command_without_fetching_again() -> TestResult
     assert_eq!(before, [0; 600]);
     assert_eq!(read_word(&mut device, PRODUCER)?, 0);
     let mut service = device.hardware();
-    // When: finite invocations advance the retained command.
+    // When: one invocation advances the whole command across chunk boundaries.
     let mut operation = Operation::new(());
     for _ in 0..256 {
         if let StepOutcome::Complete(result) = operation.step(&mut service, &mut device)? {
             result?;
-            if read_word(&mut device, PRODUCER)? == 1 {
-                break;
-            }
-            operation = Operation::new(());
+            assert_eq!(read_word(&mut device, PRODUCER)?, 1);
+            break;
         }
         if read_word(&mut device, CONSUMER)? == 1 {
             memory.write(0x1000.into(), MemoryAlignment::ONE, &command().to_bytes()?)?;

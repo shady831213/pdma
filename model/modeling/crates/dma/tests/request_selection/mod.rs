@@ -2,7 +2,7 @@ use super::*;
 use pdma_model_dma::{CheckRanges, PrepareChunk, ReadCopy};
 
 #[test]
-fn active_task_remains_a_candidate_and_backpressures_peers() -> TestResult {
+fn active_task_is_not_readmitted_and_backpressures_peers() -> TestResult {
     // Given: a selected descriptor already accepted by Fetch.
     let mut device = fixture()?;
     let selected = ChannelId::new(0);
@@ -14,11 +14,11 @@ fn active_task_remains_a_candidate_and_backpressures_peers() -> TestResult {
             .step(&mut Fetch, &mut device)?,
         StepOutcome::Complete(Ok(ref flow)) if flow.data().is_some()
     ));
-    // When: the next finite chunk pass samples task candidates.
+    // When: admission samples candidates while command execution retains its grant.
     let continuation = device.command_request(selected)?;
     let peer = device.command_request(ChannelId::new(1))?;
-    // Then: only the current task is exposed for continued authorization.
-    assert!(continuation.is_some());
+    // Then: neither the active command nor its peer can be admitted again.
+    assert!(continuation.is_none());
     assert!(peer.is_none());
     Ok(())
 }
@@ -71,7 +71,7 @@ fn stale_fetch_cannot_substitute_a_reconfigured_head() -> TestResult {
 }
 
 #[test]
-fn continuation_preserves_round_robin_position() -> TestResult {
+fn active_command_candidate_sweeps_preserve_round_robin_position() -> TestResult {
     // Given: a fresh grant rotates the next winner to the second source.
     let mut device = fixture()?;
     let fresh = [
@@ -90,12 +90,15 @@ fn continuation_preserves_round_robin_position() -> TestResult {
         )?,
         StepOutcome::Complete(Ok(ref flow)) if flow.data().is_some()
     ));
-    let continuing = device.command_request(ChannelId::new(0))?;
-    // When: repeated continuation values occupy a different input position.
+    // When: repeated candidate sweeps occur while the accepted command is active.
     for _ in 0..4 {
-        assert_eq!(policy.select(&[Some(None), Some(continuing)])?, Some(1));
+        let candidates = [
+            Some(device.command_request(ChannelId::new(0))?),
+            Some(device.command_request(ChannelId::new(1))?),
+        ];
+        assert_eq!(policy.select(&candidates)?, None);
     }
-    // Then: continued authorization has not rotated the next fresh winner.
+    // Then: empty sweeps have not rotated the next fresh winner.
     assert_eq!(policy.select(&fresh)?, Some(1));
     Ok(())
 }

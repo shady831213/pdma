@@ -34,7 +34,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Fetch {
         }
         let (work, snapshot) = match request {
             CommandRequest::Fetch(snapshot) => (snapshot.work, Some(snapshot)),
-            CommandRequest::Resume(task) | CommandRequest::Continue(task) => (task.work, None),
+            CommandRequest::Resume(task) => (task.work, None),
         };
         let Some(channel) = dma.channels.get_mut(work.channel.index()) else {
             return Ok(StepOutcome::Complete(Ok(Flow::new(

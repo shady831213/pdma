@@ -9,40 +9,41 @@ use pdma_model_dma::{
 
 fn execute(device: &mut Dma<SharedMemory>) -> TestResult<Flow<Completion>> {
     let mut pipeline = Then::new(
-        Then::new(PrepareChunk::default(), ReadCopy::default()),
-        Then::new(WriteCopy::default(), CompletionInput),
+        pdma_model_dma::CommandExecution::new(Then::new(
+            PrepareChunk::default(),
+            Then::new(ReadCopy::default(), WriteCopy::default()),
+        )),
+        CompletionInput,
     );
-    let mut expected_length = None;
-    for _ in 0..32 {
-        let request = device.command_request(ChannelId::new(0))?;
-        let StepOutcome::Complete(Ok(fetched)) =
-            Operation::new(request).step(&mut Fetch, device)?
-        else {
-            return Err("fetch did not complete".into());
-        };
-        if let Some(command) = fetched.data() {
-            expected_length = Some(command.command().copy_length);
-        }
-        let mut context = device.execution_context();
-        let checked = super::support::finish(
-            &mut CheckRanges::default(),
-            &mut Operation::new(fetched),
-            &mut context,
-        )??;
-        let input = context.install_progress(checked);
-        let completion =
-            super::support::finish(&mut pipeline, &mut Operation::new(input), &mut context)??;
-        completion.status()?;
-        if let Some(value) = completion.data() {
-            assert_eq!(Some(value.response().bytes_completed()), expected_length);
-            return Ok(completion);
-        }
-        assert_eq!(
-            Operation::new(completion.finish()).step(&mut Retire, device)?,
-            StepOutcome::Complete(Ok(()))
-        );
-    }
-    Err("command did not produce response work".into())
+    let request = device.command_request(ChannelId::new(0))?;
+    let StepOutcome::Complete(Ok(fetched)) = Operation::new(request).step(&mut Fetch, device)?
+    else {
+        return Err("fetch did not complete".into());
+    };
+    let expected_length = fetched
+        .data()
+        .ok_or("fetched command")?
+        .command()
+        .copy_length;
+    let mut context = device.execution_context();
+    let checked = super::support::finish(
+        &mut CheckRanges::default(),
+        &mut Operation::new(fetched),
+        &mut context,
+    )??;
+    let input = context.install_progress(checked);
+    let completion =
+        super::support::finish(&mut pipeline, &mut Operation::new(input), &mut context)??;
+    completion.status()?;
+    assert_eq!(
+        completion
+            .data()
+            .ok_or("command completion")?
+            .response()
+            .bytes_completed(),
+        expected_length
+    );
+    Ok(completion)
 }
 
 fn setup() -> TestResult<Dma<SharedMemory>> {

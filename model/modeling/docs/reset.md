@@ -59,9 +59,9 @@ typed stage values without releasing accepted ownership. Later stages borrow
 only the selected channel and execution resources; they check generation and
 reset before each effect. No leaf invokes another stage.
 
-A healthy command retains its hardware grant across finite chunk passes. The
-occupied execution unit backpressures command admission; ordinary stages prepare,
-read, optionally transform and write one chunk before the next pass. Reset still
+A healthy command retains its grant and residency across chunk child completions.
+CommandExecution stays InProgress and feeds each next chunk into its child graph;
+the occupied execution unit backpressures outer admission. Reset still
 does not wait for downstream readiness and access guards apply throughout.
 Chunk completion is not reset completion or accepted-command retirement.
 
@@ -74,7 +74,7 @@ Upstream empty inputs are bubbles, not reissued payload. No generic child
 continuation owns the task and no controller chooses the stage to resume.
 An early RESUME does not restore the released grant of the old invocation; that
 invocation must exit before arbitration starts the resumed one.
-Finite data-path completion is not command retirement while Channel still has work.
+An execution exit caused by parking is not command retirement while Channel retains work.
 
 Fetch records pipeline residency, separately from the accepted command and shared
 execution grant. Flow values retain its identity across connecting buffers and

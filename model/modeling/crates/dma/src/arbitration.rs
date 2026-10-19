@@ -1,7 +1,7 @@
 use crate::{CommandRequest, Error};
 use hardware_interface_pipeline::Arbitration;
 
-/// Selects a task candidate with rotating channel priority, retaining active authorization.
+/// Selects a fresh or resumed task with rotating channel priority.
 #[derive(Debug, Default)]
 pub struct RoundRobin {
     next: usize,
@@ -12,12 +12,6 @@ impl Arbitration<Option<CommandRequest>, Error> for RoundRobin {
         &mut self,
         values: &[Option<Option<CommandRequest>>],
     ) -> Result<Option<usize>, Error> {
-        if let Some(index) = values
-            .iter()
-            .position(|value| matches!(value, Some(Some(CommandRequest::Continue(_)))))
-        {
-            return Ok(Some(index));
-        }
         let selected = (0..values.len())
             .map(|offset| (self.next + offset) % values.len())
             .find(|index| {

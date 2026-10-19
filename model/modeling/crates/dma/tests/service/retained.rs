@@ -88,7 +88,7 @@ fn reset_waits_for_retained_data_to_reach_retirement_without_old_effects() -> Te
 }
 
 #[test]
-fn stale_work_cannot_retire_or_write_a_newer_accepted_command() -> TestResult {
+fn stale_payload_is_rejected_before_effects_and_recovers_after_reset() -> TestResult {
     // Given: a completed old service invocation and a reset channel configured for new work.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
@@ -103,6 +103,113 @@ fn stale_work_cannot_retire_or_write_a_newer_accepted_command() -> TestResult {
     );
     device.write(RESET, &1_u32.to_le_bytes())?;
     assert_eq!(read_word(&mut device, RESET)?, 0);
+    reconfigure(&mut device)?;
+    let descriptor = pdma_model_contract::dma::Command {
+        id: 81,
+        ..command()
+    };
+    memory.write(0x1200.into(), MemoryAlignment::ONE, &[1, 2, 3, 4])?;
+    submit(&mut device, &memory, descriptor)?;
+    let input = crate::support::accept(&mut device, ChannelId::new(0))?;
+    let old_payload = old_payload.ok_or("missing old payload")?;
+    // When: a miswired transform substitutes obsolete bytes into the new flow.
+    let StepOutcome::Complete(Ok(rejected)) = Operation::new(input.map(|_| old_payload))
+        .step(&mut WriteCopy::default(), &mut device.execution_context())?
+    else {
+        return Err("stale payload not rejected".into());
+    };
+    assert_eq!(rejected.status(), Err(Error::Reset));
+    assert_eq!(
+        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+        [0; 4]
+    );
+    assert_eq!(
+        read_word(
+            &mut device,
+            ChannelBlock::ALIGNMENT
+                + ChannelBlock::COMMAND.offset()
+                + CommandRegisters::CONSUMER.offset()
+        )?,
+        1
+    );
+    assert!(device.command_request(ChannelId::new(0))?.is_none());
+    device.write(RESET, &1_u32.to_le_bytes())?;
+    assert_eq!(read_word(&mut device, RESET)?, 1);
+    assert_eq!(
+        Operation::new(rejected.finish()).step(&mut Retire, &mut device)?,
+        StepOutcome::Complete(Err(Error::Reset))
+    );
+    assert_eq!(read_word(&mut device, RESET)?, 0);
+    reconfigure(&mut device)?;
+    submit(&mut device, &memory, descriptor)?;
+    crate::support::run(&mut device)?;
+    // Then: the new descriptor completes normally and retains its own identity and payload.
+    assert_eq!(
+        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+        [1, 2, 3, 4]
+    );
+    let raw: pdma_model_contract::dma::ResponseRaw =
+        memory.read_typed(0x1100.into(), MemoryAlignment::ONE)?;
+    assert_eq!(
+        pdma_model_contract::dma::Response::from_bytes(raw.as_ref())?.id,
+        descriptor.id
+    );
+    Ok(())
+}
+
+#[test]
+fn completed_old_retirement_cannot_affect_a_newer_accepted_command() -> TestResult {
+    // Given: an exhausted old operation and a separately accepted current command.
+    let (mut device, memory) = setup(0x1100, 2)?;
+    submit(&mut device, &memory, command())?;
+    let mut old = Operation::new(payload(&mut device)?.finish());
+    assert_eq!(
+        old.step(&mut Retire, &mut device)?,
+        StepOutcome::Complete(Ok(()))
+    );
+    device.write(RESET, &1_u32.to_le_bytes())?;
+    reconfigure(&mut device)?;
+    let descriptor = pdma_model_contract::dma::Command {
+        id: 81,
+        ..command()
+    };
+    memory.write(0x1200.into(), MemoryAlignment::ONE, &[1, 2, 3, 4])?;
+    submit(&mut device, &memory, descriptor)?;
+    let input = crate::support::accept(&mut device, ChannelId::new(0))?;
+    // When: the old retirement is stepped while the current command remains resident.
+    assert_eq!(old.step(&mut Retire, &mut device), Err(RunError::Exhausted));
+    let mut pipeline = crate::support::chunk_pipeline(&device);
+    let mut output = None;
+    {
+        let mut context = device.execution_context();
+        let mut operation = Operation::new(input);
+        for _ in 0..128 {
+            if let StepOutcome::Complete(result) = operation.step(&mut pipeline, &mut context)? {
+                output = Some(result?);
+                break;
+            }
+        }
+    }
+    assert_eq!(
+        Operation::new(output.ok_or("current command completion")?)
+            .step(&mut Retire, &mut device)?,
+        StepOutcome::Complete(Ok(()))
+    );
+    // Then: the current command completes with its own identity and bytes.
+    assert_eq!(
+        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+        [1, 2, 3, 4]
+    );
+    let raw: pdma_model_contract::dma::ResponseRaw =
+        memory.read_typed(0x1100.into(), MemoryAlignment::ONE)?;
+    assert_eq!(
+        pdma_model_contract::dma::Response::from_bytes(raw.as_ref())?.id,
+        descriptor.id
+    );
+    Ok(())
+}
+
+fn reconfigure(device: &mut Dma<SharedMemory>) -> TestResult {
     let base = ChannelBlock::ALIGNMENT;
     for (offset, value) in [
         (
@@ -132,37 +239,5 @@ fn stale_work_cannot_retire_or_write_a_newer_accepted_command() -> TestResult {
     ] {
         device.write(base + offset, &value.to_le_bytes())?;
     }
-    let descriptor = pdma_model_contract::dma::Command {
-        id: 81,
-        ..command()
-    };
-    memory.write(0x1200.into(), MemoryAlignment::ONE, &[1, 2, 3, 4])?;
-    submit(&mut device, &memory, descriptor)?;
-    let input = crate::support::accept(&mut device, ChannelId::new(0))?;
-    let old_payload = old_payload.ok_or("missing old payload")?;
-    // When: a miswired transform substitutes obsolete bytes into the new flow.
-    let StepOutcome::Complete(Ok(rejected)) = Operation::new(input.map(|_| old_payload))
-        .step(&mut WriteCopy::default(), &mut device.execution_context())?
-    else {
-        return Err("stale payload not rejected".into());
-    };
-    assert_eq!(rejected.status(), Err(Error::Reset));
-    assert_eq!(old.step(&mut Retire, &mut device), Err(RunError::Exhausted));
-    assert_eq!(
-        Operation::new(rejected.finish()).step(&mut Retire, &mut device)?,
-        StepOutcome::Complete(Err(Error::Reset))
-    );
-    crate::support::run(&mut device)?;
-    // Then: the new descriptor completes normally and retains its own identity and payload.
-    assert_eq!(
-        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
-        [1, 2, 3, 4]
-    );
-    let raw: pdma_model_contract::dma::ResponseRaw =
-        memory.read_typed(0x1100.into(), MemoryAlignment::ONE)?;
-    assert_eq!(
-        pdma_model_contract::dma::Response::from_bytes(raw.as_ref())?.id,
-        descriptor.id
-    );
     Ok(())
 }

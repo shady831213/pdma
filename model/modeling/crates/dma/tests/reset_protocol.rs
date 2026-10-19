@@ -102,13 +102,7 @@ fn reset_waits_for_the_resident_tail_after_response_publication() -> TestResult 
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
     let chunk = support::chunk_pipeline(&device);
-    let pipeline = Then::new(
-        chunk.upstream,
-        Then::new(
-            chunk.downstream.upstream,
-            Then::new(chunk.downstream.downstream, CommandExit),
-        ),
-    );
+    let pipeline = Then::new(chunk, CommandExit);
     let mut hardware = device.hardware_with(pipeline);
     let command = &mut hardware;
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();

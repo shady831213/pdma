@@ -48,11 +48,10 @@ fn transform_can_modify_only_the_active_chunk_and_cannot_forge_its_length() -> T
         PrepareChunk::default(),
         Then::new(ReadCopy::default(), FillChunk),
     );
-    let write = Then::new(
-        WriteCopy::default(),
+    let pipeline = Then::new(
+        pdma_model_dma::CommandExecution::new(Then::new(read, WriteCopy::default())),
         Then::new(pdma_model_dma::CompletionInput, device.responses()),
     );
-    let pipeline = Then::new(read, write);
     let mut service = device.hardware_with(pipeline);
     let mut operation = Operation::new(());
     // When: the transform fills its entire exposed slice and normal execution publishes it.

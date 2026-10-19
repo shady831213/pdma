@@ -46,13 +46,9 @@ fn transformed_resume(replace_service: bool) -> TestResult {
         PrepareChunk::default(),
         Then::new(ReadCopy::default(), InvertPayload),
     );
-    let execution = chunk;
     let pipeline = Then::new(
-        execution,
-        Then::new(
-            WriteCopy::default(),
-            Then::new(pdma_model_dma::CompletionInput, device.responses()),
-        ),
+        pdma_model_dma::CommandExecution::new(Then::new(chunk, WriteCopy::default())),
+        Then::new(pdma_model_dma::CompletionInput, device.responses()),
     );
     let mut engine = device.hardware_with(pipeline);
     let mut operation = Operation::new(());
@@ -89,11 +85,8 @@ fn transformed_resume(replace_service: bool) -> TestResult {
             Then::new(ReadCopy::default(), InvertPayload),
         );
         engine = device.hardware_with(Then::new(
-            chunk,
-            Then::new(
-                WriteCopy::default(),
-                Then::new(pdma_model_dma::CompletionInput, device.responses()),
-            ),
+            pdma_model_dma::CommandExecution::new(Then::new(chunk, WriteCopy::default())),
+            Then::new(pdma_model_dma::CompletionInput, device.responses()),
         ));
         device.memory.memory.write(
             0x1000.into(),

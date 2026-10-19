@@ -3,7 +3,7 @@ use hardware_interface_pipeline::Then;
 use pdma_model_dma::{PrepareChunk, ReadCopy, WriteCopy};
 
 #[test]
-fn local_invocations_transform_every_chunk_with_one_memory_access_per_step() -> TestResult {
+fn command_invocation_transforms_every_chunk_with_one_memory_access_per_step() -> TestResult {
     chunked_transform(false)
 }
 
@@ -34,11 +34,8 @@ fn chunked_transform(fault: bool) -> TestResult {
         Then::new(ReadCopy::default(), InvertPayload),
     );
     let mut service = device.hardware_with(Then::new(
-        chunks,
-        Then::new(
-            WriteCopy::default(),
-            Then::new(pdma_model_dma::CompletionInput, device.responses()),
-        ),
+        pdma_model_dma::CommandExecution::new(Then::new(chunks, WriteCopy::default())),
+        Then::new(pdma_model_dma::CompletionInput, device.responses()),
     ));
     let mut operation = Operation::new(());
     let mut resumed = false;

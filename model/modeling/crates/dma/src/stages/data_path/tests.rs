@@ -98,11 +98,12 @@ fn reset_waits_for_resident_child_to_observe_and_complete_cleanup() -> TestResul
 }
 
 #[test]
-fn stale_continuation_cannot_enter_the_next_task_on_the_same_generation() -> TestResult {
+fn stale_fetch_cannot_enter_the_next_task_on_the_same_generation() -> TestResult {
     // Given: an observation of the first accepted task before retirement.
     let mut dma = crate::stages::tests::queued_copy(0x1100, false)?;
     let id = ChannelId::new(0);
     let request = dma.command_request(id)?;
+    let old = request;
     let fetched = finish(&mut Fetch, &mut dma, request)?;
     let command = *fetched.data().ok_or("fetched")?.command();
     let progress = finish(
@@ -111,10 +112,20 @@ fn stale_continuation_cannot_enter_the_next_task_on_the_same_generation() -> Tes
         fetched,
     )?;
     let chunk = dma.execution_context().install_progress(progress);
-    finish(&mut Retire, &mut dma, chunk.finish())?;
-    let old = dma.command_request(id)?;
-    let mut hardware = dma.hardware();
-    finish(&mut hardware, &mut dma, ())?;
+    let mut execution = crate::CommandExecution::new(hardware_interface_pipeline::Then::new(
+        crate::PrepareChunk::default(),
+        hardware_interface_pipeline::Then::new(
+            crate::ReadCopy::default(),
+            crate::WriteCopy::default(),
+        ),
+    ));
+    let completion = finish(&mut execution, &mut dma.execution_context(), chunk)?;
+    let response = finish(
+        &mut dma.responses(),
+        &mut dma.execution_context(),
+        completion,
+    )?;
+    finish(&mut Retire, &mut dma, response)?;
     dma.memory.write(
         (0x1000 + u64::try_from(Command::RECORD_SIZE)?).into(),
         MemoryAlignment::ONE,
@@ -129,15 +140,16 @@ fn stale_continuation_cannot_enter_the_next_task_on_the_same_generation() -> Tes
     let next = dma.command_request(id)?;
     assert!(matches!(next, Some(CommandRequest::Fetch(_))));
     let fetched = finish(&mut Fetch, &mut dma, next)?;
-    finish(&mut Retire, &mut dma, fetched.finish())?;
-    let current = dma.command_request(id)?;
     // When: a stale request reaches admission after next-task acceptance.
     let rejected = finish(&mut Fetch, &mut dma, old)?;
-    // Then: only the next task's own request can obtain resident ownership.
+    // Then: rejection leaves the next task's resident ownership intact until cleanup.
     assert!(rejected.work.is_none());
-    let accepted = finish(&mut Fetch, &mut dma, current)?;
-    assert!(accepted.work.is_some());
-    finish(&mut Retire, &mut dma, accepted.finish())?;
+    assert!(fetched.work.is_some());
+    dma.request_reset();
+    finish(&mut Retire, &mut dma, rejected.finish())?;
+    assert!(dma.resetting());
+    assert!(finish(&mut Retire, &mut dma, fetched.stop(Error::Reset)).is_err());
+    assert!(!dma.resetting());
     Ok(())
 }
 

@@ -40,13 +40,10 @@ fn resumed_write_uses_the_same_custom_completion_tail_as_healthy_write() -> Test
         let count = Rc::new(Cell::new(0));
         let chunk = Then::new(PrepareChunk::default(), ReadCopy::default());
         let mut hardware = device.hardware_with(Then::new(
-            chunk,
+            pdma_model_dma::CommandExecution::new(Then::new(chunk, WriteCopy::default())),
             Then::new(
-                WriteCopy::default(),
-                Then::new(
-                    pdma_model_dma::CompletionInput,
-                    Then::new(ObserveCompletion(Rc::clone(&count)), device.responses()),
-                ),
+                pdma_model_dma::CompletionInput,
+                Then::new(ObserveCompletion(Rc::clone(&count)), device.responses()),
             ),
         ));
         let mut driver = HardwareDriver::new();

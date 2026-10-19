@@ -1,5 +1,6 @@
 //! Typed payloads connect independently composable execution stages.
 
+mod command_tail;
 /// Shared raw-bus test fixtures.
 pub mod support;
 
@@ -51,11 +52,11 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
         PrepareChunk::default(),
         Then::new(ReadCopy::default(), InvertPayload),
     );
-    let write = Then::new(
-        WriteCopy::default(),
+    let pipeline = Then::new(
+        pdma_model_dma::CommandExecution::new(Then::new(read, WriteCopy::default())),
         Then::new(pdma_model_dma::CompletionInput, device.responses()),
     );
-    let mut hardware = device.hardware_with(Then::new(read, write));
+    let mut hardware = device.hardware_with(pipeline);
     let mut driver = HardwareDriver::new();
     // When: ordinary stages pass actual payload data through the inserted transform.
     for _ in 0..128 {

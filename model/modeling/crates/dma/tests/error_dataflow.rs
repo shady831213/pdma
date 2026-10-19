@@ -159,11 +159,8 @@ fn check(
         dma.responses(),
     );
     let mut hardware = dma.hardware_with(Then::new(
-        read,
-        Then::new(
-            WriteCopy::default(),
-            Then::new(pdma_model_dma::CompletionInput, tail),
-        ),
+        pdma_model_dma::CommandExecution::new(Then::new(read, WriteCopy::default())),
+        Then::new(pdma_model_dma::CompletionInput, tail),
     ));
     let mut driver = HardwareDriver::new();
     let producer = ChannelBlock::ALIGNMENT

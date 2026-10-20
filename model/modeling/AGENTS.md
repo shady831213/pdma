@@ -9,8 +9,9 @@ removed from master after backing up the complete source snapshot:
 `51707fe1d38e261a188e1d0ac14243c0caf58127`.
 
 The replacement now implements instance-configured channels with command and response rings,
-linear/scatter-gather DMA copy, error/reset boundaries, and edge/IOC IRQ delivery. See README.md
-and the `crates/scenarios/tests/{single_channel,multi_channel}/main.rs` system tests. Old interfaces, numeric register
+linear/scatter-gather DMA copy, signed 64-bit Signal/Wait, error/reset boundaries,
+and edge/IOC IRQ delivery. See README.md, docs/signal-wait.md and the
+`crates/scenarios/tests/{single_channel,multi_channel}/main.rs` system tests. Old interfaces, numeric register
 layouts, and ABI compatibility are not requirements for this model.
 
 ## Active building blocks
@@ -205,8 +206,9 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   requests, not channel selections: reject stale head/generation/retained-task
   position rather than substituting another task. An active command stays inside
   its execution continuation and backpressures all candidates. Fresh selection
-  enters Fetch then CheckRanges; a resumed request grants the channel and produces
-  no new descriptor. Install forwards the new or retained chunk request into the
+  enters Fetch then Signals and CheckRanges; a resumed request grants the channel
+  and produces no new descriptor. Signals handles Signal/Wait and forwards Copy
+  data into range validation. Install forwards the new or retained chunk request into the
   same Then-connected execution graph. RoundRobin implements
   Arbitration, not FanPolicy; snapshot disposal belongs to the generic adapter.
   Candidates emit non-owning observations and do not consume descriptors. The
@@ -369,8 +371,21 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   Reset cancels parked work without resume; Drain returns ChannelStopped and
   bitmap; Abort discards matching parked work without response, including work that
   parks after Abort acceptance. Metadata faults retain their stopping/fatal behavior.
-  Response is 24 bytes with statuses 0..5; PageFault status 6 and fault info are retired.
+  Response is 24 bytes with Copy statuses 0..5, SignalSuccess 7 and SignalError 8;
+  PageFault status 6 and fault info are retired.
   See docs/page-fault-recovery.md for normative hardware, software and RTL obligations.
+- Tagged Command is 112 bytes with Copy/Signal/Wait payloads. Signal uses one aligned
+  64-bit atomic backend access; signed EQ/NE/LT/GE Wait rechecks through arbitration
+  while preserving same-channel order and peer progress. Ordinary waiting has no
+  fault status/notification and needs no RESUME. Atomic PageFault commits no update
+  and uses the existing owner repair/resume path. A successful atomic result is
+  retained before publication, preventing replay on response backpressure/failure.
+  Target contexts remain referenced through response retirement or cancellation
+  cleanup. Drain waits for a false dependency; Abort discards unstarted/waiting work,
+  and Reset can interrupt Drain while still awaiting actual resident cleanup.
+  See docs/signal-wait.md for valid orders, terminal SignalError reasons, software
+  helpers and platform coherence obligations. No HSA/AQL ABI, doorbell Signal,
+  general memory-atomic command, oversubscription or standalone Fence is implied.
 - Software handlers remain outside the hardware. Preserve CPU-local and handler
   execution guarantees supplied by the runtime.
 - Runtime memory installs regions atomically with `add_regions(&regions)`. Keep overlap,

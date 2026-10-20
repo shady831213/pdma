@@ -128,8 +128,9 @@ before acknowledging cleanup. Bindings remain valid on failure.
 
 ## Normative requirements and wire details
 
-**HW-PF-01 (range acceptance).** Command remains 104 bytes: id/source/destination/
-copy_length/flags/sg_context at 0/8/48/88/96/100. Each 40-byte endpoint has
+**HW-PF-01 (range acceptance).** The current tagged Command is 112 bytes:
+id/flags/opcode/payload at 0/8/12/16. For Copy, source/destination/copy_length/
+sg_context are at absolute command offsets 16/56/96/104. Each 40-byte endpoint has
 mode/context at 0/4 and geometry at 8: Linear has base/offset; SG has
 table/count/index/offset. All records are little-endian, eight-byte aligned;
 unused storage encodes zero. Generated schemas are the wire-layout authority.
@@ -152,9 +153,11 @@ using the already transformed bytes, not Read or Transform. Cursors alone are
 insufficient when a transform has side effects or is not idempotent. Do not store
 the Rust composition's invocation state as a substitute for hardware state; retry
 only the failed access after authorized resume.
-Response is 24 bytes: id/status/flags/info at 0/8/12/16. The info contains u64
-bytes_completed. Status values 0..5 retain their existing success/stopping-error
-meanings; former PageFault status 6 is invalid. PageFaultInfo, fault access and
+Response is 24 bytes: id/status/flags/info at 0/8/12/16. Copy info contains u64
+bytes_completed. Copy status values 0..5 retain their existing success/stopping-error
+meanings; former PageFault status 6 is invalid. SignalSuccess 7 and SignalError 8
+use the separate result payloads defined in [Signal/Wait](signal-wait.md).
+PageFaultInfo, fault access and
 continuation-position response fields are removed. A final success reports the
 original copy_length; a later ordinary error reports the original command's
 committed prefix. Completion uses normal publication/notification rules.
@@ -260,15 +263,19 @@ The detailed [decision record](page-fault-decisions.md) explains the two copy us
 retired terminal partial completion, retained operation boundary, public GPU
 comparisons, rejected tickets, and future logical-channel/firmware limitations.
 That record is rationale; the numbered requirements here define the contract.
-Barrier dependencies, visibility, completion ordering and scope still need a
-separate contract. No barrier opcode, implicit fence, channel oversubscription,
+Signal dependency waits, ordered visibility and atomic fault recovery now have a
+separate [contract](signal-wait.md). Atomic PageFault commits no update and uses
+the same platform report/owner RESUME path. An ordinary false Wait is not a fault,
+needs no RESUME and leaves Drain pending until its dependency resolves.
+No AQL barrier opcode, implicit fence, channel oversubscription,
 true MMU or PCIe integration follows from suspension.
 
 ## Verification obligations
 
 These are required scenarios, not a report that tests have passed:
 
-- Wire/header consumers: 24-byte final response, statuses 0..5 only, and
+- Wire/header consumers: 112-byte tagged command, 24-byte final response,
+  Copy statuses 0..5 plus Signal statuses 7/8 (retired 6 invalid), and
   four-byte read-only FAULT_STATUS/write-only RESUME with boolean bit 0 and
   identical physical placement in role views.
 - Linear/SG/mixed copies: read/write and interior-address faults, no intermediate

@@ -6,10 +6,12 @@ Host/platform obligations, and explicit model-to-RTL verification boundaries.
 DMA/event recovery. Raw DMA-wide fatal notification goes to firmware; PF receives
 firmware events and coordinates affected VFs.
 
-Next stages in the [roadmap](docs/firmware-dma-goal.md#agreed-next-stages-hsa-aligned-dma):
-HSA-aligned synchronization and signal atomics, then HSA/AQL contract and programming-interface
-convergence, followed by a strict standards review before modeling completion.
-These are planned capabilities, not implemented functionality. The broader
+The [Signal/Wait slice](docs/signal-wait.md) implements signed 64-bit signal atomics
+and dependency waits, with ordered backend access and retained lifecycle tracking.
+The next stages in the [roadmap](docs/firmware-dma-goal.md#agreed-next-stages-hsa-aligned-dma)
+are HSA/AQL contract and programming-interface convergence, then a strict standards
+review before modeling completion. HSA ABI compatibility and platform conformance
+remain unimplemented claims. The broader
 firmware-managed direction preserves the ordinary configuration and prepares
 SR-IOV, PASID and Function reset integration boundaries.
 The implemented first milestone is the [architecture MVP](docs/firmware-dma-mvp.md): an
@@ -96,6 +98,7 @@ backend errors. New platform error categories need no generic runtime change.
 | `crates/dma/src/channel/mmio.rs` | Generated block routing and software-write effects. |
 | `crates/dma/src/stages.rs` | One connected command admission and execution pipeline. |
 | `crates/dma/src/stages/fetch.rs` | Revalidated command acceptance into channel-owned state. |
+| `crates/dma/src/stages/signal.rs` | Signal atomics, dependency observations and retained completion checkpoints. |
 | `crates/hardware-interface-pipeline/src/combinators/` | Typed sequencing, gathering, arbitration and distribution. |
 | `crates/dma/src/arbitration.rs` | PDMA round-robin selection policy. |
 | `crates/dma/src/stages/candidate.rs` | Non-consuming channel candidate advancement against the full DMA context. |
@@ -109,6 +112,7 @@ backend errors. New platform error categories need no generic runtime change.
 | `crates/dma/src/stages/execution/copy.rs` | Shared chunk read/write stages with selected execution resources. |
 | `crates/dma/src/stages/responses.rs` | Generation-bound response dispatch and publication through channel rings. |
 | `crates/software/src/dma.rs` | Shared DMA driver configuration, submit and response consumption; reexported by Host. |
+| `crates/software/src/signal.rs` | Borrowed signed signal operations and cooperative software waits. |
 | `crates/host/src/runtime.rs` | PDMA transport: async context access, cooperative yielding and pending notification delivery. |
 | `crates/software/src/dma/control.rs` | Shared discovery, fatal, IRQ and register-only reset access. |
 | `crates/dma/src/reset.rs` | Reset completion after affected channel-owned work retires. |
@@ -150,22 +154,24 @@ and no Channel-owned Rust Operation or generic composition continuation.
 
 Candidate produces a non-owning task request carrying its originating channel.
 FanIn and Arbitrate::snapshots select a task through DMA's RoundRobin policy, without calling source stages
-from the selected output. Fresh requests enter Fetch then CheckRanges. Fetch
+from the selected output. Fresh requests enter Fetch then Signals and CheckRanges. Fetch
 rechecks current eligibility at acceptance, reads the descriptor, advances consumer
 and establishes accepted ownership atomically. Its FetchedCommand output carries
-the actual command. CheckRanges owns its incremental scan and produces validated
-CopyProgress, installed once as authoritative hardware traversal.
+the actual command. Signals forwards Copy commands, executes Signal/Wait observations
+and retains terminal results for the shared completion tail. An unmet Wait releases
+the grant with its accepted state intact. CheckRanges owns the Copy incremental scan
+and produces validated CopyProgress, installed once as authoritative hardware traversal.
 
 Candidates are revalidated, not replaced by a newer task from the same channel.
 A stale descriptor head or generation is rejected before consumption. Retained
 task requests also capture the consumer position so a continuation cannot select
 a same-generation successor. Every later memory access rejects stale reset work.
 
-Normal execution dataflow is:
+Copy execution dataflow is:
 
 | Boundary | Transferred data |
 | --- | --- |
-| Fetch -> CheckRanges | `Flow<FetchedCommand>`: descriptor and accepted identity |
+| Fetch -> Signals -> CheckRanges | `Flow<FetchedCommand>`: descriptor and accepted identity |
 | CheckRanges -> hardware installation | `Flow<CopyProgress>`: validated traversal |
 | PrepareChunk -> ReadCopy | `Flow<Chunk>`: source/destination spans, selectors and length |
 | ReadCopy -> transform/write | `Flow<Payload>`: actual bounded bytes and chunk geometry |
@@ -224,7 +230,7 @@ not refetch, revalidate or transform retained write bytes. Even immediate RESUME
 revive a failed path. The assembly can be replaced while parked because checkpoints
 are concrete hardware data, not saved Rust stage continuations.
 
-FanIn's output is Fetch, CheckRanges, Install, the configured execution pipeline
+FanIn's output is Fetch, Signals, CheckRanges, Install, the configured execution pipeline
 and Retire connected through Then. Fetch validates the exact request and records
 residency; it cannot replace an outstanding resident transfer. Retire consumes the
 execution result and releases that residency, including after publication or a
@@ -362,11 +368,24 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   overflow; bases are 8-byte aligned. Geometry freezes on first
   enable, including across disable/re-enable. Software owns allocation and ensures
   rings and payload have appropriate backing and do not alias unintentionally.
-- Generated commands contain an ID and two independent endpoints. Each endpoint is
+- Generated 112-byte commands contain an ID, completion flags and a tagged
+  Copy/Signal/Wait payload. Copy contains two independent endpoints. Each endpoint is
   either Linear(address,offset) or ScatterGather(list_address,count) with an explicit
   start index and local offset. One command copy_length selects both ranges. Segment records
   contain address/length; ring and list storage uses generated size/alignment metadata,
   while payloads require only byte alignment. See `include/README.md` for the current ABI.
+- Signal supports signed 64-bit load/store, wrapping add/subtract, AND/OR/XOR,
+  exchange and compare/exchange through one indivisible backend access. Wait tests
+  signed EQ/NE/LT/GE and releases the shared grant while false, retaining channel
+  order and target references. Ordinary waiting requires no RESUME and emits no
+  fault notification. Atomic PageFault instead uses owner repair/resume; terminal
+  access/order/alignment failures publish SignalError and halt. Completed atomic
+  results are checkpointed before response publication, preventing replay on
+  response backpressure/failure. See [Signal/Wait](docs/signal-wait.md) for valid
+  orders, software helpers, lifetime, Drain/Abort/reset and coherence obligations.
+- Responses remain 24 bytes: Copy statuses 0..5, SignalSuccess 7 and SignalError 8.
+  Status 6 remains invalid. SignalSuccess reports the old atomic value or satisfying
+  Wait observation; it does not report copied-byte progress.
 - Hardware validates both selected ranges before payload reads or writes, starting
   directly at each selected SG entry. Unused prefix/suffix entries are not scanned.
   Insufficient selected capacity returns `LengthMismatch`; backing totals need not match.

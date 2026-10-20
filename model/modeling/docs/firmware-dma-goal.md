@@ -70,8 +70,9 @@ no intermediate DMA response, IRQ, firmware event or new PF management opcode.
 The [page-fault recovery chapter](page-fault-recovery.md) records the contract,
 software lifetime requirements and superseded decisions. Independent Linear offsets
 and SG entry/local-offset positions remain general subrange inputs. Final responses
-are 24 bytes with statuses 0..5; PageFault status 6 and fault continuation fields
-are retired. Fault status and resume are 32-bit registers with one boolean bit each;
+are 24 bytes with Copy statuses 0..5 and Signal statuses 7/8; PageFault status 6
+and fault continuation fields are retired. Fault status and resume are 32-bit
+registers with one boolean bit each;
 software must serialize repair/resume with reset/release/reallocation and retire
 old fault handling before reuse. Reset/release cancel parked work without resume. Drain reports ChannelStopped when
 parked work prevents completion; Abort discards matching parked work without a
@@ -105,6 +106,14 @@ not authorization to implement them as part of a documentation update.
 
 #### Stage 1: synchronization and the complete signal-operation set
 
+Implementation update, 2026-10-20: the
+[Signal/Wait contract](signal-wait.md) now defines the implemented operation/order
+matrix, signed values, error classification, completion checkpoints and lifecycle.
+Commands are 112-byte tagged Copy/Signal/Wait records; responses retain 24 bytes
+with Copy statuses 0..5 and Signal statuses 7/8, leaving retired 6 invalid.
+The scope is a PDMA protocol and software helper, not HSA runtime/AQL compatibility.
+The requirements below remain acceptance obligations; test results are separate evidence.
+
 - Define signal objects, dependency waits, completion signaling and memory ordering
   from the applicable HSA signal rules. Cover atomic load/store, add/subtract,
   AND/OR/XOR, exchange and compare-and-swap, including specified return values,
@@ -130,8 +139,8 @@ not authorization to implement them as part of a documentation update.
   preserve dependency progress and response consumption while draining. This does
   not replace existing failure results for page-fault-stopped or erroneous work.
 - Abort/Reset must permit cancellation of waiting work without fabricating a
-  successful signal or satisfying its dependency. Before implementation, specify
-  how recovery remains reachable during a long-running Drain: firmware retains the
+  successful signal or satisfying its dependency. Recovery remains reachable
+  during a long-running Drain: firmware retains the
   pending maintenance request while accepting ResetChannel and ResetDma on the
   existing control channel. An affected reset fails the original Drain; reset
   success still requires actual hardware cleanup. An unrelated reset does not
@@ -166,9 +175,10 @@ implementations. Existing Copy/ring/reset paths already rely on ordering: consol
 their obligations rather than assuming synchronous storage proves arbitrary system
 visibility. Copy completion must not imply cache flush or TLB invalidation.
 
-Before coding, finish the operation/type/order matrix, signal representation and
-authorized access binding, result/error behavior, and management recovery protocol.
-No command encoding, signal handle ABI or standalone Fence opcode is frozen here.
+The operation/type/order matrix, signal representation, authorized access binding,
+result/error behavior and management recovery protocol are specified in
+[Signal/Wait](signal-wait.md). Its tagged command encoding is implemented; no HSA
+signal-handle ABI or standalone Fence opcode is defined.
 Independent Fence behavior must add a defined guarantee beyond ordinary ordering;
 the modeling goal is not to recreate a weak-memory cache simulator.
 
@@ -198,7 +208,7 @@ fault handling; reserved AQL fields cannot be repurposed.
 
 Convergence includes agent capability discovery, queue creation/lifecycle, ring
 indices, packet publication/reuse, doorbell signal semantics, completion and error
-reporting. Mapping to the current 104-byte Copy command, 32-bit register cursors
+reporting. Mapping to the current 112-byte tagged command, 32-bit register cursors
 and response ring is a deliberate protocol migration, not an existing compatibility
 guarantee. Decide how response results relate to completion signals rather than
 silently reporting success through both or removing diagnostics.
@@ -480,8 +490,9 @@ and speculative collections of policy generics.
 - Recovery when firmware or the management transport itself is unavailable remains
   deferred; see the low-priority TBD below. PF events and firmware-mediated DMA/event
   recovery are implemented in [fatal and events](fatal-events.md).
-- Synchronization and signal atomics follow Stage 1 above; HSA/AQL wire and software
-  contracts follow Stage 2. Logical-channel scheduling and oversubscription remain
+- Synchronization and signal atomics are implemented under the
+  [Signal/Wait contract](signal-wait.md); HSA/AQL wire and software contracts remain
+  Stage 2. Logical-channel scheduling and oversubscription remain
   separate deferred work. Retained physical-channel suspension and owner resume
   remain specified in the page-fault chapter.
 - Which features are instance configuration and which have software enable bits.

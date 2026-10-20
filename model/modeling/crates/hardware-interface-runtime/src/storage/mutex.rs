@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::sync::{Arc, Mutex, MutexGuard, Weak};
+use std::sync::{Arc, LockResult, Mutex, MutexGuard, Weak};
 
 use super::{StorageBackend, StorageError};
 
@@ -33,7 +33,26 @@ impl<T> MutexStorage<T> {
         }
     }
 
-    fn enter(&self) -> Result<SharedEntry, StorageError> {
+    fn lock(&self) -> MutexGuard<'_, T> {
+        self.lock_checked()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    pub(crate) fn lock_checked(&self) -> LockResult<MutexGuard<'_, T>> {
+        self.inner.value.lock()
+    }
+
+    pub(crate) fn is_active(&self) -> bool {
+        let identity = Arc::downgrade(&self.inner.identity);
+        ACTIVE_BACKENDS.with(|active| {
+            active
+                .borrow()
+                .iter()
+                .any(|candidate| candidate.ptr_eq(&identity))
+        })
+    }
+
+    pub(crate) fn enter(&self) -> Result<impl Drop, StorageError> {
         let identity = Arc::downgrade(&self.inner.identity);
         ACTIVE_BACKENDS.with(|active| {
             let mut active = active.borrow_mut();
@@ -44,12 +63,15 @@ impl<T> MutexStorage<T> {
             Ok(SharedEntry)
         })
     }
+}
 
-    fn lock(&self) -> MutexGuard<'_, T> {
-        self.inner
-            .value
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+struct SharedEntry;
+
+impl Drop for SharedEntry {
+    fn drop(&mut self) {
+        ACTIVE_BACKENDS.with(|active| {
+            active.borrow_mut().pop();
+        });
     }
 }
 
@@ -84,15 +106,5 @@ impl<T> StorageBackend<T> for MutexStorage<T> {
         let _entry = self.enter()?;
         let mut value = self.lock();
         Ok(operation(&mut value))
-    }
-}
-
-struct SharedEntry;
-
-impl Drop for SharedEntry {
-    fn drop(&mut self) {
-        ACTIVE_BACKENDS.with(|active| {
-            let _ = active.borrow_mut().pop();
-        });
     }
 }

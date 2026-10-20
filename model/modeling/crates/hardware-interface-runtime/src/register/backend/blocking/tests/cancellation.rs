@@ -3,7 +3,9 @@ use super::*;
 #[test]
 fn cancelling_latest_unused_reservation_reuses_its_sequence() {
     // Given: an earlier reservation with an unused latest successor.
-    let gate = ObservationGate::new(SharedRegisterObserver::new(Arc::new(NoopRegisterObserver)));
+    let gate = BlockingObservationBackend::new(SharedRegisterObserver::new(Arc::new(
+        NoopRegisterObserver,
+    )));
     let earlier = gate.reserve(1).expect("earlier");
     let rejected = gate.reserve(2).expect("latest");
 
@@ -36,7 +38,9 @@ fn cancelling_latest_unused_reservation_reuses_its_sequence() {
 #[test]
 fn cancelling_nonlatest_reservation_rejects_without_reusing_a_live_sequence() {
     // Given: a reservation followed by another committed observation slot.
-    let gate = ObservationGate::new(SharedRegisterObserver::new(Arc::new(NoopRegisterObserver)));
+    let gate = BlockingObservationBackend::new(SharedRegisterObserver::new(Arc::new(
+        NoopRegisterObserver,
+    )));
     let earlier = gate.reserve(1).expect("earlier");
     let later = gate.reserve(1).expect("later");
 

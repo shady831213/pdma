@@ -1,11 +1,14 @@
+use crate::MutexStorage;
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, MutexGuard, OnceLock};
 
 use super::{ObservationGateError, order_error};
 use crate::register::{
-    GateFault, ObservationBackend, ObservationOrder, ObservationReservationReceipt,
-    RegisterObservation, SharedRegisterObserver,
+    GateFault, ObservationOrder, ObservationReservationReceipt, RegisterObservation,
+    SharedRegisterObserver,
 };
+
+mod access;
 
 #[derive(Debug)]
 pub(in crate::register) struct BlockingState {
@@ -18,8 +21,9 @@ pub(in crate::register) struct BlockingState {
 #[derive(Clone, Debug)]
 pub struct BlockingObservationBackend {
     observer: SharedRegisterObserver,
-    pub(in crate::register) state: Arc<Mutex<BlockingState>>,
+    pub(in crate::register) state: MutexStorage<BlockingState>,
     pub(in crate::register) changed: Arc<Condvar>,
+    deferred_fault: Arc<OnceLock<GateFault>>,
 }
 
 impl BlockingObservationBackend {
@@ -32,12 +36,13 @@ impl BlockingObservationBackend {
     pub fn new_at(observer: SharedRegisterObserver, next_sequence: u64) -> Self {
         Self {
             observer,
-            state: Arc::new(Mutex::new(BlockingState {
+            state: MutexStorage::new(BlockingState {
                 order: ObservationOrder::new_at(next_sequence),
                 emitter_active: false,
                 waiting_emitters: 0,
-            })),
+            }),
             changed: Arc::new(Condvar::new()),
+            deferred_fault: Arc::new(OnceLock::new()),
         }
     }
 
@@ -64,51 +69,6 @@ impl BlockingObservationBackend {
             receipt,
             armed: true,
         })
-    }
-
-    fn lock_state(&self) -> Result<MutexGuard<'_, BlockingState>, ObservationGateError> {
-        self.state.lock().map_err(|poisoned| {
-            let mut state = poisoned.into_inner();
-            state.order.fault(GateFault::SynchronizationPoisoned);
-            drop(state);
-            self.changed.notify_all();
-            ObservationGateError::Faulted {
-                reason: GateFault::SynchronizationPoisoned,
-            }
-        })
-    }
-
-    fn fault(&self, reason: GateFault) {
-        match self.state.lock() {
-            Ok(mut state) => {
-                state.order.fault(reason);
-                state.emitter_active = false;
-            }
-            Err(poisoned) => {
-                let mut state = poisoned.into_inner();
-                state.order.fault(GateFault::SynchronizationPoisoned);
-                state.emitter_active = false;
-            }
-        }
-        self.changed.notify_all();
-    }
-}
-
-impl ObservationBackend for BlockingObservationBackend {
-    type Error = ObservationGateError;
-
-    fn inspect<R>(
-        &self,
-        operation: impl for<'order> FnOnce(&'order ObservationOrder) -> R,
-    ) -> Result<R, Self::Error> {
-        Ok(operation(&self.lock_state()?.order))
-    }
-
-    fn mutate<R>(
-        &self,
-        operation: impl for<'order> FnOnce(&'order mut ObservationOrder) -> R,
-    ) -> Result<R, Self::Error> {
-        Ok(operation(&mut self.lock_state()?.order))
     }
 }
 
@@ -198,11 +158,10 @@ impl BlockingObservationReservation {
                 let mut state = poisoned.into_inner();
                 state.order.fault(GateFault::SynchronizationPoisoned);
                 state.emitter_active = false;
+                let error = order_error(state.order.fault_error());
                 drop(state);
                 self.backend.changed.notify_all();
-                ObservationGateError::Faulted {
-                    reason: GateFault::SynchronizationPoisoned,
-                }
+                error
             })?;
             state.waiting_emitters -= 1;
         }
@@ -213,18 +172,7 @@ impl Drop for BlockingObservationReservation {
     fn drop(&mut self) {
         if self.armed {
             self.armed = false;
-            match self.backend.state.lock() {
-                Ok(mut state) => {
-                    let _ = state.order.abandon(&mut self.receipt);
-                    state.emitter_active = false;
-                }
-                Err(poisoned) => {
-                    let mut state = poisoned.into_inner();
-                    state.order.fault(GateFault::SynchronizationPoisoned);
-                    state.emitter_active = false;
-                }
-            }
-            self.backend.changed.notify_all();
+            self.backend.fault(GateFault::ReservationDropped);
         }
     }
 }

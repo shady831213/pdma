@@ -1,10 +1,4 @@
 use super::*;
-use crate::{GateFault, NoopRegisterObserver};
-use std::panic::AssertUnwindSafe;
-use std::sync::{Arc, Mutex};
-use std::thread;
-
-mod cancellation;
 
 #[derive(Debug, Default)]
 struct Recorder(Mutex<Vec<RegisterObservation>>);
@@ -15,24 +9,16 @@ impl crate::RegisterObserver for Recorder {
     }
 }
 
-fn wait_for_one_waiter(gate: &ObservationGate) {
-    let state = gate.0.state.lock().expect("gate lock");
-    let state = gate
-        .0
-        .changed
-        .wait_while(state, |state| state.waiting_emitters == 0)
-        .expect("waiter visible");
-    drop(state);
-}
-
 #[test]
 #[allow(clippy::panic, reason = "mutex poisoning is the behavior under test")]
 fn synchronization_poison_terminally_faults_gate() {
-    let gate = ObservationGate::new(SharedRegisterObserver::new(Arc::new(NoopRegisterObserver)));
+    let gate = BlockingObservationBackend::new(SharedRegisterObserver::new(Arc::new(
+        NoopRegisterObserver,
+    )));
     let poison_gate = gate.clone();
 
     let panic_result = std::panic::catch_unwind(AssertUnwindSafe(move || {
-        let _guard = poison_gate.0.state.lock().expect("initial lock");
+        let _guard = poison_gate.state.lock_checked().expect("initial lock");
         panic!("deliberate gate poison");
     }));
 
@@ -53,33 +39,65 @@ fn synchronization_poison_terminally_faults_gate() {
 
 #[test]
 fn dropped_reservation_wakes_an_already_blocked_follower() {
-    let gate = ObservationGate::new(SharedRegisterObserver::new(Arc::new(NoopRegisterObserver)));
-    let earlier = gate.reserve(1).expect("earlier reservation");
-    let follower = gate.reserve(1).expect("follower reservation");
-    let follower_thread = thread::spawn(move || {
-        follower.emit(vec![RegisterObservation::write(
-            1,
-            crate::AccessOrigin::Direct,
-            0x20,
-            &[0xbb],
-        )])
-    });
-    wait_for_one_waiter(&gate);
+    enum Abandon {
+        Direct,
+        Inspect,
+        Mutate,
+        Unwind,
+    }
+    for action in [
+        Abandon::Direct,
+        Abandon::Inspect,
+        Abandon::Mutate,
+        Abandon::Unwind,
+    ] {
+        let gate = BlockingObservationBackend::new(SharedRegisterObserver::new(Arc::new(
+            NoopRegisterObserver,
+        )));
+        let earlier = gate.reserve(1).expect("earlier reservation");
+        let follower = gate.reserve(1).expect("follower reservation");
+        let follower_thread = thread::spawn(move || {
+            follower.emit(vec![RegisterObservation::write(
+                1,
+                crate::AccessOrigin::Direct,
+                0x20,
+                &[0xbb],
+            )])
+        });
+        wait_for_one_waiter(&gate);
 
-    drop(earlier);
+        match action {
+            Abandon::Direct => drop(earlier),
+            Abandon::Inspect => crate::ObservationBackend::inspect(&gate, |_| drop(earlier))
+                .expect("inspection returns"),
+            Abandon::Mutate => crate::ObservationBackend::mutate(&gate, |_| drop(earlier))
+                .expect("mutation returns"),
+            Abandon::Unwind => {
+                assert!(
+                    std::panic::catch_unwind(AssertUnwindSafe(|| {
+                        crate::ObservationBackend::inspect(&gate, |_| {
+                            drop(earlier);
+                            std::panic::resume_unwind(Box::new("interrupted inspection"));
+                        })
+                    }))
+                    .is_err()
+                );
+            }
+        }
 
-    assert_eq!(
-        follower_thread.join().expect("follower joins"),
-        Err(ObservationGateError::Faulted {
-            reason: GateFault::ReservationDropped,
-        })
-    );
+        assert_eq!(
+            follower_thread.join().expect("follower joins"),
+            Err(ObservationGateError::Faulted {
+                reason: GateFault::ReservationDropped,
+            })
+        );
+    }
 }
 
 #[test]
 fn later_emitter_is_waiting_before_earlier_range_emits() {
     let recorder = Arc::new(Recorder::default());
-    let gate = ObservationGate::new(SharedRegisterObserver::new(recorder.clone()));
+    let gate = BlockingObservationBackend::new(SharedRegisterObserver::new(recorder.clone()));
     let earlier = gate.reserve(1).expect("earlier reservation");
     let later = gate.reserve(1).expect("later reservation");
     let later_thread = thread::spawn(move || {
@@ -118,7 +136,7 @@ fn later_emitter_is_waiting_before_earlier_range_emits() {
 #[test]
 fn direct_emitter_is_waiting_before_batch_range_emits_contiguously() {
     let recorder = Arc::new(Recorder::default());
-    let gate = ObservationGate::new(SharedRegisterObserver::new(recorder.clone()));
+    let gate = BlockingObservationBackend::new(SharedRegisterObserver::new(recorder.clone()));
     let batch = gate.reserve(3).expect("batch reservation");
     let direct = gate.reserve(1).expect("direct reservation");
     let direct_thread = thread::spawn(move || {

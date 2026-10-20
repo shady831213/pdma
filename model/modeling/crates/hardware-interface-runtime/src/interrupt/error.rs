@@ -55,8 +55,6 @@ pub enum InterruptJoinError<V, S, H> {
     Dispatch(InterruptDispatchError<V, S, H>),
     /// Tokio task terminated unexpectedly.
     Task(tokio::task::JoinError),
-    /// Join ownership was already consumed.
-    OwnershipConsumed,
 }
 
 impl<V: fmt::Debug, S, H> fmt::Display for InterruptJoinError<V, S, H> {
@@ -64,7 +62,6 @@ impl<V: fmt::Debug, S, H> fmt::Display for InterruptJoinError<V, S, H> {
         match self {
             Self::Dispatch(error) => error.fmt(formatter),
             Self::Task(_) => formatter.write_str("interrupt dispatcher task failed"),
-            Self::OwnershipConsumed => formatter.write_str("interrupt dispatcher join is consumed"),
         }
     }
 }
@@ -79,7 +76,6 @@ where
         match self {
             Self::Dispatch(error) => Some(error),
             Self::Task(error) => Some(error),
-            Self::OwnershipConsumed => None,
         }
     }
 }

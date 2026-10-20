@@ -59,7 +59,7 @@ impl InterruptShutdown {
 /// Sole owner of dispatcher join authority.
 pub struct InterruptDispatcherTask<V, S, H> {
     shutdown: InterruptShutdown,
-    join: Option<DispatchJoin<V, S, H>>,
+    join: DispatchJoin<V, S, H>,
 }
 
 impl<V, S, H> fmt::Debug for InterruptDispatcherTask<V, S, H> {
@@ -67,8 +67,7 @@ impl<V, S, H> fmt::Debug for InterruptDispatcherTask<V, S, H> {
         formatter
             .debug_struct("InterruptDispatcherTask")
             .field("shutdown", &self.shutdown)
-            .field("join_owned", &self.join.is_some())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -83,11 +82,8 @@ impl<V, S, H> InterruptDispatcherTask<V, S, H> {
         mut self,
     ) -> Result<InterruptSummary, InterruptJoinError<V, S, H>> {
         self.shutdown.request_shutdown();
-        let join = self
-            .join
-            .take()
-            .ok_or(InterruptJoinError::OwnershipConsumed)?;
-        join.await
+        (&mut self.join)
+            .await
             .map_err(InterruptJoinError::Task)?
             .map_err(InterruptJoinError::Dispatch)
     }
@@ -136,7 +132,7 @@ impl InterruptDispatcher {
         run_dispatch(cpu, &registry, source, observer, receiver.shutdown).await
     }
 
-    /// Freezes a non-empty registry and starts its sole-owner dispatcher task.
+    /// Starts the sole-owner dispatcher task with an already-frozen registry.
     pub fn start<S, H>(
         cpu: Arc<SoftwareCpu>,
         registry: FrozenHandlerRegistry<
@@ -157,10 +153,7 @@ impl InterruptDispatcher {
     {
         let (shutdown, receiver) = Self::shutdown_channel();
         let join = tokio::spawn(Self::run(cpu, registry, source, observer, receiver));
-        InterruptDispatcherTask {
-            shutdown,
-            join: Some(join),
-        }
+        InterruptDispatcherTask { shutdown, join }
     }
 }
 

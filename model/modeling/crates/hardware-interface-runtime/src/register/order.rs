@@ -275,7 +275,7 @@ impl ObservationOrder {
         })
     }
 
-    fn fault_error(&self) -> ObservationOrderError {
+    pub(super) fn fault_error(&self) -> ObservationOrderError {
         ObservationOrderError::Faulted {
             reason: self.fault.unwrap_or(GateFault::InvalidEmission),
         }

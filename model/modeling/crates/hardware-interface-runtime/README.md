@@ -17,11 +17,15 @@ make the crate memory-only or `no_std`.
 `Memory<P>::add_regions` installs a batch of zero-initialized regions in one synchronous
 storage mutation. It checks overlaps and region capacity and reserves all backing and
 table storage before changing installed regions. Any returned error preserves existing
-regions and bytes; an empty batch is a no-op. Metadata is returned in address order.
-`SharedMemory` provides the same operation with shared storage. Region installation
+regions and bytes; an empty batch is a no-op. `regions()` returns a fallible metadata
+snapshot in address order. Reentrant access to the same storage backend returns
+`StorageError::Reentrant`, wrapped by `MemoryAccessError::Storage` for memory
+operations and `MemoryError::Storage` for region installation. It never parks the
+calling thread to hide that rejection.
+`SharedMemory` aliases `Memory<SharedMemoryStorage>` for shared storage. Region installation
 does not expose proposals, revisions, transaction closures, or byte-store snapshots.
 
-`RegisterAccess` remains a compatibility surface. Addressed register
+`RegisterAccess` is the asynchronous offset-based transport boundary. Addressed register
 access subtracts a checked `RegisterBusBase` once and then reuses the consumer's
 canonical offset decoder. A host can therefore issue full bus addresses while a
 device uses generated typed views over the same root image; the runtime does not own a
@@ -167,8 +171,10 @@ Main and ISR turns on the owner can use it; inactive or other CPU polls return
 `CpuAccessError::Access` with their original source. Cloning a cloneable binding
 retains its owner. Cancellation retains the underlying transport's semantics.
 
-Observation reservations are affine committed state. Consumers reserve only after every
-fallible check, inside a non-awaiting commit section, then release effect locks and call
+`ObservationGate` and `ObservationReservation` reexport `BlockingObservationBackend`
+and `BlockingObservationReservation`. Observation reservations are affine committed state.
+Consumers reserve only after every fallible check, inside a non-awaiting commit section,
+then release effect locks and call
 `ObservationReservation::emit` in the same non-cancellable tail. Dropping a reservation,
 emitting a mismatched range, synchronization poison, or observer panic permanently faults
 the gate and wakes all waiters; missing committed observations are never skipped.

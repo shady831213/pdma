@@ -1,9 +1,13 @@
 use super::*;
 use crate::{AccessOrigin, NoopRegisterObserver};
+use std::sync::Mutex;
 use std::thread;
 
+mod cancellation;
+mod emission;
+
 fn wait_for_one_waiter(backend: &BlockingObservationBackend) {
-    let state = backend.state.lock().expect("backend lock");
+    let state = backend.state.lock_checked().expect("backend lock");
     drop(
         backend
             .changed
@@ -21,7 +25,7 @@ fn synchronization_poison_terminally_faults_backend() {
     )));
     let poison = backend.clone();
     let panic = std::panic::catch_unwind(AssertUnwindSafe(move || {
-        let _guard = poison.state.lock().expect("initial lock");
+        let _guard = poison.state.lock_checked().expect("initial lock");
         panic!("deliberate backend poison");
     }));
 

@@ -108,7 +108,10 @@ not authorization to implement them as part of a documentation update.
 - Define signal objects, dependency waits, completion signaling and memory ordering
   from the applicable HSA signal rules. Cover atomic load/store, add/subtract,
   AND/OR/XOR, exchange and compare-and-swap, including specified return values,
-  widths and legal ordering combinations. This is the complete signal set, not
+  legal ordering combinations. Stage 1 uses signed 64-bit signal values (the HSA
+  large-machine model), with no per-signal width selector. Generic memory atomic32
+  remains a separate backend capability, not a second PDMA signal format.
+  This is the complete signal set, not
   merely the operations initially needed by one scenario.
 - Do not add general-purpose atomic commands on arbitrary memory. HSA signal
   atomics exclude min/max and wrapinc/wrapdec; RISC-V LR/SC is not part of this
@@ -128,9 +131,11 @@ not authorization to implement them as part of a documentation update.
   not replace existing failure results for page-fault-stopped or erroneous work.
 - Abort/Reset must permit cancellation of waiting work without fabricating a
   successful signal or satisfying its dependency. Before implementation, specify
-  how recovery remains reachable during a long-running Drain: the existing serial
-  firmware management loop must not indefinitely queue the only cancellation path
-  behind that Drain. The concrete management mechanism is not selected yet.
+  how recovery remains reachable during a long-running Drain: firmware retains the
+  pending maintenance request while accepting ResetChannel and ResetDma on the
+  existing control channel. An affected reset fails the original Drain; reset
+  success still requires actual hardware cleanup. An unrelated reset does not
+  cancel the Drain. No CancelDrain opcode is needed.
 - Preserve signal storage, permissions and context bindings while queued, waiting,
   executing or awaiting retirement. Define fault/error classification and retry
   boundaries for signal accesses explicitly. A committed signal update must not

@@ -70,7 +70,16 @@ Firmware checks response space before accepting another command.
 The firmware-local control endpoint owns attachment, receive/consume, response
 publication and notifications. Resources serves ordinary requests serially:
 check response space, receive one request, await its resource operation, publish
-the response. Fatal observation remains active across waits with the same retained
+the response. Context maintenance is the exception: firmware retains one pending
+Drain/Abort/Destroy request and polls its hardware result while accepting
+ResetChannel, ResetDma and ResetEvents requests. Other requests received during
+pending maintenance return ContextBusy without changing resources; software may
+retry after maintenance finishes. Responses can therefore complete out of order
+and must be matched by request ID. A failed Drain does not authorize storage reuse:
+the separate reset response succeeds only after hardware cleanup. A Destroy whose
+Drain fails must not clear context validity. Software must keep consuming control
+responses, including ContextBusy, so full response storage cannot obstruct recovery.
+Fatal observation remains active across waits with the same retained
 operation future; event publication never waits for response space. A reset holds up later management requests, not independently driven
 hardware or peer DMA. Host can still submit bounded asynchronous requests and
 correlate responses by ID. Full response storage stops command admission; the
@@ -211,7 +220,11 @@ discard retained responses, and cancellation obligations remain unchanged.
 The outstanding ledger is bounded by command-ring capacity, including requests
 whose commands firmware has consumed but whose responses Host has not collected.
 Full means software must collect results before submitting more. Response-ring
-capacity is independent. Unknown/duplicate IDs or a reset/release result naming the wrong
+capacity is independent. To recover from an indefinitely pending Drain, configure
+at least two outstanding request slots and preserve capacity for a Reset request;
+continue collecting other responses while waiting. A one-slot client cannot issue
+in-band recovery until its sole request completes.
+Unknown/duplicate IDs or a reset/release result naming the wrong
 channel are protocol errors; the offending response is not consumed.
 
 Cancelled submission retains the same ID, target Function and publication state. Call

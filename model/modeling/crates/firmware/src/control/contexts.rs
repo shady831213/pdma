@@ -1,13 +1,12 @@
 use super::monitor::Monitor;
 use crate::Error;
 use hardware_interface_runtime::RegisterAccess;
-use pdma_model_contract::control::{
-    ControlRequest, ControlRequestOpcode, ControlResponse, ControlResponseStatus,
-};
+use pdma_model_contract::control::{ControlRequest, ControlResponse, ControlResponseStatus};
+mod maintenance;
+pub(super) use maintenance::Pending;
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::hw_components::context::{
     ContextAttributeRegisters, ContextEntryRegisters, ContextManagementRegisters,
-    ContextRequestAction, ContextRequestValues, ContextResultState, ContextResultValues,
     ContextTableRegisters,
 };
 use pdma_model_contract::ring::RingError;
@@ -36,93 +35,6 @@ impl Contexts {
         )
         .map_err(|_| Error::Ring(RingError::Geometry))?;
         Ok(table)
-    }
-
-    pub(super) async fn execute<B: RegisterAccess + Sync, M>(
-        &self,
-        (bus, monitor): (&B, &Monitor<'_, B>),
-        (request, response): (&ControlRequest, &mut ControlResponse),
-        channels: impl Iterator<Item = ChannelId> + Send,
-    ) -> Result<(), Error<B::Error, M>> {
-        let (action, destroy) = match request.opcode {
-            ControlRequestOpcode::CreateContext => {
-                return self.create((bus, monitor), (request, response)).await;
-            }
-            ControlRequestOpcode::DrainContext => (ContextRequestAction::Drain, false),
-            ControlRequestOpcode::DestroyContext => (ContextRequestAction::Drain, true),
-            ControlRequestOpcode::AbortContext => (ContextRequestAction::Abort, false),
-            ControlRequestOpcode::AcquireChannel
-            | ControlRequestOpcode::ReleaseChannel
-            | ControlRequestOpcode::ResetDma
-            | ControlRequestOpcode::ResetEvents
-            | ControlRequestOpcode::ResetChannel => return Ok(()),
-        };
-        let index =
-            usize::try_from(request.context).map_err(|_| Error::Ring(RingError::Geometry))?;
-        if index >= self.count {
-            response.status = ControlResponseStatus::InvalidContext;
-            return Ok(());
-        }
-        let entry = self.entry(index)?;
-        if self
-            .read(bus, entry + ContextEntryRegisters::VALID.offset())
-            .await?
-            == 0
-        {
-            response.status = ControlResponseStatus::InvalidContext;
-            return Ok(());
-        }
-        if self
-            .read(bus, entry + ContextEntryRegisters::OWNER.offset())
-            .await?
-            != request.function
-        {
-            response.status = ControlResponseStatus::PermissionDenied;
-            return Ok(());
-        }
-        let value = ContextRequestValues::RESET
-            .with_context_id(request.context)
-            .map_err(Error::RegisterCodec)?
-            .with_action(action);
-        bus.write(
-            self.address(ContextManagementRegisters::REQUEST.offset())?,
-            &value.raw().to_le_bytes(),
-        )
-        .await
-        .map_err(Error::Bus)?;
-        loop {
-            let raw = self
-                .read(bus, ContextManagementRegisters::RESULT.offset())
-                .await?;
-            let state = ContextResultValues::new(raw)
-                .state()
-                .map_err(Error::RegisterCodec)?;
-            response.status = match state {
-                ContextResultState::Pending => {
-                    tokio::task::yield_now().await;
-                    continue;
-                }
-                ContextResultState::Success => {
-                    if destroy {
-                        monitor.healthy().await?;
-                        self.write(bus, (entry + ContextEntryRegisters::VALID.offset(), 0))
-                            .await?;
-                    }
-                    ControlResponseStatus::Success
-                }
-                ContextResultState::InvalidContext => ControlResponseStatus::InvalidContext,
-                ContextResultState::Busy => ControlResponseStatus::ContextBusy,
-                ContextResultState::Idle | ContextResultState::Failed => {
-                    let failed = self.failed_channels(bus, channels).await?;
-                    response.channel = failed
-                        .first()
-                        .and_then(|id| u32::try_from(id.index()).ok())
-                        .unwrap_or(u32::MAX);
-                    ControlResponseStatus::MaintenanceFailed
-                }
-            };
-            return Ok(());
-        }
     }
 
     async fn create<B: RegisterAccess + Sync, M>(

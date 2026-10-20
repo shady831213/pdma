@@ -106,6 +106,12 @@ Functions over one control ring pair. VF software only uses granted data channel
 Hardware checks the platform-provided PF identity on control-register access. Firmware
 validates request targets against its configured Function namespace, retains per-channel
 owner allocation state and serves requests serially. A full PF response ring stops admission.
+Context maintenance retains one pending request while firmware can accept ResetChannel,
+ResetDma and ResetEvents. Other requests arriving while it remains pending receive
+ContextBusy; response IDs, not response order, identify requests. An affected reset
+fails the Drain without discarding accepted/resident cleanup tracking. An unrelated
+channel reset does not cancel the Drain. Reset success still waits for actual cleanup.
+Host must continue consuming responses and preserve an outstanding slot for recovery.
 ResetChannel closes its data window, awaits hardware reset, then reopens unconfigured data
 access without releasing ownership. ReleaseChannel awaits reset before freeing ownership.
 Later management requests wait; independently driven peer DMA continues. Resource lifecycle

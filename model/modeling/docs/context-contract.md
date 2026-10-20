@@ -119,7 +119,7 @@ the existing context submission-exclusion and lifetime obligations.
 | SW-05 | Channel users | Keep ring storage and its context binding valid while hardware can still use it. Disabling submission alone does not prove that accepted work and response writes have ended. |
 | SW-06 | Host software | Continue normal response consumption while waiting for maintenance. Software need not count responses to prove Drain/Abort completion and must not wait for a per-command response from an Abort-discarded command. |
 | SW-07 | Host software | Treat successful Abort as collective termination of its old target tasks, not proof that none executed. Handle normal responses already published but not yet consumed; do not reuse task IDs in a way that confuses these with new tasks. Pending interrupt delivery is not retracted. |
-| SW-08 | PF and channel users | Do not reset/release/rebind affected channels or change their ring geometry/context while maintenance is pending. Hardware interlocks enforce the corresponding configuration restrictions. Failure recovery must still permit the required reset. |
+| SW-08 | PF and channel users | Do not release/rebind affected channels or change their ring geometry/context while maintenance is pending. ResetChannel or ResetDma may interrupt maintenance, which then fails rather than proving drain. Keep affected resources valid until actual reset completion; a failed maintenance response alone never permits reuse. An unrelated channel reset does not cancel maintenance. |
 | SW-09 | PF and submitters | When the intention is destruction, maintain the no-new-submission interval through Destroy success. Do not resume after an intermediate Drain/Abort and then rely on that old completion to justify destruction. |
 | SW-10 | PF and platform/OS | Do not free or rebind a context, recycle its slot, or tear down dependent mappings based on a failed request, timeout or abandoned software waiter. Preserve them until a successful recovery establishes the required boundary. |
 | SW-11 | Platform/OS | DestroyContext releases a PDMA binding, not necessarily the PASID or entire address space. Account for aliases, control/ring bindings and other devices before unmapping or recycling shared resources. |
@@ -304,8 +304,11 @@ preserve this distinction when the external transport is implemented.
   entries without needing response space. Running accepted commands remain atomic,
   but matching parked commands are discarded without responses, including commands
   that park after Abort acceptance. Their retained references retire after cleanup.
-- Channel register owners interlock reset and conflicting enable/geometry/context
-  changes while maintenance is pending. Context owner and attributes are immutable
+- Channel register owners interlock conflicting enable/geometry/context changes
+  while maintenance is pending, but privileged reset remains reachable. A reset
+  affecting a captured channel records ChannelStopped and retains its failed bit;
+  accepted ownership and pipeline residency remain until reset cleanup retires
+  them. Context owner and attributes are immutable
   while valid; clearing valid is also rejected while maintenance is pending.
   Privileged channel-owner changes also obey SW-08: supported firmware serializes
   management, closes access and awaits real reset before owner reuse. Direct privileged

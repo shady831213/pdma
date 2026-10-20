@@ -5,6 +5,24 @@ use pdma_model_contract::register::{ReadWordValues, SwitchValues, WordValues};
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[test]
+fn peer_reset_does_not_interrupt_an_unrelated_drain() -> TestResult {
+    // Given: channel zero has an outstanding frontier, outside channel one's reset scope.
+    let mut dma = Dma::new((), 2)?;
+    let channel = dma.channels.first_mut().ok_or("channel")?;
+    channel.registers.values.enable = SwitchValues::new(1);
+    channel.command.registers.values.producer = WordValues::new(1);
+    let target = ContextId::new(7);
+    dma.drain_context(target, &[ChannelId::new(0)])?;
+    // When: software resets only the peer channel through administration MMIO.
+    let reset = ChannelId::new(1).admin_offset(2).ok_or("reset layout")?;
+    dma.write(reset, &1_u32.to_le_bytes())?;
+    // Then: the original frontier remains pending without failed channels.
+    assert_eq!(dma.context_status(target), Ok(false));
+    assert_eq!(dma.failed_context_channels(target).count(), 0);
+    Ok(())
+}
+
+#[test]
 fn duplicate_channel_frontiers_complete_when_the_owner_consumes_the_snapshot() -> TestResult {
     // Given: the same channel appears twice in a captured producer frontier.
     let mut dma = Dma::new((), 1)?;

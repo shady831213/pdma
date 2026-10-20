@@ -8,21 +8,74 @@ use pdma_model_contract::control::{
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::ring::RingError;
 
+impl<
+    B: hardware_interface_runtime::RegisterAccess + Sync,
+    M: hardware_interface_runtime::MemoryAccess + Sync,
+> super::Service<'_, B, M>
+{
+    pub(super) async fn dispatch(
+        &self,
+        (resources, request): (&mut Resources, ControlRequest),
+        (monitor, events): (&super::Monitor<'_, B>, &mut super::Events<'_, B, M>),
+    ) -> Result<
+        (ControlResponse, Option<crate::control::contexts::Pending>),
+        Error<B::Error, M::Error>,
+    > {
+        match request.opcode {
+            ControlRequestOpcode::ResetEvents => {
+                let mut result = super::response(request);
+                result.status = events.reset().await?;
+                return Ok((result, None));
+            }
+            ControlRequestOpcode::AcquireChannel
+            | ControlRequestOpcode::ReleaseChannel
+            | ControlRequestOpcode::ResetChannel
+            | ControlRequestOpcode::ResetDma
+            | ControlRequestOpcode::CreateContext
+            | ControlRequestOpcode::DrainContext
+            | ControlRequestOpcode::AbortContext
+            | ControlRequestOpcode::DestroyContext => {}
+        }
+        let result = self
+            .watch(
+                self.execute(resources, (monitor, request)),
+                (monitor, Some(&mut *events)),
+            )
+            .await?;
+        self.observe((monitor, Some(events))).await?;
+        match result {
+            Ok((mut response, pending)) => {
+                if pending.is_none() && monitor.failed() {
+                    response.status = ControlResponseStatus::DeviceFailed;
+                }
+                Ok((response, pending))
+            }
+            Err(Error::DeviceFailed) => {
+                let mut failed = super::response(request);
+                failed.status = ControlResponseStatus::DeviceFailed;
+                Ok((failed, None))
+            }
+            Err(error) => Err(error),
+        }
+    }
+}
+
 impl<B: hardware_interface_runtime::RegisterAccess + Sync, M: Sync> super::Service<'_, B, M> {
     pub(super) async fn execute<E>(
         &self,
         resources: &mut Resources,
         (monitor, request): (&super::Monitor<'_, B>, ControlRequest),
-    ) -> Result<ControlResponse, Error<B::Error, E>> {
+    ) -> Result<(ControlResponse, Option<crate::control::contexts::Pending>), Error<B::Error, E>>
+    {
         match request.opcode {
             ControlRequestOpcode::ResetDma => {
                 monitor.reset().await?;
-                return Ok(super::response(request));
+                return Ok((super::response(request), None));
             }
             ControlRequestOpcode::ResetEvents => {
                 let mut response = super::response(request);
                 response.status = ControlResponseStatus::InvalidState;
-                return Ok(response);
+                return Ok((response, None));
             }
             ControlRequestOpcode::AcquireChannel
             | ControlRequestOpcode::ReleaseChannel
@@ -45,7 +98,7 @@ impl<B: hardware_interface_runtime::RegisterAccess + Sync, M: Sync> super::Servi
             Ok(function) => function,
             Err(error) => {
                 response.status = resource_status(Err(error));
-                return Ok(response);
+                return Ok((response, None));
             }
         };
         match request.opcode {
@@ -77,18 +130,15 @@ impl<B: hardware_interface_runtime::RegisterAccess + Sync, M: Sync> super::Servi
             | ControlRequestOpcode::AbortContext
             | ControlRequestOpcode::DestroyContext => match &resources.contexts {
                 Some(contexts) => {
-                    contexts
-                        .execute(
-                            (self.bus, monitor),
-                            (&request, &mut response),
-                            resources.channels(function),
-                        )
+                    let pending = contexts
+                        .execute((self.bus, monitor), (&request, &mut response))
                         .await?;
+                    return Ok((response, pending));
                 }
                 None => response.status = ControlResponseStatus::InvalidContext,
             },
         }
-        Ok(response)
+        Ok((response, None))
     }
 }
 

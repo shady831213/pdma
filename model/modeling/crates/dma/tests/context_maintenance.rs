@@ -113,6 +113,64 @@ fn configured_ring_context_is_busy_even_while_channel_is_paused() -> TestResult 
 }
 
 #[test]
+fn reset_interrupts_drain_but_waits_for_resident_cleanup() -> TestResult {
+    use pdma_model_contract::dma::{DmaAdmin, DmaControl, DmaDiscovery};
+    for whole_device in [false, true] {
+        // Given: a fetched command is resident in a pending context Drain.
+        let (mut dma, memory) = setup(0x1100, 2)?;
+        let mut input = command();
+        input.source.context = 7;
+        submit(&mut dma, &memory, input)?;
+        let id = ChannelId::new(0);
+        let consumer = id.register_offset(1).ok_or("layout")? + CommandRegisters::CONSUMER.offset();
+        let reset = if whole_device {
+            DmaDiscovery::EXTENT + DmaAdmin::CONTROL.offset() + DmaControl::RESET.offset()
+        } else {
+            id.admin_offset(1).ok_or("layout")?
+        };
+        let mut pipeline = dma.hardware();
+        let mut driver = hardware_interface_pipeline::HardwareDriver::new();
+        for _ in 0..128 {
+            let _ = driver.step(&mut pipeline, &mut dma)?;
+            if support::read_word(&mut dma, consumer)? == 1 {
+                break;
+            }
+        }
+        assert_eq!(support::read_word(&mut dma, consumer)?, 1);
+        dma.drain_context(ContextId::new(7), &[id])?;
+        assert_eq!(dma.context_status(ContextId::new(7)), Ok(false));
+        // When: reset interrupts the affected Drain before execution finishes.
+        dma.write(reset, &1_u32.to_le_bytes())?;
+        // Then: Drain fails immediately, while reset stays busy until the continuation retires.
+        assert_eq!(
+            dma.context_status(ContextId::new(7)),
+            Err(pdma_model_dma::MaintenanceError::ChannelStopped(id))
+        );
+        assert_eq!(
+            dma.failed_context_channels(ContextId::new(7))
+                .collect::<Vec<_>>(),
+            [id]
+        );
+        assert_eq!(support::read_word(&mut dma, reset)?, 1);
+        for _ in 0..128 {
+            let _ = driver.step(&mut pipeline, &mut dma)?;
+            if support::read_word(&mut dma, reset)? == 0 {
+                break;
+            }
+        }
+        assert_eq!(support::read_word(&mut dma, reset)?, 0);
+        let mut destination = [0; 4];
+        memory.read(0x1300.into(), MemoryAlignment::ONE, &mut destination)?;
+        assert_eq!(destination, [0; 4]);
+        assert_eq!(
+            dma.context_status(ContextId::new(7)),
+            Err(pdma_model_dma::MaintenanceError::ChannelStopped(id))
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn failed_drain_returns_channel_and_releases_reset_interlock() -> TestResult {
     // Given
     let (mut dma, memory) = setup(0x1100, 2)?;
@@ -127,10 +185,7 @@ fn failed_drain_returns_channel_and_releases_reset_interlock() -> TestResult {
     // When
     dma.drain_context(ContextId::new(7), &[channel])?;
     // Then
-    assert_eq!(
-        dma.write(reset, &1_u32.to_le_bytes()),
-        Err(pdma_model_dma::Error::MaintenanceInProgress)
-    );
+    assert_eq!(dma.write(reset, &0_u32.to_le_bytes()), Ok(()));
     let mut pipeline = dma.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..128 {

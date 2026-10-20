@@ -47,16 +47,12 @@ impl<M, S> Dma<M, S> {
         address: usize,
         source: &[u8],
     ) -> Result<(), RegisterAccessError<Error>> {
-        let maintenance = self.maintenance_interlock(None);
         let resetting = self.resetting();
         let mut requested = false;
         self.control.write_with(
             address,
             source,
-            |offset, _, next| {
-                if offset == DmaControl::RESET.offset() && next.reset.request() {
-                    maintenance?;
-                }
+            |offset, _, _| {
                 if resetting && offset != DmaControl::RESET.offset() {
                     return Err(Error::ResetInProgress);
                 }
@@ -112,7 +108,7 @@ impl<M, S> Dma<M, S> {
         address: usize,
         destination: &mut [u8],
     ) -> Result<(), RegisterAccessError<Error>> {
-        let (channel, offset, _) = self.locate_admin(address)?;
+        let (channel, offset) = self.locate_admin(address)?;
         channel
             .admin
             .read(offset, destination)
@@ -124,9 +120,10 @@ impl<M, S> Dma<M, S> {
         address: usize,
         source: &[u8],
     ) -> Result<(), RegisterAccessError<Error>> {
-        let (channel, offset, maintenance) = self.locate_admin(address)?;
-        channel.write_admin(offset, source, maintenance)?;
+        let (channel, offset) = self.locate_admin(address)?;
+        channel.write_admin(offset, source)?;
         self.release_invalid_grant();
+        self.refresh_maintenance();
         Ok(())
     }
 
@@ -152,19 +149,16 @@ impl<M, S> Dma<M, S> {
     fn locate_admin(
         &mut self,
         address: usize,
-    ) -> Result<(&mut Channel, usize, bool), RegisterAccessError<Error>> {
+    ) -> Result<(&mut Channel, usize), RegisterAccessError<Error>> {
         let admin = self.layout.admin();
         let (index, offset) = admin
             .locate(address)
             .and_then(|(_, offset)| admin.child().channels().locate(offset))
             .ok_or(RegisterAccessError::OutsideWindow { address })?;
-        let maintenance = self
-            .maintenance_interlock(Some(ChannelId::new(index)))
-            .is_err();
         let channel = self
             .channels
             .get_mut(index)
             .ok_or(RegisterAccessError::OutsideWindow { address })?;
-        Ok((channel, offset, maintenance))
+        Ok((channel, offset))
     }
 }

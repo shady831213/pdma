@@ -94,20 +94,13 @@ impl Channel {
         &mut self,
         address: usize,
         bytes: &[u8],
-        maintenance: bool,
     ) -> Result<(), RegisterAccessError<Error>> {
         let resetting = self.resetting();
         let mut requested = false;
         self.admin.write_with(
             address,
             bytes,
-            |_, _, next| {
-                if maintenance && next.reset.request() {
-                    Err(Error::MaintenanceInProgress)
-                } else {
-                    Ok(())
-                }
-            },
+            |_, _, _| Ok(()),
             |_, next| {
                 requested = next.reset.request();
                 next.reset = ResetValues::new(u32::from(resetting));

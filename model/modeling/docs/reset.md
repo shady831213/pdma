@@ -5,6 +5,30 @@ Completion is the memory-lifetime boundary: affected old work can no longer issu
 a command read, SG-list read, payload read/write or response write. It is not a
 promise that the old command completed successfully.
 
+## Interrupting context maintenance
+
+An affected privileged channel reset or whole-DMA reset may interrupt pending
+context Drain/Abort. The maintenance result becomes failure with the affected
+channel bitmap; it is never converted to successful drain. Reset does not depend
+on reaching the abandoned producer frontier: it blocks old admissions, cancels
+unstarted/retained work, and waits for resident work to retire through the normal
+reset path. Failing maintenance must not remove that ownership or residency ledger.
+Only actual reset completion permits reuse of the affected channel's resources.
+Other channels captured by a failed multi-channel Drain still need their own
+cleanup; resetting one channel does not certify the whole context as unused.
+
+Firmware accepts ResetChannel/ResetDma while retaining the original maintenance
+request and returns their results under separate request IDs. Reset completion is
+not conditional on a signal wait becoming satisfied. Reset never fabricates a
+successful dependency update and cannot roll back an already committed write or
+atomic update. An unrelated channel reset leaves the maintenance request pending.
+This recovery rule is a PDMA system contract, not an HSA-defined DrainContext API.
+
+For RTL, cancellation of the maintenance objective does not cancel obligations
+already accepted by an external interface: every affected outstanding transaction
+must retire before reset acknowledgment. A hung external interface can prevent
+reset completion; firmware must not turn a software timeout into reset success.
+
 ## Register handshake and scope
 
 The channel and device `Reset` registers have the same read/write protocol:

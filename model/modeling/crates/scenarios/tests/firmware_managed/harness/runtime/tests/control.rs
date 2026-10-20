@@ -11,6 +11,7 @@ use pdma_model_host::{Error, Management, ManagementRings, RingConfig, firmware};
 use std::{future::Future, pin::pin, task::Poll, time::Duration};
 
 mod in_flight;
+mod maintenance_reset;
 pub(super) mod memory;
 mod raw;
 

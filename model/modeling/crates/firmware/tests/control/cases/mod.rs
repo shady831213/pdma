@@ -5,6 +5,7 @@ mod contexts;
 mod events;
 mod failures;
 mod fatal;
+mod maintenance_reset;
 mod multi;
 mod reset;
 mod support;

@@ -8,6 +8,11 @@ use pdma_model_software::control::{InterruptEvent, ManagementAddresses};
 use std::{convert::Infallible, future::Future};
 mod request;
 
+struct PendingRequest {
+    response: ControlResponse,
+    operation: super::contexts::Pending,
+}
+
 pub(super) struct Service<'a, B, M> {
     pub(super) bus: &'a B,
     pub(super) memory: &'a M,
@@ -39,60 +44,105 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Sync> Service<'_, B, M> {
             (self.addresses.control, channel.descriptor()),
         )
         .await?;
+        let mut pending: Option<PendingRequest> = None;
         loop {
             self.observe((&monitor, Some(&mut events))).await?;
             if !channel.has_response_space().await? {
                 self.interrupt.wait().await;
                 continue;
             }
+            if let Some(waiting) = pending.as_mut() {
+                let completed = self
+                    .watch(
+                        self.poll_context(&resources, (&monitor, waiting)),
+                        (&monitor, Some(&mut events)),
+                    )
+                    .await??;
+                if completed {
+                    let result = waiting.response;
+                    pending = None;
+                    self.watch(channel.respond(result), (&monitor, Some(&mut events)))
+                        .await??;
+                    tokio::task::yield_now().await;
+                    continue;
+                }
+            }
             let Some(request) = self
                 .watch(channel.try_receive(), (&monitor, Some(&mut events)))
                 .await??
             else {
-                self.interrupt.wait().await;
+                if pending.is_some() {
+                    tokio::task::yield_now().await;
+                } else {
+                    self.interrupt.wait().await;
+                }
                 continue;
             };
-            let result = match request.opcode {
-                ControlRequestOpcode::ResetEvents => {
-                    let mut result = response(request);
-                    result.status = events.reset().await?;
-                    result
-                }
-                ControlRequestOpcode::ResetDma
-                | ControlRequestOpcode::AcquireChannel
+            let recovery = match request.opcode {
+                ControlRequestOpcode::ResetChannel
+                | ControlRequestOpcode::ResetDma
+                | ControlRequestOpcode::ResetEvents => true,
+                ControlRequestOpcode::AcquireChannel
                 | ControlRequestOpcode::ReleaseChannel
-                | ControlRequestOpcode::ResetChannel
                 | ControlRequestOpcode::CreateContext
                 | ControlRequestOpcode::DrainContext
                 | ControlRequestOpcode::AbortContext
-                | ControlRequestOpcode::DestroyContext => {
-                    let result = self
-                        .watch(
-                            self.execute(&mut resources, (&monitor, request)),
-                            (&monitor, Some(&mut events)),
-                        )
-                        .await?;
-                    self.observe((&monitor, Some(&mut events))).await?;
-                    match result {
-                        Ok(mut response) => {
-                            if monitor.failed() {
-                                response.status = ControlResponseStatus::DeviceFailed;
-                            }
-                            response
-                        }
-                        Err(Error::DeviceFailed) => {
-                            let mut failed = response(request);
-                            failed.status = ControlResponseStatus::DeviceFailed;
-                            failed
-                        }
-                        Err(error) => return Err(error),
-                    }
-                }
+                | ControlRequestOpcode::DestroyContext => false,
             };
+            if pending.is_some() && !recovery {
+                let mut busy = response(request);
+                busy.status = ControlResponseStatus::ContextBusy;
+                self.watch(channel.respond(busy), (&monitor, Some(&mut events)))
+                    .await??;
+                tokio::task::yield_now().await;
+                continue;
+            }
+            let (result, operation) = self
+                .dispatch((&mut resources, request), (&monitor, &mut events))
+                .await?;
+            if let Some(operation) = operation {
+                pending = Some(PendingRequest {
+                    response: result,
+                    operation,
+                });
+                tokio::task::yield_now().await;
+                continue;
+            }
             self.watch(channel.respond(result), (&monitor, Some(&mut events)))
                 .await??;
             self.observe((&monitor, Some(&mut events))).await?;
             tokio::task::yield_now().await;
+        }
+    }
+
+    async fn poll_context(
+        &self,
+        resources: &Resources,
+        (monitor, waiting): (&Monitor<'_, B>, &mut PendingRequest),
+    ) -> Result<bool, Error<B::Error, M::Error>> {
+        let Some(contexts) = resources.contexts.as_ref() else {
+            waiting.response.status = ControlResponseStatus::InvalidContext;
+            return Ok(true);
+        };
+        match contexts
+            .poll(
+                (self.bus, monitor),
+                (&waiting.operation, &mut waiting.response),
+                resources.channels(waiting.operation.function),
+            )
+            .await
+        {
+            Err(Error::DeviceFailed) => {
+                waiting.response.status = ControlResponseStatus::DeviceFailed;
+                Ok(true)
+            }
+            Ok(completed) => {
+                if completed && monitor.failed() {
+                    waiting.response.status = ControlResponseStatus::DeviceFailed;
+                }
+                Ok(completed)
+            }
+            Err(error) => Err(error),
         }
     }
 

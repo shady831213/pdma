@@ -22,6 +22,7 @@ impl<M, SB> Dma<M, SB> {
             }
             self.release_invalid_grant();
             self.finish_device_reset();
+            self.refresh_maintenance();
         }
     }
 }

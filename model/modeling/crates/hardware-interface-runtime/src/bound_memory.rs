@@ -17,6 +17,26 @@ impl<'a, M: ?Sized, S> BoundMemory<'a, M, S> {
 impl<M: MemoryAccess<S> + ?Sized, S> MemoryAccess for BoundMemory<'_, M, S> {
     type Error = M::Error;
 
+    fn atomic32_with_sideband(
+        &self,
+        (): &(),
+        address: MemoryAddress,
+        operation: crate::AtomicOperation<u32>,
+    ) -> Result<u32, crate::AtomicAccessError<Self::Error>> {
+        self.memory
+            .atomic32_with_sideband(&self.sideband, address, operation)
+    }
+
+    fn atomic64_with_sideband(
+        &self,
+        (): &(),
+        address: MemoryAddress,
+        operation: crate::AtomicOperation<u64>,
+    ) -> Result<u64, crate::AtomicAccessError<Self::Error>> {
+        self.memory
+            .atomic64_with_sideband(&self.sideband, address, operation)
+    }
+
     fn validate_with_sideband(
         &self,
         (): &(),

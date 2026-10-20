@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
-use crate::{MemoryAddress, MemoryAlignment, MemoryRegion};
+use crate::{MemoryAddress, MemoryAlignment, MemoryRegion, StorageError};
 
 mod unit {
     pub trait UnitSideband: Sized {
@@ -16,6 +16,8 @@ mod unit {
 /// Failure of one checked contiguous access to the built-in memory store.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MemoryAccessError {
+    /// The backing store rejected access before the operation ran.
+    Storage(StorageError),
     /// The exclusive access end exceeds the address space.
     AddressOverflow {
         /// Access start address.
@@ -49,6 +51,7 @@ pub enum MemoryAccessError {
 impl Display for MemoryAccessError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Storage(error) => Display::fmt(error, formatter),
             Self::AddressOverflow { address, length } => write!(
                 formatter,
                 "memory access at {:#x} with length {length} exceeds the address space",
@@ -78,12 +81,67 @@ impl Display for MemoryAccessError {
     }
 }
 
-impl Error for MemoryAccessError {}
+impl Error for MemoryAccessError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Storage(error) => Some(error),
+            Self::AddressOverflow { .. }
+            | Self::Misaligned { .. }
+            | Self::Unmapped { .. }
+            | Self::CrossesRegion { .. } => None,
+        }
+    }
+}
 
 /// Synchronous checked bulk access to a modeled byte store.
 pub trait MemoryAccess<S = ()> {
     /// Backend-owned failure, preserved by the default access helpers.
     type Error;
+
+    /// Performs one indivisible 32-bit access, or rejects the unsupported capability.
+    /// Implementations must honor [`crate::AtomicOperation`]'s failure and ordering contract.
+    fn atomic32_with_sideband(
+        &self,
+        _sideband: &S,
+        _address: MemoryAddress,
+        _operation: crate::AtomicOperation<u32>,
+    ) -> Result<u32, crate::AtomicAccessError<Self::Error>> {
+        Err(crate::AtomicAccessError::Unsupported)
+    }
+
+    /// Performs one indivisible 64-bit access; errors must precede modification.
+    fn atomic64_with_sideband(
+        &self,
+        _sideband: &S,
+        _address: MemoryAddress,
+        _operation: crate::AtomicOperation<u64>,
+    ) -> Result<u64, crate::AtomicAccessError<Self::Error>> {
+        Err(crate::AtomicAccessError::Unsupported)
+    }
+
+    /// Performs an indivisible word access without metadata on a unit-sideband backend.
+    fn atomic32(
+        &self,
+        address: MemoryAddress,
+        operation: crate::AtomicOperation<u32>,
+    ) -> Result<u32, crate::AtomicAccessError<Self::Error>>
+    where
+        S: unit::UnitSideband,
+    {
+        self.atomic32_with_sideband(&S::unit(), address, operation)
+    }
+
+    /// Performs an indivisible double-word access on a unit-sideband backend.
+    fn atomic64(
+        &self,
+        address: MemoryAddress,
+        operation: crate::AtomicOperation<u64>,
+    ) -> Result<u64, crate::AtomicAccessError<Self::Error>>
+    where
+        S: unit::UnitSideband,
+    {
+        self.atomic64_with_sideband(&S::unit(), address, operation)
+    }
 
     /// Checks a complete extent without reading, writing, allocating, or changing storage.
     ///

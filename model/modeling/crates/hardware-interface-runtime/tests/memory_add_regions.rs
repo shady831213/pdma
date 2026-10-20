@@ -40,7 +40,7 @@ fn failed_batch_preserves_existing_regions_and_bytes() -> TestResult {
             second: installed
         })
     );
-    assert_eq!(memory.regions(), vec![installed]);
+    assert_eq!(memory.regions()?, vec![installed]);
     let mut bytes = [0; 4];
     memory.read(installed.base(), alignment, &mut bytes)?;
     assert_eq!(bytes, [0xa5; 4]);
@@ -67,7 +67,7 @@ fn repeated_addition_rejects_duplicate_without_consuming_capacity() -> TestResul
         })
     );
     memory.add_regions(&[second])?;
-    assert_eq!(memory.regions(), vec![first, second]);
+    assert_eq!(memory.regions()?, vec![first, second]);
     Ok(())
 }
 
@@ -96,8 +96,8 @@ fn independent_stores_validate_their_own_regions() -> TestResult {
             second: b
         })
     );
-    assert_eq!(first.regions(), vec![a, b]);
-    assert_eq!(second.regions(), vec![b]);
+    assert_eq!(first.regions()?, vec![a, b]);
+    assert_eq!(second.regions()?, vec![b]);
     let mut first_bytes = [0];
     let mut second_bytes = [0];
     first.read(a.base(), MemoryAlignment::ONE, &mut first_bytes)?;
@@ -141,7 +141,7 @@ fn competing_overlapping_additions_have_one_winner() -> TestResult {
             .count(),
         1
     );
-    assert_eq!(memory.regions(), vec![shared_region]);
+    assert_eq!(memory.regions()?, vec![shared_region]);
     Ok(())
 }
 
@@ -161,7 +161,7 @@ fn capacity_rejection_preserves_regions_and_bytes() -> TestResult {
         result,
         Err(MemoryError::RegionTableExhausted { entries: 3 })
     );
-    assert_eq!(memory.regions(), vec![installed]);
+    assert_eq!(memory.regions()?, vec![installed]);
     let mut bytes = [0];
     memory.read(installed.base(), MemoryAlignment::ONE, &mut bytes)?;
     assert_eq!(bytes, [0x5a]);
@@ -187,7 +187,7 @@ fn backing_exhaustion_discards_allocated_batch_prefix() -> TestResult {
             length: impossible.length()
         })
     );
-    assert_eq!(memory.regions(), vec![installed]);
+    assert_eq!(memory.regions()?, vec![installed]);
     let mut bytes = [0];
     memory.read(installed.base(), MemoryAlignment::ONE, &mut bytes)?;
     assert_eq!(bytes, [0x5a]);
@@ -206,7 +206,7 @@ fn batch_overlap_is_reported_in_declaration_order() -> TestResult {
 
     // Then the declared order is retained in the error and nothing installs.
     assert_eq!(result, Err(MemoryError::Overlap { first, second }));
-    assert!(memory.regions().is_empty());
+    assert!(memory.regions()?.is_empty());
     Ok(())
 }
 
@@ -222,7 +222,7 @@ fn empty_addition_is_a_noop_at_capacity() -> TestResult {
     memory.add_regions(&[])?;
 
     // Then no capacity is needed and bytes remain intact.
-    assert_eq!(memory.regions(), vec![installed]);
+    assert_eq!(memory.regions()?, vec![installed]);
     let mut bytes = [0];
     memory.read(installed.base(), MemoryAlignment::ONE, &mut bytes)?;
     assert_eq!(bytes, [0xa5]);
@@ -243,7 +243,7 @@ fn successful_batch_sorts_regions_and_preserves_existing_bytes() -> TestResult {
     memory.add_regions(&[last, first])?;
 
     // Then metadata is sorted, existing bytes survive, and new backing is zeroed.
-    assert_eq!(memory.regions(), vec![first, installed, last]);
+    assert_eq!(memory.regions()?, vec![first, installed, last]);
     for (region, expected) in [(first, [0; 4]), (installed, [0xa5; 4]), (last, [0; 4])] {
         let mut bytes = [0xff; 4];
         memory.read(region.base(), MemoryAlignment::ONE, &mut bytes)?;
@@ -274,6 +274,6 @@ fn competing_disjoint_additions_both_succeed() -> TestResult {
     for writer in writers {
         writer.join().map_err(|_| "memory writer panicked")??;
     }
-    assert_eq!(memory.regions(), vec![first, second]);
+    assert_eq!(memory.regions()?, vec![first, second]);
     Ok(())
 }

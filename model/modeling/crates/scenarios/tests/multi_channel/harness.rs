@@ -24,7 +24,7 @@ pub(super) async fn run(scenario: Scenario) -> TestResult<Report> {
     let runtime = InterruptRuntime::new(Arc::new(SoftwareCpu::new()), model.clone());
     let mut workers = JoinSet::new();
     workers.spawn(hardware::drive(model.clone(), hardware));
-    assert!(storage.regions().is_empty());
+    assert!(storage.regions()?.is_empty());
     let execution = runtime.run_main(async |interrupts| {
         software::main(
             software::Ports {

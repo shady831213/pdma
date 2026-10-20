@@ -88,7 +88,7 @@ async fn early_host_error_cancels_all_scoped_system_owners() -> TestResult {
         .ok_or("Host error changed type")?;
     assert_eq!(stopped.kind(), std::io::ErrorKind::Interrupted);
     assert_eq!(report.summary.deliveries(), 0);
-    assert!(report.storage.regions().is_empty());
+    assert!(report.storage.regions()?.is_empty());
     assert_eq!(Arc::strong_count(&report.storage), 1);
     Ok(())
 }

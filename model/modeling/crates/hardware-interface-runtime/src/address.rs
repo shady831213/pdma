@@ -35,6 +35,9 @@ impl From<u64> for MemoryAddress {
 pub struct MemoryAlignment(u64);
 
 impl MemoryAlignment {
+    pub(crate) const WORD: Self = Self(4);
+    pub(crate) const DOUBLE_WORD: Self = Self(8);
+
     /// Byte alignment accepted by every address.
     pub const ONE: Self = Self(1);
 

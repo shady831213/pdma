@@ -95,7 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     writeln!(
         surface,
         "happy installed_regions={} region_base={:#x} region_length={} region_alignment={} write_calls={} read_calls={} first={first:#04x} last={last:#04x} equal={}",
-        happy_memory.regions().len(),
+        happy_memory.regions()?.len(),
         region.base().raw(),
         region.length(),
         region.alignment().raw(),
@@ -154,7 +154,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "allocator capacity_failure={capacity_failure:?} first_zero={:#x} second_zero={:#x} installed_regions={}",
         first_zero.raw(),
         second_zero.raw(),
-        empty_memory.regions().len()
+        empty_memory.regions()?.len()
     )?;
     Ok(())
 }

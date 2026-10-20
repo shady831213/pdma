@@ -25,7 +25,7 @@ pub(super) async fn run(scenario: Scenario, payload: &[u8]) -> TestResult<Report
     let (device, hardware) = crate::hardware::assemble(memory.clone())?;
     let model = Model::new(device);
     let runtime = InterruptRuntime::new(Arc::new(SoftwareCpu::new()), model.clone());
-    assert!(storage.regions().is_empty());
+    assert!(storage.regions()?.is_empty());
     let execution = runtime.run_main(async |interrupts| {
         software::main(
             software::Ports {

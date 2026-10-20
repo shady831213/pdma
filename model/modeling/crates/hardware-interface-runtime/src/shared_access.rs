@@ -40,6 +40,24 @@ impl<S, E> fmt::Debug for SharedMemoryAccess<S, E> {
 impl<S, E> MemoryAccess<S> for SharedMemoryAccess<S, E> {
     type Error = E;
 
+    fn atomic32_with_sideband(
+        &self,
+        sideband: &S,
+        address: MemoryAddress,
+        operation: crate::AtomicOperation<u32>,
+    ) -> Result<u32, crate::AtomicAccessError<Self::Error>> {
+        self.0.atomic32_with_sideband(sideband, address, operation)
+    }
+
+    fn atomic64_with_sideband(
+        &self,
+        sideband: &S,
+        address: MemoryAddress,
+        operation: crate::AtomicOperation<u64>,
+    ) -> Result<u64, crate::AtomicAccessError<Self::Error>> {
+        self.0.atomic64_with_sideband(sideband, address, operation)
+    }
+
     fn validate_with_sideband(
         &self,
         sideband: &S,

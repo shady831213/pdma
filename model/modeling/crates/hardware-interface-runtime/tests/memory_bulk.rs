@@ -30,7 +30,10 @@ fn memory_bulk_descriptor_round_trips_in_one_write_and_one_read() {
         .expect("bulk read");
 
     // Then metadata and every literal byte survive the public surface.
-    assert_eq!(memory.regions(), vec![installed]);
+    assert_eq!(
+        memory.regions().expect("metadata is accessible"),
+        vec![installed]
+    );
     assert_eq!(output, descriptor);
     assert_eq!(output.first(), Some(&0x11));
     assert_eq!(output.last(), Some(&0xee));

@@ -33,7 +33,7 @@ async fn copy(response_fault: bool, input: software::Input<'_>) -> TestResult<Ve
         let address = MemoryAddress::new(segment.address);
         let region = report
             .storage
-            .regions()
+            .regions()?
             .into_iter()
             .find(|region| region.base() == address)
             .ok_or_else(|| std::io::Error::other("destination allocation is missing"))?;

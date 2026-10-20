@@ -19,7 +19,8 @@ pub enum MemoryFailure {
 impl From<MemoryAccessError> for MemoryFailure {
     fn from(error: MemoryAccessError) -> Self {
         match error {
-            MemoryAccessError::AddressOverflow { .. }
+            MemoryAccessError::Storage(_)
+            | MemoryAccessError::AddressOverflow { .. }
             | MemoryAccessError::Misaligned { .. }
             | MemoryAccessError::Unmapped { .. }
             | MemoryAccessError::CrossesRegion { .. } => Self::Access,

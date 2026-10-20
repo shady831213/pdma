@@ -25,7 +25,7 @@ trait MemoryFixture: MemoryAccess<Error = MemoryAccessError> {
 
 impl MemoryFixture for SharedMemory {
     fn installed_regions(&self) -> Vec<MemoryRegion> {
-        self.regions()
+        self.regions().expect("metadata is accessible")
     }
 
     fn install(&self, regions: &[MemoryRegion]) -> Result<(), MemoryError> {
@@ -39,7 +39,7 @@ impl MemoryFixture for SharedMemory {
 
 impl MemoryFixture for Memory<LocalMemoryStorage> {
     fn installed_regions(&self) -> Vec<MemoryRegion> {
-        self.regions()
+        self.regions().expect("metadata is accessible")
     }
 
     fn install(&self, regions: &[MemoryRegion]) -> Result<(), MemoryError> {
@@ -125,8 +125,14 @@ fn parity_local_and_default_execute_identical_literal_sequence() {
     println!("local={local_transcript:?}");
     println!("default={shared_transcript:?}");
     assert_eq!(local_transcript, shared_transcript);
-    assert_eq!(local.regions(), vec![region(0x1000, 64, 64)]);
-    assert_eq!(shared.regions(), vec![region(0x1000, 64, 64)]);
+    assert_eq!(
+        local.regions().expect("metadata is accessible"),
+        vec![region(0x1000, 64, 64)]
+    );
+    assert_eq!(
+        shared.regions().expect("metadata is accessible"),
+        vec![region(0x1000, 64, 64)]
+    );
     let mut local_bytes = [0; 4];
     let mut shared_bytes = [0; 4];
     local

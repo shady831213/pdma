@@ -87,7 +87,7 @@ fn validate_through_shared_capability_preserves_bytes_and_regions() {
     memory
         .write(MemoryAddress::new(0x1000), alignment(1), &[0xa5; 64])
         .expect("sentinel");
-    let regions = memory.regions();
+    let regions = memory.regions().expect("metadata is accessible");
     let access = SharedMemoryAccess::from(Arc::clone(&memory));
 
     // When validation traverses the erased capability.
@@ -95,7 +95,7 @@ fn validate_through_shared_capability_preserves_bytes_and_regions() {
 
     // Then validation leaves every observable storage property unchanged.
     assert_eq!(result, Ok(()));
-    assert_eq!(memory.regions(), regions);
+    assert_eq!(memory.regions().expect("metadata is accessible"), regions);
     let mut bytes = [0; 64];
     memory
         .read(MemoryAddress::new(0x1000), alignment(1), &mut bytes)

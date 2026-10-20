@@ -24,7 +24,10 @@ fn allocator_installs_aligned_zeroed_backing() {
 
     // Then its public access capability exposes aligned, zeroed backing.
     assert_eq!(address, MemoryAddress::new(0x1040));
-    assert_eq!(memory.regions(), [region(0x1040, 64, 64)]);
+    assert_eq!(
+        memory.regions().expect("metadata is accessible"),
+        [region(0x1040, 64, 64)]
+    );
     let access = allocator.memory_access();
     assert!(access.shares_backend(&allocator.memory_access()));
     let mut bytes = [0xff; 64];
@@ -67,7 +70,7 @@ fn allocator_clones_reserve_distinct_addresses_concurrently() {
         [MemoryAddress::new(0x1000), MemoryAddress::new(0x1040)]
     );
     assert_eq!(
-        memory.regions(),
+        memory.regions().expect("metadata is accessible"),
         [region(0x1000, 64, 64), region(0x1040, 64, 64)]
     );
 }
@@ -88,7 +91,7 @@ fn zero_allocation_advances_cursor_without_installing_backing() {
     // Then addresses advance by one byte without creating storage or a valid extent.
     assert_eq!(first, MemoryAddress::new(0x1000));
     assert_eq!(second, MemoryAddress::new(0x1001));
-    assert!(memory.regions().is_empty());
+    assert!(memory.regions().expect("metadata is accessible").is_empty());
     assert_eq!(
         allocator.memory_access().validate(first, alignment(1), 0),
         Err(MemoryAccessError::Unmapped { address: first })
@@ -121,7 +124,10 @@ fn failed_allocation_preserves_cursor_and_installed_bytes() {
             }
         ))
     );
-    assert_eq!(memory.regions(), [region(0x1040, 64, 64)]);
+    assert_eq!(
+        memory.regions().expect("metadata is accessible"),
+        [region(0x1040, 64, 64)]
+    );
     let mut bytes = [0; 64];
     memory
         .read(MemoryAddress::new(0x1040), alignment(64), &mut bytes)
@@ -152,7 +158,7 @@ fn capacity_failure_preserves_cursor_for_zero_allocation() {
             MemoryError::RegionTableExhausted { entries: 1 }
         ))
     );
-    assert!(memory.regions().is_empty());
+    assert!(memory.regions().expect("metadata is accessible").is_empty());
     assert_eq!(
         allocator.allocate(0, alignment(1)).expect("zero"),
         MemoryAddress::new(0x1003)
@@ -179,7 +185,7 @@ fn address_exhaustion_preserves_cursor_and_storage() {
             result,
             Err(hardware_interface_runtime::MemoryAllocationError::AddressExhausted)
         );
-        assert!(memory.regions().is_empty());
+        assert!(memory.regions().expect("metadata is accessible").is_empty());
         if start < u64::MAX {
             assert_eq!(
                 allocator.allocate(0, alignment(1)).expect("zero"),

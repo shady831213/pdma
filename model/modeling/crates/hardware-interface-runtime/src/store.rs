@@ -1,13 +1,15 @@
 use std::fmt;
 
-use crate::{MemoryError, MemoryRegion};
+use crate::{MemoryError, MemoryRegion, StorageBackend, StorageError};
 
 mod backend;
 mod bulk;
+#[cfg(test)]
+mod tests;
 
 pub use backend::{LocalMemoryStorage, MemoryStorage, SharedMemoryStorage};
 
-use backend::{MemoryState, inspect, mutate};
+use backend::MemoryState;
 
 /// Checked memory whose closure-scoped storage policy is selected by `P`.
 pub struct Memory<P: MemoryStorage> {
@@ -30,10 +32,12 @@ impl<P: MemoryStorage> Memory<P> {
     }
 
     /// Returns installed metadata in ascending address order.
-    pub fn regions(&self) -> Vec<MemoryRegion> {
-        inspect(&self.backend, |state| {
-            state.regions.iter().map(|stored| stored.region).collect()
-        })
+    ///
+    /// # Errors
+    /// Returns a storage error if called reentrantly on the same backend.
+    pub fn regions(&self) -> Result<Vec<MemoryRegion>, StorageError> {
+        self.backend
+            .inspect(|state| state.regions.iter().map(|stored| stored.region).collect())
     }
 
     /// Atomically installs a batch of zero-initialized regions.
@@ -42,12 +46,14 @@ impl<P: MemoryStorage> Memory<P> {
     /// installed regions change; any error preserves existing regions and bytes.
     ///
     /// # Errors
-    /// Returns an overlap, region-table capacity, or backing allocation error.
+    /// Returns a storage, overlap, region-table capacity, or backing allocation error.
     pub fn add_regions(&self, regions: &[MemoryRegion]) -> Result<(), MemoryError> {
         if regions.is_empty() {
             return Ok(());
         }
-        mutate(&self.backend, |state| state.add_regions(regions))
+        self.backend
+            .mutate(|state| state.add_regions(regions))
+            .map_err(MemoryError::Storage)?
     }
 }
 
@@ -72,50 +78,4 @@ impl<P: MemoryStorage> Default for Memory<P> {
 }
 
 /// Clone-shared storage for checked memory regions and bytes.
-#[derive(Clone)]
-pub struct SharedMemory {
-    pub(in crate::store) memory: Memory<SharedMemoryStorage>,
-}
-
-impl SharedMemory {
-    /// Creates an empty store with no policy capacity.
-    pub fn new() -> Self {
-        Self {
-            memory: Memory::new(),
-        }
-    }
-
-    /// Creates an empty store with an explicit installed-region capacity.
-    pub fn with_region_capacity(capacity: usize) -> Self {
-        Self {
-            memory: Memory::with_region_capacity(capacity),
-        }
-    }
-
-    /// Returns installed metadata in ascending address order.
-    pub fn regions(&self) -> Vec<MemoryRegion> {
-        self.memory.regions()
-    }
-
-    /// Atomically installs zero-initialized regions; errors preserve the store.
-    ///
-    /// # Errors
-    /// Returns an overlap, region-table capacity, or backing allocation error.
-    pub fn add_regions(&self, regions: &[MemoryRegion]) -> Result<(), MemoryError> {
-        self.memory.add_regions(regions)
-    }
-}
-
-impl fmt::Debug for SharedMemory {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("SharedMemory")
-            .finish_non_exhaustive()
-    }
-}
-
-impl Default for SharedMemory {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+pub type SharedMemory = Memory<SharedMemoryStorage>;

@@ -4,6 +4,7 @@
 mod access;
 mod address;
 mod allocator;
+mod atomic;
 mod bound_memory;
 #[cfg(feature = "async-runtime")]
 mod cpu;
@@ -22,6 +23,10 @@ mod trace;
 pub use access::{MemoryAccess, MemoryAccessError};
 pub use address::{MemoryAddress, MemoryAlignment};
 pub use allocator::{MemoryAllocationError, SharedMemoryAllocator};
+pub use atomic::{
+    AtomicAccessError, AtomicOperation, AtomicOrder, AtomicReadOrder, AtomicUpdate,
+    AtomicWriteOrder,
+};
 pub use bound_memory::BoundMemory;
 #[cfg(feature = "async-runtime")]
 pub use cpu::{CpuAccessError, CpuContextError, CpuLocal, CpuRegisterAccess, SoftwareCpu};

@@ -31,7 +31,7 @@ fn cancellation_before_raw_register_commit_preserves_all_state() {
         memory.clone(),
         ObservationGate::new(SharedRegisterObserver::new(recorder.clone())),
     );
-    let before_regions = memory.regions();
+    let before_regions = memory.regions().expect("metadata is accessible");
     let mut future = Box::pin(endpoint.write(0x20, &[1, 2, 3, 4]));
 
     // When the future reports Pending and is dropped.
@@ -48,7 +48,7 @@ fn cancellation_before_raw_register_commit_preserves_all_state() {
         .read(MemoryAddress::new(0x1000), MemoryAlignment::ONE, &mut bytes)
         .expect("sentinel reads");
     #[rustfmt::skip]
-    assert_eq!((bytes, memory.regions(), endpoint.committed_writes.load(Ordering::SeqCst), endpoint.gate.next_sequence(), recorder.0.lock().expect("recorder lock").len()), ([0x5a; 4], before_regions, 0, Ok(0), 0));
+    assert_eq!((bytes, memory.regions().expect("metadata is accessible"), endpoint.committed_writes.load(Ordering::SeqCst), endpoint.gate.next_sequence(), recorder.0.lock().expect("recorder lock").len()), ([0x5a; 4], before_regions, 0, Ok(0), 0));
 }
 
 #[derive(Debug)]

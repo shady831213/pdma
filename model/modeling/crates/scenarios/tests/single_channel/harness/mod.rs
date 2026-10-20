@@ -82,7 +82,7 @@ pub async fn run(injection: FaultInjection, input: software::Input<'_>) -> TestR
     };
     let cpu = Arc::new(SoftwareCpu::new());
     assert!(
-        storage.regions().is_empty(),
+        storage.regions()?.is_empty(),
         "buffers must be allocated by the running software"
     );
     let runtime = InterruptRuntime::new(cpu, model.clone());

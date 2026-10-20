@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use crate::{
     LocalStorage, MemoryAccessError, MemoryAddress, MemoryError, MemoryRegion, MutexStorage,
-    StorageBackend, StorageError,
+    StorageBackend,
 };
 
 /// Selects closure-scoped storage for a generic checked memory.
@@ -35,32 +35,6 @@ impl MemoryStorage for SharedMemoryStorage {
 
     fn create<T>(value: T) -> Self::Backend<T> {
         MutexStorage::new(value)
-    }
-}
-
-pub(super) fn inspect<B, R>(backend: &B, operation: impl FnOnce(&MemoryState) -> R) -> R
-where
-    B: StorageBackend<MemoryState>,
-{
-    match backend.inspect(operation) {
-        Ok(result) => result,
-        Err(StorageError::Reentrant) => preserve_reentrant_compatibility(),
-    }
-}
-
-pub(super) fn mutate<B, R>(backend: &B, operation: impl FnOnce(&mut MemoryState) -> R) -> R
-where
-    B: StorageBackend<MemoryState>,
-{
-    match backend.mutate(operation) {
-        Ok(result) => result,
-        Err(StorageError::Reentrant) => preserve_reentrant_compatibility(),
-    }
-}
-
-fn preserve_reentrant_compatibility() -> ! {
-    loop {
-        std::thread::park();
     }
 }
 

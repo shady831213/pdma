@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
-use crate::{MemoryAddress, MemoryAlignment, MemoryRegion};
+use crate::{MemoryAddress, MemoryAlignment, MemoryRegion, StorageError};
 
 /// Failure to construct a checked alignment.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,6 +84,8 @@ impl Error for MemoryRegionError {}
 /// Failure to atomically add storage regions.
 #[derive(Debug, PartialEq, Eq)]
 pub enum MemoryError {
+    /// The backing store rejected access before installation began.
+    Storage(StorageError),
     /// Backing storage could not reserve the requested byte length.
     StorageExhausted {
         /// Requested byte length.
@@ -106,6 +108,7 @@ pub enum MemoryError {
 impl Display for MemoryError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Storage(error) => Display::fmt(error, formatter),
             Self::StorageExhausted { length } => {
                 write!(
                     formatter,
@@ -128,4 +131,13 @@ impl Display for MemoryError {
     }
 }
 
-impl Error for MemoryError {}
+impl Error for MemoryError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Storage(error) => Some(error),
+            Self::StorageExhausted { .. }
+            | Self::RegionTableExhausted { .. }
+            | Self::Overlap { .. } => None,
+        }
+    }
+}

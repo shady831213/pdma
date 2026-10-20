@@ -4,7 +4,7 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, Command, CommandRegisters, Endpoint, Response,
+    ChannelBlock, ChannelId, Command, CommandRegisters, CopyCommand, Endpoint, Response,
 };
 use pdma_model_dma::Dma;
 use pdma_model_host::{
@@ -81,12 +81,16 @@ async fn cancelled_committed_submission_resumes_without_republication()
         ))
         .await?;
     let command = Command {
-        copy_length: 0,
-        sg_context: 0,
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-        id: 41,
-        source: Endpoint::linear(0, 0),
-        destination: Endpoint::linear(0, 0),
+        ..Command::copy(
+            41,
+            CopyCommand {
+                copy_length: 0,
+                sg_context: 0,
+                source: Endpoint::linear(0, 0),
+                destination: Endpoint::linear(0, 0),
+            },
+        )
     };
     pause.store(true, Ordering::SeqCst);
     commits.store(0, Ordering::SeqCst);

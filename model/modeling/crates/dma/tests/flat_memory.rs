@@ -135,12 +135,17 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
     // Given
     let mut device = Dma::new(FlatMemory::new()?, 1)?;
     let command = Command {
-        copy_length: 4,
-        sg_context: 0,
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 91,
-        source: Endpoint::linear(256, 0),
-        destination: Endpoint::linear(320, 0),
+        ..Command::copy(
+            0,
+            pdma_model_contract::dma::CopyCommand {
+                copy_length: 4,
+                sg_context: 0,
+                source: Endpoint::linear(256, 0),
+                destination: Endpoint::linear(320, 0),
+            },
+        )
     };
     device.memory.write(
         MemoryAddress::new(0),

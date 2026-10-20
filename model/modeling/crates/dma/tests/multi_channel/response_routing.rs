@@ -24,6 +24,8 @@ fn execute(device: &mut Dma<SharedMemory>) -> TestResult<Flow<Completion>> {
         .data()
         .ok_or("fetched command")?
         .command()
+        .as_copy()
+        .ok_or("copy fixture")?
         .copy_length;
     let mut context = device.execution_context();
     let checked = super::support::finish(

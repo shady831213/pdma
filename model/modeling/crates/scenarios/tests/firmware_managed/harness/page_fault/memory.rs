@@ -1,6 +1,7 @@
 use super::{ChannelTag, platform::TaggedRequest};
 use hardware_interface_runtime::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
+    AtomicAccessError, AtomicOperation, MemoryAccess, MemoryAccessError, MemoryAddress,
+    MemoryAlignment, SharedMemoryAccess,
 };
 use pdma_model_contract::memory::MemoryIdentity;
 use std::{
@@ -141,6 +142,45 @@ impl Paged {
 
 impl MemoryAccess<TaggedRequest> for Paged {
     type Error = PageError;
+    fn atomic32_with_sideband(
+        &self,
+        request: &TaggedRequest,
+        address: MemoryAddress,
+        operation: AtomicOperation<u32>,
+    ) -> Result<u32, AtomicAccessError<Self::Error>> {
+        self.memory
+            .validate(address, MemoryAlignment::ONE, 4)
+            .map_err(|error| AtomicAccessError::Access(PageError::Access(error)))?;
+        let access = match operation {
+            AtomicOperation::Load(_) => FaultAccess::Read,
+            AtomicOperation::Store { .. } | AtomicOperation::Update { .. } => FaultAccess::Write,
+        };
+        self.access((address, 4), (request, access))
+            .map_err(AtomicAccessError::Access)?;
+        self.memory
+            .atomic32(address, operation)
+            .map_err(|error| error.map_access(PageError::Access))
+    }
+
+    fn atomic64_with_sideband(
+        &self,
+        request: &TaggedRequest,
+        address: MemoryAddress,
+        operation: AtomicOperation<u64>,
+    ) -> Result<u64, AtomicAccessError<Self::Error>> {
+        self.memory
+            .validate(address, MemoryAlignment::ONE, 8)
+            .map_err(|error| AtomicAccessError::Access(PageError::Access(error)))?;
+        let access = match operation {
+            AtomicOperation::Load(_) => FaultAccess::Read,
+            AtomicOperation::Store { .. } | AtomicOperation::Update { .. } => FaultAccess::Write,
+        };
+        self.access((address, 8), (request, access))
+            .map_err(AtomicAccessError::Access)?;
+        self.memory
+            .atomic64(address, operation)
+            .map_err(|error| error.map_access(PageError::Access))
+    }
 
     fn validate_with_sideband(
         &self,

@@ -109,6 +109,7 @@ fn fetch<M: MemoryAccess<SB>, SB>(
             }
             context.selected.work = Some(Accepted {
                 command,
+                waiting: false,
                 unread: None,
                 payload: None,
                 completion: None,

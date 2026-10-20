@@ -8,7 +8,7 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::dma::{
-    ChannelId, Command, CompletionFlagsValues, DmaRegisters, Endpoint, Response,
+    ChannelId, Command, CompletionFlagsValues, CopyCommand, DmaRegisters, Endpoint, Response,
 };
 use pdma_model_dma::Dma;
 use pdma_model_host::{
@@ -149,12 +149,16 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
                 Channel::setup(model.clone(), memory.clone(), config(&allocator, index)?).await?;
             channel
                 .submit(Command {
-                    copy_length: 0,
-                    sg_context: 0,
                     flags: CompletionFlagsValues::default(),
-                    id: u64::try_from(index)?,
-                    source: Endpoint::linear(0, 0),
-                    destination: Endpoint::linear(0, 0),
+                    ..Command::copy(
+                        u64::try_from(index)?,
+                        CopyCommand {
+                            copy_length: 0,
+                            sg_context: 0,
+                            source: Endpoint::linear(0, 0),
+                            destination: Endpoint::linear(0, 0),
+                        },
+                    )
                 })
                 .await?;
             channels.push(channel);

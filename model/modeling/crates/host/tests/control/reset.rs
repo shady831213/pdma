@@ -1,6 +1,6 @@
 use super::{
     AsyncExecutor, Channel, ChannelConfig, ChannelRegisters, Command, CompletionFlagsValues,
-    DmaControl, DmaFatalCode, Endpoint, Model, RegisterAccess, SoftwareCpu, fixture,
+    CopyCommand, DmaControl, DmaFatalCode, Endpoint, Model, RegisterAccess, SoftwareCpu, fixture,
 };
 
 #[tokio::test]
@@ -70,12 +70,16 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
             ))
             .await?;
         let command = Command {
-            copy_length: 0,
-            sg_context: 0,
             flags: CompletionFlagsValues::default(),
-            id: 9,
-            source: Endpoint::linear(0, 0),
-            destination: Endpoint::linear(0, 0),
+            ..Command::copy(
+                9,
+                CopyCommand {
+                    copy_length: 0,
+                    sg_context: 0,
+                    source: Endpoint::linear(0, 0),
+                    destination: Endpoint::linear(0, 0),
+                },
+            )
         };
         cpu.run_main(channel.submit(command)).await?;
         let producer = u32::try_from(

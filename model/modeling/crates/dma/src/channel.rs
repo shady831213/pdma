@@ -14,7 +14,7 @@ use pdma_model_contract::dma::{
     ChannelAdmin, ChannelBlock, ChannelFatalCode, ChannelIrqCauseValues, ChannelRegisters,
     FaultStatusValues, ResetValues, Response,
 };
-use pdma_model_contract::dma::{Command, ResponseStatus};
+use pdma_model_contract::dma::{Command, CompletionFlagsValues, CopyCommand};
 pub use work::COPY_CHUNK_BYTES;
 use work::Cursor;
 
@@ -127,6 +127,7 @@ impl Channel {
 #[derive(Debug)]
 pub(crate) struct Accepted {
     pub(crate) command: Command,
+    pub(crate) waiting: bool,
     pub(crate) unread: Option<crate::Chunk>,
     pub(crate) payload: Option<Box<crate::Payload>>,
     pub(crate) completion: Option<crate::Completion>,
@@ -136,12 +137,24 @@ pub(crate) struct Accepted {
 /// Retained traversal of one command's two byte streams.
 #[derive(Debug)]
 pub(crate) struct CopyState {
-    pub(crate) command: Command,
+    pub(crate) command: CopyCommand,
+    id: u64,
+    flags: CompletionFlagsValues,
     source: Cursor,
     destination: Cursor,
     pub(crate) remaining: u64,
     bytes_completed: u64,
-    pub(crate) status: ResponseStatus,
+    pub(crate) status: CopyStatus,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum CopyStatus {
+    Success,
+    InvalidLength,
+    ReadError,
+    WriteError,
+    LengthMismatch,
+    ListReadError,
 }
 
 #[derive(Debug)]
@@ -153,7 +166,9 @@ enum Side {
 /// Incremental validation of selected ranges, without payload access.
 #[derive(Debug)]
 pub struct RangeCheck {
-    pub(crate) command: Command,
+    pub(crate) command: CopyCommand,
+    id: u64,
+    flags: CompletionFlagsValues,
     cursor: Cursor,
     side: Side,
     remaining: u64,

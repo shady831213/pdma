@@ -3,7 +3,7 @@ const PF: FunctionId = FunctionId::new(0);
 use super::*;
 use hardware_interface_runtime::{MemoryAccess, MemoryAccessError};
 use pdma_model_contract::dma::{
-    Command, CompletionFlagsValues, Endpoint, Response, ResponseStatus,
+    Command, CompletionFlagsValues, CopyCommand, Endpoint, Response, ResponseStatus,
 };
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::{Channel, ChannelConfig, Rings};
@@ -190,11 +190,15 @@ fn prepare_copy(
 
 fn copy(id: u64, (source, destination): (MemoryAddress, MemoryAddress), length: u64) -> Command {
     Command {
-        copy_length: length,
-        sg_context: 0,
-        id,
-        source: Endpoint::linear(source.raw(), 0),
-        destination: Endpoint::linear(destination.raw(), 0),
         flags: CompletionFlagsValues::default(),
+        ..Command::copy(
+            id,
+            CopyCommand {
+                copy_length: length,
+                sg_context: 0,
+                source: Endpoint::linear(source.raw(), 0),
+                destination: Endpoint::linear(destination.raw(), 0),
+            },
+        )
     }
 }

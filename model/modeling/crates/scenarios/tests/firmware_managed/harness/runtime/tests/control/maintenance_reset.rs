@@ -1,7 +1,7 @@
 use super::*;
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::dma::{
-    Command, CommandRegisters, CompletionFlagsValues, ContextId, Endpoint, Response,
+    Command, CommandRegisters, CompletionFlagsValues, ContextId, CopyCommand, Endpoint, Response,
 };
 use pdma_model_contract::memory::{
     ContextAttributes, ContextAttributesAddressSpace, MemoryIdentity,
@@ -133,18 +133,22 @@ async fn submit_copy(
     .await?;
     channel
         .submit(Command {
-            id: 71,
             flags: CompletionFlagsValues::default(),
-            sg_context: payload.raw(),
-            source: Endpoint {
-                context: payload.raw(),
-                ..Endpoint::linear(source.raw(), 0)
-            },
-            destination: Endpoint {
-                context: payload.raw(),
-                ..Endpoint::linear(destination.raw(), 0)
-            },
-            copy_length: u64::try_from(source_bytes.len())?,
+            ..Command::copy(
+                71,
+                CopyCommand {
+                    sg_context: payload.raw(),
+                    source: Endpoint {
+                        context: payload.raw(),
+                        ..Endpoint::linear(source.raw(), 0)
+                    },
+                    destination: Endpoint {
+                        context: payload.raw(),
+                        ..Endpoint::linear(destination.raw(), 0)
+                    },
+                    copy_length: u64::try_from(source_bytes.len())?,
+                },
+            )
         })
         .await?;
     let consumer = u32::try_from(

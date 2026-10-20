@@ -120,6 +120,16 @@ pub enum AtomicAccessError<E> {
     Access(E),
 }
 
+impl<E> AtomicAccessError<E> {
+    /// Transforms a backend access error while preserving unsupported capability.
+    pub fn map_access<F>(self, map: impl FnOnce(E) -> F) -> AtomicAccessError<F> {
+        match self {
+            Self::Unsupported => AtomicAccessError::Unsupported,
+            Self::Access(error) => AtomicAccessError::Access(map(error)),
+        }
+    }
+}
+
 impl<E: fmt::Display> fmt::Display for AtomicAccessError<E> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

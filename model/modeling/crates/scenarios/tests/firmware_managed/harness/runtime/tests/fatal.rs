@@ -8,7 +8,9 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::{
     control::{ControlEvent, ControlEventKind, ControlResponseStatus},
-    dma::{ChannelId, Command, CompletionFlagsValues, Endpoint, Response, ResponseStatus},
+    dma::{
+        ChannelId, Command, CompletionFlagsValues, CopyCommand, Endpoint, Response, ResponseStatus,
+    },
     hw_components::control::EventRingErrorCode,
     memory::FunctionId,
 };
@@ -154,12 +156,16 @@ async fn copy(
     channel.set_irq_enabled(false).await.unwrap();
     channel
         .submit(Command {
-            copy_length: 8,
-            id: 17,
-            sg_context: 0,
-            source: Endpoint::linear(source.raw(), 0),
-            destination: Endpoint::linear(destination.raw(), 0),
             flags: CompletionFlagsValues { ioc: false },
+            ..Command::copy(
+                17,
+                CopyCommand {
+                    copy_length: 8,
+                    sg_context: 0,
+                    source: Endpoint::linear(source.raw(), 0),
+                    destination: Endpoint::linear(destination.raw(), 0),
+                },
+            )
         })
         .await
         .unwrap();

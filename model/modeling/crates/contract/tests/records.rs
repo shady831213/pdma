@@ -1,34 +1,36 @@
 //! Generated PDMA wire-codec behavior.
 
 use hardware_interface_schema::SchemaCodecError;
-use pdma_model_contract::dma::{Command, CompletionFlagsValues, Endpoint, Response};
+use pdma_model_contract::dma::{Command, CompletionFlagsValues, CopyCommand, Endpoint, Response};
 use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 
 #[test]
 fn command_round_trips_when_encoded_with_little_endian_padding() -> Result<(), SchemaCodecError> {
     // Given: a command with distinguishable fields.
-    let command = Command {
-        copy_length: 8,
-        sg_context: 0,
-        flags: CompletionFlagsValues { ioc: true },
-        id: 0x0102_0304_0506_0708,
-        source: Endpoint::linear(0x1112_1314_1516_1718, 0x3132_3334_3536_3738),
-        destination: Endpoint::scatter_gather(0x2122_2324_2526_2728, 0x4142_4344_4546_4748),
-    };
+    let mut command = Command::copy(
+        0x0102_0304_0506_0708,
+        CopyCommand {
+            copy_length: 8,
+            sg_context: 0,
+            source: Endpoint::linear(0x1112_1314_1516_1718, 0x3132_3334_3536_3738),
+            destination: Endpoint::scatter_gather(0x2122_2324_2526_2728, 0x4142_4344_4546_4748),
+        },
+    );
+    command.flags = CompletionFlagsValues { ioc: true };
 
     // When: the generated codec encodes the complete command.
     let bytes = command.to_bytes()?;
 
     // Then: scalars are little-endian, alignment padding is zero, and decoding is lossless.
-    let mut expected = [0; 104];
+    let mut expected = [0; 112];
     expected[0..8].copy_from_slice(&0x0102_0304_0506_0708_u64.to_le_bytes());
-    expected[16..24].copy_from_slice(&0x1112_1314_1516_1718_u64.to_le_bytes());
-    expected[24..32].copy_from_slice(&0x3132_3334_3536_3738_u64.to_le_bytes());
-    expected[48] = 1;
-    expected[56..64].copy_from_slice(&0x2122_2324_2526_2728_u64.to_le_bytes());
-    expected[64..72].copy_from_slice(&0x4142_4344_4546_4748_u64.to_le_bytes());
-    expected[88] = 8;
-    expected[96] = 1;
+    expected[24..32].copy_from_slice(&0x1112_1314_1516_1718_u64.to_le_bytes());
+    expected[32..40].copy_from_slice(&0x3132_3334_3536_3738_u64.to_le_bytes());
+    expected[56] = 1;
+    expected[64..72].copy_from_slice(&0x2122_2324_2526_2728_u64.to_le_bytes());
+    expected[72..80].copy_from_slice(&0x4142_4344_4546_4748_u64.to_le_bytes());
+    expected[96] = 8;
+    expected[8] = 1;
     assert_eq!(bytes, expected);
     assert_eq!(Command::from_bytes(&bytes)?, command);
     assert_eq!(Command::SPEC.alignment(), 8);
@@ -77,7 +79,7 @@ fn response_rejects_reserved_status_when_discriminant_is_unassigned() {
     // Given: a response containing the first unassigned status value.
     let mut bytes = [0; Response::RECORD_SIZE];
     bytes[0] = 7;
-    bytes[8] = 7;
+    bytes[8] = 9;
 
     // When: raw storage crosses the generated typed boundary.
     let result = Response::from_bytes(&bytes);
@@ -87,7 +89,7 @@ fn response_rejects_reserved_status_when_discriminant_is_unassigned() {
         result,
         Err(SchemaCodecError::UnknownTag {
             location: Response::STATUS_IDENTITY.at_byte(8),
-            observed: 7,
+            observed: 9,
         })
     );
 }

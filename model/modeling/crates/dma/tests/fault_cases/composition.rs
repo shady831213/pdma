@@ -116,7 +116,10 @@ fn transformed_resume(replace_service: bool) -> TestResult {
             .read_typed::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
         b"cdefgh".map(|byte| !byte)
     );
-    assert_eq!(response(&device)?.bytes_completed(), command.copy_length);
+    assert_eq!(
+        response(&device)?.bytes_completed(),
+        command.as_copy().ok_or("copy fixture")?.copy_length
+    );
     assert_eq!(
         read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
         1
@@ -158,7 +161,10 @@ fn standalone_range_validation_cannot_consume_parked_work() -> TestResult {
     device.until(|dma| Ok(read_word(dma, RESP + ResponseRegisters::PRODUCER.offset())? == 1))?;
     assert_eq!(
         (response(&device)?.id, response(&device)?.bytes_completed()),
-        (command.id, command.copy_length)
+        (
+            command.id,
+            command.as_copy().expect("copy fixture").copy_length
+        )
     );
     Ok(())
 }

@@ -68,7 +68,7 @@ fn entries_follow_wire_layout_and_wrap_for_different_record_types() -> Result<()
         tiny.entry(4)?,
     ];
     // Then
-    assert_eq!(addresses, [0x1138, 0x2048, 0x3006, 0x3000]);
+    assert_eq!(addresses, [0x1150, 0x2048, 0x3006, 0x3000]);
     assert_eq!(commands.entry(4)?, 0x1000);
     assert_eq!(aligned.entry(1)?, 0x4008);
     assert_eq!(commands.base(), 0x1000);

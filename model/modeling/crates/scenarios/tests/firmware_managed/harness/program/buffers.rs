@@ -4,7 +4,9 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
 use pdma_model_contract::control::{ControlQueue, ControlRequest, ControlResponse};
-use pdma_model_contract::dma::{ChannelId, Command, CompletionFlagsValues, Endpoint, Response};
+use pdma_model_contract::dma::{
+    ChannelId, Command, CompletionFlagsValues, CopyCommand, Endpoint, Response,
+};
 use pdma_model_host::{
     Channel, ChannelConfig, Management, ManagementConfig, ManagementRings, RingConfig, Rings,
 };
@@ -57,12 +59,16 @@ impl Transfer {
         Ok(Self {
             driver,
             command: Command {
-                copy_length: length,
-                sg_context: 0,
-                id: 0,
-                source: Endpoint::linear(source.raw(), 0),
-                destination: Endpoint::linear(destination.raw(), 0),
                 flags: CompletionFlagsValues::default(),
+                ..Command::copy(
+                    0,
+                    CopyCommand {
+                        copy_length: length,
+                        sg_context: 0,
+                        source: Endpoint::linear(source.raw(), 0),
+                        destination: Endpoint::linear(destination.raw(), 0),
+                    },
+                )
             },
             destination,
             length: payload.len(),

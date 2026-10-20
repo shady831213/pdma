@@ -5,6 +5,8 @@
 mod control_queue;
 /// Independently specified DMA wire fixtures for the C consumer.
 pub mod dma_wire;
+/// Independently specified signal wire fixtures for the C consumer.
+pub mod signal_wire;
 
 use std::{
     error::Error,
@@ -150,6 +152,7 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
         &CONTROL_BYTES.concat(),
         control_offsets.as_slice(),
         QUEUE_BYTES.as_slice(),
+        signal_wire::bytes()?.as_slice(),
     ]
     .concat();
     assert_eq!(output.stdout, expected);

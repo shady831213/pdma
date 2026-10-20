@@ -14,11 +14,18 @@ fn command_continuation_preserves_descriptor_and_backpressure_between_chunks() -
     // Given: a command spanning three chunks and a later queued successor.
     const LENGTH: usize = COPY_CHUNK_BYTES * 2 + 88;
     let (mut device, memory) = setup(0x1100, 2)?;
-    let descriptor = pdma_model_contract::dma::Command {
-        copy_length: u64::try_from(LENGTH)?,
-        source: Endpoint::linear(0x1400, 0),
-        destination: Endpoint::linear(0x1800, 0),
-        ..command()
+    let descriptor = {
+        let mut copy_fixture = command();
+        copy_fixture
+            .as_copy_mut()
+            .expect("copy fixture")
+            .copy_length = u64::try_from(LENGTH)?;
+        copy_fixture.as_copy_mut().expect("copy fixture").source = Endpoint::linear(0x1400, 0);
+        copy_fixture
+            .as_copy_mut()
+            .expect("copy fixture")
+            .destination = Endpoint::linear(0x1800, 0);
+        copy_fixture
     };
     memory.write(0x1400.into(), MemoryAlignment::ONE, &[0x5a; LENGTH])?;
     submit(&mut device, &memory, descriptor)?;

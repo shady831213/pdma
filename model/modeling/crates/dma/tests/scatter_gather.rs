@@ -84,12 +84,17 @@ fn independent_endpoint_modes_copy_across_different_boundaries() -> TestResult {
             &mut device,
             &memory,
             Command {
-                copy_length: 8,
-                sg_context: 0,
                 flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
                 id: 7,
-                source,
-                destination,
+                ..Command::copy(
+                    0,
+                    pdma_model_contract::dma::CopyCommand {
+                        copy_length: 8,
+                        sg_context: 0,
+                        source,
+                        destination,
+                    },
+                )
             },
         )?;
         // When: the normal composed hardware executes one command.
@@ -138,12 +143,17 @@ fn scratch_buffer_size_does_not_limit_command_length() -> TestResult {
         &mut device,
         &memory,
         Command {
-            copy_length: 769,
-            sg_context: 0,
             flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 8,
-            source: Endpoint::linear(0x1400, 0),
-            destination: Endpoint::linear(0x1800, 0),
+            ..Command::copy(
+                0,
+                pdma_model_contract::dma::CopyCommand {
+                    copy_length: 769,
+                    sg_context: 0,
+                    source: Endpoint::linear(0x1400, 0),
+                    destination: Endpoint::linear(0x1800, 0),
+                },
+            )
         },
     )?;
     // When: hardware executes through multiple copy iterations.
@@ -189,12 +199,17 @@ fn overlapping_segments_follow_execution_order() -> TestResult {
         &mut device,
         &memory,
         Command {
-            copy_length: 4,
-            sg_context: 0,
             flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 5,
-            source: Endpoint::scatter_gather(0x1400, 2),
-            destination: Endpoint::linear(0x1202, 0),
+            ..Command::copy(
+                0,
+                pdma_model_contract::dma::CopyCommand {
+                    copy_length: 4,
+                    sg_context: 0,
+                    source: Endpoint::scatter_gather(0x1400, 2),
+                    destination: Endpoint::linear(0x1202, 0),
+                },
+            )
         },
     )?;
     // When: hardware processes the stream without detecting or rejecting overlap.

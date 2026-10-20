@@ -4,3 +4,4 @@
 pub mod control;
 pub mod dma;
 pub mod ring;
+pub mod signal;

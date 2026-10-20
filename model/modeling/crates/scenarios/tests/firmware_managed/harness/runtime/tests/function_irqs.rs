@@ -5,7 +5,7 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAllocator,
 };
-use pdma_model_contract::dma::{ChannelId, Command, CompletionFlagsValues, Endpoint, Response};
+use pdma_model_contract::dma::{ChannelId, Command, CopyCommand, Endpoint, Response};
 use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_host::{Channel, ChannelConfig, Rings};
 use pdma_model_software::{
@@ -43,14 +43,15 @@ async fn pending_dma_notification_keeps_old_destination_after_reset_and_regrant(
     .await
     .unwrap();
     channel
-        .submit(Command {
-            copy_length: 4,
-            sg_context: 0,
-            id: 1,
-            source: Endpoint::linear(source.raw(), 0),
-            destination: Endpoint::linear(destination.raw(), 0),
-            flags: CompletionFlagsValues::default(),
-        })
+        .submit(Command::copy(
+            1,
+            CopyCommand {
+                copy_length: 4,
+                sg_context: 0,
+                source: Endpoint::linear(source.raw(), 0),
+                destination: Endpoint::linear(destination.raw(), 0),
+            },
+        ))
         .await
         .unwrap();
     let hardware = async {

@@ -1,6 +1,9 @@
 use super::PlatformConfigError;
 use crate::harness::runtime::platform::MemoryRequest;
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_runtime::{
+    AtomicAccessError, AtomicOperation, MemoryAccess, MemoryAddress, MemoryAlignment,
+};
+mod identity;
 use pdma_model_contract::memory::{ContextAttributes, FunctionId, MemoryIdentity};
 use pdma_model_dma::MemoryFailure;
 use std::fmt;
@@ -91,6 +94,39 @@ impl<M: MemoryAccess> FunctionSpaces<M> {
 
 impl<M: MemoryAccess> MemoryAccess<MemoryRequest> for FunctionSpaces<M> {
     type Error = SpaceError<M::Error>;
+    fn atomic32_with_sideband(
+        &self,
+        request: &MemoryRequest,
+        address: MemoryAddress,
+        operation: AtomicOperation<u32>,
+    ) -> Result<u32, AtomicAccessError<Self::Error>> {
+        let memory = self
+            .get(request.identity, address)
+            .map_err(AtomicAccessError::Access)?;
+        let bound = self.bind.map(|bind| bind(memory, *request));
+        bound
+            .as_ref()
+            .unwrap_or(memory)
+            .atomic32(address, operation)
+            .map_err(|error| error.map_access(SpaceError::Downstream))
+    }
+
+    fn atomic64_with_sideband(
+        &self,
+        request: &MemoryRequest,
+        address: MemoryAddress,
+        operation: AtomicOperation<u64>,
+    ) -> Result<u64, AtomicAccessError<Self::Error>> {
+        let memory = self
+            .get(request.identity, address)
+            .map_err(AtomicAccessError::Access)?;
+        let bound = self.bind.map(|bind| bind(memory, *request));
+        bound
+            .as_ref()
+            .unwrap_or(memory)
+            .atomic64(address, operation)
+            .map_err(|error| error.map_access(SpaceError::Downstream))
+    }
 
     fn validate_with_sideband(
         &self,
@@ -138,63 +174,5 @@ impl<M: MemoryAccess> MemoryAccess<MemoryRequest> for FunctionSpaces<M> {
             .unwrap_or(memory)
             .write(address, alignment, bytes)
             .map_err(SpaceError::Downstream)
-    }
-}
-
-impl<M: MemoryAccess> MemoryAccess<MemoryIdentity> for FunctionSpaces<M> {
-    type Error = SpaceError<M::Error>;
-
-    fn validate_with_sideband(
-        &self,
-        identity: &MemoryIdentity,
-        address: MemoryAddress,
-        alignment: MemoryAlignment,
-        length: u64,
-    ) -> Result<(), Self::Error> {
-        self.validate_with_sideband(
-            &MemoryRequest {
-                channel: None,
-                identity: *identity,
-            },
-            address,
-            alignment,
-            length,
-        )
-    }
-
-    fn read_with_sideband(
-        &self,
-        identity: &MemoryIdentity,
-        address: MemoryAddress,
-        alignment: MemoryAlignment,
-        bytes: &mut [u8],
-    ) -> Result<(), Self::Error> {
-        self.read_with_sideband(
-            &MemoryRequest {
-                channel: None,
-                identity: *identity,
-            },
-            address,
-            alignment,
-            bytes,
-        )
-    }
-
-    fn write_with_sideband(
-        &self,
-        identity: &MemoryIdentity,
-        address: MemoryAddress,
-        alignment: MemoryAlignment,
-        bytes: &[u8],
-    ) -> Result<(), Self::Error> {
-        self.write_with_sideband(
-            &MemoryRequest {
-                channel: None,
-                identity: *identity,
-            },
-            address,
-            alignment,
-            bytes,
-        )
     }
 }

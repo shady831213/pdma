@@ -12,13 +12,21 @@ fn linear_fault_is_silent_under_every_notification_mask() -> TestResult {
                     .memory
                     .memory
                     .write(0x1400.into(), MemoryAlignment::ONE, &[0xa5; 600])?;
-                let command = Command {
-                    id: 9,
-                    source: Endpoint::linear(0x1400, 7),
-                    destination: Endpoint::linear(0x1800, 11),
-                    copy_length: 512,
-                    flags: CompletionFlagsValues { ioc },
-                    ..Command::ZERO
+                let command = {
+                    let mut copy_fixture = Command::ZERO;
+                    copy_fixture.id = 9;
+                    copy_fixture.as_copy_mut().expect("copy fixture").source =
+                        Endpoint::linear(0x1400, 7);
+                    copy_fixture
+                        .as_copy_mut()
+                        .expect("copy fixture")
+                        .destination = Endpoint::linear(0x1800, 11);
+                    copy_fixture
+                        .as_copy_mut()
+                        .expect("copy fixture")
+                        .copy_length = 512;
+                    copy_fixture.flags = CompletionFlagsValues { ioc };
+                    copy_fixture
                 };
                 device.write(
                     CTRL + ChannelRegisters::IRQ_MASK.offset(),

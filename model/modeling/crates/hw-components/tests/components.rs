@@ -1,4 +1,5 @@
 //! Peripheral hardware behavior grouped by the object that owns it.
+mod atomic_routing;
 mod context;
 mod control;
 mod firmware;

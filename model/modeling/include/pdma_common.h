@@ -185,27 +185,22 @@ static inline void C_ENDPOINT_STORE_C_WORD3(uint8_t bytes[C_ENDPOINT_SIZE], uint
 }
 
 /*
- * DMA copy command
- * A 104-byte, eight-byte-aligned little-endian command. Two independent endpoint starts select one copy_length. Hardware validates both selected ranges before payload writes; backing capacities need not match. Software retains lists and resources until final completion or acknowledged cancellation, including payload-fault suspension. Every submission is self-contained.
+ * DMA command
+ * An eight-byte-aligned little-endian tagged Copy, Signal or Wait submission. Software retains resources and context bindings until terminal completion or acknowledged cancellation.
  */
-#define C_COMMAND_SIZE UINT64_C(104)
+#define C_COMMAND_SIZE UINT64_C(112)
 #define C_COMMAND_ALIGNMENT UINT64_C(8)
 #define C_COMMAND_ENDIAN_LITTLE UINT32_C(0)
 #define C_COMMAND_ENDIAN_BIG UINT32_C(1)
 /*
- * Command.source
- * Source stream
- * Linear or scatter/gather stream supplying payload bytes in logical order.
- */
-/*
- * Command.destination
- * Destination stream
- * Independent destination stream receiving copy_length bytes from its selected start.
+ * Command.payload
+ * Operation parameters
+ * The opcode selects the only active parameter record; unused union bytes are reserved.
  */
 
 /*
  * Command identifier
- * Software-selected identifier echoed unchanged in the response. Hardware does not interpret or enforce uniqueness of this value.
+ * Software-selected identifier echoed unchanged in the response.
  */
 #define C_COMMAND_C_ID_OFFSET UINT64_C(0)
 #define C_COMMAND_C_ID_WIDTH UINT64_C(8)
@@ -225,280 +220,15 @@ static inline void C_COMMAND_STORE_C_ID(uint8_t bytes[C_COMMAND_SIZE], uint64_t 
 }
 
 /*
- * Endpoint representation
- * 0: Linear base address.
- * 1: ScatterGather table address and total entry count.
- * Other wire values are invalid. Encoding derives this tag from the selected payload case.
- */
-#define C_COMMAND_C_SOURCEQX2EMODE_C_QULINEAR UINT64_C(0)
-#define C_COMMAND_C_SOURCEQX2EMODE_C_QUSCATTERQUGATHER UINT64_C(1)
-#define C_COMMAND_C_SOURCEQX2EMODE_OFFSET UINT64_C(8)
-#define C_COMMAND_C_SOURCEQX2EMODE_WIDTH UINT64_C(4)
-#define C_COMMAND_C_SOURCEQX2EMODE_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint32_t C_COMMAND_LOAD_C_SOURCEQX2EMODE(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint32_t)((uint32_t)bytes[C_COMMAND_C_SOURCEQX2EMODE_OFFSET] | ((uint32_t)bytes[C_COMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(3)] << UINT32_C(24)));
-}
-static inline void C_COMMAND_STORE_C_SOURCEQX2EMODE(uint8_t bytes[C_COMMAND_SIZE], uint32_t value) {
-    bytes[C_COMMAND_C_SOURCEQX2EMODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-}
-
-/*
- * Payload address-space context
- * Context selector for payload accesses, independent of the context used to read a scatter/gather table. Ignored by ordinary context-free hardware.
- */
-#define C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET UINT64_C(12)
-#define C_COMMAND_C_SOURCEQX2ECONTEXT_WIDTH UINT64_C(4)
-#define C_COMMAND_C_SOURCEQX2ECONTEXT_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint32_t C_COMMAND_LOAD_C_SOURCEQX2ECONTEXT(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint32_t)((uint32_t)bytes[C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET] | ((uint32_t)bytes[C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
-}
-static inline void C_COMMAND_STORE_C_SOURCEQX2ECONTEXT(uint8_t bytes[C_COMMAND_SIZE], uint32_t value) {
-    bytes[C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-}
-
-/*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
- */
-#define C_COMMAND_C_SOURCEQX2EWORD0_OFFSET UINT64_C(16)
-#define C_COMMAND_C_SOURCEQX2EWORD0_WIDTH UINT64_C(8)
-#define C_COMMAND_C_SOURCEQX2EWORD0_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COMMAND_LOAD_C_SOURCEQX2EWORD0(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET] | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_COMMAND_STORE_C_SOURCEQX2EWORD0(uint8_t bytes[C_COMMAND_SIZE], uint64_t value) {
-    bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
- */
-#define C_COMMAND_C_SOURCEQX2EWORD1_OFFSET UINT64_C(24)
-#define C_COMMAND_C_SOURCEQX2EWORD1_WIDTH UINT64_C(8)
-#define C_COMMAND_C_SOURCEQX2EWORD1_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COMMAND_LOAD_C_SOURCEQX2EWORD1(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET] | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_COMMAND_STORE_C_SOURCEQX2EWORD1(uint8_t bytes[C_COMMAND_SIZE], uint64_t value) {
-    bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
- */
-#define C_COMMAND_C_SOURCEQX2EWORD2_OFFSET UINT64_C(32)
-#define C_COMMAND_C_SOURCEQX2EWORD2_WIDTH UINT64_C(8)
-#define C_COMMAND_C_SOURCEQX2EWORD2_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COMMAND_LOAD_C_SOURCEQX2EWORD2(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD2_OFFSET] | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_COMMAND_STORE_C_SOURCEQX2EWORD2(uint8_t bytes[C_COMMAND_SIZE], uint64_t value) {
-    bytes[C_COMMAND_C_SOURCEQX2EWORD2_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
- */
-#define C_COMMAND_C_SOURCEQX2EWORD3_OFFSET UINT64_C(40)
-#define C_COMMAND_C_SOURCEQX2EWORD3_WIDTH UINT64_C(8)
-#define C_COMMAND_C_SOURCEQX2EWORD3_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COMMAND_LOAD_C_SOURCEQX2EWORD3(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD3_OFFSET] | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_COMMAND_STORE_C_SOURCEQX2EWORD3(uint8_t bytes[C_COMMAND_SIZE], uint64_t value) {
-    bytes[C_COMMAND_C_SOURCEQX2EWORD3_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Endpoint representation
- * 0: Linear base address.
- * 1: ScatterGather table address and total entry count.
- * Other wire values are invalid. Encoding derives this tag from the selected payload case.
- */
-#define C_COMMAND_C_DESTINATIONQX2EMODE_C_QULINEAR UINT64_C(0)
-#define C_COMMAND_C_DESTINATIONQX2EMODE_C_QUSCATTERQUGATHER UINT64_C(1)
-#define C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET UINT64_C(48)
-#define C_COMMAND_C_DESTINATIONQX2EMODE_WIDTH UINT64_C(4)
-#define C_COMMAND_C_DESTINATIONQX2EMODE_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint32_t C_COMMAND_LOAD_C_DESTINATIONQX2EMODE(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint32_t)((uint32_t)bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET] | ((uint32_t)bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(3)] << UINT32_C(24)));
-}
-static inline void C_COMMAND_STORE_C_DESTINATIONQX2EMODE(uint8_t bytes[C_COMMAND_SIZE], uint32_t value) {
-    bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-}
-
-/*
- * Payload address-space context
- * Context selector for payload accesses, independent of the context used to read a scatter/gather table. Ignored by ordinary context-free hardware.
- */
-#define C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET UINT64_C(52)
-#define C_COMMAND_C_DESTINATIONQX2ECONTEXT_WIDTH UINT64_C(4)
-#define C_COMMAND_C_DESTINATIONQX2ECONTEXT_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint32_t C_COMMAND_LOAD_C_DESTINATIONQX2ECONTEXT(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint32_t)((uint32_t)bytes[C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET] | ((uint32_t)bytes[C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
-}
-static inline void C_COMMAND_STORE_C_DESTINATIONQX2ECONTEXT(uint8_t bytes[C_COMMAND_SIZE], uint32_t value) {
-    bytes[C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-}
-
-/*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
- */
-#define C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET UINT64_C(56)
-#define C_COMMAND_C_DESTINATIONQX2EWORD0_WIDTH UINT64_C(8)
-#define C_COMMAND_C_DESTINATIONQX2EWORD0_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COMMAND_LOAD_C_DESTINATIONQX2EWORD0(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET] | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_COMMAND_STORE_C_DESTINATIONQX2EWORD0(uint8_t bytes[C_COMMAND_SIZE], uint64_t value) {
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
- */
-#define C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET UINT64_C(64)
-#define C_COMMAND_C_DESTINATIONQX2EWORD1_WIDTH UINT64_C(8)
-#define C_COMMAND_C_DESTINATIONQX2EWORD1_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COMMAND_LOAD_C_DESTINATIONQX2EWORD1(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET] | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_COMMAND_STORE_C_DESTINATIONQX2EWORD1(uint8_t bytes[C_COMMAND_SIZE], uint64_t value) {
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
- */
-#define C_COMMAND_C_DESTINATIONQX2EWORD2_OFFSET UINT64_C(72)
-#define C_COMMAND_C_DESTINATIONQX2EWORD2_WIDTH UINT64_C(8)
-#define C_COMMAND_C_DESTINATIONQX2EWORD2_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COMMAND_LOAD_C_DESTINATIONQX2EWORD2(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD2_OFFSET] | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_COMMAND_STORE_C_DESTINATIONQX2EWORD2(uint8_t bytes[C_COMMAND_SIZE], uint64_t value) {
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD2_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
- */
-#define C_COMMAND_C_DESTINATIONQX2EWORD3_OFFSET UINT64_C(80)
-#define C_COMMAND_C_DESTINATIONQX2EWORD3_WIDTH UINT64_C(8)
-#define C_COMMAND_C_DESTINATIONQX2EWORD3_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COMMAND_LOAD_C_DESTINATIONQX2EWORD3(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD3_OFFSET] | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_COMMAND_STORE_C_DESTINATIONQX2EWORD3(uint8_t bytes[C_COMMAND_SIZE], uint64_t value) {
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD3_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Copy byte length
- * Bytes requested from each endpoint start. Zero performs no list or payload accesses. Each selected SG range must cover this many bytes; insufficient capacity reports LengthMismatch before payload writes.
- */
-#define C_COMMAND_C_COPYQSLENGTH_OFFSET UINT64_C(88)
-#define C_COMMAND_C_COPYQSLENGTH_WIDTH UINT64_C(8)
-#define C_COMMAND_C_COPYQSLENGTH_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COMMAND_LOAD_C_COPYQSLENGTH(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COMMAND_C_COPYQSLENGTH_OFFSET] | ((uint64_t)bytes[C_COMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_COMMAND_STORE_C_COPYQSLENGTH(uint8_t bytes[C_COMMAND_SIZE], uint64_t value) {
-    bytes[C_COMMAND_C_COPYQSLENGTH_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
  * Completion notification flags
- * IOC requests notification after this command's response is published. Reserved bits must be zero.
+ * IOC requests notification after response publication. Reserved bits must be zero.
  */
 /*
  * ioc
  * Interrupt on completion
  * Request a channel notification after successful response publication, independently of empty-to-non-empty notification. Echoed in the response; consuming that response clears its IOC cause. Device masks suppress new notifications without replay on unmask.
  */
-#define C_COMMAND_C_FLAGS_OFFSET UINT64_C(96)
+#define C_COMMAND_C_FLAGS_OFFSET UINT64_C(8)
 #define C_COMMAND_C_FLAGS_WIDTH UINT64_C(4)
 #define C_COMMAND_C_FLAGS_ENDIAN C_COMMAND_ENDIAN_LITTLE
 static inline uint32_t C_COMMAND_LOAD_C_FLAGS(const uint8_t bytes[C_COMMAND_SIZE]) {
@@ -512,28 +242,698 @@ static inline void C_COMMAND_STORE_C_FLAGS(uint8_t bytes[C_COMMAND_SIZE], uint32
 }
 
 /*
+ * Command operation
+ * Copy is zero, Signal is one and Wait is two. The payload case determines the encoded operation.
+ */
+#define C_COMMAND_C_OPCODE_C_QUCOPY UINT64_C(0)
+#define C_COMMAND_C_OPCODE_C_QUSIGNAL UINT64_C(1)
+#define C_COMMAND_C_OPCODE_C_QUWAIT UINT64_C(2)
+#define C_COMMAND_C_OPCODE_OFFSET UINT64_C(12)
+#define C_COMMAND_C_OPCODE_WIDTH UINT64_C(4)
+#define C_COMMAND_C_OPCODE_ENDIAN C_COMMAND_ENDIAN_LITTLE
+static inline uint32_t C_COMMAND_LOAD_C_OPCODE(const uint8_t bytes[C_COMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_COMMAND_C_OPCODE_OFFSET] | ((uint32_t)bytes[C_COMMAND_C_OPCODE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COMMAND_C_OPCODE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COMMAND_C_OPCODE_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_COMMAND_STORE_C_OPCODE(uint8_t bytes[C_COMMAND_SIZE], uint32_t value) {
+    bytes[C_COMMAND_C_OPCODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COMMAND_C_OPCODE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COMMAND_C_OPCODE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COMMAND_C_OPCODE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+#define C_COMMAND_RECORD_C_PAYLOAD_OFFSET UINT64_C(16)
+#define C_COMMAND_RECORD_C_PAYLOAD_SIZE UINT64_C(96)
+
+/*
+ * Copy parameters
+ * Two independent endpoint starts select one copy_length. Hardware validates both ranges before writes. Software retains lists and resources until completion or acknowledged cancellation, including fault suspension.
+ */
+#define C_COPYCOMMAND_SIZE UINT64_C(96)
+#define C_COPYCOMMAND_ALIGNMENT UINT64_C(8)
+#define C_COPYCOMMAND_ENDIAN_LITTLE UINT32_C(0)
+#define C_COPYCOMMAND_ENDIAN_BIG UINT32_C(1)
+/*
+ * CopyCommand.source
+ * Source stream
+ * Linear or scatter/gather stream supplying payload bytes in logical order.
+ */
+/*
+ * CopyCommand.destination
+ * Destination stream
+ * Independent destination stream receiving copy_length bytes from its selected start.
+ */
+
+/*
+ * Endpoint representation
+ * 0: Linear base address.
+ * 1: ScatterGather table address and total entry count.
+ * Other wire values are invalid. Encoding derives this tag from the selected payload case.
+ */
+#define C_COPYCOMMAND_C_SOURCEQX2EMODE_C_QULINEAR UINT64_C(0)
+#define C_COPYCOMMAND_C_SOURCEQX2EMODE_C_QUSCATTERQUGATHER UINT64_C(1)
+#define C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET UINT64_C(0)
+#define C_COPYCOMMAND_C_SOURCEQX2EMODE_WIDTH UINT64_C(4)
+#define C_COPYCOMMAND_C_SOURCEQX2EMODE_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_COPYCOMMAND_LOAD_C_SOURCEQX2EMODE(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET] | ((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_COPYCOMMAND_STORE_C_SOURCEQX2EMODE(uint8_t bytes[C_COPYCOMMAND_SIZE], uint32_t value) {
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Payload address-space context
+ * Context selector for payload accesses, independent of the context used to read a scatter/gather table. Ignored by ordinary context-free hardware.
+ */
+#define C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET UINT64_C(4)
+#define C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_WIDTH UINT64_C(4)
+#define C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_COPYCOMMAND_LOAD_C_SOURCEQX2ECONTEXT(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET] | ((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_COPYCOMMAND_STORE_C_SOURCEQX2ECONTEXT(uint8_t bytes[C_COPYCOMMAND_SIZE], uint32_t value) {
+    bytes[C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Endpoint parameters
+ * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
+ */
+#define C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET UINT64_C(8)
+#define C_COPYCOMMAND_C_SOURCEQX2EWORD0_WIDTH UINT64_C(8)
+#define C_COPYCOMMAND_C_SOURCEQX2EWORD0_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_COPYCOMMAND_LOAD_C_SOURCEQX2EWORD0(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_COPYCOMMAND_STORE_C_SOURCEQX2EWORD0(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Endpoint parameters
+ * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
+ */
+#define C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET UINT64_C(16)
+#define C_COPYCOMMAND_C_SOURCEQX2EWORD1_WIDTH UINT64_C(8)
+#define C_COPYCOMMAND_C_SOURCEQX2EWORD1_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_COPYCOMMAND_LOAD_C_SOURCEQX2EWORD1(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_COPYCOMMAND_STORE_C_SOURCEQX2EWORD1(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Endpoint parameters
+ * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
+ */
+#define C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET UINT64_C(24)
+#define C_COPYCOMMAND_C_SOURCEQX2EWORD2_WIDTH UINT64_C(8)
+#define C_COPYCOMMAND_C_SOURCEQX2EWORD2_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_COPYCOMMAND_LOAD_C_SOURCEQX2EWORD2(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_COPYCOMMAND_STORE_C_SOURCEQX2EWORD2(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Endpoint parameters
+ * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
+ */
+#define C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET UINT64_C(32)
+#define C_COPYCOMMAND_C_SOURCEQX2EWORD3_WIDTH UINT64_C(8)
+#define C_COPYCOMMAND_C_SOURCEQX2EWORD3_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_COPYCOMMAND_LOAD_C_SOURCEQX2EWORD3(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_COPYCOMMAND_STORE_C_SOURCEQX2EWORD3(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Endpoint representation
+ * 0: Linear base address.
+ * 1: ScatterGather table address and total entry count.
+ * Other wire values are invalid. Encoding derives this tag from the selected payload case.
+ */
+#define C_COPYCOMMAND_C_DESTINATIONQX2EMODE_C_QULINEAR UINT64_C(0)
+#define C_COPYCOMMAND_C_DESTINATIONQX2EMODE_C_QUSCATTERQUGATHER UINT64_C(1)
+#define C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET UINT64_C(40)
+#define C_COPYCOMMAND_C_DESTINATIONQX2EMODE_WIDTH UINT64_C(4)
+#define C_COPYCOMMAND_C_DESTINATIONQX2EMODE_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_COPYCOMMAND_LOAD_C_DESTINATIONQX2EMODE(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET] | ((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_COPYCOMMAND_STORE_C_DESTINATIONQX2EMODE(uint8_t bytes[C_COPYCOMMAND_SIZE], uint32_t value) {
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Payload address-space context
+ * Context selector for payload accesses, independent of the context used to read a scatter/gather table. Ignored by ordinary context-free hardware.
+ */
+#define C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET UINT64_C(44)
+#define C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_WIDTH UINT64_C(4)
+#define C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_COPYCOMMAND_LOAD_C_DESTINATIONQX2ECONTEXT(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET] | ((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_COPYCOMMAND_STORE_C_DESTINATIONQX2ECONTEXT(uint8_t bytes[C_COPYCOMMAND_SIZE], uint32_t value) {
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Endpoint parameters
+ * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
+ */
+#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET UINT64_C(48)
+#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_WIDTH UINT64_C(8)
+#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_COPYCOMMAND_LOAD_C_DESTINATIONQX2EWORD0(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_COPYCOMMAND_STORE_C_DESTINATIONQX2EWORD0(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Endpoint parameters
+ * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
+ */
+#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET UINT64_C(56)
+#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_WIDTH UINT64_C(8)
+#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_COPYCOMMAND_LOAD_C_DESTINATIONQX2EWORD1(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_COPYCOMMAND_STORE_C_DESTINATIONQX2EWORD1(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Endpoint parameters
+ * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
+ */
+#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET UINT64_C(64)
+#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_WIDTH UINT64_C(8)
+#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_COPYCOMMAND_LOAD_C_DESTINATIONQX2EWORD2(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_COPYCOMMAND_STORE_C_DESTINATIONQX2EWORD2(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Endpoint parameters
+ * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
+ */
+#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET UINT64_C(72)
+#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_WIDTH UINT64_C(8)
+#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_COPYCOMMAND_LOAD_C_DESTINATIONQX2EWORD3(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_COPYCOMMAND_STORE_C_DESTINATIONQX2EWORD3(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Copy byte length
+ * Bytes requested from each endpoint start. Zero performs no list or payload accesses. Each selected SG range must cover this many bytes; insufficient capacity reports LengthMismatch before payload writes.
+ */
+#define C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET UINT64_C(80)
+#define C_COPYCOMMAND_C_COPYQSLENGTH_WIDTH UINT64_C(8)
+#define C_COPYCOMMAND_C_COPYQSLENGTH_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_COPYCOMMAND_LOAD_C_COPYQSLENGTH(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_COPYCOMMAND_STORE_C_COPYQSLENGTH(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
+    bytes[C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
  * Scatter/gather table context
  * Context selector shared by both scatter/gather tables. Entries describe payload in each endpoint's own context. Ignored when both endpoints are linear or hardware is context-free.
  */
-#define C_COMMAND_C_SGQSCONTEXT_OFFSET UINT64_C(100)
-#define C_COMMAND_C_SGQSCONTEXT_WIDTH UINT64_C(4)
-#define C_COMMAND_C_SGQSCONTEXT_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint32_t C_COMMAND_LOAD_C_SGQSCONTEXT(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint32_t)((uint32_t)bytes[C_COMMAND_C_SGQSCONTEXT_OFFSET] | ((uint32_t)bytes[C_COMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+#define C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET UINT64_C(88)
+#define C_COPYCOMMAND_C_SGQSCONTEXT_WIDTH UINT64_C(4)
+#define C_COPYCOMMAND_C_SGQSCONTEXT_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_COPYCOMMAND_LOAD_C_SGQSCONTEXT(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET] | ((uint32_t)bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
 }
-static inline void C_COMMAND_STORE_C_SGQSCONTEXT(uint8_t bytes[C_COMMAND_SIZE], uint32_t value) {
-    bytes[C_COMMAND_C_SGQSCONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+static inline void C_COPYCOMMAND_STORE_C_SGQSCONTEXT(uint8_t bytes[C_COPYCOMMAND_SIZE], uint32_t value) {
+    bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
 }
-#define C_COMMAND_RECORD_C_SOURCE_OFFSET UINT64_C(8)
-#define C_COMMAND_RECORD_C_SOURCE_SIZE UINT64_C(40)
-#define C_COMMAND_RECORD_C_DESTINATION_OFFSET UINT64_C(48)
-#define C_COMMAND_RECORD_C_DESTINATION_SIZE UINT64_C(40)
+#define C_COPYCOMMAND_RECORD_C_SOURCE_OFFSET UINT64_C(0)
+#define C_COPYCOMMAND_RECORD_C_SOURCE_SIZE UINT64_C(40)
+#define C_COPYCOMMAND_RECORD_C_DESTINATION_OFFSET UINT64_C(40)
+#define C_COPYCOMMAND_RECORD_C_DESTINATION_SIZE UINT64_C(40)
 
 /*
- * DMA copy response
+ * Atomic signal command
+ * One atomic access to a signed 64-bit signal. Values use two's-complement u64 wire storage. The response returns the observed old value; compare exchange updates only on equality.
+ */
+#define C_SIGNALCOMMAND_SIZE UINT64_C(40)
+#define C_SIGNALCOMMAND_ALIGNMENT UINT64_C(8)
+#define C_SIGNALCOMMAND_ENDIAN_LITTLE UINT32_C(0)
+#define C_SIGNALCOMMAND_ENDIAN_BIG UINT32_C(1)
+/*
+ * SignalCommand.target
+ * Signal target
+ * Address and context selecting the signal allocation.
+ */
+
+/*
+ * Signal address
+ * Eight-byte-aligned address of one atomic 64-bit signal.
+ */
+#define C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_OFFSET UINT64_C(0)
+#define C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_WIDTH UINT64_C(8)
+#define C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_ENDIAN C_SIGNALCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_SIGNALCOMMAND_LOAD_C_TARGETQX2EADDRESS(const uint8_t bytes[C_SIGNALCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_OFFSET] | ((uint64_t)bytes[C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_SIGNALCOMMAND_STORE_C_TARGETQX2EADDRESS(uint8_t bytes[C_SIGNALCOMMAND_SIZE], uint64_t value) {
+    bytes[C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Signal context
+ * Address-space context selector for the signal access.
+ */
+#define C_SIGNALCOMMAND_C_TARGETQX2ECONTEXT_OFFSET UINT64_C(8)
+#define C_SIGNALCOMMAND_C_TARGETQX2ECONTEXT_WIDTH UINT64_C(4)
+#define C_SIGNALCOMMAND_C_TARGETQX2ECONTEXT_ENDIAN C_SIGNALCOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_SIGNALCOMMAND_LOAD_C_TARGETQX2ECONTEXT(const uint8_t bytes[C_SIGNALCOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_SIGNALCOMMAND_C_TARGETQX2ECONTEXT_OFFSET] | ((uint32_t)bytes[C_SIGNALCOMMAND_C_TARGETQX2ECONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_SIGNALCOMMAND_C_TARGETQX2ECONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_SIGNALCOMMAND_C_TARGETQX2ECONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_SIGNALCOMMAND_STORE_C_TARGETQX2ECONTEXT(uint8_t bytes[C_SIGNALCOMMAND_SIZE], uint32_t value) {
+    bytes[C_SIGNALCOMMAND_C_TARGETQX2ECONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_TARGETQX2ECONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_TARGETQX2ECONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_TARGETQX2ECONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Atomic operation
+ * Load, store, wrapping arithmetic, bitwise operations, exchange or compare exchange. Arithmetic operates on the 64-bit representation.
+ */
+#define C_SIGNALCOMMAND_C_OPERATION_C_QULOAD UINT64_C(0)
+#define C_SIGNALCOMMAND_C_OPERATION_C_QUSTORE UINT64_C(1)
+#define C_SIGNALCOMMAND_C_OPERATION_C_QUADD UINT64_C(2)
+#define C_SIGNALCOMMAND_C_OPERATION_C_QUSUBTRACT UINT64_C(3)
+#define C_SIGNALCOMMAND_C_OPERATION_C_QUAND UINT64_C(4)
+#define C_SIGNALCOMMAND_C_OPERATION_C_QUOR UINT64_C(5)
+#define C_SIGNALCOMMAND_C_OPERATION_C_QUXOR UINT64_C(6)
+#define C_SIGNALCOMMAND_C_OPERATION_C_QUEXCHANGE UINT64_C(7)
+#define C_SIGNALCOMMAND_C_OPERATION_C_QUCOMPAREQUEXCHANGE UINT64_C(8)
+#define C_SIGNALCOMMAND_C_OPERATION_OFFSET UINT64_C(16)
+#define C_SIGNALCOMMAND_C_OPERATION_WIDTH UINT64_C(4)
+#define C_SIGNALCOMMAND_C_OPERATION_ENDIAN C_SIGNALCOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_SIGNALCOMMAND_LOAD_C_OPERATION(const uint8_t bytes[C_SIGNALCOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_SIGNALCOMMAND_C_OPERATION_OFFSET] | ((uint32_t)bytes[C_SIGNALCOMMAND_C_OPERATION_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_SIGNALCOMMAND_C_OPERATION_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_SIGNALCOMMAND_C_OPERATION_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_SIGNALCOMMAND_STORE_C_OPERATION(uint8_t bytes[C_SIGNALCOMMAND_SIZE], uint32_t value) {
+    bytes[C_SIGNALCOMMAND_C_OPERATION_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_OPERATION_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_OPERATION_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_OPERATION_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Memory order
+ * Load allows Relaxed or Acquire; Store allows Relaxed or Release; read-modify-write operations allow all four orders. Compare-exchange failure uses Acquire for acquire-bearing orders and Relaxed otherwise.
+ */
+#define C_SIGNALCOMMAND_C_ORDER_C_QURELAXED UINT64_C(0)
+#define C_SIGNALCOMMAND_C_ORDER_C_QUACQQUIRE UINT64_C(1)
+#define C_SIGNALCOMMAND_C_ORDER_C_QURELEASE UINT64_C(2)
+#define C_SIGNALCOMMAND_C_ORDER_C_QUACQQUIREQURELEASE UINT64_C(3)
+#define C_SIGNALCOMMAND_C_ORDER_OFFSET UINT64_C(20)
+#define C_SIGNALCOMMAND_C_ORDER_WIDTH UINT64_C(4)
+#define C_SIGNALCOMMAND_C_ORDER_ENDIAN C_SIGNALCOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_SIGNALCOMMAND_LOAD_C_ORDER(const uint8_t bytes[C_SIGNALCOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_SIGNALCOMMAND_C_ORDER_OFFSET] | ((uint32_t)bytes[C_SIGNALCOMMAND_C_ORDER_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_SIGNALCOMMAND_C_ORDER_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_SIGNALCOMMAND_C_ORDER_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_SIGNALCOMMAND_STORE_C_ORDER(uint8_t bytes[C_SIGNALCOMMAND_SIZE], uint32_t value) {
+    bytes[C_SIGNALCOMMAND_C_ORDER_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_ORDER_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_ORDER_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_ORDER_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Operation operand
+ * Two's-complement operand or replacement value; ignored by Load.
+ */
+#define C_SIGNALCOMMAND_C_VALUE_OFFSET UINT64_C(24)
+#define C_SIGNALCOMMAND_C_VALUE_WIDTH UINT64_C(8)
+#define C_SIGNALCOMMAND_C_VALUE_ENDIAN C_SIGNALCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_SIGNALCOMMAND_LOAD_C_VALUE(const uint8_t bytes[C_SIGNALCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_SIGNALCOMMAND_C_VALUE_OFFSET] | ((uint64_t)bytes[C_SIGNALCOMMAND_C_VALUE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_VALUE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_VALUE_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_VALUE_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_VALUE_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_VALUE_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_VALUE_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_SIGNALCOMMAND_STORE_C_VALUE(uint8_t bytes[C_SIGNALCOMMAND_SIZE], uint64_t value) {
+    bytes[C_SIGNALCOMMAND_C_VALUE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_VALUE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_VALUE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_VALUE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_VALUE_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_VALUE_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_VALUE_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_VALUE_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Expected value
+ * Two's-complement equality operand for CompareExchange; ignored by other operations.
+ */
+#define C_SIGNALCOMMAND_C_EXPECTED_OFFSET UINT64_C(32)
+#define C_SIGNALCOMMAND_C_EXPECTED_WIDTH UINT64_C(8)
+#define C_SIGNALCOMMAND_C_EXPECTED_ENDIAN C_SIGNALCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_SIGNALCOMMAND_LOAD_C_EXPECTED(const uint8_t bytes[C_SIGNALCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_SIGNALCOMMAND_C_EXPECTED_OFFSET] | ((uint64_t)bytes[C_SIGNALCOMMAND_C_EXPECTED_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_EXPECTED_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_EXPECTED_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_EXPECTED_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_EXPECTED_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_EXPECTED_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_SIGNALCOMMAND_C_EXPECTED_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_SIGNALCOMMAND_STORE_C_EXPECTED(uint8_t bytes[C_SIGNALCOMMAND_SIZE], uint64_t value) {
+    bytes[C_SIGNALCOMMAND_C_EXPECTED_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_EXPECTED_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_EXPECTED_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_EXPECTED_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_EXPECTED_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_EXPECTED_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_EXPECTED_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_SIGNALCOMMAND_C_EXPECTED_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+#define C_SIGNALCOMMAND_RECORD_C_TARGET_OFFSET UINT64_C(0)
+#define C_SIGNALCOMMAND_RECORD_C_TARGET_SIZE UINT64_C(16)
+
+/*
+ * Signal location
+ * An aligned 64-bit signal in a selected address space. Software retains the signal allocation and binding until all accesses retire.
+ */
+#define C_SIGNALTARGET_SIZE UINT64_C(16)
+#define C_SIGNALTARGET_ALIGNMENT UINT64_C(8)
+#define C_SIGNALTARGET_ENDIAN_LITTLE UINT32_C(0)
+#define C_SIGNALTARGET_ENDIAN_BIG UINT32_C(1)
+
+/*
+ * Signal address
+ * Eight-byte-aligned address of one atomic 64-bit signal.
+ */
+#define C_SIGNALTARGET_C_ADDRESS_OFFSET UINT64_C(0)
+#define C_SIGNALTARGET_C_ADDRESS_WIDTH UINT64_C(8)
+#define C_SIGNALTARGET_C_ADDRESS_ENDIAN C_SIGNALTARGET_ENDIAN_LITTLE
+static inline uint64_t C_SIGNALTARGET_LOAD_C_ADDRESS(const uint8_t bytes[C_SIGNALTARGET_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_SIGNALTARGET_C_ADDRESS_OFFSET] | ((uint64_t)bytes[C_SIGNALTARGET_C_ADDRESS_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_SIGNALTARGET_C_ADDRESS_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_SIGNALTARGET_C_ADDRESS_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_SIGNALTARGET_C_ADDRESS_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_SIGNALTARGET_C_ADDRESS_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_SIGNALTARGET_C_ADDRESS_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_SIGNALTARGET_C_ADDRESS_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_SIGNALTARGET_STORE_C_ADDRESS(uint8_t bytes[C_SIGNALTARGET_SIZE], uint64_t value) {
+    bytes[C_SIGNALTARGET_C_ADDRESS_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_SIGNALTARGET_C_ADDRESS_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_SIGNALTARGET_C_ADDRESS_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_SIGNALTARGET_C_ADDRESS_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_SIGNALTARGET_C_ADDRESS_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_SIGNALTARGET_C_ADDRESS_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_SIGNALTARGET_C_ADDRESS_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_SIGNALTARGET_C_ADDRESS_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Signal context
+ * Address-space context selector for the signal access.
+ */
+#define C_SIGNALTARGET_C_CONTEXT_OFFSET UINT64_C(8)
+#define C_SIGNALTARGET_C_CONTEXT_WIDTH UINT64_C(4)
+#define C_SIGNALTARGET_C_CONTEXT_ENDIAN C_SIGNALTARGET_ENDIAN_LITTLE
+static inline uint32_t C_SIGNALTARGET_LOAD_C_CONTEXT(const uint8_t bytes[C_SIGNALTARGET_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_SIGNALTARGET_C_CONTEXT_OFFSET] | ((uint32_t)bytes[C_SIGNALTARGET_C_CONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_SIGNALTARGET_C_CONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_SIGNALTARGET_C_CONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_SIGNALTARGET_STORE_C_CONTEXT(uint8_t bytes[C_SIGNALTARGET_SIZE], uint32_t value) {
+    bytes[C_SIGNALTARGET_C_CONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_SIGNALTARGET_C_CONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_SIGNALTARGET_C_CONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_SIGNALTARGET_C_CONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Signal wait command
+ * Wait until one atomic signal load satisfies a signed comparison. An unmet condition retains the command while peer channels remain eligible.
+ */
+#define C_WAITCOMMAND_SIZE UINT64_C(32)
+#define C_WAITCOMMAND_ALIGNMENT UINT64_C(8)
+#define C_WAITCOMMAND_ENDIAN_LITTLE UINT32_C(0)
+#define C_WAITCOMMAND_ENDIAN_BIG UINT32_C(1)
+/*
+ * WaitCommand.target
+ * Signal target
+ * Address and context selecting the signal allocation.
+ */
+
+/*
+ * Signal address
+ * Eight-byte-aligned address of one atomic 64-bit signal.
+ */
+#define C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET UINT64_C(0)
+#define C_WAITCOMMAND_C_TARGETQX2EADDRESS_WIDTH UINT64_C(8)
+#define C_WAITCOMMAND_C_TARGETQX2EADDRESS_ENDIAN C_WAITCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_WAITCOMMAND_LOAD_C_TARGETQX2EADDRESS(const uint8_t bytes[C_WAITCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET] | ((uint64_t)bytes[C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_WAITCOMMAND_STORE_C_TARGETQX2EADDRESS(uint8_t bytes[C_WAITCOMMAND_SIZE], uint64_t value) {
+    bytes[C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Signal context
+ * Address-space context selector for the signal access.
+ */
+#define C_WAITCOMMAND_C_TARGETQX2ECONTEXT_OFFSET UINT64_C(8)
+#define C_WAITCOMMAND_C_TARGETQX2ECONTEXT_WIDTH UINT64_C(4)
+#define C_WAITCOMMAND_C_TARGETQX2ECONTEXT_ENDIAN C_WAITCOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_WAITCOMMAND_LOAD_C_TARGETQX2ECONTEXT(const uint8_t bytes[C_WAITCOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_WAITCOMMAND_C_TARGETQX2ECONTEXT_OFFSET] | ((uint32_t)bytes[C_WAITCOMMAND_C_TARGETQX2ECONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_WAITCOMMAND_C_TARGETQX2ECONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_WAITCOMMAND_C_TARGETQX2ECONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_WAITCOMMAND_STORE_C_TARGETQX2ECONTEXT(uint8_t bytes[C_WAITCOMMAND_SIZE], uint32_t value) {
+    bytes[C_WAITCOMMAND_C_TARGETQX2ECONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_TARGETQX2ECONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_TARGETQX2ECONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_TARGETQX2ECONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Signed comparison
+ * Compare the observed signed 64-bit value with compare using Equal, NotEqual, LessThan or GreaterOrEqual.
+ */
+#define C_WAITCOMMAND_C_CONDITION_C_QUEQQUAL UINT64_C(0)
+#define C_WAITCOMMAND_C_CONDITION_C_QUNOTQUEQQUAL UINT64_C(1)
+#define C_WAITCOMMAND_C_CONDITION_C_QULESSQUTHAN UINT64_C(2)
+#define C_WAITCOMMAND_C_CONDITION_C_QUGREATERQUORQUEQQUAL UINT64_C(3)
+#define C_WAITCOMMAND_C_CONDITION_OFFSET UINT64_C(16)
+#define C_WAITCOMMAND_C_CONDITION_WIDTH UINT64_C(4)
+#define C_WAITCOMMAND_C_CONDITION_ENDIAN C_WAITCOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_WAITCOMMAND_LOAD_C_CONDITION(const uint8_t bytes[C_WAITCOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_WAITCOMMAND_C_CONDITION_OFFSET] | ((uint32_t)bytes[C_WAITCOMMAND_C_CONDITION_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_WAITCOMMAND_C_CONDITION_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_WAITCOMMAND_C_CONDITION_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_WAITCOMMAND_STORE_C_CONDITION(uint8_t bytes[C_WAITCOMMAND_SIZE], uint32_t value) {
+    bytes[C_WAITCOMMAND_C_CONDITION_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_CONDITION_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_CONDITION_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_CONDITION_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Load memory order
+ * Relaxed or Acquire ordering for every atomic signal observation.
+ */
+#define C_WAITCOMMAND_C_ORDER_C_QURELAXED UINT64_C(0)
+#define C_WAITCOMMAND_C_ORDER_C_QUACQQUIRE UINT64_C(1)
+#define C_WAITCOMMAND_C_ORDER_OFFSET UINT64_C(20)
+#define C_WAITCOMMAND_C_ORDER_WIDTH UINT64_C(4)
+#define C_WAITCOMMAND_C_ORDER_ENDIAN C_WAITCOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_WAITCOMMAND_LOAD_C_ORDER(const uint8_t bytes[C_WAITCOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_WAITCOMMAND_C_ORDER_OFFSET] | ((uint32_t)bytes[C_WAITCOMMAND_C_ORDER_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_WAITCOMMAND_C_ORDER_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_WAITCOMMAND_C_ORDER_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_WAITCOMMAND_STORE_C_ORDER(uint8_t bytes[C_WAITCOMMAND_SIZE], uint32_t value) {
+    bytes[C_WAITCOMMAND_C_ORDER_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_ORDER_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_ORDER_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_ORDER_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Comparison value
+ * Signed comparison operand stored as two's-complement u64 bits.
+ */
+#define C_WAITCOMMAND_C_COMPARE_OFFSET UINT64_C(24)
+#define C_WAITCOMMAND_C_COMPARE_WIDTH UINT64_C(8)
+#define C_WAITCOMMAND_C_COMPARE_ENDIAN C_WAITCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_WAITCOMMAND_LOAD_C_COMPARE(const uint8_t bytes[C_WAITCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_WAITCOMMAND_C_COMPARE_OFFSET] | ((uint64_t)bytes[C_WAITCOMMAND_C_COMPARE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_WAITCOMMAND_C_COMPARE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_WAITCOMMAND_C_COMPARE_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_WAITCOMMAND_C_COMPARE_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_WAITCOMMAND_C_COMPARE_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_WAITCOMMAND_C_COMPARE_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_WAITCOMMAND_C_COMPARE_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_WAITCOMMAND_STORE_C_COMPARE(uint8_t bytes[C_WAITCOMMAND_SIZE], uint64_t value) {
+    bytes[C_WAITCOMMAND_C_COMPARE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_COMPARE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_COMPARE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_COMPARE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_COMPARE_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_COMPARE_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_COMPARE_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_COMPARE_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+#define C_WAITCOMMAND_RECORD_C_TARGET_OFFSET UINT64_C(0)
+#define C_WAITCOMMAND_RECORD_C_TARGET_SIZE UINT64_C(16)
+
+/*
+ * Observed signal value
+ * The signed 64-bit signal observation, stored as two's-complement bits.
+ */
+#define C_SIGNALINFO_SIZE UINT64_C(8)
+#define C_SIGNALINFO_ALIGNMENT UINT64_C(8)
+#define C_SIGNALINFO_ENDIAN_LITTLE UINT32_C(0)
+#define C_SIGNALINFO_ENDIAN_BIG UINT32_C(1)
+
+/*
+ * Observed value
+ * Value observed before an atomic update, or the value satisfying Wait.
+ */
+#define C_SIGNALINFO_C_VALUE_OFFSET UINT64_C(0)
+#define C_SIGNALINFO_C_VALUE_WIDTH UINT64_C(8)
+#define C_SIGNALINFO_C_VALUE_ENDIAN C_SIGNALINFO_ENDIAN_LITTLE
+static inline uint64_t C_SIGNALINFO_LOAD_C_VALUE(const uint8_t bytes[C_SIGNALINFO_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_SIGNALINFO_C_VALUE_OFFSET] | ((uint64_t)bytes[C_SIGNALINFO_C_VALUE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_SIGNALINFO_C_VALUE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_SIGNALINFO_C_VALUE_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_SIGNALINFO_C_VALUE_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_SIGNALINFO_C_VALUE_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_SIGNALINFO_C_VALUE_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_SIGNALINFO_C_VALUE_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_SIGNALINFO_STORE_C_VALUE(uint8_t bytes[C_SIGNALINFO_SIZE], uint64_t value) {
+    bytes[C_SIGNALINFO_C_VALUE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_SIGNALINFO_C_VALUE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_SIGNALINFO_C_VALUE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_SIGNALINFO_C_VALUE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_SIGNALINFO_C_VALUE_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_SIGNALINFO_C_VALUE_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_SIGNALINFO_C_VALUE_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_SIGNALINFO_C_VALUE_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Signal access failure
+ * A terminal signal or wait failure which stops the channel.
+ */
+#define C_SIGNALERRORINFO_SIZE UINT64_C(4)
+#define C_SIGNALERRORINFO_ALIGNMENT UINT64_C(4)
+#define C_SIGNALERRORINFO_ENDIAN_LITTLE UINT32_C(0)
+#define C_SIGNALERRORINFO_ENDIAN_BIG UINT32_C(1)
+
+/*
+ * Failure reason
+ * InvalidOperation denotes invalid alignment or ordering; Unsupported denotes unavailable atomic access; Access denotes a terminal memory access failure.
+ */
+#define C_SIGNALERRORINFO_C_REASON_C_QUINVALIDQUOPERATION UINT64_C(0)
+#define C_SIGNALERRORINFO_C_REASON_C_QUUNSUPPORTED UINT64_C(1)
+#define C_SIGNALERRORINFO_C_REASON_C_QUACCESS UINT64_C(2)
+#define C_SIGNALERRORINFO_C_REASON_OFFSET UINT64_C(0)
+#define C_SIGNALERRORINFO_C_REASON_WIDTH UINT64_C(4)
+#define C_SIGNALERRORINFO_C_REASON_ENDIAN C_SIGNALERRORINFO_ENDIAN_LITTLE
+static inline uint32_t C_SIGNALERRORINFO_LOAD_C_REASON(const uint8_t bytes[C_SIGNALERRORINFO_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_SIGNALERRORINFO_C_REASON_OFFSET] | ((uint32_t)bytes[C_SIGNALERRORINFO_C_REASON_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_SIGNALERRORINFO_C_REASON_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_SIGNALERRORINFO_C_REASON_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_SIGNALERRORINFO_STORE_C_REASON(uint8_t bytes[C_SIGNALERRORINFO_SIZE], uint32_t value) {
+    bytes[C_SIGNALERRORINFO_C_REASON_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_SIGNALERRORINFO_C_REASON_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_SIGNALERRORINFO_C_REASON_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_SIGNALERRORINFO_C_REASON_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * DMA response
  * A 24-byte, eight-byte-aligned little-endian terminal completion. Recoverable payload faults suspend the command without publishing a response. Unsuccessful results stop the channel until reset. Ring failures use the channel fatal register. Committed writes are never rolled back.
  */
 #define C_RESPONSE_SIZE UINT64_C(24)
@@ -543,7 +943,7 @@ static inline void C_COMMAND_STORE_C_SGQSCONTEXT(uint8_t bytes[C_COMMAND_SIZE], 
 /*
  * Response.info
  * Status-specific completion information
- * The status selects the only valid information format. Success and stopping errors report committed bytes.
+ * Copy statuses report committed bytes; SignalSuccess reports an observed value; SignalError reports a reason.
  */
 
 /*
@@ -568,8 +968,8 @@ static inline void C_RESPONSE_STORE_C_ID(uint8_t bytes[C_RESPONSE_SIZE], uint64_
 }
 
 /*
- * Copy result
- * 0: Success. 1: InvalidLength, invalid position or overflowing range. 2: ReadError. 3: WriteError. 4: LengthMismatch, selected SG capacity is insufficient. 5: ListReadError. Only Success avoids channel halt. Other values, including the retired PageFault encoding 6, are invalid.
+ * Command result
+ * 0: Success. 1: InvalidLength. 2: ReadError. 3: WriteError. 4: LengthMismatch. 5: ListReadError. 7: SignalSuccess. 8: SignalError. Success and SignalSuccess avoid channel halt. Retired PageFault encoding 6 remains invalid.
  */
 #define C_RESPONSE_C_STATUS_C_QUSUCCESS UINT64_C(0)
 #define C_RESPONSE_C_STATUS_C_QUINVALIDQULENGTH UINT64_C(1)
@@ -577,6 +977,8 @@ static inline void C_RESPONSE_STORE_C_ID(uint8_t bytes[C_RESPONSE_SIZE], uint64_
 #define C_RESPONSE_C_STATUS_C_QUWRITEQUERROR UINT64_C(3)
 #define C_RESPONSE_C_STATUS_C_QULENGTHQUMISMATCH UINT64_C(4)
 #define C_RESPONSE_C_STATUS_C_QULISTQUREADQUERROR UINT64_C(5)
+#define C_RESPONSE_C_STATUS_C_QUSIGNALQUSUCCESS UINT64_C(7)
+#define C_RESPONSE_C_STATUS_C_QUSIGNALQUERROR UINT64_C(8)
 #define C_RESPONSE_C_STATUS_OFFSET UINT64_C(8)
 #define C_RESPONSE_C_STATUS_WIDTH UINT64_C(4)
 #define C_RESPONSE_C_STATUS_ENDIAN C_RESPONSE_ENDIAN_LITTLE

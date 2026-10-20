@@ -1,53 +1,20 @@
 use super::PlatformConfigError;
 use super::platform::MemoryRequest;
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_runtime::{
+    AtomicAccessError, AtomicOperation, MemoryAccess, MemoryAddress, MemoryAlignment,
+};
 use pdma_model_contract::dma::DmaAccess;
 use pdma_model_contract::memory::{ContextAttributes, MemoryIdentity};
-use pdma_model_dma::MemoryFailure;
 use pdma_model_hw_components::{context, windows};
-use std::{
-    fmt,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 mod control;
+mod error;
+pub(super) use error::RouteError;
 mod spaces;
 pub(super) use control::ControlMemory;
 pub(super) use spaces::FunctionSpaces;
 pub(in crate::harness) use spaces::SpaceError;
-
-#[derive(Debug, PartialEq, Eq)]
-pub(super) enum RouteError<E> {
-    Window(windows::MemoryError<SpaceError<E>>),
-    Context(context::MemoryError<SpaceError<E>>),
-}
-
-impl<E: fmt::Display> fmt::Display for RouteError<E> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Window(error) => error.fmt(f),
-            Self::Context(error) => error.fmt(f),
-        }
-    }
-}
-
-impl<E: std::error::Error + 'static> std::error::Error for RouteError<E> {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Window(error) => Some(error),
-            Self::Context(error) => Some(error),
-        }
-    }
-}
-
-impl<E: Into<Self>> From<RouteError<E>> for MemoryFailure {
-    fn from(error: RouteError<E>) -> Self {
-        match error {
-            RouteError::Window(error) => error.into(),
-            RouteError::Context(error) => error.into(),
-        }
-    }
-}
 
 #[derive(Debug)]
 pub(super) struct RoutedMemory<M> {
@@ -83,6 +50,84 @@ impl<M> RoutedMemory<M> {
 
 impl<M: MemoryAccess> MemoryAccess<DmaAccess> for RoutedMemory<M> {
     type Error = RouteError<M::Error>;
+
+    fn atomic32_with_sideband(
+        &self,
+        access: &DmaAccess,
+        address: MemoryAddress,
+        operation: AtomicOperation<u32>,
+    ) -> Result<u32, AtomicAccessError<Self::Error>> {
+        let windows = self
+            .windows
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        self.contexts.as_ref().map_or_else(
+            || {
+                windows
+                    .memory(&self.spaces)
+                    .map_sideband(|channel, function| MemoryRequest {
+                        channel: Some(channel),
+                        identity: MemoryIdentity {
+                            function,
+                            attributes: ContextAttributes::DEFAULT,
+                        },
+                    })
+                    .atomic32_with_sideband(&access.channel, address, operation)
+                    .map_err(|error| error.map_access(RouteError::Window))
+            },
+            |contexts| {
+                contexts
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .memory(&windows, &self.spaces)
+                    .map_sideband(|access, identity| MemoryRequest {
+                        channel: Some(access.channel),
+                        identity,
+                    })
+                    .atomic32_with_sideband(access, address, operation)
+                    .map_err(|error| error.map_access(RouteError::Context))
+            },
+        )
+    }
+
+    fn atomic64_with_sideband(
+        &self,
+        access: &DmaAccess,
+        address: MemoryAddress,
+        operation: AtomicOperation<u64>,
+    ) -> Result<u64, AtomicAccessError<Self::Error>> {
+        let windows = self
+            .windows
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        self.contexts.as_ref().map_or_else(
+            || {
+                windows
+                    .memory(&self.spaces)
+                    .map_sideband(|channel, function| MemoryRequest {
+                        channel: Some(channel),
+                        identity: MemoryIdentity {
+                            function,
+                            attributes: ContextAttributes::DEFAULT,
+                        },
+                    })
+                    .atomic64_with_sideband(&access.channel, address, operation)
+                    .map_err(|error| error.map_access(RouteError::Window))
+            },
+            |contexts| {
+                contexts
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .memory(&windows, &self.spaces)
+                    .map_sideband(|access, identity| MemoryRequest {
+                        channel: Some(access.channel),
+                        identity,
+                    })
+                    .atomic64_with_sideband(access, address, operation)
+                    .map_err(|error| error.map_access(RouteError::Context))
+            },
+        )
+    }
 
     fn validate_with_sideband(
         &self,

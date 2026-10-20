@@ -15,8 +15,8 @@ fn selected_ranges_skip_unused_sg_prefix_and_clip_last_segment() -> TestResult {
     memory.write(0x1200.into(), MemoryAlignment::ONE, b"abcdefgh")?;
     memory.write(0x1300.into(), MemoryAlignment::ONE, b"--------")?;
     let mut request = command();
-    request.destination = Endpoint::linear(0x1300, 2);
-    request.copy_length = 4;
+    request.as_copy_mut().expect("copy fixture").destination = Endpoint::linear(0x1300, 2);
+    request.as_copy_mut().expect("copy fixture").copy_length = 4;
     memory.add_regions(&[hardware_interface_runtime::MemoryRegion::try_new(
         0x3000.into(),
         32,
@@ -40,8 +40,10 @@ fn selected_ranges_skip_unused_sg_prefix_and_clip_last_segment() -> TestResult {
         }
         .to_bytes()?,
     )?;
-    request.source = Endpoint::scatter_gather(0x2ff0, 3);
-    request.source = request
+    request.as_copy_mut().expect("copy fixture").source = Endpoint::scatter_gather(0x2ff0, 3);
+    request.as_copy_mut().expect("copy fixture").source = request
+        .as_copy()
+        .expect("copy fixture")
         .source
         .with_start(Position::scatter_gather(1, 1))
         .ok_or("position mode mismatch")?;
@@ -105,7 +107,7 @@ fn invalid_selected_positions_and_ranges_fail_before_payload_writes() -> TestRes
         )?;
         memory.write(0x1300.into(), MemoryAlignment::ONE, b"keep")?;
         let mut request = command();
-        request.source = source;
+        request.as_copy_mut().expect("copy fixture").source = source;
         // When: range preflight runs through the real pipeline.
         submit(&mut dma, &memory, request)?;
         run(&mut dma)?;
@@ -166,10 +168,11 @@ fn segment_end_start_skips_empty_entries_without_reading_unused_suffix() -> Test
     }
     memory.write(0x1200.into(), MemoryAlignment::ONE, b"abcde")?;
     let mut request = command();
-    request.copy_length = 3;
-    request.source = Endpoint::scatter_gather(0x1400, u64::MAX)
-        .with_start(Position::scatter_gather(0, 3))
-        .ok_or("SG position")?;
+    request.as_copy_mut().expect("copy fixture").copy_length = 3;
+    request.as_copy_mut().expect("copy fixture").source =
+        Endpoint::scatter_gather(0x1400, u64::MAX)
+            .with_start(Position::scatter_gather(0, 3))
+            .ok_or("SG position")?;
     // When: only the requested three bytes are copied.
     submit(&mut dma, &memory, request)?;
     run(&mut dma)?;

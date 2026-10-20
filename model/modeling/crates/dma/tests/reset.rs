@@ -134,8 +134,8 @@ fn reset_after_committed_chunk_discards_remaining_copy_after_reconfiguration() -
         let (mut device, memory) = setup(0x1100, 2)?;
         memory.write(MemoryAddress::new(0x1200), MemoryAlignment::ONE, &[7; 512])?;
         let mut input = command();
-        input.copy_length = 512;
-        input.destination = Endpoint::linear(0x1600, 0);
+        input.as_copy_mut().expect("copy fixture").copy_length = 512;
+        input.as_copy_mut().expect("copy fixture").destination = Endpoint::linear(0x1600, 0);
         submit(&mut device, &memory, input)?;
         let mut hardware = device.hardware();
         let mut operation = hardware_interface_pipeline::HardwareDriver::new();

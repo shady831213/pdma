@@ -1,6 +1,8 @@
 use super::memory::{PageError, Paged};
 use crate::harness::runtime::platform::MemoryRequest;
-use hardware_interface_runtime::{BoundMemory, MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_runtime::{
+    AtomicAccessError, AtomicOperation, BoundMemory, MemoryAccess, MemoryAddress, MemoryAlignment,
+};
 use pdma_model_contract::{
     dma::ChannelId,
     memory::{FunctionId, MemoryIdentity},
@@ -110,6 +112,23 @@ impl Backend {
 
 impl MemoryAccess for Backend {
     type Error = PageError;
+    fn atomic32_with_sideband(
+        &self,
+        (): &(),
+        address: MemoryAddress,
+        operation: AtomicOperation<u32>,
+    ) -> Result<u32, AtomicAccessError<Self::Error>> {
+        BoundMemory::new(self.memory.as_ref(), self.request.clone()).atomic32(address, operation)
+    }
+
+    fn atomic64_with_sideband(
+        &self,
+        (): &(),
+        address: MemoryAddress,
+        operation: AtomicOperation<u64>,
+    ) -> Result<u64, AtomicAccessError<Self::Error>> {
+        BoundMemory::new(self.memory.as_ref(), self.request.clone()).atomic64(address, operation)
+    }
 
     fn validate_with_sideband(
         &self,

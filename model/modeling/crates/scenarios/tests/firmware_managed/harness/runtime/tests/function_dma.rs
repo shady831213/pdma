@@ -41,8 +41,9 @@ fn command_lists_payload_and_response_use_the_same_channel_owner() -> TestResult
             )?;
         }
         let mut work = command(100 + u64::try_from(index)?);
-        work.source = Endpoint::scatter_gather(0x1400, 1);
-        work.destination = Endpoint::scatter_gather(0x1500, 1);
+        let copy = work.as_copy_mut().ok_or("expected copy command")?;
+        copy.source = Endpoint::scatter_gather(0x1400, 1);
+        copy.destination = Endpoint::scatter_gather(0x1500, 1);
         publish(&mut dma, memory, (ChannelId::new(index), work))?;
     }
     // When: the shared execution pipeline services both channels.
@@ -93,15 +94,16 @@ fn another_functions_mapping_cannot_satisfy_a_dma_access() -> TestResult {
             &[0xa5; 256],
         )?;
         let mut work = command(91);
+        let copy = work.as_copy_mut().ok_or("expected copy command")?;
         let base = ChannelId::new(0).register_offset(2).ok_or("channel")?;
         match path {
             Path::Command => dma.write(
                 base + ChannelBlock::COMMAND.offset() + CommandRegisters::BASE.offset(),
                 &0x4000_u64.to_le_bytes(),
             )?,
-            Path::List => work.source = Endpoint::scatter_gather(0x4000, 1),
-            Path::Read => work.source = Endpoint::linear(0x4000, 0),
-            Path::Write => work.destination = Endpoint::linear(0x4000, 0),
+            Path::List => copy.source = Endpoint::scatter_gather(0x4000, 1),
+            Path::Read => copy.source = Endpoint::linear(0x4000, 0),
+            Path::Write => copy.destination = Endpoint::linear(0x4000, 0),
             Path::Response => dma.write(
                 base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
                 &0x4000_u64.to_le_bytes(),

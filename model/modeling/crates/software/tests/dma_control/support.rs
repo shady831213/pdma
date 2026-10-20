@@ -6,7 +6,7 @@ use hardware_interface_runtime::{
     SharedMemoryAccess,
 };
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Endpoint,
+    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, CopyCommand, Endpoint,
     ResponseRegisters,
 };
 use pdma_model_dma::{Dma, Hardware};
@@ -44,12 +44,16 @@ impl Bus {
                 MemoryAddress::new(0x1000),
                 MemoryAlignment::ONE,
                 &Command {
-                    copy_length: 0,
-                    sg_context: 0,
                     flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-                    id: 13,
-                    source: Endpoint::linear(0, 0),
-                    destination: Endpoint::linear(0, 0),
+                    ..Command::copy(
+                        13,
+                        CopyCommand {
+                            copy_length: 0,
+                            sg_context: 0,
+                            source: Endpoint::linear(0, 0),
+                            destination: Endpoint::linear(0, 0),
+                        },
+                    )
                 }
                 .to_bytes()?,
             )?;

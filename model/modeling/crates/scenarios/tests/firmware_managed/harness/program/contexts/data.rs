@@ -4,7 +4,7 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
 use pdma_model_contract::dma::{
-    ChannelId, Command, CompletionFlagsValues, ContextId, Endpoint, Response, Segment,
+    ChannelId, Command, CompletionFlagsValues, ContextId, CopyCommand, Endpoint, Response, Segment,
 };
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings};
 use pdma_model_software::dma::ChannelControl;
@@ -84,12 +84,16 @@ impl Transfer {
         Ok(Self {
             driver,
             command: Command {
-                copy_length: length,
-                id: 37,
-                source: source_endpoint,
-                destination: destination_endpoint,
-                sg_context: contexts[0].raw(),
                 flags: CompletionFlagsValues::default(),
+                ..Command::copy(
+                    37,
+                    CopyCommand {
+                        copy_length: length,
+                        source: source_endpoint,
+                        destination: destination_endpoint,
+                        sg_context: contexts[0].raw(),
+                    },
+                )
             },
             destination,
             same_address: source == destination,
@@ -99,9 +103,10 @@ impl Transfer {
     pub(super) async fn submit(&mut self, failure: bool) -> TestResult {
         let mut command = self.command;
         if failure {
+            let copy = command.as_copy_mut().ok_or("expected copy command")?;
             let mut source = Endpoint::linear(u64::MAX - 4096, 0);
-            source.context = command.source.context;
-            command.source = source;
+            source.context = copy.source.context;
+            copy.source = source;
         }
         self.driver.submit(command).await?;
         Ok(())

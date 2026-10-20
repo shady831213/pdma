@@ -2,7 +2,7 @@
 #include "pdma_firmware.h"
 #include <stdio.h>
 
-_Static_assert(C_COMMAND_SIZE == 104, "command wire extent");
+_Static_assert(C_COMMAND_SIZE == 112, "command wire extent");
 _Static_assert(C_RESPONSE_SIZE == 24, "response wire extent");
 _Static_assert(C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_ACCESS == C_HDMA_ACCESS_READ_ONLY, "fault status is observable");
 _Static_assert(C_HDMA_C_QURQUEQUSQUUQUMQUE__1_ACCESS == C_HDMA_ACCESS_WRITE_ONLY, "owner resume is a request");
@@ -30,7 +30,7 @@ _Static_assert(C_FWIN_C_QUOQUPQUEQUN__1_WRITABLE_MASK == 1, "only access-enable 
 _Static_assert(C_FWIN_C_QUOQUPQUEQUN__1_RESET_VALUE == 0, "window starts closed");
 _Static_assert(C_HWIN_C_QURQUEQUAQUDQUY__1_ACCESS == C_HWIN_ACCESS_READ_ONLY, "readiness is read-only");
 _Static_assert(C_HWIN_C_QURQUEQUAQUDQUY__1_WRITABLE_MASK == 0, "readiness has no writable fields");
-_Static_assert(C_COMMAND_C_FLAGS_OFFSET == 96, "command IOC offset");
+_Static_assert(C_COMMAND_C_FLAGS_OFFSET == 8, "command IOC offset");
 _Static_assert(C_RESPONSE_C_FLAGS_OFFSET == 12, "response IOC offset");
 _Static_assert(C_COMMAND_ALIGNMENT == 8, "command alignment");
 _Static_assert(C_RESPONSE_ALIGNMENT == 8, "response alignment");
@@ -169,18 +169,20 @@ int main(void) {
         C_FDMA_C_QURQUEQUSQUUQUMQUE__3_OFFSET,
     };
     C_COMMAND_STORE_C_ID(command, UINT64_C(7));
-    C_COMMAND_STORE_C_SOURCEQX2ECONTEXT(command, UINT32_C(11));
-    C_COMMAND_STORE_C_DESTINATIONQX2ECONTEXT(command, UINT32_C(22));
-    C_COMMAND_STORE_C_SGQSCONTEXT(command, UINT32_C(33));
-    C_COMMAND_STORE_C_SOURCEQX2EMODE(command, C_COMMAND_C_SOURCEQX2EMODE_C_QULINEAR);
-    C_COMMAND_STORE_C_SOURCEQX2EWORD0(command, UINT64_C(0x100));
-    C_COMMAND_STORE_C_COPYQSLENGTH(command, UINT64_C(8));
-    C_COMMAND_STORE_C_SOURCEQX2EWORD1(command, UINT64_C(7));
-    C_COMMAND_STORE_C_DESTINATIONQX2EWORD2(command, UINT64_C(1));
-    C_COMMAND_STORE_C_DESTINATIONQX2EWORD3(command, UINT64_C(3));
-    C_COMMAND_STORE_C_DESTINATIONQX2EMODE(command, C_COMMAND_C_DESTINATIONQX2EMODE_C_QUSCATTERQUGATHER);
-    C_COMMAND_STORE_C_DESTINATIONQX2EWORD0(command, UINT64_C(0x200));
-    C_COMMAND_STORE_C_DESTINATIONQX2EWORD1(command, UINT64_C(2));
+    C_COMMAND_STORE_C_OPCODE(command, C_COMMAND_C_OPCODE_C_QUCOPY);
+    uint8_t *copy = command + C_COMMAND_RECORD_C_PAYLOAD_OFFSET;
+    C_COPYCOMMAND_STORE_C_SOURCEQX2ECONTEXT(copy, UINT32_C(11));
+    C_COPYCOMMAND_STORE_C_DESTINATIONQX2ECONTEXT(copy, UINT32_C(22));
+    C_COPYCOMMAND_STORE_C_SGQSCONTEXT(copy, UINT32_C(33));
+    C_COPYCOMMAND_STORE_C_SOURCEQX2EMODE(copy, C_COPYCOMMAND_C_SOURCEQX2EMODE_C_QULINEAR);
+    C_COPYCOMMAND_STORE_C_SOURCEQX2EWORD0(copy, UINT64_C(0x100));
+    C_COPYCOMMAND_STORE_C_COPYQSLENGTH(copy, UINT64_C(8));
+    C_COPYCOMMAND_STORE_C_SOURCEQX2EWORD1(copy, UINT64_C(7));
+    C_COPYCOMMAND_STORE_C_DESTINATIONQX2EWORD2(copy, UINT64_C(1));
+    C_COPYCOMMAND_STORE_C_DESTINATIONQX2EWORD3(copy, UINT64_C(3));
+    C_COPYCOMMAND_STORE_C_DESTINATIONQX2EMODE(copy, C_COPYCOMMAND_C_DESTINATIONQX2EMODE_C_QUSCATTERQUGATHER);
+    C_COPYCOMMAND_STORE_C_DESTINATIONQX2EWORD0(copy, UINT64_C(0x200));
+    C_COPYCOMMAND_STORE_C_DESTINATIONQX2EWORD1(copy, UINT64_C(2));
     C_COMMAND_STORE_C_FLAGS(command, UINT32_C(1));
     C_RESPONSE_STORE_C_ID(response, UINT64_C(7));
     C_RESPONSE_STORE_C_STATUS(response, C_RESPONSE_C_STATUS_C_QUWRITEQUERROR);
@@ -224,12 +226,12 @@ int main(void) {
     if (C_CONTROLQQUEUE_LOAD_C_RESPONSEQX2EPRODUCER(queue) != UINT32_C(2)) return 30;
     if (C_CONTROLQQUEUE_LOAD_C_RESPONSEQX2ECONSUMER(queue) != UINT32_C(1)) return 31;
     if (C_COMMAND_LOAD_C_ID(command) != UINT64_C(7)) return 1;
-    if (C_COMMAND_LOAD_C_SOURCEQX2EMODE(command) != UINT32_C(0)) return 2;
-    if (C_COMMAND_LOAD_C_SOURCEQX2EWORD0(command) != UINT64_C(0x100)) return 3;
-    if (C_COMMAND_LOAD_C_COPYQSLENGTH(command) != UINT64_C(8)) return 4;
-    if (C_COMMAND_LOAD_C_DESTINATIONQX2EMODE(command) != UINT32_C(1)) return 10;
-    if (C_COMMAND_LOAD_C_DESTINATIONQX2EWORD0(command) != UINT64_C(0x200)) return 11;
-    if (C_COMMAND_LOAD_C_DESTINATIONQX2EWORD1(command) != UINT64_C(2)) return 12;
+    if (C_COPYCOMMAND_LOAD_C_SOURCEQX2EMODE(copy) != UINT32_C(0)) return 2;
+    if (C_COPYCOMMAND_LOAD_C_SOURCEQX2EWORD0(copy) != UINT64_C(0x100)) return 3;
+    if (C_COPYCOMMAND_LOAD_C_COPYQSLENGTH(copy) != UINT64_C(8)) return 4;
+    if (C_COPYCOMMAND_LOAD_C_DESTINATIONQX2EMODE(copy) != UINT32_C(1)) return 10;
+    if (C_COPYCOMMAND_LOAD_C_DESTINATIONQX2EWORD0(copy) != UINT64_C(0x200)) return 11;
+    if (C_COPYCOMMAND_LOAD_C_DESTINATIONQX2EWORD1(copy) != UINT64_C(2)) return 12;
     if (C_COMMAND_LOAD_C_FLAGS(command) != UINT32_C(1)) return 17;
     if (C_RESPONSE_LOAD_C_ID(response) != UINT64_C(7)) return 5;
     if (C_RESPONSE_LOAD_C_STATUS(response) != UINT32_C(3)) return 6;
@@ -253,5 +255,31 @@ int main(void) {
     if (fwrite(rejected, 1, sizeof(rejected), stdout) != sizeof(rejected)) return 22;
     if (fwrite(control_offsets, 1, sizeof(control_offsets), stdout) != sizeof(control_offsets)) return 23;
     if (fwrite(queue, 1, sizeof(queue), stdout) != sizeof(queue)) return 32;
+    uint8_t signal[C_COMMAND_SIZE] = {0};
+    uint8_t wait[C_COMMAND_SIZE] = {0};
+    uint8_t observed[C_RESPONSE_SIZE] = {0};
+    uint8_t *signal_payload = signal + C_COMMAND_RECORD_C_PAYLOAD_OFFSET;
+    uint8_t *wait_payload = wait + C_COMMAND_RECORD_C_PAYLOAD_OFFSET;
+    C_COMMAND_STORE_C_ID(signal, UINT64_C(15));
+    C_COMMAND_STORE_C_OPCODE(signal, C_COMMAND_C_OPCODE_C_QUSIGNAL);
+    C_SIGNALCOMMAND_STORE_C_TARGETQX2EADDRESS(signal_payload, UINT64_C(0x800));
+    C_SIGNALCOMMAND_STORE_C_TARGETQX2ECONTEXT(signal_payload, UINT32_C(3));
+    C_SIGNALCOMMAND_STORE_C_OPERATION(signal_payload, C_SIGNALCOMMAND_C_OPERATION_C_QUCOMPAREQUEXCHANGE);
+    C_SIGNALCOMMAND_STORE_C_ORDER(signal_payload, C_SIGNALCOMMAND_C_ORDER_C_QUACQQUIREQURELEASE);
+    C_SIGNALCOMMAND_STORE_C_VALUE(signal_payload, UINT64_MAX);
+    C_SIGNALCOMMAND_STORE_C_EXPECTED(signal_payload, UINT64_C(7));
+    C_COMMAND_STORE_C_ID(wait, UINT64_C(16));
+    C_COMMAND_STORE_C_OPCODE(wait, C_COMMAND_C_OPCODE_C_QUWAIT);
+    C_WAITCOMMAND_STORE_C_TARGETQX2EADDRESS(wait_payload, UINT64_C(0x800));
+    C_WAITCOMMAND_STORE_C_TARGETQX2ECONTEXT(wait_payload, UINT32_C(3));
+    C_WAITCOMMAND_STORE_C_CONDITION(wait_payload, C_WAITCOMMAND_C_CONDITION_C_QULESSQUTHAN);
+    C_WAITCOMMAND_STORE_C_ORDER(wait_payload, C_WAITCOMMAND_C_ORDER_C_QUACQQUIRE);
+    C_WAITCOMMAND_STORE_C_COMPARE(wait_payload, UINT64_MAX);
+    C_RESPONSE_STORE_C_ID(observed, UINT64_C(15));
+    C_RESPONSE_STORE_C_STATUS(observed, C_RESPONSE_C_STATUS_C_QUSIGNALQUSUCCESS);
+    C_SIGNALINFO_STORE_C_VALUE(observed + C_RESPONSE_RECORD_C_INFO_OFFSET, UINT64_C(7));
+    if (fwrite(signal, 1, sizeof(signal), stdout) != sizeof(signal)) return 33;
+    if (fwrite(wait, 1, sizeof(wait), stdout) != sizeof(wait)) return 34;
+    if (fwrite(observed, 1, sizeof(observed), stdout) != sizeof(observed)) return 35;
     return 0;
 }

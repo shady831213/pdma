@@ -81,7 +81,7 @@ fn transform_can_modify_only_the_active_chunk_and_cannot_forge_its_length() -> T
             id: descriptor.id,
             status: ResponseStatus::Success,
             info: ResponseInfoValues::Success(CompletionInfo {
-                bytes_completed: descriptor.copy_length
+                bytes_completed: descriptor.as_copy().expect("copy fixture").copy_length
             }),
         }
     );

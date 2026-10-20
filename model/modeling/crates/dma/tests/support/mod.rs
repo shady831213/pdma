@@ -175,11 +175,16 @@ pub fn read_word(
 /// Canonical four-byte copy input.
 pub const fn command() -> Command {
     Command {
-        copy_length: 4,
-        sg_context: 0,
         flags: pdma_model_contract::dma::CompletionFlagsValues { ioc: false },
         id: 7,
-        source: Endpoint::linear(0x1200, 0),
-        destination: Endpoint::linear(0x1300, 0),
+        ..Command::copy(
+            0,
+            pdma_model_contract::dma::CopyCommand {
+                copy_length: 4,
+                sg_context: 0,
+                source: Endpoint::linear(0x1200, 0),
+                destination: Endpoint::linear(0x1300, 0),
+            },
+        )
     }
 }

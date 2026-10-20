@@ -4,8 +4,8 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Endpoint, Response,
-    ResponseRegisters,
+    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, CopyCommand, Endpoint,
+    Response, ResponseRegisters,
 };
 use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_dma::Dma;
@@ -156,11 +156,15 @@ pub(super) fn bytes<const N: usize>(memory: &SharedMemory, address: u64) -> Test
 /// Constructs the fixture's linear copy descriptor.
 pub(super) const fn command(id: u64) -> Command {
     Command {
-        copy_length: 8,
-        sg_context: 0,
-        id,
-        source: Endpoint::linear(0x1200, 0),
-        destination: Endpoint::linear(0x1300, 0),
         flags: pdma_model_contract::dma::CompletionFlagsValues { ioc: false },
+        ..Command::copy(
+            id,
+            CopyCommand {
+                copy_length: 8,
+                sg_context: 0,
+                source: Endpoint::linear(0x1200, 0),
+                destination: Endpoint::linear(0x1300, 0),
+            },
+        )
     }
 }

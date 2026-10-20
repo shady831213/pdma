@@ -8,6 +8,8 @@ mod interrupts;
 pub mod multi;
 /// VF-owned page repair and retained DMA task resume scenario.
 pub mod page_fault;
+/// Signal/Wait software programs and observed results.
+pub mod signal;
 pub mod transfer;
 
 use super::runtime::{AccessError, HostBus, HostIrq, HostVector};

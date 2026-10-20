@@ -35,12 +35,17 @@ pub(super) fn queued_copy(response_base: u64, ioc: bool) -> TestResult<Dma<Share
         MemoryAlignment::ONE,
     )?])?;
     let command = Command {
-        copy_length: 4,
-        sg_context: 0,
         flags: CompletionFlagsValues { ioc },
         id: 17,
-        source: Endpoint::linear(0x1200, 0),
-        destination: Endpoint::linear(0x1300, 0),
+        ..Command::copy(
+            0,
+            pdma_model_contract::dma::CopyCommand {
+                copy_length: 4,
+                sg_context: 0,
+                source: Endpoint::linear(0x1200, 0),
+                destination: Endpoint::linear(0x1300, 0),
+            },
+        )
     };
     memory.write(
         MemoryAddress::new(0x1000),

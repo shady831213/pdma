@@ -30,8 +30,8 @@ use hardware_interface_schema::RegisterWindow;
 pub use maintenance::MaintenanceError;
 pub use memory::{ChannelContext, MemoryFailure};
 use pdma_model_contract::dma::{
-    ChannelId, Command, ContextId, DmaAccess, DmaControl, DmaDiscovery, DmaFatalCode,
-    DmaRegistersLayout, EndpointMode,
+    ChannelId, Command, CommandPayloadValues, ContextId, DmaAccess, DmaControl, DmaDiscovery,
+    DmaFatalCode, DmaRegistersLayout, EndpointMode,
 };
 pub use stages::{
     Candidate, CheckRanges, CommandExecution, CommandRequest, CompletionInput, CopyChunk,
@@ -60,6 +60,15 @@ struct Maintenance {
 }
 
 const fn references(command: &Command) -> [Option<ContextId>; 3] {
+    let command = match command.payload {
+        CommandPayloadValues::Copy(copy) => copy,
+        CommandPayloadValues::Signal(signal) => {
+            return [Some(ContextId::new(signal.target.context)), None, None];
+        }
+        CommandPayloadValues::Wait(wait) => {
+            return [Some(ContextId::new(wait.target.context)), None, None];
+        }
+    };
     let sg = match (command.source.mode, command.destination.mode) {
         (EndpointMode::Linear, EndpointMode::Linear) => None,
         (EndpointMode::ScatterGather, _) | (_, EndpointMode::ScatterGather) => {

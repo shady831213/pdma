@@ -103,12 +103,13 @@ mod hardware_lifecycle {
     fn stale_fetch_leaves_the_next_abort_target_for_fresh_arbitration() -> TestResult {
         // Given: two Abort targets and a snapshot of the original head.
         let (mut dma, memory) = setup(0x1100, 2)?;
-        let target = Command {
-            source: Endpoint {
+        let target = {
+            let mut copy_fixture = command();
+            copy_fixture.as_copy_mut().expect("copy fixture").source = Endpoint {
                 context: 7,
                 ..Endpoint::linear(0x1200, 0)
-            },
-            ..command()
+            };
+            copy_fixture
         };
         submit(&mut dma, &memory, target)?;
         memory.write(
@@ -214,17 +215,18 @@ mod hardware_lifecycle {
                 ] {
                     dma.write(offset, &value.to_le_bytes())?;
                 }
-                let fresh = Command {
-                    id: 99,
-                    source: Endpoint::linear(
+                let fresh = {
+                    let mut copy_fixture = command();
+                    copy_fixture.id = 99;
+                    copy_fixture.as_copy_mut().expect("copy fixture").source = Endpoint::linear(
                         if status == ResponseStatus::Success {
                             0x1200
                         } else {
                             0x9000
                         },
                         0,
-                    ),
-                    ..command()
+                    );
+                    copy_fixture
                 };
                 submit(&mut dma, &memory, fresh)?;
                 for _ in 0..128 {

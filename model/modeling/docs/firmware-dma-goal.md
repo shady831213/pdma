@@ -6,8 +6,10 @@ Status: the architecture MVP, Function-scoped channel management, context select
 and maintenance, and managed fatal/event recovery are implemented. Actual PCIe/IOMMU
 integration and Function-level reset remain unimplemented. Payload-only retained
 suspension with owner per-channel resume replaces the earlier DSA-like continuation;
-the first Signal/Wait implementation has been withdrawn. The next design decision
-compares SDMA-style dependency and completion mechanisms against PDMA requirements.
+the first Signal/Wait implementation has been withdrawn. The agreed next feature set
+adds copy-engine commands and replaces DMA success responses with ordered completion
+writeback, optional notification and a per-channel error event ring. These additions
+are not implemented; the current DMA remains Copy-only with response rings.
 HSA remains a semantic reference, not a mandatory AQL migration or conformance goal.
 Generic memory atomics and reset during context maintenance remain implemented.
 This document records decisions and open questions; it is not an execution plan
@@ -127,6 +129,9 @@ encoding or that the older builder covers all current submission paths. [S9]
 - AMD's compute AQL queues and native SDMA queues are different submission paths.
   AQL packets carry completion-signal handles; the inspected SDMA copy builder
   does not consume AQL or embed that handle in its linear COPY packet. [S1, S2]
+  This does not mean SDMA has no AQL support: public SDMA packet definitions also
+  contain AQL layouts. Their existence does not establish support on every product
+  or change which path the inspected builder uses. [S13]
 - HSA completion is an atomic decrement after the applicable release fence.
   An HSA software signal API operation is not automatically a DMA opcode. [S1]
 - A native FENCE packet, a Linux `dma_fence` software object, an HSA signal and
@@ -179,8 +184,8 @@ SDMA writes the supplied value and can emit a TRAP. The fence handler reads the
 completed sequence and signals intervening software fences. This is a serialized
 per-ring completion protocol, not a multi-producer shared countdown. [S3, S4]
 
-A proposed PDMA single-writer completion location would therefore be a reasonable
-candidate, not an already approved feature. Different channels must not blindly
+The agreed PDMA Fence command supports a software-selected completion location
+and value; a per-channel single-writer timeline is one usage. Different channels must not blindly
 write one shared monotonically increasing location: a later value from one channel
 does not prove another channel's work completed. Shared aggregation needs a
 separate correct protocol, potentially atomics.
@@ -240,41 +245,151 @@ remain deferred.
 
 | Area | Restored PDMA evidence | Gap and proposed disposition |
 | --- | --- | --- |
-| Copy and SG traversal | `contract/src/dma/command.rs`; `dma/src/stages/execution/{validate,copy}.rs` | Linear/independent SG already supported; retain it. Fill/rectangular/tiled copy require an actual workload before adoption. |
+| Copy and SG traversal | `contract/src/dma/command.rs`; `dma/src/stages/execution/{validate,copy}.rs` | Retain Linear/independent SG. Add Write and Fill; rectangular/tiled and page-table-specific operations are outside this slice. |
 | Dependency gating | `dma/src/stages/candidate.rs` only offers fetch/resume candidates | No Wait after withdrawal. Define comparison, width, context, lifetime and peer progress before implementation. |
-| Ordered completion writeback | `dma/src/stages/responses.rs`; `dma/src/channel/response.rs` | Mandatory response-ring publication exists; no selectable memory completion value. Compare per-task records and per-channel timeline use cases first. |
-| Completion versus interrupt | Channel response publication and IOC/non-empty IRQ causes | Already distinct effects, but IRQ depends on response publication. Decide whether a future writeback can complete without a success response; avoid hidden response-ring backpressure. |
-| Multi-writer atomic update | `hardware-interface-runtime/src/atomic.rs` and storage tests | Generic capability retained, no DMA opcode and no managed atomic forwarding after withdrawal. Add only operations required by the chosen protocol, with authorization on every path. |
+| Ordered completion writeback | `dma/src/stages/responses.rs`; `dma/src/channel/response.rs` | Add Fence; replace the DMA response ring with an error event ring, not mandatory success records. Preserve diagnostics and an independent reporting-failure outlet. |
+| Completion versus interrupt | Channel response publication and IOC/non-empty IRQ causes | Add independent Trap; remove response-consumption-dependent IOC bookkeeping and success-response backpressure. Specify event notification and fatal fallback separately. |
+| Multi-writer atomic update | `hardware-interface-runtime/src/atomic.rs` and storage tests | Add Atomic and counting SEM with authorized managed forwarding. Model indivisible operations; RTL selects unsupported, exclusive or native-atomic implementation. |
 | Visibility and ordering | `docs/spec.md` RTL handoff and `docs/reset.md`; synchronous memory calls | Need a precise producer/consumer visibility contract and a model boundary to verify it. Do not equate Rust mutex ordering with platform coherence. |
 | Queue/engine relationship | `dma/src/stages/data_path.rs`; retained work in Channel | One shared engine and fixed channels are intentional. Wait peer progress must be proven; oversubscription is not required. |
 | Fault and reset | `dma/src/reset.rs`; `dma/src/maintenance/progress.rs`; fault/reset scenarios | Existing ownership and replay boundaries are usable. Define faulting synchronization accesses and committed-update checkpoints when new operations are chosen. |
-| Descriptor compactness | 104-byte Copy command and 24-byte response; generated C ABI | A future tagged layout can be compact without being AQL. No new format or opcode set is approved by this comparison. |
+| Descriptor compactness | 104-byte Copy command and 24-byte response; generated C ABI | The command families below are agreed; exact compact encodings and error-event layout remain to be specified, without mandatory AQL compatibility. |
 | Software assembly | `software/src/dma.rs`, firmware resource management, managed scenario harness | Keep task compilation in software and execution in hardware. API similarity alone does not require importing HSA handles or runtime objects. |
 
 All code paths in this table are relative to `model/modeling/crates` unless prefixed
 `docs/`. These are design gaps and deliberate differences, not newly discovered
 regressions in the restored Copy contract.
 
-#### Recommended next decision, not implementation authorization
+#### Agreed next feature set, not yet implemented
 
-Specify three concrete workflows before encoding new commands:
+Decision, 2026-10-21, following the command and completion review. Preserve existing
+Linear/independent-SG Copy and add the command families below. This records the
+approved direction, not an instruction to implement automatically or restore the
+withdrawn Signal/Wait ABI.
 
-1. CPU publishes data, PDMA waits, copies, then publishes completion for a consumer.
-2. Several copies on one channel publish one ordered batch/timeline completion.
-3. Several channels contribute to a shared completion condition.
+| Command | Agreed purpose and boundary |
+| --- | --- |
+| Write | Write command-carried data to an authorized target. Unify memory/register-write intent rather than add a separate RegisterWrite opcode; platform routing and register permissions remain explicit. A memory context never implicitly grants access to management registers. |
+| Fill | Repeat a pattern over a destination range, including zeroing and initialization, without reading a repeated source buffer. |
+| Wait | Observe a memory condition without modifying its value. A false condition blocks same-channel successors but releases the shared engine for peers; it is not a PageFault. |
+| Atomic | Perform an indivisible memory read-modify-write. Specify the operation set, width, result destination and ordering before encoding. It is not a direct mapping of the HSA software signal API. |
+| SEM | Counting semaphore: Signal atomically increments; Wait atomically consumes one permit only when the count is positive, otherwise waits without modifying it. Do not implement it as separate condition Wait and unconditional decrement commands. |
+| Fence | Complete prior operations in the specified ordering scope before writing a software-selected completion value to memory. It is an ordered writeback, not an ordinary Write or an atomic shared-counter update. |
+| Trap | Explicit notification independent of success-record publication. It does not itself certify prior memory completion; use Fence before Trap when that guarantee is required. |
+| Timestamp (candidate) | Write a platform-provided timestamp for observation. Clock source, representation and ordering remain to be agreed; model step count must not masquerade as hardware time. |
 
-For each, choose whether completion is an immediate-value write, an atomic update,
-or existing response publication. Decide width/comparison/wrap rules, context and
-storage lifetime, failure reporting and cancellation. Do not require every software
-signal operation to have a DMA opcode. Do not remove response diagnostics merely
-because a separate completion mechanism exists.
+Software can express `Copy -> Fill -> Copy -> Fence -> optional Trap`. It owns
+completion storage and chooses notification/batch boundaries; hardware needs no
+batch container. No INDIRECT, COND_EXE, GPU page-table-specific operation, cache
+maintenance command or additional copy geometry is selected. PRE_EXE and other
+poorly documented SDMA instructions are not inferred requirements.
 
-Acceptance should cover false dependencies with peer progress, publication
-visibility, multiple writers where supported, fault/retry without duplicate effects,
-response backpressure, and reset/abort while waiting or publishing. Preserve the
-normal Copy/SG/direct/managed configurations. The final architecture audit should
-trace these PDMA obligations to model tests and platform/RTL owners, using HSA and
-SDMA as references rather than asserting conformance by resemblance.
+#### DMA response ring becomes a channel error event ring
+
+The agreed migration retains a per-channel reporting ring, but changes its role
+from one response per command to error events only in this slice. Do not silently
+replace the ring with a register-only diagnostic scheme.
+
+- Successful commands produce no event. Fence publishes the completion value;
+  optional Trap requests notification without adding a success event record.
+- A stopping command error records task identity, cause and necessary diagnostics
+  in an event. Hardware stops the channel independently of event publication;
+  later commands, including success Fences, cannot pass the failed command.
+  Preserve channel-reset recovery. Specify which existing diagnostics, including
+  committed-byte information, are retained rather than losing them implicitly.
+- Recoverable payload PageFault retains the existing MMU report and channel
+  suspend/resume contract. It produces no duplicate DMA error event, and no later
+  completion Fence can pass the unfinished command.
+- Event ring full, corrupt configuration or failed event write is a reporting
+  failure, not backpressure or an implicit retry loop. Retain channel fatal state
+  and an independent interrupt outlet that do not require a successful event write.
+  Fence-write errors also need a reliable reporting path; classify access failures
+  explicitly before encoding, rather than assuming every failure is recoverable.
+- Consuming an event does not resume the channel, prove resident cleanup or permit
+  memory reuse. Reset/Abort must terminate affected software waits without
+  fabricating successful Fence values; old writes/notifications must not be mistaken
+  for a new allocation's completion.
+- Remove mandatory success-response writes, response-space admission gating and
+  IOC bookkeeping tied to response consumption. Define Trap, error-event and fatal
+  IRQ cause/mask/acknowledgment rules together, preserving notification ownership
+  and the existing no-mask-replay rule.
+- This is the DMA data-channel ring, not the PF/firmware control response or event
+  ring. Keep those management protocols and DMA-wide fatal routing unchanged;
+  ordinary channel errors remain owner-visible without PF proxying each task.
+
+AMD's reference separates Fence writeback from Trap notification. GPU IH hardware
+aggregates IP interrupts into interrupt rings, which can carry both normal and
+error notifications. That is not a dedicated per-SDMA-command response queue or
+proof of an error-only ring. PDMA chooses a channel error ring without importing a
+GPU-wide IH subsystem. [S3, S4, S12]
+
+#### Atomic and semaphore: model semantics versus RTL mechanism
+
+The functional model executes indivisible operations through generic memory atomic
+capabilities. DMA owns SEM policy and waiting state; generic runtime/storage owns
+no PDMA opcode or semaphore protocol. Atomicity must cover all participating
+accessors to shared backing, not just callers inside one DMA instance. Restore
+managed atomic forwarding with the same channel/context authorization as other
+accesses; baseline backend atomics alone are insufficient.
+
+RTL may provide three configurations:
+
+| Configuration | Obligation |
+| --- | --- |
+| Unsupported | Atomic and counting SEM are unavailable, discoverable as such, and rejected explicitly before effects. Ordinary condition Wait and Fence do not require atomic RMW support. |
+| Exclusive | Implement operations through exclusive read/write and local retry control, with an end-to-end monitor covering competing accesses. |
+| Native atomic | Use supported bus atomic transactions; compound SEM acquisition can still require CAS/retry control. |
+
+AXI4 exclusive and AXI5 AtomicCompare are implementation options, not new descriptor
+formats. An unsupported exclusive-read response cannot be treated as a successful
+reservation; contention retries and actual bus errors must remain distinct. Native
+CAS returns the original value for match detection. Neither mechanism supplies a
+complete semaphore wait loop by itself. [S11]
+
+Do not model exclusive monitors, bus cycles or CAS contention retry traffic.
+Semantic waiting and lifecycle remain observable: unsuccessful SEM acquisition
+does not decrement or block peers; successful acquisition/atomic update is
+checkpointed exactly once. Later stalls, notification failures or reset must not
+repeat or silently undo a committed update. Drain waits for ordinary dependencies;
+Abort/Reset can cancel unfinished waiting work while reset still awaits resident
+cleanup. Acquire/release ordering is a separate contract from atomicity and must
+hold regardless of the chosen RTL mechanism.
+
+Historical Radeon developer discussion describes counter semaphores and a central
+semaphore block, but also contains unresolved multi-ring questions. It is not a
+complete specification of every SDMA generation or mailbox mode. Our counting SEM
+is an explicit PDMA choice; no dedicated central semaphore block is required. [S10]
+
+#### Specification refinements and acceptance before implementation
+
+No further architectural fork blocks this direction. Before assigning wire fields,
+record exact operation/width/alignment rules; Wait comparisons and wrap behavior;
+SEM overflow and ordering; Atomic returned-data placement; Fence ordering and
+visibility scope; access context/lifetime and fault classification for each new
+command; event diagnostics and IRQ acknowledgment; and reset/abort completion-value
+reuse rules. Timestamp remains a candidate until its platform time contract is set.
+Trace these obligations into the normative spec and generated Host/Firmware ABI,
+without presenting planned behavior as already implemented.
+
+Acceptance must include:
+
+1. CPU publication -> Wait -> Copy -> Fence, with explicit visibility requirements.
+2. Several commands -> one Fence -> optional Trap, with no success events or hidden
+   response-space backpressure; independent channels must not falsely complete one
+   another by writing an uncoordinated shared timeline.
+3. Contending Atomic/SEM accessors, including two waiters competing for one permit,
+   peer progress and discoverable unsupported capabilities in direct/managed paths.
+4. Fault/retry and cancellation before/after committed updates, without duplicate
+   effects; Drain waits and reset still waits for actual resident cleanup.
+5. Stopping errors, diagnostic-event delivery, event overflow/configuration/write
+   failure, independent fatal notification, and no successful Fence beyond a stop.
+6. Existing Copy/SG, Function/context isolation, page-fault recovery and management
+   lifecycle behavior; update obsolete response/IOC tests to the new contract
+   without weakening their ownership, cleanup and diagnostic guarantees.
+
+Preserve the existing typed pipeline and command/chunk continuation boundaries.
+The final architecture audit must trace model evidence and platform/RTL obligations
+separately, using HSA/SDMA as references rather than claiming conformance.
 
 #### Sources and evidence limits
 
@@ -287,6 +402,10 @@ SDMA as references rather than asserting conformance by resemblance.
 - **S7:** [Linux v6.12 GFX9 SDMA queue destruction](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v9.c#L576-L613). Context idle observation is checked, not assumed.
 - **S8:** [AMD AQL command-processor description](https://rocm.docs.amd.com/projects/ROCdbgapi/en/docs-10.0.0/doxygen/html/index.html). Compute AQL processing is distinct from S2's SDMA-native path.
 - **S9:** [ROCr API reference, retrieved 2026-10-21](https://rocm.docs.amd.com/projects/ROCR-Runtime/en/latest/api-reference/api.html), `hsa_amd_memory_copy_op_s` and `hsa_amd_memory_copy_signal_op_t`. Moving documentation; newer API example only, not the version baseline for S2.
+- **S10:** [Radeon semaphore discussion, Christian Konig, 2011-11-15](https://www.mail-archive.com/dri-devel@lists.freedesktop.org/msg16307.html) and [follow-up questions](https://www.mail-archive.com/dri-devel@lists.freedesktop.org/msg16308.html). Historical counter/central-block explanation, not a universal SDMA SEM or mailbox specification.
+- **S11:** [Arm AMBA AXI/ACE specification, IHI 0022H](https://developer.arm.com/-/media/Arm%20Developer%20Community/PDF/IHI0022H_amba_axi_protocol_spec.pdf). Exclusive access and AtomicCompare mechanisms; platform support and atomicity scope must be established, not inferred from an AXI version label.
+- **S12:** [Linux 6.17 GPU hardware structure](https://docs.kernel.org/6.17/gpu/amdgpu/driver-core.html#gpu-hardware-structure). IH aggregates IP interrupts into rings; it is separate from SDMA's command and completion-value storage.
+- **S13:** [Linux v6.12 SDMA v6 packet definitions](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/amdgpu/sdma_v6_0_0_pkt_open.h). Native and AQL packet layouts, not proof of deployment or software-path selection on every device.
 
 ### Deferred
 
@@ -388,7 +507,8 @@ firmware startup, PCIe services, context tables or external reset handshakes.
   contexts. A channel register selects the context shared by its two DMA rings.
   Control memory has independent PF-programmed access configuration. These are
   reusable access bindings, not task identifiers; preserve task ID as a
-  submission/response correlation value. See the [context contract](context-contract.md).
+  submission/diagnostic correlation value. The next DMA reporting ring is an error
+  event ring; current code still uses responses. See the [context contract](context-contract.md).
 - Access logic in `hw-components` derives Function identity from the controlled channel
   binding and resolves the selected context to PASID and any required access
   attributes. Lookup must be scoped and authorized; a guessed context ID must not
@@ -408,7 +528,7 @@ firmware startup, PCIe services, context tables or external reset handshakes.
 | `dma` | DMA core: channel execution, admission/stop/reset, local completion facts, and memory requests through injected access capabilities. |
 | `hw-components` | Hardware components outside the DMA core: authorized MMIO views, channel/context-to-request identity resolution, interrupt routing, and ownership of accepted external access obligations. |
 | Device firmware | Resource allocation, management register programming, lifecycle sequencing, and coordination of independently reported completion conditions. |
-| Host software | Use granted channels/contexts, allocate buffers, submit commands, consume responses, handle interrupts and coordinate OS address-space lifetimes. |
+| Host software | Use granted channels/contexts, allocate buffers, submit commands, observe completion values and error events under the next protocol (responses today), handle interrupts and coordinate OS address-space lifetimes. |
 | Runtime/platform | Assemble hardware and software execution domains; provide memory backing, transports, wakeups and interrupt delivery. No PDMA traversal, copy or recovery policy. |
 
 Device firmware is a real modeled software actor with its own execution context.
@@ -466,7 +586,7 @@ register state and operations rather than creating shadow registers.
   state do not belong in the PDMA core.
 
 Host software uses an authorized work MMIO view for normal ring submission,
-response consumption and permitted channel/IRQ configuration, without firmware
+response consumption today (error-event consumption under the next protocol) and permitted channel/IRQ configuration, without firmware
 proxying every command. Firmware has a separate privileged view of management
 hardware and relevant channel controls. Both views can reach the same underlying
 channel state; neither requires shadow registers. Host accesses cannot bypass the
@@ -491,7 +611,7 @@ unbind or backing-memory reuse safe.
 Keep these completion facts separate:
 
 1. PDMA local stop/reset completion: old work cannot issue new accesses,
-   response writes or notifications.
+   completion/event writes (response writes in the current implementation) or notifications.
 2. External access drain: accepted obligations have reached their qualified
    completion point, as reported by their owning port.
 3. External lifecycle release: controller/integration conditions permit reopening.
@@ -531,8 +651,9 @@ and speculative collections of policy generics.
 - Recovery when firmware or the management transport itself is unavailable remains
   deferred; see the low-priority TBD below. PF events and firmware-mediated DMA/event
   recovery are implemented in [fatal and events](fatal-events.md).
-- Synchronization follows the copy-engine reassessment above; the opcode set,
-  completion protocol and wire format are not yet selected. Logical-channel scheduling and oversubscription remain
+- Synchronization follows the agreed command families and Fence/Trap/error-event
+  protocol above; detailed field semantics and wire format remain to be specified.
+  Logical-channel scheduling and oversubscription remain
   separate deferred work. Retained physical-channel suspension and owner resume
   remain specified in the page-fault chapter.
 - Which features are instance configuration and which have software enable bits.

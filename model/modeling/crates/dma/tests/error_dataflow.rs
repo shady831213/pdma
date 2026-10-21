@@ -36,10 +36,9 @@ impl<T> Stage<ExecutionContext<'_, SharedMemory>> for Observe<T> {
 #[test]
 fn failed_read_bypasses_payload_transform_but_keeps_completion_tail() -> TestResult {
     check(
-        {
-            let mut copy_fixture = command();
-            copy_fixture.as_copy_mut().expect("copy fixture").source = Endpoint::linear(0x8000, 0);
-            copy_fixture
+        Command {
+            source: Endpoint::linear(0x8000, 0),
+            ..command()
         },
         ResponseStatus::ReadError,
         (1, 0),
@@ -49,11 +48,9 @@ fn failed_read_bypasses_payload_transform_but_keeps_completion_tail() -> TestRes
 #[test]
 fn invalid_range_bypasses_normal_chunk_and_payload_outputs() -> TestResult {
     check(
-        {
-            let mut copy_fixture = command();
-            copy_fixture.as_copy_mut().expect("copy fixture").source =
-                Endpoint::linear(u64::MAX, 0);
-            copy_fixture
+        Command {
+            source: Endpoint::linear(u64::MAX, 0),
+            ..command()
         },
         ResponseStatus::InvalidLength,
         (0, 0),
@@ -63,11 +60,9 @@ fn invalid_range_bypasses_normal_chunk_and_payload_outputs() -> TestResult {
 #[test]
 fn invalid_list_bypasses_normal_chunk_and_payload_outputs() -> TestResult {
     check(
-        {
-            let mut copy_fixture = command();
-            copy_fixture.as_copy_mut().expect("copy fixture").source =
-                Endpoint::scatter_gather(0x8000, 1);
-            copy_fixture
+        Command {
+            source: Endpoint::scatter_gather(0x8000, 1),
+            ..command()
         },
         ResponseStatus::ListReadError,
         (0, 0),
@@ -77,14 +72,10 @@ fn invalid_list_bypasses_normal_chunk_and_payload_outputs() -> TestResult {
 #[test]
 fn empty_success_is_normal_dataflow_without_payload_access() -> TestResult {
     check(
-        {
-            let mut copy_fixture = command();
-            copy_fixture.as_copy_mut().expect("copy fixture").source = Endpoint::linear(0x8000, 0);
-            copy_fixture
-                .as_copy_mut()
-                .expect("copy fixture")
-                .copy_length = 0;
-            copy_fixture
+        Command {
+            source: Endpoint::linear(0x8000, 0),
+            copy_length: 0,
+            ..command()
         },
         ResponseStatus::Success,
         (1, 1),
@@ -95,10 +86,9 @@ fn empty_success_is_normal_dataflow_without_payload_access() -> TestResult {
 fn standalone_chunk_graph_publishes_the_actual_read_failure() -> TestResult {
     // Given: accepted traversal whose payload source is inaccessible.
     let (mut dma, memory) = setup(0x1100, 2)?;
-    let descriptor = {
-        let mut copy_fixture = command();
-        copy_fixture.as_copy_mut().expect("copy fixture").source = Endpoint::linear(0x8000, 0);
-        copy_fixture
+    let descriptor = Command {
+        source: Endpoint::linear(0x8000, 0),
+        ..command()
     };
     submit(&mut dma, &memory, descriptor)?;
     let id = pdma_model_contract::dma::ChannelId::new(0);

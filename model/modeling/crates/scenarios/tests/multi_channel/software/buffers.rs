@@ -1,9 +1,7 @@
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess, SharedMemoryAllocator,
 };
-use pdma_model_contract::dma::{
-    ChannelId, Command, CompletionFlagsValues, CopyCommand, Endpoint, Response,
-};
+use pdma_model_contract::dma::{ChannelId, Command, CompletionFlagsValues, Endpoint, Response};
 use pdma_model_host::{ChannelConfig, RingConfig, Rings};
 
 use crate::TestResult;
@@ -52,16 +50,12 @@ impl Buffers {
         let length = u64::try_from(self.length)?;
         let destination = self.destination.raw() + if second { length } else { 0 };
         Ok(Command {
+            copy_length: length,
+            sg_context: 0,
+            id,
+            source: Endpoint::linear(self.source.raw(), 0),
+            destination: Endpoint::linear(destination, 0),
             flags: CompletionFlagsValues::default(),
-            ..Command::copy(
-                id,
-                CopyCommand {
-                    copy_length: length,
-                    sg_context: 0,
-                    source: Endpoint::linear(self.source.raw(), 0),
-                    destination: Endpoint::linear(destination, 0),
-                },
-            )
         })
     }
 

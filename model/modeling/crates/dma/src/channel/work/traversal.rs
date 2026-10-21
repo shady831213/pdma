@@ -1,5 +1,6 @@
-use super::{COPY_CHUNK_BYTES, CopyState, CopyStatus};
+use super::{COPY_CHUNK_BYTES, CopyState};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress};
+use pdma_model_contract::dma::ResponseStatus;
 
 impl CopyState {
     pub(crate) fn prepare<M: MemoryAccess>(
@@ -11,7 +12,7 @@ impl CopyState {
         let mut destination = 0;
         let mut length = 0;
         match progress.status {
-            CopyStatus::Success if progress.remaining > 0 => {
+            ResponseStatus::Success if progress.remaining > 0 => {
                 let cursor = if progress.source.remaining() == 0 {
                     Some(&mut progress.source)
                 } else if progress.destination.remaining() == 0 {
@@ -22,18 +23,18 @@ impl CopyState {
                 if let Some(cursor) = cursor {
                     match cursor.next_segment(memory) {
                         Ok(true) => {}
-                        Ok(false) => progress.status = CopyStatus::LengthMismatch,
+                        Ok(false) => progress.status = ResponseStatus::LengthMismatch,
                         Err(status) => progress.status = status,
                     }
                     return None;
                 }
                 let Some(address) = progress.source.address() else {
-                    progress.status = CopyStatus::ReadError;
+                    progress.status = ResponseStatus::ReadError;
                     return None;
                 };
                 source = address;
                 let Some(address) = progress.destination.address() else {
-                    progress.status = CopyStatus::WriteError;
+                    progress.status = ResponseStatus::WriteError;
                     return None;
                 };
                 destination = address;
@@ -45,12 +46,12 @@ impl CopyState {
                     .unwrap_or(COPY_CHUNK_BYTES)
                     .min(COPY_CHUNK_BYTES);
             }
-            CopyStatus::Success
-            | CopyStatus::InvalidLength
-            | CopyStatus::ReadError
-            | CopyStatus::WriteError
-            | CopyStatus::LengthMismatch
-            | CopyStatus::ListReadError => {}
+            ResponseStatus::Success
+            | ResponseStatus::InvalidLength
+            | ResponseStatus::ReadError
+            | ResponseStatus::WriteError
+            | ResponseStatus::LengthMismatch
+            | ResponseStatus::ListReadError => {}
         }
 
         Some((

@@ -2,7 +2,7 @@
 
 Channel and device reset separate a software request from hardware completion.
 Completion is the memory-lifetime boundary: affected old work can no longer issue
-a command read, SG-list read, payload read/write, signal atomic or response write. It is not a
+a command read, SG-list read, payload read/write or response write. It is not a
 promise that the old command completed successfully.
 
 ## Interrupting context maintenance
@@ -23,11 +23,6 @@ not conditional on a signal wait becoming satisfied. Reset never fabricates a
 successful dependency update and cannot roll back an already committed write or
 atomic update. An unrelated channel reset leaves the maintenance request pending.
 This recovery rule is a PDMA system contract, not an HSA-defined DrainContext API.
-Ordinary false dependency Waits and fault-parked Signal/Wait accesses are distinct
-retained states, both cancellable by reset. Neither requires dependency satisfaction
-or owner RESUME for cleanup. An atomic operation already committed before reset
-remains committed; its completion checkpoint is never a reason to replay it.
-See [Signal/Wait](signal-wait.md).
 
 For RTL, cancellation of the maintenance objective does not cancel obligations
 already accepted by an external interface: every affected outstanding transaction

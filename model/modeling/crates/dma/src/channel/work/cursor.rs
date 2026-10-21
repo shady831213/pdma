@@ -1,7 +1,8 @@
-use super::CopyStatus;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::Decode;
-use pdma_model_contract::dma::{Endpoint, EndpointPayloadValues, Segment, SegmentRaw};
+use pdma_model_contract::dma::{
+    Endpoint, EndpointPayloadValues, ResponseStatus, Segment, SegmentRaw,
+};
 
 #[derive(Debug)]
 pub(in crate::channel) struct Cursor {
@@ -19,41 +20,44 @@ impl Cursor {
         }
     }
 
-    pub(super) fn next_segment(&mut self, memory: &impl MemoryAccess) -> Result<bool, CopyStatus> {
+    pub(super) fn next_segment(
+        &mut self,
+        memory: &impl MemoryAccess,
+    ) -> Result<bool, ResponseStatus> {
         let segment = match self.endpoint.payload {
             EndpointPayloadValues::Linear(linear) => Segment {
                 address: linear.address,
                 length: linear
                     .offset
                     .checked_add(self.length)
-                    .ok_or(CopyStatus::InvalidLength)?,
+                    .ok_or(ResponseStatus::InvalidLength)?,
             },
             EndpointPayloadValues::ScatterGather(list) => {
                 if list.index >= list.count {
                     return Ok(false);
                 }
-                let stride =
-                    u64::try_from(Segment::RECORD_SIZE).map_err(|_| CopyStatus::InvalidLength)?;
+                let stride = u64::try_from(Segment::RECORD_SIZE)
+                    .map_err(|_| ResponseStatus::InvalidLength)?;
                 let address = list
                     .index
                     .checked_mul(stride)
                     .and_then(|offset| list.list_address.checked_add(offset))
                     .filter(|address| address.checked_add(stride).is_some())
-                    .ok_or(CopyStatus::InvalidLength)?;
+                    .ok_or(ResponseStatus::InvalidLength)?;
                 let alignment = MemoryAlignment::try_new(
                     u64::try_from(Segment::RECORD_ALIGNMENT)
-                        .map_err(|_| CopyStatus::InvalidLength)?,
+                        .map_err(|_| ResponseStatus::InvalidLength)?,
                 )
-                .map_err(|_| CopyStatus::InvalidLength)?;
+                .map_err(|_| ResponseStatus::InvalidLength)?;
                 memory
                     .read_typed::<SegmentRaw>(MemoryAddress::new(address), alignment)
-                    .map_err(|_| CopyStatus::ListReadError)?
+                    .map_err(|_| ResponseStatus::ListReadError)?
                     .decode()
-                    .map_err(|_| CopyStatus::ListReadError)?
+                    .map_err(|_| ResponseStatus::ListReadError)?
             }
         };
         if self.offset() > segment.length {
-            return Err(CopyStatus::InvalidLength);
+            return Err(ResponseStatus::InvalidLength);
         }
         self.segment = Some(segment);
         self.advance(0);

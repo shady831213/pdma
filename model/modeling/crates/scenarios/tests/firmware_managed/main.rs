@@ -2,4 +2,3 @@
 
 mod cases;
 pub mod harness;
-mod signal;

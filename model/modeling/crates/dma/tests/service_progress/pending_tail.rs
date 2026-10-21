@@ -85,18 +85,11 @@ impl<M> Stage<pdma_model_dma::ExecutionContext<'_, M>> for Tail {
 fn reset_after_committed_chunk_retires_hardware_while_custom_tail_is_pending() -> TestResult {
     // Given: a non-final chunk published progress while a custom tail remains pending.
     let (mut device, memory) = setup(0x1100, 2)?;
-    let descriptor = {
-        let mut copy_fixture = command();
-        copy_fixture
-            .as_copy_mut()
-            .expect("copy fixture")
-            .copy_length = u64::try_from(COPY_CHUNK_BYTES * 2)?;
-        copy_fixture.as_copy_mut().expect("copy fixture").source = Endpoint::linear(0x1400, 0);
-        copy_fixture
-            .as_copy_mut()
-            .expect("copy fixture")
-            .destination = Endpoint::linear(0x1800, 0);
-        copy_fixture
+    let descriptor = pdma_model_contract::dma::Command {
+        copy_length: u64::try_from(COPY_CHUNK_BYTES * 2)?,
+        source: Endpoint::linear(0x1400, 0),
+        destination: Endpoint::linear(0x1800, 0),
+        ..command()
     };
     submit(&mut device, &memory, descriptor)?;
     let entered = Rc::new(Cell::new(false));

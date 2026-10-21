@@ -83,17 +83,12 @@ fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {
 
 fn fill_response_ring(device: &mut Dma<SharedMemory>, base: usize) -> TestResult {
     let command = pdma_model_contract::dma::Command {
+        copy_length: 0,
+        sg_context: 0,
         id: 1,
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-        ..pdma_model_contract::dma::Command::copy(
-            0,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 0,
-                sg_context: 0,
-                source: pdma_model_contract::dma::Endpoint::linear(0x1200, 0),
-                destination: pdma_model_contract::dma::Endpoint::linear(0x1400, 0),
-            },
-        )
+        source: pdma_model_contract::dma::Endpoint::linear(0x1200, 0),
+        destination: pdma_model_contract::dma::Endpoint::linear(0x1400, 0),
     };
     for producer in 1..=3_u32 {
         device.memory.write(

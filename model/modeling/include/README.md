@@ -82,22 +82,18 @@ registers provide no episode or stale-request check. Shared software offers
 `faulted() -> Result<bool, _>` and `resume()` without a ticket argument. See
 [pageable-copy recovery](../docs/page-fault-recovery.md) for ordering and lifetime.
 
-Shared wire records: Segment is 16 bytes, Endpoint 40, Command 112, Response 24,
+Shared wire records: Segment is 16 bytes, Endpoint 40, Command 104, Response 24,
 ControlRequest 32 and ControlResponse 24, ContextAttributes 8, ControlRingState 24,
 ControlEvent 8 (alignment four), and ControlQueue 72. Enum bitfield constants are
 unshifted values. Endpoints use mode zero for linear spans and one for scatter/gather
 lists; WORD0/WORD1 hold the Linear base/offset (WORD2/WORD3 reserved), or all four
 words hold SG list_address/count/index/offset. Each endpoint starts with mode/context
-at 0/4 and parameters at 8. Command has ID/flags/opcode/payload at 0/8/12/16.
-Its tagged payload selects Copy (0), Signal (1) or Wait (2). CopyCommand is 96 bytes;
-within Command, copy_length is at 96 and SG context at 104. Response IOC stays at
-byte 12. The nested source and destination payload-context selectors are at bytes 20/60.
+at 0/4 and parameters at 8. Command copy_length is at 88,
+IOC at 96 and SG context at 100. Response IOC stays at byte 12. The nested source
+and destination payload-context selectors are at bytes 12/52.
 Response has ID/status/flags/info at bytes 0/8/12/16. Success and stopping errors
-use CompletionInfo (eight-byte bytes_completed). Status values 0..5 retain their meanings;
-SignalSuccess (7) returns SignalInfo with the observed signed value in two's-complement
-u64 storage, and SignalError (8) returns a reason. Retired PageFault status 6 is rejected.
-SignalTarget stores address/context, SignalCommand adds operation/order/value/expected,
-and WaitCommand adds signed condition/load order/compare. No fault address/access or continuation
+use CompletionInfo (eight-byte bytes_completed). Status values 0..5 are valid;
+retired PageFault status 6 is rejected. No fault address/access or continuation
 positions are carried in a response. Suspension produces no response; the final
 completion describes the original command. The generated record-placement
 OFFSET/SIZE constants locate info; use the generated accessors for that slice.

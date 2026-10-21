@@ -165,19 +165,11 @@ fn streams(device: &Dma<Paged>) -> TestResult<Command> {
             )?;
         }
     }
-    Ok({
-        let mut copy_fixture = Command::ZERO;
-        copy_fixture.id = 7;
-        copy_fixture
-            .as_copy_mut()
-            .ok_or("copy fixture")?
-            .copy_length = 8;
-        copy_fixture.as_copy_mut().ok_or("copy fixture")?.source =
-            Endpoint::scatter_gather(0x1400, 2);
-        copy_fixture
-            .as_copy_mut()
-            .ok_or("copy fixture")?
-            .destination = Endpoint::scatter_gather(0x1500, 2);
-        copy_fixture
+    Ok(Command {
+        id: 7,
+        copy_length: 8,
+        source: Endpoint::scatter_gather(0x1400, 2),
+        destination: Endpoint::scatter_gather(0x1500, 2),
+        ..Command::ZERO
     })
 }

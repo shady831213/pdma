@@ -118,17 +118,12 @@ fn full_response_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
     }
     memory.write(0x1600.into(), MemoryAlignment::ONE, &[1, 3, 5, 7])?;
     let normal = Command {
+        copy_length: 4,
         id: 1,
         flags: CompletionFlagsValues { ioc: false },
-        ..Command::copy(
-            0,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 4,
-                sg_context: 0,
-                source: Endpoint::scatter_gather(0x1400, 1),
-                destination: Endpoint::scatter_gather(0x1500, 1),
-            },
-        )
+        sg_context: 0,
+        source: Endpoint::scatter_gather(0x1400, 1),
+        destination: Endpoint::scatter_gather(0x1500, 1),
     };
     memory.write(0x1000.into(), MemoryAlignment::ONE, &normal.to_bytes()?)?;
     dma.write(
@@ -189,23 +184,18 @@ fn abort_with_full_response_ring_has_no_sg_payload_response_or_irq_effects()
     let base = channel.register_offset(1).ok_or("channel layout")?;
     let responses = base + ChannelBlock::RESPONSE.offset();
     let target = Command {
+        copy_length: normal.copy_length,
         id: 2,
         flags: CompletionFlagsValues { ioc: true },
-        ..Command::copy(
-            0,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: normal.as_copy().expect("copy fixture").copy_length,
-                sg_context: 7,
-                source: Endpoint {
-                    context: 7,
-                    ..normal.as_copy().expect("copy fixture").source
-                },
-                destination: Endpoint {
-                    context: 7,
-                    ..normal.as_copy().expect("copy fixture").destination
-                },
-            },
-        )
+        sg_context: 7,
+        source: Endpoint {
+            context: 7,
+            ..normal.source
+        },
+        destination: Endpoint {
+            context: 7,
+            ..normal.destination
+        },
     };
     memory.write(0x1600.into(), MemoryAlignment::ONE, &[2, 4, 6, 8])?;
     memory.write(0x1700.into(), MemoryAlignment::ONE, &[9; 4])?;

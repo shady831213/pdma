@@ -86,9 +86,8 @@ The generated header under `model/modeling/include` describes the current contra
 `docs/white_boards/**` remains exploratory background.
 
 The current implementation has an instance-configured channel count with independent reset,
-command/response rings and one shared DMA execution pipeline. Tagged 112-byte commands
-support Copy, Signal and Wait. It supports independently selected linear/scatter-gather
-DMA endpoints, and interrupt delivery using existing
+command/response rings and one shared DMA execution pipeline. It supports independently
+selected linear/scatter-gather DMA endpoints, and interrupt delivery using existing
 building blocks. Recoverable payload PageFault parks the original command and both
 cursors, including successful read scratch for a failed write, while peers can run.
 Owner software repairs through its platform, observes FAULT_STATUS.faulted and
@@ -101,20 +100,17 @@ sideband mapping; MemoryIdentity stays address-space-only. Tags must retain thei
 association through outstanding reports/handlers. Software must coordinate
 reset, release and reallocation and retire old fault handling before reuse; hardware
 does not correlate late or duplicate requests with fault episodes. Normal responses are 24 bytes with
-Copy statuses 0..5, SignalSuccess 7 and SignalError 8; retired PageFault status 6
-is invalid. Signed 64-bit Signal supports load/store, wrapping arithmetic, bitwise
-updates, exchange and CAS. Wait uses signed EQ/NE/LT/GE and releases the shared
-grant while false, without a fault notification or RESUME. Atomic PageFault
-parks before any update; successful results are checkpointed before response
-publication to prevent replay. Signal targets remain live through retirement.
-Drain waits for ordinary dependencies; Abort/Reset can cancel waiting work, with
-reset still waiting for resident cleanup. See
-`model/modeling/docs/{page-fault-recovery,signal-wait}.md`. No true MMU, PCIe integration,
-oversubscription, AQL/doorbell Signal ABI, general memory-atomic or Fence opcode is added.
-Do not expand that scope or
+statuses 0..5; retired PageFault status 6 is invalid. See
+`model/modeling/docs/page-fault-recovery.md`. No true MMU, PCIe integration,
+oversubscription or barrier semantics are added. Do not expand that scope or
 recreate the old API surface to satisfy historical tests.
 
 ## Working rules
+
+The 2026-10-21 decision withdraws the first Signal/Wait feature while retaining
+generic memory atomics and reset during pending context maintenance. Use the
+copy-engine reassessment in `model/modeling/docs/firmware-dma-goal.md` for next-step
+decisions. HSA is a semantic reference; AQL compatibility is not a current goal.
 
 - Use native Rust module paths. `#[path]` and conditional path redirection are forbidden;
   do not bypass this with `include!`, symlinks, or duplicate source trees.

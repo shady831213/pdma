@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use super::{Candidate, CheckRanges, Fetch, Retire, execution::Install, signal::Signals};
+use super::{Candidate, CheckRanges, Fetch, Retire, execution::Install};
 use crate::{
     ChunkInput, CommandRequest, CopyProgress, Dma, Error, ExecutionContext, FetchedCommand, Flow,
     Pipeline, RoundRobin,
@@ -12,8 +12,7 @@ use hardware_interface_pipeline::{
 use pdma_model_contract::dma::ChannelId;
 use std::convert::Infallible;
 
-type CopyGraph<S> = Then<CheckRanges, Then<Install, S, Flow<ChunkInput>>, Flow<CopyProgress>>;
-type ExecutionGraph<S> = Then<Signals, CopyGraph<S>, Flow<FetchedCommand>>;
+type ExecutionGraph<S> = Then<CheckRanges, Then<Install, S, Flow<ChunkInput>>, Flow<CopyProgress>>;
 type TaskExecution<S> = Then<Fetch, Resources<ExecutionGraph<S>>, Flow<FetchedCommand>>;
 type TaskPath<S> = Then<MapError<TaskExecution<S>, fn(Infallible) -> Error>, Retire, Flow<()>>;
 type Commands<S> = FanIn<
@@ -51,8 +50,8 @@ impl<S> Hardware<S> {
                             Then::new(
                                 Fetch,
                                 Resources(Then::new(
-                                    Signals,
-                                    Then::new(CheckRanges::default(), Then::new(Install, pipeline)),
+                                    CheckRanges::default(),
+                                    Then::new(Install, pipeline),
                                 )),
                             ),
                             impossible as fn(Infallible) -> Error,

@@ -4,7 +4,6 @@ mod execution;
 mod fetch;
 mod responses;
 mod retire;
-mod signal;
 #[cfg(test)]
 mod tests;
 

@@ -5,9 +5,7 @@ use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, MemoryRegion, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SoftwareCpu,
 };
-use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, Command, CommandRegisters, CopyCommand, Endpoint,
-};
+use pdma_model_contract::dma::{ChannelBlock, ChannelId, Command, CommandRegisters, Endpoint};
 use pdma_model_dma::{Dma, Hardware};
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::{
@@ -73,16 +71,12 @@ pub(super) async fn fixture(cpu: &SoftwareCpu) -> Result<Fixture, Box<dyn std::e
         ))
         .await?;
     cpu.run_main(channel.submit(Command {
+        copy_length: 0,
+        sg_context: 0,
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-        ..Command::copy(
-            71,
-            CopyCommand {
-                copy_length: 0,
-                sg_context: 0,
-                source: Endpoint::linear(0, 0),
-                destination: Endpoint::linear(0, 0),
-            },
-        )
+        id: 71,
+        source: Endpoint::linear(0, 0),
+        destination: Endpoint::linear(0, 0),
     }))
     .await?;
     let consumer = u32::try_from(

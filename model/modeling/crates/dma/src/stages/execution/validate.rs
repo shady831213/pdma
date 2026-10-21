@@ -22,18 +22,8 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for CheckRanges
             let Some(input) = input.take() else {
                 return Ok(StepOutcome::InProgress);
             };
-            self.state = Some(Flow::new(
-                input.work,
-                input.value.and_then(|fetched| {
-                    fetched
-                        .map(|fetched| {
-                            RangeCheck::new(fetched.command)
-                                .map(|scan| (fetched.work, scan))
-                                .ok_or(crate::Error::Routing)
-                        })
-                        .transpose()
-                }),
-            ));
+            self.state =
+                Some(input.map(|fetched| (fetched.work, RangeCheck::new(fetched.command))));
         }
         Flow::advance(&mut self.state, context, |state, context| {
             let Some((work, scan)) = state.as_mut() else {

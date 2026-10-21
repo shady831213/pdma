@@ -1,5 +1,4 @@
 use super::*;
-use pdma_model_contract::dma::CopyCommand;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings};
 use pdma_model_software::dma::ChannelControl;
 
@@ -148,21 +147,18 @@ pub(super) fn requests(
         .write(source, MemoryAlignment::ONE, data)?;
     payload.pages.evict(source);
     Ok((
-        Command::copy(
-            0,
-            CopyCommand {
-                source: Endpoint {
-                    context: context.raw(),
-                    ..Endpoint::linear(source.raw(), 0)
-                },
-                destination: Endpoint {
-                    context: context.raw(),
-                    ..Endpoint::linear(0, 0)
-                },
-                copy_length: length,
-                ..CopyCommand::ZERO
+        Command {
+            source: Endpoint {
+                context: context.raw(),
+                ..Endpoint::linear(source.raw(), 0)
             },
-        ),
+            destination: Endpoint {
+                context: context.raw(),
+                ..Endpoint::linear(0, 0)
+            },
+            copy_length: length,
+            ..Command::ZERO
+        },
         destinations,
     ))
 }

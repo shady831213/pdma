@@ -44,15 +44,14 @@ fn insufficient_selected_range_leaves_payload_untouched() -> TestResult {
     submit(
         &mut device,
         &memory,
-        Command::copy(
-            1,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 5,
-                sg_context: 0,
-                source: Endpoint::scatter_gather(0x1400, 1),
-                destination: Endpoint::linear(0x1300, 0),
-            },
-        ),
+        Command {
+            copy_length: 5,
+            sg_context: 0,
+            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
+            id: 1,
+            source: Endpoint::scatter_gather(0x1400, 1),
+            destination: Endpoint::linear(0x1300, 0),
+        },
     )?;
     // When: hardware validates the endpoint totals.
     run(&mut device)?;
@@ -123,15 +122,14 @@ fn list_errors_and_length_overflow_precede_payload_writes() -> TestResult {
         submit(
             &mut device,
             &memory,
-            Command::copy(
-                2,
-                pdma_model_contract::dma::CopyCommand {
-                    copy_length: 4,
-                    sg_context: 0,
-                    source,
-                    destination,
-                },
-            ),
+            Command {
+                copy_length: 4,
+                sg_context: 0,
+                flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
+                id: 2,
+                source,
+                destination,
+            },
         )?;
         // When: the real hardware pipeline runs its preflight.
         run(&mut device)?;
@@ -201,15 +199,14 @@ fn payload_fault_reports_written_prefix_without_rollback() -> TestResult {
         submit(
             &mut device,
             &memory,
-            Command::copy(
-                3,
-                pdma_model_contract::dma::CopyCommand {
-                    copy_length: 8,
-                    sg_context: 0,
-                    source,
-                    destination,
-                },
-            ),
+            Command {
+                copy_length: 8,
+                sg_context: 0,
+                flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
+                id: 3,
+                source,
+                destination,
+            },
         )?;
         // When: the second payload access fails.
         run(&mut device)?;
@@ -248,15 +245,14 @@ fn zero_length_does_not_access_lists_or_payload() -> TestResult {
     submit(
         &mut device,
         &memory,
-        Command::copy(
-            4,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 0,
-                sg_context: 0,
-                source: Endpoint::scatter_gather(0x8000, 2),
-                destination: Endpoint::scatter_gather(u64::MAX, 0),
-            },
-        ),
+        Command {
+            copy_length: 0,
+            sg_context: 0,
+            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
+            id: 4,
+            source: Endpoint::scatter_gather(0x8000, 2),
+            destination: Endpoint::scatter_gather(u64::MAX, 0),
+        },
     )?;
     // When: hardware accepts the empty copy range.
     run(&mut device)?;

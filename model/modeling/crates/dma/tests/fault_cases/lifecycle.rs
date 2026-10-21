@@ -58,11 +58,11 @@ fn drain_reports_parked_channel_and_abort_discards_without_completion() -> TestR
         // Given: a parked command holds a non-ring context.
         let mut device = setup()?;
         let mut command = streams(&device)?;
-        command.as_copy_mut().expect("copy fixture").source.context = 7;
+        command.source.context = 7;
         device.memory.missing.set(Some((0x1242, false)));
         submit(&mut device, command, 0)?;
         device.until(|dma| Ok(fault_status(dma)? == 1))?;
-        let context = ContextId::new(command.as_copy().expect("copy fixture").source.context);
+        let context = ContextId::new(command.source.context);
         let channel = ChannelId::new(0);
         // When: management requests maintenance of the retained reference.
         if abort {
@@ -100,17 +100,13 @@ fn abort_of_running_task_discards_it_only_when_payload_fault_parks_it() -> TestR
     // Given: a command has been accepted before Abort arrives.
     let mut device = setup()?;
     let mut command = streams(&device)?;
-    command
-        .as_copy_mut()
-        .expect("copy fixture")
-        .destination
-        .context = 7;
+    command.destination.context = 7;
     device.memory.missing.set(Some((0x1242, false)));
     submit(&mut device, command, 0)?;
     device.until(|dma| Ok(read_word(dma, CMD + CommandRegisters::CONSUMER.offset())? == 1))?;
     assert_eq!(device.memory.faults.get(), 0);
     // When: Abort waits for the running command and that command encounters a page fault.
-    let context = ContextId::new(command.as_copy().expect("copy fixture").destination.context);
+    let context = ContextId::new(command.destination.context);
     device.abort_context(context, &[ChannelId::new(0)])?;
     device.until(|dma| Ok(dma.context_status(context) != Ok(false)))?;
     // Then: committed bytes remain and maintenance completes without requiring resume.

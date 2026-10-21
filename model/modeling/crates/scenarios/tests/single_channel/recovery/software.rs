@@ -7,8 +7,8 @@ use hardware_interface_runtime::{
     RegisterAccess, SharedMemoryAccess, SharedMemoryAllocator,
 };
 use pdma_model_contract::dma::{
-    ChannelFatalCode, ChannelId, ChannelIrqCauseValues, ChannelIrqMaskValues, Command, CopyCommand,
-    Endpoint, Response,
+    ChannelFatalCode, ChannelId, ChannelIrqCauseValues, ChannelIrqMaskValues, Command,
+    CompletionFlagsValues, Endpoint, Response,
 };
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Irq};
 use std::{convert::Infallible, error::Error};
@@ -106,11 +106,11 @@ where
         destination,
         fatal: ChannelFatalCode::None,
     };
-    let request = CopyCommand {
+    let request = Command {
         source: Endpoint::linear(source.raw(), 0),
         destination: Endpoint::linear(destination.raw(), 0),
         copy_length: length,
-        ..CopyCommand::ZERO
+        ..Command::ZERO
     };
     match scenario {
         Scenario::Batch => {
@@ -118,15 +118,14 @@ where
                 .set_irq_mask(ChannelIrqMaskValues::default().with_response_non_empty(true)?)
                 .await?;
             for index in 0..3 {
-                let mut command = Command::copy(
-                    40 + index,
-                    CopyCommand {
+                channel
+                    .submit(Command {
+                        id: 40 + index,
                         destination: Endpoint::linear(destination.raw() + index * length, 0),
+                        flags: CompletionFlagsValues { ioc: index == 2 },
                         ..request
-                    },
-                );
-                command.flags.ioc = index == 2;
-                channel.submit(command).await?;
+                    })
+                    .await?;
             }
         }
         Scenario::ChannelReset => {
@@ -138,13 +137,11 @@ where
                 )
                 .await?;
             channel
-                .submit(Command::copy(
-                    41,
-                    CopyCommand {
-                        destination: Endpoint::scatter_gather(0, 0),
-                        ..request
-                    },
-                ))
+                .submit(Command {
+                    id: 41,
+                    destination: Endpoint::scatter_gather(0, 0),
+                    ..request
+                })
                 .await?;
         }
     }
@@ -157,7 +154,7 @@ where
             outcome.fatal = channel.fatal().await?;
             channel.reset().await?;
             channel = Channel::setup(ports.bus, ports.memory, config).await?;
-            channel.submit(Command::copy(42, request)).await?;
+            channel.submit(Command { id: 42, ..request }).await?;
             outcome
                 .wait_and_drain(&mut channel, &mut notifications)
                 .await?;

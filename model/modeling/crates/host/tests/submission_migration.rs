@@ -4,7 +4,7 @@ use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::dma::{Command, CommandRegisters, CopyCommand, Endpoint, Response};
+use pdma_model_contract::dma::{Command, CommandRegisters, Endpoint, Response};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::{
@@ -83,16 +83,12 @@ async fn suspended_submission_completes_on_another_cpu() -> Result<(), Box<dyn s
         .await?;
     delay.store(true, Ordering::SeqCst);
     let submission = channel.submit(Command {
+        copy_length: 0,
+        sg_context: 0,
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-        ..Command::copy(
-            1,
-            CopyCommand {
-                copy_length: 0,
-                sg_context: 0,
-                source: Endpoint::linear(0, 0),
-                destination: Endpoint::linear(0, 0),
-            },
-        )
+        id: 1,
+        source: Endpoint::linear(0, 0),
+        destination: Endpoint::linear(0, 0),
     });
     tokio::pin!(submission);
     owner

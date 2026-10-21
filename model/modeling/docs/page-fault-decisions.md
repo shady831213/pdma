@@ -52,11 +52,9 @@ the fault response, residual-command resubmission API and scratch-discard rule a
 retired together. A 24-byte normal response now completes the original command;
 statuses 0..5 remain valid and former PageFault status 6 is rejected.
 
-The motivating dependency example was `Copy A -> Signal A -> Copy B`. At the time
-of this decision, Signal/fence commands were future discussion, not an implemented
-opcode or observed bug. Signal/Wait is now implemented under its
-[separate contract](signal-wait.md); a standalone Fence remains deferred.
-A terminal PageFault response for A would say that this
+The motivating dependency example was `Copy A -> Signal A -> Copy B`. Signal/fence
+commands are future discussion, not a currently implemented opcode or an observed
+bug in today's model. A terminal PageFault response for A would say that this
 hardware descriptor ended; it would not say the logical copy had finished.
 Resubmitting A's residual at the ring tail cannot automatically preserve A's
 original place before Signal A and B. Treating partial descriptor completion as
@@ -378,10 +376,8 @@ alone is insufficient: hardware must provide suitable saved-state, quiesce,
 retirement, switching and isolation primitives and the interfaces need defined
 ownership/lifetimes. The current fixed physical channels are not that feature.
 
-At this decision, dependency waits, visibility, signaling and completion ordering
-remained a separate discussion. The implemented Signal/Wait slice now has its
-[own contract](signal-wait.md). This suspension change adds no implicit fence,
-AQL barrier opcode, PCIe
+Barrier waits, visibility, signaling, completion ordering and scope remain a
+separate discussion. This change adds no implicit fence, barrier opcode, PCIe
 integration, FLR or true MMU. The external transparent-retry boundary remains a
 separate possible integration.
 

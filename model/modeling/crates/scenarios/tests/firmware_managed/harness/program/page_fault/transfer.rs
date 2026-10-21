@@ -1,7 +1,7 @@
 use super::super::buffers::Driver;
 use super::{Grant, Input, Ports, Space, TestResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::{Command, ContextId, CopyCommand, Endpoint, Response, Segment};
+use pdma_model_contract::dma::{Command, ContextId, Endpoint, Response, Segment};
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings};
 use pdma_model_software::dma::ChannelControl;
 
@@ -54,15 +54,14 @@ pub(super) async fn prepare<M: Send>(
         ports.bus.addresses().dma,
     )
     .await?;
-    let request = Command::copy(
-        input.id,
-        CopyCommand {
-            source: source_endpoint,
-            destination: destination_endpoint,
-            copy_length: length,
-            sg_context: list_id.raw(),
-        },
-    );
+    let request = Command {
+        id: input.id,
+        source: source_endpoint,
+        destination: destination_endpoint,
+        copy_length: length,
+        sg_context: list_id.raw(),
+        ..Command::ZERO
+    };
     Ok((driver, request, dst))
 }
 

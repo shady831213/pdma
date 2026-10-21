@@ -20,7 +20,6 @@ PCIe, IOMMU translation, caches and an actual interconnect are integration scope
 | [Function isolation](function-isolation.md) | Grants, routing, permissions and pre-FLR obligations |
 | [Contexts](context-contract.md) | Context bindings, maintenance frontiers, lifetime and non-faulting migration-copy obligations |
 | [Pageable copy](page-fault-recovery.md) | Selected ranges, retained suspension, owner write-one resume and repair/lifetime obligations |
-| [Signal and Wait](signal-wait.md) | Signed 64-bit atomics, dependency progress, ordered visibility, checkpoints and lifecycle |
 | [Fatal and events](fatal-events.md) | System fatal handling, PF events and managed recovery |
 
 The fatal/event chapter describes the managed recovery extension. Its verification
@@ -39,17 +38,9 @@ software lifetime obligations. Payload PageFault
 retains the original command without a response or DMA IRQ/event; same-channel
 successors wait while peers can run. Firmware lifecycle operations include parked
 work. Metadata faults and other errors retain their prior policy. Physical channels
-remain fixed with one shared engine; no oversubscription, AQL barriers, true MMU or
+remain fixed with one shared engine; no oversubscription, barriers, true MMU or
 PCIe integration is introduced. A transparent ATS+PRI retry port is a separate
 platform boundary and does not require PDMA resume for its held transactions.
-
-Tagged 112-byte commands support Copy, Signal and Wait. A false signed dependency
-Wait retains channel order while allowing peer progress, without fault notification
-or RESUME. Signal/Wait atomic PageFault uses retained suspension; a committed
-atomic result is checkpointed before response publication to prevent replay.
-Responses remain 24 bytes: Copy statuses 0..5, SignalSuccess 7, SignalError 8;
-retired status 6 stays invalid. The Signal/Wait chapter defines the operation/order
-matrix and the separate software, hardware, firmware and platform obligations.
 
 ## Responsibility notation
 

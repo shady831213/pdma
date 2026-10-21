@@ -19,16 +19,8 @@ fn abort_discards_unstarted_work_without_response_space() -> TestResult {
         let _ = operation.step(&mut pipeline, &mut dma)?;
     }
     let mut discarded = command();
-    discarded
-        .as_copy_mut()
-        .expect("copy fixture")
-        .source
-        .context = 7;
-    discarded
-        .as_copy_mut()
-        .expect("copy fixture")
-        .destination
-        .context = 7;
+    discarded.source.context = 7;
+    discarded.destination.context = 7;
     memory.write(
         MemoryAddress::new(0x1000),
         MemoryAlignment::ONE,
@@ -59,7 +51,7 @@ fn abort_waits_for_accepted_command_and_preserves_its_normal_response() -> TestR
     // Given
     let (mut dma, memory) = setup(0x1100, 2)?;
     let mut input = command();
-    input.as_copy_mut().expect("copy fixture").source.context = 7;
+    input.source.context = 7;
     memory.write(
         MemoryAddress::new(0x1200),
         MemoryAlignment::ONE,
@@ -127,7 +119,7 @@ fn reset_interrupts_drain_but_waits_for_resident_cleanup() -> TestResult {
         // Given: a fetched command is resident in a pending context Drain.
         let (mut dma, memory) = setup(0x1100, 2)?;
         let mut input = command();
-        input.as_copy_mut().expect("copy fixture").source.context = 7;
+        input.source.context = 7;
         submit(&mut dma, &memory, input)?;
         let id = ChannelId::new(0);
         let consumer = id.register_offset(1).ok_or("layout")? + CommandRegisters::CONSUMER.offset();
@@ -183,7 +175,7 @@ fn failed_drain_returns_channel_and_releases_reset_interlock() -> TestResult {
     // Given
     let (mut dma, memory) = setup(0x1100, 2)?;
     let mut input = command();
-    input.as_copy_mut().expect("copy fixture").source = pdma_model_contract::dma::Endpoint {
+    input.source = pdma_model_contract::dma::Endpoint {
         context: 7,
         ..pdma_model_contract::dma::Endpoint::linear(0x9000, 0)
     };

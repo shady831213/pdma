@@ -134,8 +134,7 @@ fn error_response_stops_the_channel_even_after_consumption() -> TestResult {
         &3_u32.to_le_bytes(),
     )?;
     let mut invalid = command();
-    invalid.as_copy_mut().expect("copy fixture").destination =
-        pdma_model_contract::dma::Endpoint::scatter_gather(0, 0);
+    invalid.destination = pdma_model_contract::dma::Endpoint::scatter_gather(0, 0);
     submit(&mut device, &memory, invalid)?;
     run(&mut device)?;
     device.write(

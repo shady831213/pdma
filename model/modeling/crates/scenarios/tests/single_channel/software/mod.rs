@@ -6,9 +6,7 @@ use hardware_interface_runtime::{
     InterruptHandler, InterruptRegistration, MemoryAlignment, RegisterAccess, SharedMemoryAccess,
     SharedMemoryAllocator,
 };
-use pdma_model_contract::dma::{
-    ChannelFatalCode, ChannelId, Command, CopyCommand, Response, Segment,
-};
+use pdma_model_contract::dma::{ChannelFatalCode, ChannelId, Command, Response, Segment};
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as HostError, RingConfig, Rings, runtime::Irq,
 };
@@ -133,16 +131,12 @@ where
     let mut channel = Channel::setup(ports.bus, ports.memory, config).await?;
     channel
         .submit(Command {
+            copy_length: u64::try_from(input.data.len())?,
+            sg_context: 0,
             flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-            ..Command::copy(
-                7,
-                CopyCommand {
-                    copy_length: u64::try_from(input.data.len())?,
-                    sg_context: 0,
-                    source: source.endpoint,
-                    destination: destination.endpoint,
-                },
-            )
+            id: 7,
+            source: source.endpoint,
+            destination: destination.endpoint,
         })
         .await?;
 

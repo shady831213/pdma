@@ -82,17 +82,12 @@ where
 {
     let memory = 0x1000 + u64::try_from(index)? * 0x1000;
     let command = Command {
+        copy_length: 512,
+        sg_context: 0,
         id,
         flags: CompletionFlagsValues::default(),
-        ..Command::copy(
-            0,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 512,
-                sg_context: 0,
-                source: Endpoint::linear(memory + 0x200, 0),
-                destination: Endpoint::linear(memory + 0x400, 0),
-            },
-        )
+        source: Endpoint::linear(memory + 0x200, 0),
+        destination: Endpoint::linear(memory + 0x400, 0),
     };
     device.memory.write(
         MemoryAddress::new(memory),

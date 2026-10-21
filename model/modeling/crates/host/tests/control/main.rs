@@ -8,8 +8,8 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::dma::{
-    ChannelIrqMaskValues, ChannelRegisters, Command, CompletionFlagsValues, CopyCommand,
-    DmaControl, DmaFatalCode, Endpoint, Response,
+    ChannelIrqMaskValues, ChannelRegisters, Command, CompletionFlagsValues, DmaControl,
+    DmaFatalCode, Endpoint, Response,
 };
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
@@ -136,16 +136,12 @@ async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
     cpu.run_main(channel.set_irq_mask(ChannelIrqMaskValues::new(3)))
         .await?;
     cpu.run_main(channel.submit(Command {
+        copy_length: 0,
+        sg_context: 0,
         flags: CompletionFlagsValues { ioc: true },
-        ..Command::copy(
-            7,
-            CopyCommand {
-                copy_length: 0,
-                sg_context: 0,
-                source: Endpoint::linear(0, 0),
-                destination: Endpoint::linear(0, 0),
-            },
-        )
+        id: 7,
+        source: Endpoint::linear(0, 0),
+        destination: Endpoint::linear(0, 0),
     }))
     .await?;
     // When: hardware publishes a masked IOC completion and software unmasks.

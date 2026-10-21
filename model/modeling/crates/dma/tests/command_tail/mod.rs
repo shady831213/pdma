@@ -76,18 +76,11 @@ fn custom_command_tail_receives_only_final_completion_for_multiple_chunks() -> T
     // Given: a transformed multi-chunk command followed by a command-level observer.
     let (mut device, memory) = setup(0x1100, 2)?;
     let source = [0x5a; 600];
-    let descriptor = {
-        let mut copy_fixture = command();
-        copy_fixture
-            .as_copy_mut()
-            .expect("copy fixture")
-            .copy_length = u64::try_from(source.len())?;
-        copy_fixture.as_copy_mut().expect("copy fixture").source = Endpoint::linear(0x1400, 0);
-        copy_fixture
-            .as_copy_mut()
-            .expect("copy fixture")
-            .destination = Endpoint::linear(0x1800, 0);
-        copy_fixture
+    let descriptor = pdma_model_contract::dma::Command {
+        copy_length: u64::try_from(source.len())?,
+        source: Endpoint::linear(0x1400, 0),
+        destination: Endpoint::linear(0x1800, 0),
+        ..command()
     };
     memory.write(0x1400.into(), MemoryAlignment::ONE, &source)?;
     submit(&mut device, &memory, descriptor)?;
@@ -104,7 +97,7 @@ fn custom_command_tail_receives_only_final_completion_for_multiple_chunks() -> T
         Then::new(
             CommandTail {
                 calls: Rc::clone(&calls),
-                expected_length: descriptor.as_copy().expect("copy fixture").copy_length,
+                expected_length: descriptor.copy_length,
             },
             Then::new(CompletionInput, device.responses()),
         ),
@@ -137,10 +130,7 @@ fn custom_command_tail_receives_only_final_completion_for_multiple_chunks() -> T
     let response = Response::from_bytes(raw.as_ref())?;
     assert_eq!(
         (response.id, response.bytes_completed()),
-        (
-            descriptor.id,
-            descriptor.as_copy().expect("copy fixture").copy_length
-        )
+        (descriptor.id, descriptor.copy_length)
     );
     Ok(())
 }
@@ -149,18 +139,11 @@ fn custom_command_tail_receives_only_final_completion_for_multiple_chunks() -> T
 fn raw_child_error_retains_command_and_resumes_without_replaying_committed_chunk() -> TestResult {
     // Given: a chunk-local stage consumes its first result before returning a raw error.
     let (mut device, memory) = setup(0x1100, 2)?;
-    let descriptor = {
-        let mut copy_fixture = command();
-        copy_fixture
-            .as_copy_mut()
-            .expect("copy fixture")
-            .copy_length = 600;
-        copy_fixture.as_copy_mut().expect("copy fixture").source = Endpoint::linear(0x1400, 0);
-        copy_fixture
-            .as_copy_mut()
-            .expect("copy fixture")
-            .destination = Endpoint::linear(0x1800, 0);
-        copy_fixture
+    let descriptor = pdma_model_contract::dma::Command {
+        copy_length: 600,
+        source: Endpoint::linear(0x1400, 0),
+        destination: Endpoint::linear(0x1800, 0),
+        ..command()
     };
     memory.write(0x1400.into(), MemoryAlignment::ONE, &[0x5a; 600])?;
     submit(&mut device, &memory, descriptor)?;
@@ -220,8 +203,7 @@ fn raw_child_error_retains_command_and_resumes_without_replaying_committed_chunk
     assert!(operation.is_complete());
     assert_eq!(
         calls.get(),
-        usize::try_from(descriptor.as_copy().expect("copy fixture").copy_length)?
-            .div_ceil(pdma_model_dma::COPY_CHUNK_BYTES)
+        usize::try_from(descriptor.copy_length)?.div_ceil(pdma_model_dma::COPY_CHUNK_BYTES)
     );
     let mut destination = [0; 600];
     memory.read(0x1800.into(), MemoryAlignment::ONE, &mut destination)?;

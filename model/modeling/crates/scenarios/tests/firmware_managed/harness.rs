@@ -8,8 +8,6 @@ pub mod multi;
 pub mod page_fault;
 pub mod program;
 pub mod runtime;
-/// Managed Signal/Wait scenario assembly.
-pub mod signal;
 
 use hardware_interface_runtime::{
     InterruptSummary, MemoryAddress, SharedMemory, SharedMemoryAllocator,

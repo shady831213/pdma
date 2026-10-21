@@ -1,7 +1,7 @@
-use crate::channel::CopyStatus;
 use crate::{COPY_CHUNK_BYTES, Chunk, Completion, ExecutionContext, Flow, MemoryFailure, Payload};
 use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
+use pdma_model_contract::dma::ResponseStatus;
 
 /// Reads a concrete bounded chunk and transfers its bytes to the next stage.
 #[derive(Debug, Default)]
@@ -87,7 +87,7 @@ where
                                 .ok_or(RunError::Exhausted)?;
                             let completion = Completion {
                                 work: chunk.work,
-                                response: progress.response_with(CopyStatus::ReadError),
+                                response: progress.response_with(ResponseStatus::ReadError),
                             };
                             *state = None;
                             return Ok(StepOutcome::Complete(
@@ -205,7 +205,7 @@ where
                                 .ok_or(RunError::Exhausted)?;
                             let completion = Completion {
                                 work,
-                                response: progress.response_with(CopyStatus::WriteError),
+                                response: progress.response_with(ResponseStatus::WriteError),
                             };
                             *state = None;
                             return Ok(StepOutcome::Complete(Ok(Some(completion))));

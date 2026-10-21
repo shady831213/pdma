@@ -23,9 +23,9 @@ fn one_command_invocation_completes_all_chunks_without_fetching_again() -> TestR
     // Given: a descriptor requiring three bounded copy interactions.
     let (mut device, memory) = setup(0x1100, 2)?;
     let mut descriptor = command();
-    descriptor.as_copy_mut().expect("copy fixture").copy_length = 600;
-    descriptor.as_copy_mut().expect("copy fixture").source = Endpoint::linear(0x1400, 0);
-    descriptor.as_copy_mut().expect("copy fixture").destination = Endpoint::linear(0x1800, 0);
+    descriptor.copy_length = 600;
+    descriptor.source = Endpoint::linear(0x1400, 0);
+    descriptor.destination = Endpoint::linear(0x1800, 0);
     memory.write(0x1400.into(), MemoryAlignment::ONE, &[0x5a; 600])?;
     submit(&mut device, &memory, descriptor)?;
     let mut before = [0xff; 600];
@@ -60,9 +60,9 @@ fn reset_between_chunks_retires_retained_progress() -> TestResult {
     // Given: accepted command state retained after its first chunk.
     let (mut device, memory) = setup(0x1100, 2)?;
     let mut descriptor = command();
-    descriptor.as_copy_mut().expect("copy fixture").copy_length = 600;
-    descriptor.as_copy_mut().expect("copy fixture").source = Endpoint::linear(0x1400, 0);
-    descriptor.as_copy_mut().expect("copy fixture").destination = Endpoint::linear(0x1800, 0);
+    descriptor.copy_length = 600;
+    descriptor.source = Endpoint::linear(0x1400, 0);
+    descriptor.destination = Endpoint::linear(0x1800, 0);
     memory.write(0x1400.into(), MemoryAlignment::ONE, &[0x5a; 600])?;
     submit(&mut device, &memory, descriptor)?;
     let mut hardware = device.hardware();
@@ -107,18 +107,11 @@ fn reset_at_every_chunk_boundary_retires_without_more_writes() -> TestResult {
     for prefix in 0..24 {
         // Given: one committed chunk and each subsequent local boundary.
         let (mut device, memory) = setup(0x1100, 2)?;
-        let descriptor = {
-            let mut copy_fixture = command();
-            copy_fixture
-                .as_copy_mut()
-                .expect("copy fixture")
-                .copy_length = u64::try_from(COPY_CHUNK_BYTES * 3)?;
-            copy_fixture.as_copy_mut().expect("copy fixture").source = Endpoint::linear(0x1400, 0);
-            copy_fixture
-                .as_copy_mut()
-                .expect("copy fixture")
-                .destination = Endpoint::linear(0x1800, 0);
-            copy_fixture
+        let descriptor = pdma_model_contract::dma::Command {
+            copy_length: u64::try_from(COPY_CHUNK_BYTES * 3)?,
+            source: Endpoint::linear(0x1400, 0),
+            destination: Endpoint::linear(0x1800, 0),
+            ..command()
         };
         memory.write(
             0x1400.into(),

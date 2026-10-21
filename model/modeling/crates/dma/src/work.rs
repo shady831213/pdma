@@ -37,8 +37,7 @@ impl<M, S> Dma<M, S> {
             channel.resident = None;
             if halted
                 || channel.halted()
-                || ((self.active != Some(work)
-                    || channel.work.as_ref().is_some_and(|work| work.waiting))
+                || (self.active != Some(work)
                     && abort_context.is_some_and(|context| {
                         channel.accepted_command().is_some_and(|command| {
                             crate::references(command).contains(&Some(context))

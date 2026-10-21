@@ -72,16 +72,11 @@ fn fixture() -> TestResult<Dma<ObservedMemory>> {
         let address = 0x1000 + u64::try_from(index)? * 0x100;
         let command = Command {
             id: address,
+            copy_length: 4,
             flags: CompletionFlagsValues { ioc: false },
-            ..Command::copy(
-                0,
-                pdma_model_contract::dma::CopyCommand {
-                    copy_length: 4,
-                    sg_context: 0,
-                    source: Endpoint::linear(0x2000, 0),
-                    destination: Endpoint::linear(0x2100, 0),
-                },
-            )
+            sg_context: 0,
+            source: Endpoint::linear(0x2000, 0),
+            destination: Endpoint::linear(0x2100, 0),
         };
         device
             .memory

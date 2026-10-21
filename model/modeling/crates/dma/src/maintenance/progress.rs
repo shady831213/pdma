@@ -23,7 +23,6 @@ impl Maintenance {
                 .accepted_command()
                 .is_some_and(|task| references(task).contains(&Some(self.context)));
             let blocked = channel.accepted_command().is_some()
-                && channel.work.as_ref().is_none_or(|work| !work.waiting)
                 && !active
                 && (!frontier.passed || target)
                 && !(self.abort && target);
@@ -32,7 +31,7 @@ impl Maintenance {
                 || channel.resetting()
                 || channel.generation != frontier.generation
                 || blocked
-                || ((!frontier.passed || active || target) && !channel.enabled());
+                || ((!frontier.passed || active) && !channel.enabled());
             frontier.passed |= channel
                 .command
                 .pointers()

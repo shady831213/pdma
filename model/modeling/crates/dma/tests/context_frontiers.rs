@@ -14,11 +14,11 @@ fn linear_command_does_not_reference_ignored_sg_selector() -> TestResult {
     // Given
     let (mut dma, memory) = setup(0x1100, 4)?;
     let mut target = command();
-    target.as_copy_mut().expect("copy fixture").source.context = 7;
+    target.source.context = 7;
     submit(&mut dma, &memory, target)?;
     let mut unrelated = command();
     unrelated.id = 8;
-    unrelated.as_copy_mut().expect("copy fixture").sg_context = 7;
+    unrelated.sg_context = 7;
     memory.write(
         MemoryAddress::new(0x1000 + u64::try_from(pdma_model_contract::dma::Command::RECORD_SIZE)?),
         MemoryAlignment::ONE,
@@ -68,7 +68,7 @@ fn later_unrelated_publication_does_not_extend_the_drain_frontier() -> TestResul
     // Given
     let (mut dma, memory) = setup(0x1100, 4)?;
     let mut target = command();
-    target.as_copy_mut().expect("copy fixture").source.context = 7;
+    target.source.context = 7;
     submit(&mut dma, &memory, target)?;
     dma.drain_context(ContextId::new(7), &[ChannelId::new(0)])?;
     let mut later = command();

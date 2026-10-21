@@ -5,7 +5,7 @@ use hardware_interface_runtime::{
     InterruptSource, MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::dma::{Command, CopyCommand, Endpoint, Response, ResponseStatus, Segment};
+use pdma_model_contract::dma::{Command, Endpoint, Response, ResponseStatus, Segment};
 use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
@@ -80,16 +80,12 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
         ))
         .await?;
     cpu.run_main(channel.submit(Command {
+        copy_length: 8,
+        sg_context: 0,
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-        ..Command::copy(
-            31,
-            CopyCommand {
-                copy_length: 8,
-                sg_context: 0,
-                source,
-                destination,
-            },
-        )
+        id: 31,
+        source,
+        destination,
     }))
     .await?;
     let executor = AsyncExecutor::new(model.clone());

@@ -60,17 +60,12 @@ fn setup() -> TestResult<Dma<Observed>> {
     publish(
         &mut device,
         Command {
+            copy_length: 512,
+            sg_context: 0,
             id: 7,
             flags: CompletionFlagsValues { ioc: true },
-            ..Command::copy(
-                0,
-                pdma_model_contract::dma::CopyCommand {
-                    copy_length: 512,
-                    sg_context: 0,
-                    source: Endpoint::scatter_gather(0x1800, 2),
-                    destination: Endpoint::scatter_gather(0x1900, 2),
-                },
-            )
+            source: Endpoint::scatter_gather(0x1800, 2),
+            destination: Endpoint::scatter_gather(0x1900, 2),
         },
     )?;
     Ok(device)
@@ -166,17 +161,12 @@ fn reset_stops_sg_interactions_before_completion_and_keeps_them_stopped() -> Tes
             publish(
                 &mut device,
                 Command {
+                    copy_length: 512,
+                    sg_context: 0,
                     id: 99,
                     flags: CompletionFlagsValues::default(),
-                    ..Command::copy(
-                        0,
-                        pdma_model_contract::dma::CopyCommand {
-                            copy_length: 512,
-                            sg_context: 0,
-                            source: Endpoint::linear(0x1200, 0),
-                            destination: Endpoint::linear(0x1600, 0),
-                        },
-                    )
+                    source: Endpoint::linear(0x1200, 0),
+                    destination: Endpoint::linear(0x1600, 0),
                 },
             )?;
             for _ in 0..256 {

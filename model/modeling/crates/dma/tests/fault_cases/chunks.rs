@@ -15,18 +15,11 @@ fn early_write_resume_ends_old_invocation_without_repeating_read_or_transform() 
 fn chunked_transform(fault: bool) -> TestResult {
     // Given: a three-chunk command with a non-idempotent payload transform.
     let mut device = setup()?.dma;
-    let command = {
-        let mut copy_fixture = crate::support::command();
-        copy_fixture
-            .as_copy_mut()
-            .ok_or("copy fixture")?
-            .copy_length = 600;
-        copy_fixture.as_copy_mut().ok_or("copy fixture")?.source = Endpoint::linear(0x1400, 0);
-        copy_fixture
-            .as_copy_mut()
-            .ok_or("copy fixture")?
-            .destination = Endpoint::linear(0x1800, 0);
-        copy_fixture
+    let command = Command {
+        copy_length: 600,
+        source: Endpoint::linear(0x1400, 0),
+        destination: Endpoint::linear(0x1800, 0),
+        ..crate::support::command()
     };
     device
         .memory

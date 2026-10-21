@@ -60,11 +60,7 @@ fn sg_resume_preserves_progress_and_cached_destination_bytes() -> TestResult {
         let done = response(&device)?;
         assert_eq!(
             (done.id, done.status, done.bytes_completed()),
-            (
-                command.id,
-                ResponseStatus::Success,
-                command.as_copy().expect("copy fixture").copy_length
-            )
+            (command.id, ResponseStatus::Success, command.copy_length)
         );
         assert_eq!(
             read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
@@ -102,19 +98,12 @@ fn repair_and_zero_resume_do_not_retry_or_admit_later_same_channel_work() -> Tes
     device.memory.missing.set(Some((0x1242, false)));
     submit(&mut device, command, 0)?;
     device.until(|dma| Ok(fault_status(dma)? == 1))?;
-    let follower = {
-        let mut copy_fixture = Command::ZERO;
-        copy_fixture.id = 99;
-        copy_fixture
-            .as_copy_mut()
-            .expect("copy fixture")
-            .copy_length = 3;
-        copy_fixture.as_copy_mut().expect("copy fixture").source = Endpoint::linear(0x1200, 0);
-        copy_fixture
-            .as_copy_mut()
-            .expect("copy fixture")
-            .destination = Endpoint::linear(0x1600, 0);
-        copy_fixture
+    let follower = Command {
+        id: 99,
+        copy_length: 3,
+        source: Endpoint::linear(0x1200, 0),
+        destination: Endpoint::linear(0x1600, 0),
+        ..Command::ZERO
     };
     submit(&mut device, follower, 1)?;
     // When: the backend is repaired without a write-one resume request.
@@ -168,10 +157,10 @@ fn mixed_endpoint_resumption_keeps_each_stream_cursor() -> TestResult {
                 .memory
                 .memory
                 .write(0x1200.into(), MemoryAlignment::ONE, b"abcdefgh")?;
-            command.as_copy_mut().expect("copy fixture").source = Endpoint::linear(0x1200, 0);
+            command.source = Endpoint::linear(0x1200, 0);
             device.memory.missing.set(Some((0x1343, true)));
         } else {
-            command.as_copy_mut().expect("copy fixture").destination = Endpoint::linear(0x1600, 0);
+            command.destination = Endpoint::linear(0x1600, 0);
             device.memory.missing.set(Some((0x1242, false)));
         }
         submit(&mut device, command, 0)?;
@@ -184,10 +173,7 @@ fn mixed_endpoint_resumption_keeps_each_stream_cursor() -> TestResult {
         // Then: one full-length success reports the original task and exact output.
         assert_eq!(
             (response(&device)?.id, response(&device)?.bytes_completed()),
-            (
-                command.id,
-                command.as_copy().expect("copy fixture").copy_length
-            )
+            (command.id, command.copy_length)
         );
         if linear_source {
             assert_eq!(

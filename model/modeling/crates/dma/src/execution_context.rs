@@ -103,8 +103,7 @@ impl<M, S> SelectedResources<'_, M, S> {
         if channel.generation != self.generation || channel.resetting() {
             return Err(Error::Reset);
         }
-        let aborted = (*self.active != Some(self.work())
-            || channel.work.as_ref().is_some_and(|work| work.waiting))
+        let aborted = *self.active != Some(self.work())
             && self.maintenance.as_ref().is_some_and(|maintenance| {
                 maintenance.abort
                     && maintenance.result == Ok(false)
@@ -181,11 +180,7 @@ impl<M, S> SelectedResources<'_, M, S> {
     }
 
     pub(crate) fn park(&mut self, work: Work) -> Result<(), Error> {
-        let channel = self.channel(work)?;
-        if let Some(accepted) = channel.work.as_mut() {
-            accepted.waiting = false;
-        }
-        channel.suspend();
+        self.channel(work)?.suspend();
         if *self.active == Some(work) {
             *self.active = None;
         }

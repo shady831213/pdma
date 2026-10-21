@@ -65,27 +65,21 @@ fn parked_peer() -> Result<(Dma<()>, pdma_model_contract::dma::Command), Box<dyn
 {
     let mut dma = Dma::new((), 2)?;
     let command = pdma_model_contract::dma::Command {
+        copy_length: 4,
+        sg_context: 0,
         flags: pdma_model_contract::dma::CompletionFlagsValues { ioc: false },
         id: 17,
-        ..pdma_model_contract::dma::Command::copy(
-            0,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 4,
-                sg_context: 0,
-                source: pdma_model_contract::dma::Endpoint {
-                    context: 7,
-                    ..pdma_model_contract::dma::Endpoint::linear(0x1000, 0)
-                },
-                destination: pdma_model_contract::dma::Endpoint {
-                    context: 7,
-                    ..pdma_model_contract::dma::Endpoint::linear(0x2000, 0)
-                },
-            },
-        )
+        source: pdma_model_contract::dma::Endpoint {
+            context: 7,
+            ..pdma_model_contract::dma::Endpoint::linear(0x1000, 0)
+        },
+        destination: pdma_model_contract::dma::Endpoint {
+            context: 7,
+            ..pdma_model_contract::dma::Endpoint::linear(0x2000, 0)
+        },
     };
     let peer = dma.channels.get_mut(1).ok_or("channel")?;
     peer.work = Some(crate::channel::Accepted {
-        waiting: false,
         command,
         unread: None,
         payload: None,

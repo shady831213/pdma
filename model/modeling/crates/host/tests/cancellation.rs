@@ -5,9 +5,7 @@ use hardware_interface_runtime::{
     InterruptSource, MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::dma::{
-    Command, CommandRegisters, CopyCommand, Endpoint, Response, ResponseStatus,
-};
+use pdma_model_contract::dma::{Command, CommandRegisters, Endpoint, Response, ResponseStatus};
 use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
@@ -59,16 +57,12 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
         ))
         .await?;
     cpu.run_main(channel.submit(Command {
+        copy_length: 8,
+        sg_context: 0,
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-        ..Command::copy(
-            11,
-            CopyCommand {
-                copy_length: 8,
-                sg_context: 0,
-                source: Endpoint::linear(source.raw(), 0),
-                destination: Endpoint::linear(destination.raw(), 0),
-            },
-        )
+        id: 11,
+        source: Endpoint::linear(source.raw(), 0),
+        destination: Endpoint::linear(destination.raw(), 0),
     }))
     .await?;
     let executor = AsyncExecutor::new(model.clone());

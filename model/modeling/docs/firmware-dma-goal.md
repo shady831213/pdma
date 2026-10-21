@@ -1,14 +1,15 @@
 # Firmware-managed DMA roadmap
 
 Recorded: 2026-09-15.
-Updated: 2026-10-19.
+Updated: 2026-10-21.
 Status: the architecture MVP, Function-scoped channel management, context selection
 and maintenance, and managed fatal/event recovery are implemented. Actual PCIe/IOMMU
 integration and Function-level reset remain unimplemented. Payload-only retained
 suspension with owner per-channel resume replaces the earlier DSA-like continuation;
-synchronization and signal atomics are the next agreed feature scope, followed by
-HSA/AQL contract and programming-interface convergence and a final HSA-based audit.
-These stages are not implemented yet.
+the first Signal/Wait implementation has been withdrawn. The next design decision
+compares SDMA-style dependency and completion mechanisms against PDMA requirements.
+HSA remains a semantic reference, not a mandatory AQL migration or conformance goal.
+Generic memory atomics and reset during context maintenance remain implemented.
 This document records decisions and open questions; it is not an execution plan
 or an instruction to start implementation automatically.
 
@@ -70,9 +71,8 @@ no intermediate DMA response, IRQ, firmware event or new PF management opcode.
 The [page-fault recovery chapter](page-fault-recovery.md) records the contract,
 software lifetime requirements and superseded decisions. Independent Linear offsets
 and SG entry/local-offset positions remain general subrange inputs. Final responses
-are 24 bytes with Copy statuses 0..5 and Signal statuses 7/8; PageFault status 6
-and fault continuation fields are retired. Fault status and resume are 32-bit
-registers with one boolean bit each;
+are 24 bytes with statuses 0..5; PageFault status 6 and fault continuation fields
+are retired. Fault status and resume are 32-bit registers with one boolean bit each;
 software must serialize repair/resume with reset/release/reallocation and retire
 old fault handling before reuse. Reset/release cancel parked work without resume. Drain reports ChannelStopped when
 parked work prevents completion; Abort discards matching parked work without a
@@ -88,164 +88,205 @@ integration with that port or true MMU is included.
 Keep the existing functional abstraction: no bus cycles, transaction IDs,
 outstanding queues or asynchronous memory-transaction model are requested.
 
-### Agreed next stages: HSA-aligned DMA
+### Copy-engine synchronization reassessment
 
-Decision, 2026-10-19. The pipeline/command-continuation refactor is complete at
-`ae3b7f3aa76a6d8188d8164d2f9edeb0e39adf8a`. Preserve its hardware ownership,
-typed dataflow and command/chunk completion boundaries; do not reopen framework
-design to add synchronization. Performance measurements did not establish a
-significant inherent penalty from binary step outcomes; removing repeated outer
-command work improved full-scenario performance. No further old-Pending comparison
-is requested.
+Decision, 2026-10-21. This section supersedes the 2026-10-19 staged plan for
+the complete HSA signal API followed by mandatory AQL convergence. The user
+approved withdrawing the Signal/Wait implementation before choosing its replacement.
+Use SDMA as a copy-engine reference and HSA as a system-semantics cross-check;
+neither complete SDMA instruction coverage nor HSA/AQL compatibility is a current goal.
 
-Use HSA 1.2 as a coherent reference for applicable roles and semantics, rather
-than deriving each queue/synchronization rule independently. HSA conformance,
-actual ROCr integration and AQL wire compatibility are separate claims, not
-consequences of adopting similar names. The stages below record the agreed order,
-not authorization to implement them as part of a documentation update.
+The Copy-only implementation is restored to
+`a67dbfce2e867b48a571fcb4b39874057d9f1932`. The withdrawn implementation and
+specification remain in `247e914` and `50b38bc`. Generic memory atomic32/atomic64,
+backend-owned errors and reset during pending context maintenance are retained.
+The Signal/Wait-specific descriptor, response variants, software helper, routed
+atomic extensions and their dedicated tests are withdrawn together. The managed
+memory adapters are back to their read/write-only baseline; generic backend atomic
+support does not imply an end-to-end managed DMA atomic path.
 
-#### Stage 1: synchronization and the complete signal-operation set
+The pipeline/command-continuation refactor remains complete at `ae3b7f3`.
+Preserve its hardware ownership, typed dataflow and command/chunk completion
+boundaries. Synchronization is not a reason to reopen the pipeline framework.
+The earlier performance comparison did not establish a significant inherent
+penalty from binary step outcomes; retaining command execution across chunks
+removed repeated outer work. No further old-Pending comparison is requested.
 
-Implementation update, 2026-10-20: the
-[Signal/Wait contract](signal-wait.md) now defines the implemented operation/order
-matrix, signed values, error classification, completion checkpoints and lifecycle.
-Commands are 112-byte tagged Copy/Signal/Wait records; responses retain 24 bytes
-with Copy statuses 0..5 and Signal statuses 7/8, leaving retired 6 invalid.
-The scope is a PDMA protocol and software helper, not HSA runtime/AQL compatibility.
-The requirements below remain acceptance obligations; test results are separate evidence.
+#### Evidence scope and corrections
 
-- Define signal objects, dependency waits, completion signaling and memory ordering
-  from the applicable HSA signal rules. Cover atomic load/store, add/subtract,
-  AND/OR/XOR, exchange and compare-and-swap, including specified return values,
-  legal ordering combinations. Stage 1 uses signed 64-bit signal values (the HSA
-  large-machine model), with no per-signal width selector. Generic memory atomic32
-  remains a separate backend capability, not a second PDMA signal format.
-  This is the complete signal set, not
-  merely the operations initially needed by one scenario.
-- Do not add general-purpose atomic commands on arbitrary memory. HSA signal
-  atomics exclude min/max and wrapinc/wrapdec; RISC-V LR/SC is not part of this
-  feature. Doorbell signals have separate restrictions and belong to Stage 2.
-- Keep HSA signed signal comparisons, runtime wait behavior and AQL Barrier-AND/OR
-  semantics distinct. The previously discussed CUDA cyclic GEQ is not HSA GTE;
-  do not silently mix it into the HSA baseline. Document any deliberate extension.
-- A normal unsatisfied dependency is neither a page fault nor a stopping error.
-  Same-channel successors cannot pass it, but the wait must not retain the shared
-  execution resources needed by other channels to satisfy the dependency. Recheck
-  and scheduling policy must provide progress without a software fault-resume
-  request for ordinary waiting.
-- Drain waits for affected work to complete normally, including dependency waits.
-  Do not return Busy/WouldBlock merely because a condition is currently false;
-  hardware cannot infer that a future signal will never arrive. Software must
-  preserve dependency progress and response consumption while draining. This does
-  not replace existing failure results for page-fault-stopped or erroneous work.
-- Abort/Reset must permit cancellation of waiting work without fabricating a
-  successful signal or satisfying its dependency. Recovery remains reachable
-  during a long-running Drain: firmware retains the
-  pending maintenance request while accepting ResetChannel and ResetDma on the
-  existing control channel. An affected reset fails the original Drain; reset
-  success still requires actual hardware cleanup. An unrelated reset does not
-  cancel the Drain. No CancelDrain opcode is needed.
-- Preserve signal storage, permissions and context bindings while queued, waiting,
-  executing or awaiting retirement. Define fault/error classification and retry
-  boundaries for signal accesses explicitly. A committed signal update must not
-  be repeated because subsequent result publication fails; cancellation does not
-  undo an already committed update.
+Sources were read on 2026-10-21. Concrete code examples below use ROCr
+`rocm-6.3.3`, commit `637eaec61186cc1f73480d99095ac4a3b2597242`, and Linux
+`v6.12`; the architectural queue overview is Linux 6.16 documentation.
+They establish those software paths, not every SDMA generation or undocumented
+hardware execution details. Newer APIs can add different packet capabilities.
+In particular, the current ROCr API documentation describes per-operation raw
+GPU-side wait/signal attributes separately from the HSA completion signal. That
+is a further API design example, not evidence that every device supports the new
+encoding or that the older builder covers all current submission paths. [S9]
 
-Memory access remains requester-neutral. PDMA interprets signal operations; the
-generic memory capability provides the indivisible access, without PDMA signal,
-channel, firmware or CPU ownership policy. A single-thread backend may perform
-read/transform/write synchronously without a scheduling or reentrant access boundary
-inside the operation. A concurrently shared backend must serialize the entire
-operation against other accesses to that storage. Neither approach requires a
-modeled bus lock, transaction queue or cycle timing. Preserve existing backend
-capabilities; do not turn a single-thread reference into an assumption that every
-backend has only one accessor.
+- AMD's compute AQL queues and native SDMA queues are different submission paths.
+  AQL packets carry completion-signal handles; the inspected SDMA copy builder
+  does not consume AQL or embed that handle in its linear COPY packet. [S1, S2]
+- HSA completion is an atomic decrement after the applicable release fence.
+  An HSA software signal API operation is not automatically a DMA opcode. [S1]
+- A native FENCE packet, a Linux `dma_fence` software object, an HSA signal and
+  acquire/release memory ordering are different concepts. Do not substitute one
+  name or contract for another. [S1-S4]
+- ROCr exposes SDMA engines through GPU-agent copy APIs. This does not establish
+  that SDMA is a separately enumerated HSA "other agent", or that its queues
+  implement the AQL agent-dispatch contract. [S5]
 
-Terminus is a modeling reference, not a new dependency: its CPU AMO semantics live
-in `terminus`, while `Space` and `Region` storage live in `terminus-spaceport`.
-Its synchronous closure-based AMO operation illustrates the no-interleaving
-boundary. Do not import hart IDs, LR/SC reservation machinery or ISA decoding into
-PDMA or generic memory interfaces.
+The prior discussion incorrectly used the SDMA fallback as evidence for AQL
+packet-processor completion on a non-atomic platform. That inference is withdrawn.
+We have not established the latter implementation.
 
-Model PDMA's required acquire/release effects and atomicity. Specify the visibility
-point required before successful publication and what a consumer may observe after
-acquisition. Cache coherence, cache maintenance, external transaction retirement and
-interconnect ordering remain explicit platform/RTL obligations, not detailed model
-implementations. Existing Copy/ring/reset paths already rely on ordering: consolidate
-their obligations rather than assuming synchronous storage proves arbitrary system
-visibility. Copy completion must not imply cache flush or TLB invalidation.
+#### Commands and software/hardware division
 
-The operation/type/order matrix, signal representation, authorized access binding,
-result/error behavior and management recovery protocol are specified in
-[Signal/Wait](signal-wait.md). Its tagged command encoding is implemented; no HSA
-signal-handle ABI or standalone Fence opcode is defined.
-Independent Fence behavior must add a defined guarantee beyond ordinary ordering;
-the modeling goal is not to recreate a weak-memory cache simulator.
+The inspected ROCr path composes native packets:
 
-Stage 1 acceptance must demonstrate:
+```text
+dependency POLLs -> platform cache operations -> COPY packet(s)
+                 -> platform writeback -> completion update -> optional TRAP
+```
 
-- Dependency -> Copy -> completion -> consumer with the required ordering.
-- A waiting channel does not prevent a peer from generating its dependency;
-  repeated waits and multiple waiters retain correct progress.
-- Every supported signal atomic has input-derived behavioral assertions, including
-  competing updates, returned old values, failed CAS, width and overflow rules.
-- Fault, reset and publication failure cannot replay a committed signal update or
-  release referenced storage prematurely; forbidden accesses preserve isolation.
-- Drain remains incomplete until its dependency resolves; Abort/Reset cancellation
-  remains reachable and clears affected work without a false success notification.
-- Direct and firmware-managed configurations remain usable, with existing Copy,
-  SG, fault/resume, reset, context maintenance and IRQ scenarios preserved.
+Its builder emits linear/rectangular copy and fill, equality polling, 64-bit
+atomic decrement implemented as ADD64(-1), ordered immediate-value FENCE writes,
+and optional notification. Larger copies are split in software. Submission
+publishes the queue write pointer before ringing the doorbell. These are
+observed builder choices, not an exhaustive SDMA ISA specification. [S2]
 
-#### Stage 2: HSA/AQL contract and programming-interface convergence
+| Responsibility | PDMA owner to preserve |
+| --- | --- |
+| Select a dependency/completion protocol and allocate its storage | Host/shared software |
+| Execute Copy, and any future wait/writeback/atomic operation | DMA hardware stages and channel-owned state |
+| Bind contexts and authorize channel access | Firmware policy plus hw-components enforcement |
+| Provide atomic capability, coherence, ordering and fault transport | Platform memory/transport implementation |
+| Model clocks, CPU/ISR delivery and wire actors together | Scenario harness/runtime, without DMA policy |
 
-Review descriptor compactness and software contracts together, not as a mechanical
-64-byte packing exercise. Agent Dispatch is the leading candidate for fixed-function
-PDMA services: its application-defined function type, arguments/parameter pointers,
-return address and completion signal do not require HSAIL execution. Copy service
-codes and parameter formats would still be PDMA-defined. Compare inline common
-operations with indirect SG parameters, including fetch cost, lifetime, context and
-fault handling; reserved AQL fields cannot be repurposed.
+The reviewed SDMA APIs do not justify moving PDMA execution policy into runtime,
+using firmware to submit every VF task, or adding another pipeline controller.
 
-Convergence includes agent capability discovery, queue creation/lifecycle, ring
-indices, packet publication/reuse, doorbell signal semantics, completion and error
-reporting. Mapping to the current 112-byte tagged command, 32-bit register cursors
-and response ring is a deliberate protocol migration, not an existing compatibility
-guarantee. Decide how response results relate to completion signals rather than
-silently reporting success through both or removing diagnostics.
+#### Two concrete completion protocols
 
-Keep software queue, physical channel, execution agent and Function/context identity
-distinct. Define only capabilities PDMA actually provides. A fixed physical-channel
-binding is sufficient for the initial convergence; do not add oversubscription,
-GPU kernel execution, HSAIL, or a replacement runtime. Actual HSA runtime integration
-requires its own selected implementation and end-to-end proof.
+**ROCr copy API:** completion updates use an atomic packet when platform atomics
+are supported. Otherwise runtime calculates the old value minus one at submission
+and emits one or two FENCE writes. Blocking copies reserve private signals before
+reuse. This verifies a fallback exists, not a general concurrent decrement
+guarantee for the public asynchronous API. [S2, S5]
 
-Acceptance requires an explicit standards-to-PDMA mapping, justified differences,
-wire/header and queue-publication checks, and real software submission through the
-agreed programming interface. Standard-looking records alone are not compatibility.
+**Linux amdgpu ring fences:** software allocates a sequence number for a ring;
+SDMA writes the supplied value and can emit a TRAP. The fence handler reads the
+completed sequence and signals intervening software fences. This is a serialized
+per-ring completion protocol, not a multi-producer shared countdown. [S3, S4]
 
-#### Stage 3: strict HSA review before modeling completion
+A proposed PDMA single-writer completion location would therefore be a reasonable
+candidate, not an already approved feature. Different channels must not blindly
+write one shared monotonically increasing location: a later value from one channel
+does not prove another channel's work completed. Shared aggregation needs a
+separate correct protocol, potentially atomics.
 
-Audit every applicable HSA requirement against PDMA's declared role, version and
-capabilities. Maintain a traceable matrix of: implemented requirement with model/test
-evidence; platform/RTL obligation with a verification owner; not-applicable requirement
-with a reason; or intentional deviation with its software impact. Distinguish HSA
-core requirements, AMD extensions and PDMA policy. No unclassified applicable
-requirement may be assumed satisfied by the synchronous backend.
+The non-atomic fallback must not be copied as a generic RMW emulation. For example,
+if two submissions both read 2 before either completes, both precompute 1; ordered
+writes of 1 then 1 do not produce the required countdown result 0. This is a
+counterexample to unrestricted equivalence, not a reproduction of an AMD product bug.
+The permitted sharing/lifetime conditions of that fallback remain unresolved.
+Two 32-bit writes also do not independently prove an indivisible 64-bit publication.
 
-Review signal lifetime/atomics, queue publication and reclamation, completion versus
-visibility, dependency progress, error propagation, cancellation, resource isolation
-and discovery/capability consistency. Apply these rules during development; this
-final review confirms coverage rather than postponing architectural decisions until
-RTL handoff. Full Profile and complete HSA-platform compliance are not implied by
-PDMA's component role.
+#### Dependency waiting, ordering and progress
 
-#### Decision and implementation references
+The ROCr builder polls both halves of a signal for zero, uses equality comparison,
+and programs an indefinite retry setting. This is not proof of an atomic 64-bit
+snapshot for arbitrary concurrent signal changes, nor proof that a stalled POLL
+releases a particular SDMA pipe. [S2]
 
-- [HSA System Architecture 1.2](https://hsafoundation.com/wp-content/uploads/2021/02/HSA-SysArch-1.2.pdf): signal restrictions, AQL, queue lifecycle, ordering and forward progress.
-- [HSA Runtime 1.2](https://hsafoundation.com/wp-content/uploads/2021/02/HSA-Runtime-1.2.pdf): signal operations, discovery, queue APIs and Agent Dispatch services.
-- [HSA Multi-vendor 1.1](https://hsafoundation.com/wp-content/uploads/2021/02/HSA-Multivendor-1.1.pdf): platform and vendor-component integration boundaries, not a mandate to implement the entire stack.
-- [Khronos timeline semaphore example](https://docs.vulkan.org/samples/latest/samples/extensions/timeline_semaphore/README.html): unresolved dependencies can block normal queue draining; this supports the distinction from cancellation, not a PDMA Drain ABI.
-- [Terminus AMO access](https://github.com/shady831213/terminus/blob/a873870e4461ff1fd4e453f25783e9f94349b7d4/src/processor/load_store.rs) and [memory storage](https://github.com/shady831213/terminus_spaceport/blob/ab51f87e2dddee6b8bd4e247ee8d98291f271a55/src/memory/region/mod.rs): synchronous modeling reference reviewed for this decision, not an audit of the entire simulator.
+Linux documents queue-to-pipe mapping and switching; a pipe processes one mapped
+queue at a time. That architectural overview does not specify precise scheduling
+on every unsuccessful POLL or XNACK. [S6]
+
+PDMA should keep the already agreed requirements when waiting is reintroduced:
+an ordinary false dependency is not a PageFault, same-channel successors cannot
+pass it, and peers needed to satisfy it must be able to run. Drain waits for normal
+completion; Abort/Reset remain reachable cancellation paths. Those are PDMA
+requirements, not claims of identical AMD scheduling.
+
+The model's synchronous memory backend does not prove cache or interconnect
+visibility. Required publication/acquisition points must be explicit before
+adding synchronization. Cache management and TLB operations remain platform
+responsibilities. SDMA's separate cache-management and VM-flush paths are evidence
+against treating an ordinary completion write as an implicit universal cache/TLB
+flush. [S2, S3]
+
+#### Fault, preemption and reset
+
+The reviewed GFX9 SDMA queue-destroy code disables ring admission, waits for a
+context-idle observation, reports timeout failure and captures the read pointer.
+The SDMA v7 IB-preemption path requests preemption and waits for a trailing fence.
+These are concrete request/acknowledgment mechanisms; neither alone proves that all
+external transactions have drained under every reset mode. [S3, S7]
+
+PDMA already distinguishes reset request, resident cleanup and completion in
+[reset.md](reset.md). It retains payload-fault cursors and read scratch, releases
+the grant, and requires owner repair/resume, as specified in
+[page-fault-recovery.md](page-fault-recovery.md). Keep these observable guarantees.
+
+**Unresolved in the sources reviewed:** the exact SDMA payload replay checkpoint,
+whether later packets have issued effects when one access faults, the notification
+coalescing rule, and the precise retry/wakeup schedule for each generation.
+Do not replace PDMA's explicit resume or replay-safety contract with inferred AMD
+microarchitecture. Logical-queue oversubscription and true MMU/PCIe integration
+remain deferred.
+
+#### Gap matrix against the restored PDMA
+
+| Area | Restored PDMA evidence | Gap and proposed disposition |
+| --- | --- | --- |
+| Copy and SG traversal | `contract/src/dma/command.rs`; `dma/src/stages/execution/{validate,copy}.rs` | Linear/independent SG already supported; retain it. Fill/rectangular/tiled copy require an actual workload before adoption. |
+| Dependency gating | `dma/src/stages/candidate.rs` only offers fetch/resume candidates | No Wait after withdrawal. Define comparison, width, context, lifetime and peer progress before implementation. |
+| Ordered completion writeback | `dma/src/stages/responses.rs`; `dma/src/channel/response.rs` | Mandatory response-ring publication exists; no selectable memory completion value. Compare per-task records and per-channel timeline use cases first. |
+| Completion versus interrupt | Channel response publication and IOC/non-empty IRQ causes | Already distinct effects, but IRQ depends on response publication. Decide whether a future writeback can complete without a success response; avoid hidden response-ring backpressure. |
+| Multi-writer atomic update | `hardware-interface-runtime/src/atomic.rs` and storage tests | Generic capability retained, no DMA opcode and no managed atomic forwarding after withdrawal. Add only operations required by the chosen protocol, with authorization on every path. |
+| Visibility and ordering | `docs/spec.md` RTL handoff and `docs/reset.md`; synchronous memory calls | Need a precise producer/consumer visibility contract and a model boundary to verify it. Do not equate Rust mutex ordering with platform coherence. |
+| Queue/engine relationship | `dma/src/stages/data_path.rs`; retained work in Channel | One shared engine and fixed channels are intentional. Wait peer progress must be proven; oversubscription is not required. |
+| Fault and reset | `dma/src/reset.rs`; `dma/src/maintenance/progress.rs`; fault/reset scenarios | Existing ownership and replay boundaries are usable. Define faulting synchronization accesses and committed-update checkpoints when new operations are chosen. |
+| Descriptor compactness | 104-byte Copy command and 24-byte response; generated C ABI | A future tagged layout can be compact without being AQL. No new format or opcode set is approved by this comparison. |
+| Software assembly | `software/src/dma.rs`, firmware resource management, managed scenario harness | Keep task compilation in software and execution in hardware. API similarity alone does not require importing HSA handles or runtime objects. |
+
+All code paths in this table are relative to `model/modeling/crates` unless prefixed
+`docs/`. These are design gaps and deliberate differences, not newly discovered
+regressions in the restored Copy contract.
+
+#### Recommended next decision, not implementation authorization
+
+Specify three concrete workflows before encoding new commands:
+
+1. CPU publishes data, PDMA waits, copies, then publishes completion for a consumer.
+2. Several copies on one channel publish one ordered batch/timeline completion.
+3. Several channels contribute to a shared completion condition.
+
+For each, choose whether completion is an immediate-value write, an atomic update,
+or existing response publication. Decide width/comparison/wrap rules, context and
+storage lifetime, failure reporting and cancellation. Do not require every software
+signal operation to have a DMA opcode. Do not remove response diagnostics merely
+because a separate completion mechanism exists.
+
+Acceptance should cover false dependencies with peer progress, publication
+visibility, multiple writers where supported, fault/retry without duplicate effects,
+response backpressure, and reset/abort while waiting or publishing. Preserve the
+normal Copy/SG/direct/managed configurations. The final architecture audit should
+trace these PDMA obligations to model tests and platform/RTL owners, using HSA and
+SDMA as references rather than asserting conformance by resemblance.
+
+#### Sources and evidence limits
+
+- **S1:** [HSA System Architecture 1.2, sections 2.5, 2.6 and 2.9](https://hsafoundation.com/wp-content/uploads/2021/02/HSA-SysArch-1.2.pdf). Normative HSA semantics, not SDMA implementation.
+- **S2:** [ROCr 6.3.3 SDMA builder](https://github.com/ROCm/ROCR-Runtime/blob/637eaec61186cc1f73480d99095ac4a3b2597242/runtime/hsa-runtime/core/runtime/amd_blit_sdma.cpp): `SubmitCommand`, `SubmitBlockingCommand`, `BuildCopyCommand`, `BuildPollCommand`, `BuildFenceCommand`, `BuildAtomicDecrementCommand`. Host code, not hardware execution traces.
+- **S3:** [Linux v6.12 SDMA v7](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/amdgpu/sdma_v7_0.c): `ring_emit_fence`, `ring_emit_mem_sync`, `ring_emit_pipeline_sync`, `ring_preempt_ib`. Generation-specific driver programming.
+- **S4:** [Linux v6.12 amdgpu fence lifecycle](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/amdgpu/amdgpu_fence.c): `amdgpu_fence_emit` and `amdgpu_fence_process`. Software completion bookkeeping.
+- **S5:** [ROCr 6.3.3 API reference](https://rocm.docs.amd.com/_/downloads/ROCR-Runtime/en/docs-6.3.3/pdf/): asynchronous copy dependencies, completion signal and engine selection. API contract, not proof of atomic fallback safety.
+- **S6:** [Linux 6.16 GPU hardware and queue overview](https://docs.kernel.org/6.16/gpu/amdgpu/driver-core.html#gfx-compute-and-sdma-overall-behavior). Queue/pipe roles, not an instruction-level scheduling specification.
+- **S7:** [Linux v6.12 GFX9 SDMA queue destruction](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v9.c#L576-L613). Context idle observation is checked, not assumed.
+- **S8:** [AMD AQL command-processor description](https://rocm.docs.amd.com/projects/ROCdbgapi/en/docs-10.0.0/doxygen/html/index.html). Compute AQL processing is distinct from S2's SDMA-native path.
+- **S9:** [ROCr API reference, retrieved 2026-10-21](https://rocm.docs.amd.com/projects/ROCR-Runtime/en/latest/api-reference/api.html), `hsa_amd_memory_copy_op_s` and `hsa_amd_memory_copy_signal_op_t`. Moving documentation; newer API example only, not the version baseline for S2.
 
 ### Deferred
 
@@ -490,9 +531,8 @@ and speculative collections of policy generics.
 - Recovery when firmware or the management transport itself is unavailable remains
   deferred; see the low-priority TBD below. PF events and firmware-mediated DMA/event
   recovery are implemented in [fatal and events](fatal-events.md).
-- Synchronization and signal atomics are implemented under the
-  [Signal/Wait contract](signal-wait.md); HSA/AQL wire and software contracts remain
-  Stage 2. Logical-channel scheduling and oversubscription remain
+- Synchronization follows the copy-engine reassessment above; the opcode set,
+  completion protocol and wire format are not yet selected. Logical-channel scheduling and oversubscription remain
   separate deferred work. Retained physical-channel suspension and owner resume
   remain specified in the page-fault chapter.
 - Which features are instance configuration and which have software enable bits.
@@ -529,8 +569,8 @@ Retain ordinary copy, SG, fault, reset and interrupt scenarios. Add explicit
 hardware/firmware/host/harness separation and test unauthorized resource access,
 context isolation, queued-context reuse, stale notifications and unaffected channel
 behavior. Page-fault scenarios must cover the retained suspension contract;
-synchronization scenarios must cover the agreed Stage 1 requirements after its
-remaining interface decisions are resolved. The final HSA review must trace model
+synchronization scenarios must cover the selected copy-engine contract after its
+remaining interface decisions are resolved. The final architecture review must trace model
 evidence separately from platform obligations. External transaction drain and release
 remain RTL/platform obligations, not a mandate to lower the model to bus-transaction timing.
 

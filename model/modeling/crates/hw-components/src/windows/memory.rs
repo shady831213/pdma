@@ -1,7 +1,5 @@
 use super::ChannelWindows;
-use hardware_interface_runtime::{
-    AtomicAccessError, AtomicOperation, MemoryAccess, MemoryAddress, MemoryAlignment,
-};
+use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::memory::FunctionId;
 
@@ -52,29 +50,6 @@ where
     F: Fn(ChannelId, FunctionId) -> S,
 {
     type Error = MemoryError<M::Error>;
-    fn atomic32_with_sideband(
-        &self,
-        access: &ChannelId,
-        address: MemoryAddress,
-        operation: AtomicOperation<u32>,
-    ) -> Result<u32, AtomicAccessError<Self::Error>> {
-        let owner = self.owner(*access).map_err(AtomicAccessError::Access)?;
-        self.downstream
-            .atomic32_with_sideband(&(self.map)(*access, owner), address, operation)
-            .map_err(|error| error.map_access(MemoryError::Downstream))
-    }
-
-    fn atomic64_with_sideband(
-        &self,
-        access: &ChannelId,
-        address: MemoryAddress,
-        operation: AtomicOperation<u64>,
-    ) -> Result<u64, AtomicAccessError<Self::Error>> {
-        let owner = self.owner(*access).map_err(AtomicAccessError::Access)?;
-        self.downstream
-            .atomic64_with_sideband(&(self.map)(*access, owner), address, operation)
-            .map_err(|error| error.map_access(MemoryError::Downstream))
-    }
     fn validate_with_sideband(
         &self,
         channel: &ChannelId,

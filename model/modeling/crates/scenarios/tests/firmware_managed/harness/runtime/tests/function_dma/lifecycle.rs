@@ -25,10 +25,9 @@ fn reset_before_regrant_prevents_old_work_from_entering_the_new_space() -> TestR
         &[0xa5; 1024],
     )?;
     let mut work = command(1);
-    let copy = work.as_copy_mut().ok_or("expected copy command")?;
-    copy.copy_length = 1024;
-    copy.source = Endpoint::linear(0x1600, 0);
-    copy.destination = Endpoint::linear(0x1b00, 0);
+    work.copy_length = 1024;
+    work.source = Endpoint::linear(0x1600, 0);
+    work.destination = Endpoint::linear(0x1b00, 0);
     publish(&mut dma, &old, (ChannelId::new(0), work))?;
     let mut pipeline = dma.hardware();
     let mut driver = HardwareDriver::new();

@@ -5,9 +5,7 @@ use hardware_interface_runtime::{
     InterruptSource, MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::dma::{
-    ChannelFatalCode, Command, CopyCommand, Endpoint, Response, ResponseStatus,
-};
+use pdma_model_contract::dma::{ChannelFatalCode, Command, Endpoint, Response, ResponseStatus};
 use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
@@ -51,15 +49,14 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
             },
         ))
         .await?;
-    cpu.run_main(channel.submit(Command::copy(
-        13,
-        CopyCommand {
-            copy_length: 0,
-            sg_context: 0,
-            source: Endpoint::linear(0, 0),
-            destination: Endpoint::linear(0, 0),
-        },
-    )))
+    cpu.run_main(channel.submit(Command {
+        copy_length: 0,
+        sg_context: 0,
+        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
+        id: 13,
+        source: Endpoint::linear(0, 0),
+        destination: Endpoint::linear(0, 0),
+    }))
     .await?;
     until_irq(model.clone(), &mut hardware).await?;
     assert!(model.irq(), "response did not arrive before watchdog");
@@ -138,15 +135,14 @@ async fn copy_completes_when_host_submits_and_consumes_response()
         .await?;
 
     // When: a real async worker executes the submitted command.
-    cpu.run_main(channel.submit(Command::copy(
-        7,
-        CopyCommand {
-            copy_length: 8,
-            sg_context: 0,
-            source: Endpoint::linear(source.raw(), 0),
-            destination: Endpoint::linear(destination.raw(), 0),
-        },
-    )))
+    cpu.run_main(channel.submit(Command {
+        copy_length: 8,
+        sg_context: 0,
+        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
+        id: 7,
+        source: Endpoint::linear(source.raw(), 0),
+        destination: Endpoint::linear(destination.raw(), 0),
+    }))
     .await?;
     until_irq(model.clone(), &mut hardware).await?;
     assert!(model.irq(), "response did not arrive before watchdog");
@@ -208,15 +204,14 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
             },
         ))
         .await?;
-    cpu.run_main(channel.submit(Command::copy(
-        9,
-        CopyCommand {
-            copy_length: 8,
-            sg_context: 0,
-            source: Endpoint::linear(source.raw(), 0),
-            destination: Endpoint::linear(destination.raw(), 0),
-        },
-    )))
+    cpu.run_main(channel.submit(Command {
+        copy_length: 8,
+        sg_context: 0,
+        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
+        id: 9,
+        source: Endpoint::linear(source.raw(), 0),
+        destination: Endpoint::linear(destination.raw(), 0),
+    }))
     .await?;
 
     // When: response publication fails at the real memory boundary.

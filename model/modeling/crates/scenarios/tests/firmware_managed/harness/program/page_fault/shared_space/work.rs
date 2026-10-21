@@ -33,19 +33,17 @@ pub(super) async fn pair<M: Send>(
         .zip(destinations)
         .zip(input.ids)
     {
-        let mut request = request;
-        request.id = id;
-        request
-            .as_copy_mut()
-            .ok_or("expected copy command")?
-            .destination = Endpoint {
-            context: session.payload_context.raw(),
-            ..Endpoint::linear(destination.raw(), 0)
-        };
         work.push(Work {
             channel,
             driver: setup::driver(ports, channel, session.ring_context).await?,
-            request,
+            request: Command {
+                id,
+                destination: Endpoint {
+                    context: session.payload_context.raw(),
+                    ..Endpoint::linear(destination.raw(), 0)
+                },
+                ..request
+            },
             destination,
         });
     }

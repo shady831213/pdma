@@ -78,23 +78,18 @@ fn identical_addresses_use_independent_ring_sg_source_and_destination_spaces() -
     // Given
     let mut dma = Dma::with_sideband(Spaces::new()?, 1, |access| access.context.raw())?;
     let command = Command {
+        copy_length: 4,
         id: 7,
         flags: CompletionFlagsValues::default(),
-        ..Command::copy(
-            0,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 4,
-                sg_context: 1,
-                source: Endpoint {
-                    context: 2,
-                    ..Endpoint::scatter_gather(0x1200, 1)
-                },
-                destination: Endpoint {
-                    context: 3,
-                    ..Endpoint::scatter_gather(0x1200, 1)
-                },
-            },
-        )
+        sg_context: 1,
+        source: Endpoint {
+            context: 2,
+            ..Endpoint::scatter_gather(0x1200, 1)
+        },
+        destination: Endpoint {
+            context: 3,
+            ..Endpoint::scatter_gather(0x1200, 1)
+        },
     };
     dma.memory.write_with_sideband(
         &4,

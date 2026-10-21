@@ -14,63 +14,6 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 const WINDOWS: usize = 0x10_0000;
 
 #[test]
-fn routed_atomic_uses_current_owner_backing_without_fallback() -> TestResult {
-    use hardware_interface_runtime::{
-        AtomicAccessError, AtomicOperation, AtomicOrder, AtomicUpdate,
-    };
-    use pdma_model_contract::dma::{ContextId, DmaAccess};
-    // Given: two Function spaces and a register-owned route to Function one.
-    let first = space([0x11; 4])?;
-    let second = space([0x22; 4])?;
-    let mut windows = ChannelWindows::new(1, 0, u32::try_from(WINDOWS)?)?;
-    windows.management_write(
-        WINDOWS + WindowControl::OWNER.offset(),
-        &1_u32.to_le_bytes(),
-    )?;
-    let windows = Arc::new(Mutex::new(windows));
-    let memory = RoutedMemory::new(Arc::clone(&windows), vec![first.clone(), second.clone()])?;
-    let selector = DmaAccess {
-        channel: ChannelId::new(0),
-        context: ContextId::new(0),
-    };
-    let address = MemoryAddress::new(0x1000);
-    let operation = AtomicOperation::Update {
-        update: AtomicUpdate::Exchange(99),
-        order: AtomicOrder::AcquireRelease,
-    };
-    // When: an atomic updates the selected backing, then firmware selects an unmapped owner.
-    let old = memory.atomic32_with_sideband(&selector, address, operation)?;
-    windows.lock().unwrap().management_write(
-        WINDOWS + WindowControl::OWNER.offset(),
-        &9_u32.to_le_bytes(),
-    )?;
-    let rejected = memory.atomic32_with_sideband(&selector, address, operation);
-    // Then: only the authorized space changed and the unmapped route retains its identity.
-    assert_eq!(old, u32::from_le_bytes([0x22; 4]));
-    assert_eq!(
-        first.read_typed::<[u8; 4]>(address, MemoryAlignment::ONE)?,
-        [0x11; 4]
-    );
-    assert_eq!(
-        second.read_typed::<[u8; 4]>(address, MemoryAlignment::ONE)?,
-        99_u32.to_le_bytes()
-    );
-    assert_eq!(
-        rejected,
-        Err(AtomicAccessError::Access(RouteError::Window(
-            pdma_model_hw_components::windows::MemoryError::Downstream(SpaceError::MissingSpace {
-                identity: MemoryIdentity {
-                    function: FunctionId::new(9),
-                    attributes: ContextAttributes::DEFAULT
-                },
-                address,
-            })
-        )))
-    );
-    Ok(())
-}
-
-#[test]
 fn closed_window_retains_memory_binding_until_reset_and_reassignment() -> TestResult {
     // Given: two backends map identical addresses, and channel zero belongs to Function one.
     let first = space([0x11; 4])?;

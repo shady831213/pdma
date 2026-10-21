@@ -109,11 +109,14 @@ fn response_write_fault_is_reported_without_response_memory() -> TestResult {
 fn source_fault_produces_failure_response_not_success() -> TestResult {
     // Given
     let (mut device, memory) = setup(0x1100, 2)?;
-    submit(&mut device, &memory, {
-        let mut copy_fixture = command();
-        copy_fixture.as_copy_mut().expect("copy fixture").source = Endpoint::linear(0x8000, 0);
-        copy_fixture
-    })?;
+    submit(
+        &mut device,
+        &memory,
+        Command {
+            source: Endpoint::linear(0x8000, 0),
+            ..command()
+        },
+    )?;
     // When
     run(&mut device)?;
     // Then

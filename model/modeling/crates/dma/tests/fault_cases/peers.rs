@@ -5,19 +5,12 @@ use pdma_model_contract::dma::ChannelId;
 pub(super) fn pair() -> TestResult<(Dma<Paged>, usize, Command)> {
     let mut device = Dma::new(setup()?.dma.memory, 2)?;
     let first = streams(&device)?;
-    let peer = {
-        let mut copy_fixture = Command::ZERO;
-        copy_fixture.id = 99;
-        copy_fixture
-            .as_copy_mut()
-            .ok_or("copy fixture")?
-            .copy_length = 3;
-        copy_fixture.as_copy_mut().ok_or("copy fixture")?.source = Endpoint::linear(0x1200, 0);
-        copy_fixture
-            .as_copy_mut()
-            .ok_or("copy fixture")?
-            .destination = Endpoint::linear(0x1600, 0);
-        copy_fixture
+    let peer = Command {
+        id: 99,
+        copy_length: 3,
+        source: Endpoint::linear(0x1200, 0),
+        destination: Endpoint::linear(0x1600, 0),
+        ..Command::ZERO
     };
     let mut peer_response = 0;
     for (index, command, command_base, response_base) in [

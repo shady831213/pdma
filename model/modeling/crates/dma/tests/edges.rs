@@ -169,14 +169,14 @@ fn unmask_does_not_replay_command_read_fault() -> TestResult {
 fn destination_fault_is_a_failed_completion() -> TestResult {
     // Given
     let (mut device, memory) = setup(0x1100, 2)?;
-    submit(&mut device, &memory, {
-        let mut copy_fixture = command();
-        copy_fixture
-            .as_copy_mut()
-            .expect("copy fixture")
-            .destination = Endpoint::linear(0x8000, 0);
-        copy_fixture
-    })?;
+    submit(
+        &mut device,
+        &memory,
+        Command {
+            destination: Endpoint::linear(0x8000, 0),
+            ..command()
+        },
+    )?;
     // When
     run(&mut device)?;
     // Then
@@ -199,19 +199,16 @@ fn zero_length_skips_payload_and_longer_copy_reports_inaccessible_source() -> Te
     ] {
         // Given
         let (mut device, memory) = setup(0x1100, 2)?;
-        submit(&mut device, &memory, {
-            let mut copy_fixture = command();
-            copy_fixture
-                .as_copy_mut()
-                .expect("copy fixture")
-                .copy_length = length;
-            copy_fixture.as_copy_mut().expect("copy fixture").source = Endpoint::linear(0x8000, 0);
-            copy_fixture
-                .as_copy_mut()
-                .expect("copy fixture")
-                .destination = Endpoint::linear(0x9000, 0);
-            copy_fixture
-        })?;
+        submit(
+            &mut device,
+            &memory,
+            Command {
+                copy_length: length,
+                source: Endpoint::linear(0x8000, 0),
+                destination: Endpoint::linear(0x9000, 0),
+                ..command()
+            },
+        )?;
         // When
         run(&mut device)?;
         // Then

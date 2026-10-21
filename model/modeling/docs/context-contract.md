@@ -9,8 +9,7 @@ subsequent RTL. Related behavior is described by [Function isolation](function-i
 Implementation scope, 2026-09-23: the first iteration selects Default or PASID
 address spaces. Context attributes are a named schema record, extensible separately
 from descriptor selectors. Source/destination and SG selectors are 32-bit IDs in
-CopyCommand. The current 112-byte tagged Command also carries Signal/Wait targets
-with 32-bit context selectors; see [Signal/Wait](signal-wait.md).
+the Command layout, now 104 bytes after explicit range selection support.
 Table capacity is instance configuration.
 Device-memory targeting, address translation and base/limit permission windows
 are outside this iteration. The obligations below are the implementation and
@@ -31,7 +30,6 @@ NOT be described as supported hostile-software isolation.
 | Source and destination SG tables | One descriptor-level `sg_context` | Command submitter |
 | Source payload | Descriptor-level `src_context` | Command submitter |
 | Destination payload | Descriptor-level `dst_context` | Command submitter |
-| Signal atomic access or Wait observation | `SignalTarget.context` | Command submitter |
 
 There is no command-level default payload context. Source and destination may
 select the same or different contexts. SG table bytes use `sg_context`; addresses
@@ -153,7 +151,7 @@ management register contract below.
 | --- | --- | --- |
 | CreateContext | Establish a complete, authorized binding before making it usable | Return a reusable selector; table exhaustion is not per-command exhaustion |
 | DrainContext | Let old tasks referencing the context finish normally | Old target tasks have retired; original binding remains usable |
-| AbortContext | Discard unstarted, fault-parked or dependency-waiting old target tasks; let running tasks complete or discard them if they suspend | Old target tasks have retired or been discarded; original binding remains usable |
+| AbortContext | Discard unstarted or parked old target tasks; let running tasks complete or discard them if they park | Old target tasks have retired or been discarded; original binding remains usable |
 | DestroyContext | Release a binding only after its old references and accepted accesses have exited | Selector no longer usable; slot eligible for reallocation |
 
 Successful Drain and Abort do not change the binding and need no ResumeContext.
@@ -163,10 +161,6 @@ Drain and Abort; neither clears `valid`. Firmware must obey SW-09 throughout thi
 sequence. A privileged `valid` write by itself does not establish cleanup.
 An operation that encounters a channel fault follows the failure path below;
 "successful result" must not be inferred merely from receiving a reply.
-An ordinary false Signal Wait is not a stopped channel: Drain remains pending
-until the dependency completes. Software must preserve producers and response
-consumption. [Reset can interrupt that Drain](reset.md#interrupting-context-maintenance)
-without satisfying the dependency, but still waits for actual resident cleanup.
 
 HW-01: A context still bound to a ring that hardware may access MUST NOT be
 revoked or destroyed. Report a resource-busy outcome rather than disabling its
@@ -175,18 +169,15 @@ cannot silently exempt ring traffic while claiming the context is quiescent.
 
 HW-02: Define a single execution-acceptance point ordered against an Abort request.
 A target command before that point may be discarded; a running command past it
-continues under its original immutable bindings unless it parks on a recoverable
-fault or becomes an unsatisfied dependency Wait. Matching parked/waiting work may
-be discarded even if its suspension follows Abort acceptance. A running signal
-atomic is indivisible; cancellation cannot split or undo it.
+continues under its original immutable bindings unless it parks on a payload fault.
+Matching parked work may be discarded even if its fault follows Abort acceptance.
 A prefetched descriptor is not
 automatically a started command. The implementation/spec must identify the exact
 acceptance point, not infer it from first payload write or consumer movement.
 
 HW-03: Abort is command-granular, not per-memory-access cancellation. Unstarted
-discarded commands consume their command-ring entry but perform no SG/payload/signal accesses.
-Fault-parked or dependency-waiting discarded commands retain earlier committed
-writes but perform no later accesses.
+discarded commands consume their command-ring entry but perform no SG/payload accesses.
+Parked discarded commands retain earlier committed writes but perform no later accesses.
 Neither discard publishes a response or completion interrupt. Their discard path must not
 require response-ring space. Other commands retain ordinary execution/admission
 rules. Abort must not simply invalidate a table entry that a started command is
@@ -224,9 +215,7 @@ may own validation, current chunk bytes or completion while that ledger remains
 present; moving data out of Channel must not make accepted_command disappear.
 A fault ends the current finite execution path while preserving that task. Do not
 equate Rust invocation completion or disposal with hardware retirement. Payload
-completion or a successful signal atomic alone does not retire a task awaiting
-response publication. A false Wait retains its target reference across rechecks.
-Deduplicate
+completion alone does not retire a task awaiting response publication. Deduplicate
 multiple uses of the same context within a
 task when using reference counts. Parking releases shared engine capacity without
 retiring ownership; count all retained parked tasks alongside the single executing

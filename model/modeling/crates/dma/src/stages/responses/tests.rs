@@ -18,16 +18,11 @@ fn queued_channel(channel: ChannelId) -> TestResult<Dma<SharedMemory>> {
     )?])?;
     let command = Command {
         id: 17,
+        copy_length: 4,
+        sg_context: 0,
         flags: CompletionFlagsValues { ioc: false },
-        ..Command::copy(
-            0,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 4,
-                sg_context: 0,
-                source: Endpoint::linear(0x1200, 0),
-                destination: Endpoint::linear(0x1300, 0),
-            },
-        )
+        source: Endpoint::linear(0x1200, 0),
+        destination: Endpoint::linear(0x1300, 0),
     };
     memory.write(0x1000.into(), MemoryAlignment::ONE, &command.to_bytes()?)?;
     memory.write(0x1200.into(), MemoryAlignment::ONE, &[1, 3, 5, 7])?;

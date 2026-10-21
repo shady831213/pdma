@@ -5,65 +5,6 @@ use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::memory::{ContextAttributes, FunctionId};
 
 #[test]
-fn atomic_fault_preserves_bits_and_opaque_origin_before_repair() {
-    use hardware_interface_runtime::{
-        AtomicAccessError, AtomicOperation, AtomicOrder, AtomicUpdate,
-    };
-    // Given: an initialized atomic word on an evicted page with a platform source tag.
-    let allocator = SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into());
-    let address = allocator.allocate(8, MemoryAlignment::ONE).unwrap();
-    let (reports, mut receiver) = mpsc::channel(1);
-    let sources = Sources::new(1);
-    let request = TaggedRequest {
-        identity: MemoryIdentity {
-            function: FunctionId::new(1),
-            attributes: ContextAttributes::DEFAULT,
-        },
-        ch_tag: sources.ch_tag(ChannelId::new(0)),
-    };
-    let memory = Paged {
-        memory: allocator.memory_access(),
-        pages: PageTable::default(),
-        reports,
-    };
-    memory
-        .memory
-        .write(address, MemoryAlignment::ONE, &12_u64.to_le_bytes())
-        .unwrap();
-    memory.pages.evict(address);
-    // When: a read-modify-write encounters the missing mapping.
-    let result = memory.atomic64_with_sideband(
-        &request,
-        address,
-        AtomicOperation::Update {
-            update: AtomicUpdate::Add(5),
-            order: AtomicOrder::AcquireRelease,
-        },
-    );
-    // Then: the original source is reported and no part of the word was changed.
-    assert_eq!(
-        result,
-        Err(AtomicAccessError::Access(PageError::PageFault { address }))
-    );
-    assert_eq!(
-        receiver.try_recv().unwrap(),
-        FaultReport {
-            identity: request.identity,
-            ch_tag: request.ch_tag.unwrap(),
-            address,
-            access: FaultAccess::Write,
-        }
-    );
-    assert_eq!(
-        memory
-            .memory
-            .read_typed::<[u8; 8]>(address, MemoryAlignment::ONE)
-            .unwrap(),
-        12_u64.to_le_bytes()
-    );
-}
-
-#[test]
 fn same_space_channel_tags_preserve_origins_for_duplicate_reports() {
     // Given: two channel requests touch the same missing page in the same address space.
     let allocator = SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into());

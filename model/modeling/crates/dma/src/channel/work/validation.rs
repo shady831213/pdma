@@ -1,21 +1,16 @@
-use super::{CopyState, CopyStatus, Cursor};
+use super::{CopyState, Cursor};
 use crate::channel::{RangeCheck, Side};
 use hardware_interface_runtime::MemoryAccess;
-use pdma_model_contract::dma::Command;
+use pdma_model_contract::dma::{Command, ResponseStatus};
 
 impl RangeCheck {
-    pub(crate) const fn new(command: Command) -> Option<Self> {
-        let Some(copy) = command.as_copy() else {
-            return None;
-        };
-        Some(Self {
-            cursor: Cursor::new(copy.source, copy.copy_length),
-            remaining: copy.copy_length,
-            command: *copy,
-            id: command.id,
-            flags: command.flags,
+    pub(crate) const fn new(command: Command) -> Self {
+        Self {
+            cursor: Cursor::new(command.source, command.copy_length),
+            remaining: command.copy_length,
+            command,
             side: Side::Source,
-        })
+        }
     }
 }
 
@@ -30,7 +25,7 @@ impl RangeCheck {
                     scan.side = Side::Destination;
                     return None;
                 }
-                Side::Destination => CopyStatus::Success,
+                Side::Destination => ResponseStatus::Success,
             }
         } else {
             match scan.cursor.next_segment(memory) {
@@ -43,17 +38,17 @@ impl RangeCheck {
                             .and_then(|address| address.checked_add(count))
                             .is_none()
                     {
-                        CopyStatus::InvalidLength
+                        ResponseStatus::InvalidLength
                     } else {
                         scan.cursor.advance(count);
                         scan.remaining -= count;
                         return None;
                     }
                 }
-                Ok(false) => CopyStatus::LengthMismatch,
+                Ok(false) => ResponseStatus::LengthMismatch,
                 Err(status) => status,
             }
         };
-        Some(CopyState::new(scan, result))
+        Some(CopyState::new(scan.command, result))
     }
 }

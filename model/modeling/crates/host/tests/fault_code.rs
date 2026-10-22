@@ -26,7 +26,7 @@ impl RegisterAccess for CorruptFaultBus {
                     + ChannelRegisters::FATAL.offset(),
             )
         {
-            response.copy_from_slice(&3_u32.to_le_bytes());
+            response.copy_from_slice(&255_u32.to_le_bytes());
         }
         Ok(())
     }
@@ -45,7 +45,7 @@ async fn unknown_fault_is_a_codec_error() -> Result<(), Box<dyn std::error::Erro
     let bus = CorruptFaultBus(Model::new(Dma::new(memory.clone(), 1)?));
     let rings = Rings {
         command: RingConfig::new(0x1000, 1)?,
-        response: RingConfig::new(0x2000, 1)?,
+        event: RingConfig::new(0x2000, 1)?,
     };
     let cpu = SoftwareCpu::new();
     cpu.run_main(async {
@@ -64,7 +64,7 @@ async fn unknown_fault_is_a_codec_error() -> Result<(), Box<dyn std::error::Erro
         assert!(matches!(
             result,
             Err(Error::RegisterCodec(RegisterCodecError::UnknownTag {
-                observed: 3,
+                observed: 255,
                 ..
             }))
         ));

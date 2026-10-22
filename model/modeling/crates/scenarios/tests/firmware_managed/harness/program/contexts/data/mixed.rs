@@ -3,6 +3,7 @@ use super::*;
 pub(in crate::harness::program::contexts) struct Mixed {
     target: MemoryAddress,
     peer: MemoryAddress,
+    active: MemoryAddress,
     pub(in crate::harness::program::contexts) partial: usize,
 }
 
@@ -74,10 +75,13 @@ impl Transfer {
                 4,
             ))
             .await?;
+        self.fence.0.value = first + 2;
+        self.driver.submit(self.fence.command(first + 3)).await?;
         Ok(Mixed {
             target,
             peer,
             partial,
+            active: destination,
         })
     }
 }
@@ -88,6 +92,11 @@ impl Mixed {
         spaces: &Spaces,
     ) -> TestResult<([u8; 4], [u8; 4])> {
         let memory = spaces.destination.memory_access();
+        let mut active = vec![0; 65_536];
+        memory.read(self.active, MemoryAlignment::ONE, &mut active)?;
+        if active.iter().any(|byte| *byte != 0x6d) {
+            return Err("active command did not finish before Fence".into());
+        }
         Ok((
             memory.read_typed(self.target, MemoryAlignment::ONE)?,
             memory.read_typed(self.peer, MemoryAlignment::ONE)?,
@@ -100,18 +109,19 @@ const fn command(
     (source, destination): ((MemoryAddress, ContextId), (MemoryAddress, ContextId)),
     length: u64,
 ) -> Command {
-    Command {
-        copy_length: length,
+    Command::copy(
         id,
-        source: Endpoint {
-            context: source.1.raw(),
-            ..Endpoint::linear(source.0.raw(), 0)
+        pdma_model_contract::dma::CopyCommand {
+            copy_length: length,
+            source: Endpoint {
+                context: source.1.raw(),
+                ..Endpoint::linear(source.0.raw(), 0)
+            },
+            destination: Endpoint {
+                context: destination.1.raw(),
+                ..Endpoint::linear(destination.0.raw(), 0)
+            },
+            sg_context: 0,
         },
-        destination: Endpoint {
-            context: destination.1.raw(),
-            ..Endpoint::linear(destination.0.raw(), 0)
-        },
-        sg_context: 0,
-        flags: CompletionFlagsValues { ioc: false },
-    }
+    )
 }

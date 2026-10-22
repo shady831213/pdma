@@ -5,7 +5,6 @@ pub mod support;
 
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome, StepResult, Then};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
-use pdma_model_contract::dma::{CompletionInfo, Response, ResponseInfoValues, ResponseStatus};
 use pdma_model_dma::{ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy};
 use support::{TestResult, command, setup, submit};
 
@@ -48,43 +47,18 @@ fn transform_can_modify_only_the_active_chunk_and_cannot_forge_its_length() -> T
         PrepareChunk::default(),
         Then::new(ReadCopy::default(), FillChunk),
     );
-    let pipeline = Then::new(
-        pdma_model_dma::CommandExecution::new(Then::new(read, WriteCopy::default())),
-        Then::new(pdma_model_dma::CompletionInput, device.responses()),
-    );
+    let pipeline = pdma_model_dma::CommandExecution::new(Then::new(read, WriteCopy::default()));
     let mut service = device.hardware_with(pipeline);
     let mut operation = Operation::new(());
     // When: the transform fills its entire exposed slice and normal execution publishes it.
     for _ in 0..128 {
         if let StepOutcome::Complete(result) = operation.step(&mut service, &mut device)? {
             result?;
-            if support::read_word(
-                &mut device,
-                pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-                    + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
-                    + pdma_model_contract::dma::ResponseRegisters::PRODUCER.offset(),
-            )? == 1
-            {
-                break;
-            }
-            operation = Operation::new(());
+            break;
         }
     }
     // Then: the public slice cannot resize hardware scratch or change completion length.
     assert!(operation.is_complete());
-    let raw = memory
-        .read_typed::<pdma_model_contract::dma::ResponseRaw>(0x1100.into(), MemoryAlignment::ONE)?;
-    assert_eq!(
-        Response::from_bytes(raw.as_ref())?,
-        Response {
-            flags: descriptor.flags,
-            id: descriptor.id,
-            status: ResponseStatus::Success,
-            info: ResponseInfoValues::Success(CompletionInfo {
-                bytes_completed: descriptor.copy_length
-            }),
-        }
-    );
     assert_eq!(
         memory.read_typed::<[u8; 6]>(0x12ff.into(), MemoryAlignment::ONE)?,
         [0xaa, 0x5a, 0x5a, 0x5a, 0x5a, 0xaa]

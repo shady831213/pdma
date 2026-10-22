@@ -23,7 +23,7 @@ impl<B: RegisterAccess + Send + Sync, M: Send + Sync> Channel<B, M> {
 
     /// Enables or masks all channel interrupt notifications.
     ///
-    /// Enabling does not replay masked events; inspect causes and pending responses.
+    /// Enabling does not replay masked events; inspect causes and pending events.
     pub async fn set_irq_enabled(&self, enabled: bool) -> Result<(), Error<B::Error>> {
         self.port
             .control
@@ -31,9 +31,9 @@ impl<B: RegisterAccess + Send + Sync, M: Send + Sync> Channel<B, M> {
             .await
     }
 
-    /// Masks selected routine response events; error and fatal events bypass this mask.
+    /// Masks event-nonempty and Trap notifications; errors and fatals bypass this mask.
     ///
-    /// Clearing a mask does not replay events; inspect causes and pending responses.
+    /// Clearing a mask does not replay events; inspect causes and pending events.
     pub async fn set_irq_mask(&self, mask: ChannelIrqMaskValues) -> Result<(), Error<B::Error>> {
         self.port.control.set_irq_mask(&self.port.bus, mask).await
     }
@@ -43,9 +43,14 @@ impl<B: RegisterAccess + Send + Sync, M: Send + Sync> Channel<B, M> {
         self.port.control.irq_cause(&self.port.bus).await
     }
 
+    /// Acknowledges the sticky Trap cause without retracting pending notifications.
+    pub async fn acknowledge_trap(&self) -> Result<(), Error<B::Error>> {
+        self.port.control.acknowledge_trap(&self.port.bus).await
+    }
+
     /// Requests channel reset and waits for disabled, unconfigured hardware.
     ///
-    /// Success means all prior command, list, payload and response memory accesses have
+    /// Success means all prior command, list, payload and event memory accesses have
     /// drained and no later access can belong to that work. External memory is preserved;
     /// construct a fresh driver with `Self::setup` before reuse. Hardware must run independently.
     ///
@@ -73,7 +78,7 @@ impl<B: RegisterAccess + Send + Sync, M: Send + Sync> Channel<B, M> {
 
     /// Requests device reset and waits for every channel to become disabled and unconfigured.
     ///
-    /// Success drains all prior command, list, payload and response memory accesses across
+    /// Success drains all prior command, list, payload and event memory accesses across
     /// all channels and prevents later accesses by that work. External memory is preserved;
     /// construct fresh drivers before reuse. Hardware must run independently.
     ///

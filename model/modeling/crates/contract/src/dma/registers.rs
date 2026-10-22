@@ -11,11 +11,11 @@ pub use channel::{
     ChannelIrqMaskViewMut, ChannelRegisters, ChannelRegistersRaw, ChannelRegistersRegisterId,
     ChannelRegistersValues, ChannelRegistersView, ChannelRegistersViewMut, CommandRegisters,
     CommandRegistersRaw, CommandRegistersRegisterId, CommandRegistersValues, CommandRegistersView,
-    CommandRegistersViewMut, FaultStatus, FaultStatusFieldId, FaultStatusRaw, FaultStatusValues,
-    FaultStatusView, FaultStatusViewMut, ResponseRegisters, ResponseRegistersRaw,
-    ResponseRegistersRegisterId, ResponseRegistersValues, ResponseRegistersView,
-    ResponseRegistersViewMut, Resume, ResumeFieldId, ResumeRaw, ResumeValues, ResumeView,
-    ResumeViewMut,
+    CommandRegistersViewMut, EventRegisters, EventRegistersRaw, EventRegistersRegisterId,
+    EventRegistersValues, EventRegistersView, EventRegistersViewMut, FaultStatus,
+    FaultStatusFieldId, FaultStatusRaw, FaultStatusValues, FaultStatusView, FaultStatusViewMut,
+    Resume, ResumeFieldId, ResumeRaw, ResumeValues, ResumeView, ResumeViewMut, TrapAck,
+    TrapAckFieldId, TrapAckRaw, TrapAckValues, TrapAckView, TrapAckViewMut,
 };
 
 use crate::register::Switch;
@@ -32,10 +32,11 @@ register_schema! {
 
 register_schema! {
     #[short_description = "Hardware reset request and busy state"]
-    #[description = "Writing one to bit zero requests reset of the owning hardware scope. Reading one means reset is busy; only hardware clears it to zero after draining all prior command-ring reads, SG-list reads, payload reads/writes and response-ring writes, invalidating retained work and clearing configuration, cursors, errors and device-owned notification state. Once zero is observed, no further memory access can belong to pre-reset work in that scope. Writing zero has no effect, and repeated requests while busy coalesce. Configuration writes are rejected while reset is busy. External memory is neither cleared nor rolled back; platform-pending notifications remain claimable. Software must keep affected memory valid until completion, even if it cancels or times out its wait. Other bits are reserved."]
+    #[description = "Writing one to bit zero requests reset of the owning hardware scope. Reading one means reset is busy; only hardware clears it to zero after draining all prior command-ring reads, SG-list reads, payload reads/writes and event-ring writes, invalidating retained work and clearing configuration, cursors, errors and device-owned notification state. Once zero is observed, no further memory access can belong to pre-reset work in that scope. Writing zero has no effect, and repeated requests while busy coalesce. Configuration writes are rejected while reset is busy. External memory is neither cleared nor rolled back; platform-pending notifications remain claimable. Software must keep affected memory valid until completion, even if it cancels or times out its wait. Other bits are reserved."]
     pub register Reset {
         width: 4, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 1,
         fields: {
+            #[short_description = "Write one to request reset; read one while busy and zero after hardware cleanup"]
             #[description = "Write one to request reset; read one while busy and zero after hardware cleanup. Writing zero cannot clear a pending request."]
             request: 0..=0,
         },
@@ -48,6 +49,7 @@ register_schema! {
     pub register DmaFatal {
         width: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0,
         fields: {
+            #[short_description = "Zero is healthy; Internal is a device-wide unrecoverable hardware fatal"]
             #[description = "Zero is healthy; Internal is a device-wide unrecoverable hardware fatal."]
             code: 0..=31 => enum { variants: { None = 0, Internal = 1 } },
         },
@@ -63,6 +65,9 @@ register_map! {
             #[short_description = "Implemented channel count"]
             #[description = "Number of implemented channels, preserved across DMA reset."]
             pub channel_num: ChannelCount,
+            #[short_description = "Immutable native or exclusive atomic operation support by word width"]
+            #[description = "Immutable native or exclusive atomic operation support by word width."]
+            pub capabilities: Capabilities,
         ],
     }
 }
@@ -73,10 +78,13 @@ register_map! {
     pub map DmaControl {
         alignment: 4,
         placements: [
+            #[short_description = "Enables notification of device fatal independently of channel IRQ enable"]
             #[description = "Enables notification of device fatal independently of channel IRQ enable."]
             pub irq_enable: Switch,
+            #[short_description = "Dma fatal cause; read-only and sticky until device reset"]
             #[description = "Dma fatal cause; read-only and sticky until device reset."]
             pub fatal: DmaFatal,
+            #[short_description = "Requests reset of device controls and every channel, including retained execution"]
             #[description = "Requests reset of device controls and every channel, including retained execution. Reads busy until all affected memory accesses drain and cleanup completes. Hardware channel count is preserved."]
             pub reset: Reset,
         ],
@@ -115,5 +123,21 @@ register_map! {
             #[description = "Page-aligned complete channel blocks containing rings, configuration, fatal failures and notifications. Unused bytes are reserved to their owning block."]
             pub channels: ChannelBlock[channel_count],
         ],
+    }
+}
+
+register_schema! {
+    #[short_description = "Immutable hardware RMW capabilities, preserved across reset"]
+    #[description = "Immutable hardware RMW capabilities, preserved across reset. Wait and Fence do not require these bits."]
+    pub register Capabilities {
+        width: 4, endian: Little, access: ReadOnly, reset: PostReset(0), writable_mask: 0,
+        fields: {
+            #[short_description = "32-bit atomic and semaphore operations are supported"]
+            #[description = "32-bit atomic and semaphore operations are supported."]
+            atomic32: 0..=0,
+            #[short_description = "64-bit atomic and semaphore operations are supported"]
+            #[description = "64-bit atomic and semaphore operations are supported."]
+            atomic64: 1..=1,
+        },
     }
 }

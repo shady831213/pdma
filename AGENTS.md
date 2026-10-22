@@ -86,30 +86,41 @@ The generated header under `model/modeling/include` describes the current contra
 `docs/white_boards/**` remains exploratory background.
 
 The current implementation has an instance-configured channel count with independent reset,
-command/response rings and one shared DMA execution pipeline. It supports independently
-selected linear/scatter-gather DMA endpoints, and interrupt delivery using existing
-building blocks. Recoverable payload PageFault parks the original command and both
+command/error-event rings and one shared DMA execution pipeline. Copy retains independently
+selected linear/scatter-gather endpoints. Write, Fill, Wait, Atomic, Semaphore, Fence
+and Trap share the same accepted ownership and reset boundaries. Successful commands
+produce no event; software observes Fence storage and explicit Trap notifications.
+Atomic32/64 capabilities are immutable instance configuration, defaulting off in
+ordinary constructors. Atomic has no old-value destination. Ordinary false Wait and
+Semaphore Wait release the shared grant without setting fault status; same-channel
+successors remain blocked. Stopping errors latch before event I/O; event-full,
+event-write and event-configuration failures are fatal, never admission backpressure.
+Trap has an independent sticky cause and write-one acknowledgement; masks never replay.
+Recoverable payload PageFault parks the original command and both Copy
 cursors, including successful read scratch for a failed write, while peers can run.
 Owner software repairs through its platform, observes FAULT_STATUS.faulted and
 writes RESUME.request=1 in channel work MMIO; both registers are 32 bits. No fault
-response or DMA IRQ/event is produced. Software must serialize repair/resume with
+event or DMA IRQ is produced. Software must serialize repair/resume with
 resource lifecycle operations. Platform-defined opaque tags distinguish fault
 sources even when channels share a Function/PASID; the MMU echoes tags rather than
 interpreting PDMA channel IDs. hw-components exposes authorized source/identity
 sideband mapping; MemoryIdentity stays address-space-only. Tags must retain their
 association through outstanding reports/handlers. Software must coordinate
 reset, release and reallocation and retire old fault handling before reuse; hardware
-does not correlate late or duplicate requests with fault episodes. Normal responses are 24 bytes with
-statuses 0..5; retired PageFault status 6 is invalid. See
+does not correlate late or duplicate requests with fault episodes. Error-only Event
+records have no Success or IOC fields. Fence storage must be non-faulting; a failed
+Fence write stops with WriteError. See `model/modeling/docs/copy-engine.md` and
 `model/modeling/docs/page-fault-recovery.md`. No true MMU, PCIe integration,
-oversubscription or barrier semantics are added. Do not expand that scope or
+oversubscription or global barrier semantics are added. Do not expand that scope or
 recreate the old API surface to satisfy historical tests.
 
 ## Working rules
 
-The 2026-10-21 decision withdraws the first Signal/Wait feature while retaining
-generic memory atomics and reset during pending context maintenance. Use the
-copy-engine reassessment in `model/modeling/docs/firmware-dma-goal.md` for next-step
+The 2026-10-21 decision withdrew the first Signal/Wait feature. The approved
+2026-10-22 copy-engine command families replace that design while retaining generic
+memory atomics and reset during pending context maintenance. Use
+`model/modeling/docs/copy-engine.md` for the current command contract and the
+copy-engine reassessment in `model/modeling/docs/firmware-dma-goal.md` for future
 decisions. HSA is a semantic reference; AQL compatibility is not a current goal.
 
 - Use native Rust module paths. `#[path]` and conditional path redirection are forbidden;

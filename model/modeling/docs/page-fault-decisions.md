@@ -49,12 +49,15 @@ Partial completion was a coherent alternative, but it assigned continuation to
 software and completed the accepted task at each fault. The selected requirement
 instead keeps that task and its queue position alive through repair. Consequently
 the fault response, residual-command resubmission API and scratch-discard rule are
-retired together. A 24-byte normal response now completes the original command;
-statuses 0..5 remain valid and former PageFault status 6 is rejected.
+retired together. At that decision checkpoint a 24-byte normal response completed
+the original command, with statuses 0..5 and former PageFault status 6 rejected.
+The subsequent [copy-engine protocol](copy-engine.md) replaces that normal response
+with explicit Fence/Trap completion and an errors-only Event record; it still has
+no PageFault event or software residual-command resubmission.
 
 The motivating dependency example was `Copy A -> Signal A -> Copy B`. Signal/fence
-commands are future discussion, not a currently implemented opcode or an observed
-bug in today's model. A terminal PageFault response for A would say that this
+commands were future discussion at the decision checkpoint, not an observed bug.
+A terminal PageFault response for A would say that this
 hardware descriptor ended; it would not say the logical copy had finished.
 Resubmitting A's residual at the ring tail cannot automatically preserve A's
 original place before Signal A and B. Treating partial descriptor completion as
@@ -864,3 +867,76 @@ releases its grant. The generic pipeline crate is unchanged. This is a narrow
 DMA-specific exception to the earlier blanket ban on reusing completed child
 graphs, justified by explicit command/chunk lifetime separation; it does not
 authorize a generic Repeat, Stream, or device-phase controller.
+
+## 2026-10-22: Channel-owned error reporting
+
+The copy-engine command expansion supersedes the publication-stage details above.
+Normal completion no longer produces a response/event. Keeping an Events/Publish
+tail made every opcode traverse reporting machinery and delayed reporting beyond
+the stage that detected the error, despite Channel already owning its event ring
+and interrupt state.
+
+Error-origin stages now invoke Channel's guarded report operation. It stops the
+channel before event storage, updates IRQ after publication and latches fatal if
+reporting fails. Work identity and reset generation are checked before effects.
+Downstream stages propagate the terminal result without publishing again.
+CompletionInput, Events/Publish and retained event-merging state are removed;
+Completion is a success receipt, not an event container.
+
+Reporting is not retirement. Accepted ownership, execution grant and residency
+remain until the common Retire boundary, so an IRQ handler requesting reset cannot
+observe successful reset while an old tail still owns pipeline state. Terminal
+custom errors also retire accepted work; waiting and parked empty results retain
+it unless lifecycle cancellation applies. A wrong-owner completion regression
+checks this by requiring the next queued Fence to become executable.
+
+Opcode dispatch now precedes Copy-specific CheckRanges/Install. Copy validation
+and the opaque command/chunk execution hierarchy remain in the Copy branch;
+other opcodes have their own typed execution path. Both return Flow<Completion>
+to common retirement. Generic pipeline combinators are unchanged.
+
+### Single opcode dispatch
+
+Further review found an unnecessary Copy/Operation family between the already
+decoded descriptor and execution. ResolveCommand classified the descriptor, Select
+translated the family to a branch, projection stages unwrapped it, and scalar
+Execute matched the opcode again. These were software adapters, not distinct
+hardware work or useful data transformations.
+
+Fetch now supplies the accepted descriptor on both fresh and resumed admission,
+with explicit origin. A resumed descriptor comes from retained Channel state, not
+another ring read. This removes the hidden requirement that an empty fetched value
+means resume; bubbles remain genuinely absent work. Copy uses origin to bypass
+fresh range validation while retaining its installed cursors and scratch.
+
+Fetch is the input of the existing FanOut; one Dispatch chooses the concrete opcode
+branch. Branches extract their operands when accepting input and own execution
+continuations. There is no intermediate command-family classifier or runtime
+re-dispatch of all opcodes during each Fill chunk. The generic framework is unchanged.
+
+The lifecycle boundary remains command-wide: intermediate chunk completion leaves
+the selected command execution InProgress and backpressures admission. Only terminal
+completion/stop or a deliberate fault/wait yield ends the invocation and reaches
+Retire. A yielded command must re-arbitrate, but resume never refetches its descriptor
+or replays committed bytes. This refactor does not claim the prior family routing
+already re-fetched every chunk; it removes redundant classification while preserving
+the command/chunk lifetime separation established above.
+
+### Retire consumes branch results directly
+
+The remaining Opcodes wrapper merely held the FanOut and unwrapped its result
+vector. Retire now accepts Vec<(branch index, Flow<Completion>)> directly and
+outputs unit; Then connects the branch assembly to it without that wrapper.
+The opcode module retains only branch definitions, selection and graph construction.
+
+Retire handles every receipt in input order before returning the first error.
+This prevents a stopped or malformed earlier result from discarding later cleanup
+obligations. Existing Work identity/generation checks, terminal cleanup and retained
+waiting/parked ownership apply independently to each receipt. Routing indices are
+metadata, not Channel IDs. Empty collections complete without hardware effects.
+
+Generic Fold, FanPolicy context access and update/grant callbacks were considered
+but deferred: none is needed for this ordinary collection-consuming stage. FanOut
+already advances the branches and collects their results. Creating a second FanIn
+around the same stages would duplicate progression ownership; inserting pass-through
+stages would merely adapt shapes. Existing Fan/Then behavior is sufficient.

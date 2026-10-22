@@ -1,5 +1,4 @@
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::{CompletionFlagsValues, ResponseStatus};
 
 use crate::{Scenario, TestResult, harness};
 
@@ -11,15 +10,19 @@ fn bytes(report: &harness::Report, address: MemoryAddress, length: usize) -> Tes
     Ok(data)
 }
 
-fn assert_responses(report: &harness::Report, expected: &[(usize, u64, u64)]) {
-    let mut responses = Vec::new();
-    for (channel, response) in &report.outcome.responses {
-        assert_eq!(response.status, ResponseStatus::Success);
-        assert_eq!(response.flags, CompletionFlagsValues::default());
-        responses.push((channel.index(), response.id, response.bytes_completed()));
+fn assert_completions(report: &harness::Report, expected: &[(usize, u64, u64)]) {
+    let mut completions = Vec::new();
+    for (channel, response) in &report.outcome.completions {
+        completions.push((channel.index(), *response));
     }
-    responses.sort_unstable();
-    assert_eq!(responses, expected);
+    completions.sort_unstable();
+    assert_eq!(
+        completions,
+        expected
+            .iter()
+            .map(|(channel, value, _)| (*channel, *value))
+            .collect::<Vec<_>>()
+    );
     assert_eq!(report.outcome.channel_counts, [3, 3]);
     assert!(report.outcome.discovery_write_rejected);
     assert!(report.summary.deliveries() > 0);
@@ -103,7 +106,7 @@ async fn resetting_inflight_channel_preserves_queued_work_and_accepts_fresh_work
     assert_preserved(&report, 0)?;
     assert_completed(&report, 1)?;
     assert_completed(&report, 2)?;
-    assert_responses(&report, &[(0, 20, 1024), (1, 11, 16_384), (2, 12, 16_384)]);
+    assert_completions(&report, &[(0, 20, 1024), (1, 11, 16_384), (2, 12, 16_384)]);
     assert_eq!(
         bytes(&report, report.outcome.fresh, 1024)?,
         vec![0x31; 1024]
@@ -121,7 +124,7 @@ async fn resetting_queued_channel_preserves_selected_copy_and_other_queued_work(
     assert_completed(&report, 0)?;
     assert_preserved(&report, 1)?;
     assert_completed(&report, 2)?;
-    assert_responses(&report, &[(0, 10, 1024), (1, 20, 16_384), (2, 12, 16_384)]);
+    assert_completions(&report, &[(0, 10, 1024), (1, 20, 16_384), (2, 12, 16_384)]);
     assert_eq!(
         bytes(&report, report.outcome.fresh, 16_384)?,
         vec![0x32; 16_384]
@@ -130,19 +133,24 @@ async fn resetting_queued_channel_preserves_selected_copy_and_other_queued_work(
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn full_response_channel_is_skipped_before_accepting_another_command() -> TestResult {
-    // Given: A has one response slot and two queued commands; B/C have one command each.
-    // When: software leaves A's response ring full until B/C finish, then resets A.
-    let report = harness::run(Scenario::ResponseBackpressure).await?;
-    // Then: A's second command was never consumed or copied; peers and fresh A complete.
-    assert_eq!(report.outcome.blocked_cursors, Some((1, 1)));
+async fn successful_commands_do_not_consume_event_capacity() -> TestResult {
+    // Given: A has one event slot and two copies; B/C have one copy each.
+    // When: software waits for their Fence values, then resets A.
+    let report = harness::run(Scenario::SuccessWithoutEvents).await?;
+    // Then: both A copies finish without events, and peers and fresh A complete.
+    let (events, consumed) = report
+        .outcome
+        .blocked_cursors
+        .ok_or("missing cursor snapshot")?;
+    assert_eq!(events, 0);
+    assert!((3..=4).contains(&consumed));
     let first = report
         .outcome
         .original
         .first()
         .ok_or("missing channel A result")?;
     let mut expected = vec![first.value; first.length];
-    expected.resize(first.length * 2, 0);
+    expected.resize(first.length * 2, first.value);
     assert_eq!(first.before_reset, expected);
     assert_preserved(&report, 0)?;
     for index in 1..3 {
@@ -156,7 +164,7 @@ async fn full_response_channel_is_skipped_before_accepting_another_command() -> 
         assert_eq!(peer.before_reset, completed);
         assert_completed(&report, index)?;
     }
-    assert_responses(&report, &[(0, 20, 1024), (1, 11, 16_384), (2, 12, 16_384)]);
+    assert_completions(&report, &[(0, 20, 1024), (1, 11, 16_384), (2, 12, 16_384)]);
     assert_eq!(
         bytes(&report, report.outcome.fresh, 1024)?,
         vec![0x31; 1024]
@@ -174,7 +182,7 @@ async fn device_reset_cancels_selected_and_queued_work_and_preserves_discovery()
     for index in 0..3 {
         assert_preserved(&report, index)?;
     }
-    assert_responses(&report, &[(0, 20, 1024)]);
+    assert_completions(&report, &[(0, 20, 1024)]);
     assert_eq!(
         bytes(&report, report.outcome.fresh, 1024)?,
         vec![0x31; 1024]

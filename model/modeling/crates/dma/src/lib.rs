@@ -18,25 +18,25 @@ mod tests;
 mod work;
 
 pub use arbitration::RoundRobin;
-pub use build::BuildError;
-pub use channel::{COPY_CHUNK_BYTES, Channel, CommandRing, ResponseRing};
+pub use build::{BuildError, DmaConfig};
+pub use channel::{COPY_CHUNK_BYTES, Channel, CommandRing, EventRing};
 pub use error::{ChannelFatal, Error};
 pub use execution_context::ExecutionContext;
 pub(crate) use execution_context::SelectedResources;
 pub use flow::{
-    Chunk, ChunkInput, CommandSnapshot, Completion, CopyProgress, FetchedCommand, Flow, Payload,
+    Chunk, ChunkInput, CommandAdmission, CommandSnapshot, Completion, CopyProgress, FetchedCommand,
+    Flow, Payload,
 };
 use hardware_interface_schema::RegisterWindow;
 pub use maintenance::MaintenanceError;
 pub use memory::{ChannelContext, MemoryFailure};
 use pdma_model_contract::dma::{
-    ChannelId, Command, ContextId, DmaAccess, DmaControl, DmaDiscovery, DmaFatalCode,
-    DmaRegistersLayout, EndpointMode,
+    ChannelId, Command, CommandPayloadValues, ContextId, DmaAccess, DmaControl, DmaDiscovery,
+    DmaFatalCode, DmaRegistersLayout, EndpointMode,
 };
 pub use stages::{
-    Candidate, CheckRanges, CommandExecution, CommandRequest, CompletionInput, CopyChunk,
-    Execution, Fetch, Hardware, Pipeline, PrepareChunk, Publish, ReadCopy, Responses, RetainedTask,
-    Retire, WriteCopy,
+    Candidate, CheckRanges, CommandExecution, CommandRequest, CopyChunk, Execution, Fetch,
+    Hardware, Pipeline, PrepareChunk, ReadCopy, RetainedTask, Retire, WriteCopy,
 };
 pub use work::Work;
 
@@ -60,15 +60,34 @@ struct Maintenance {
 }
 
 const fn references(command: &Command) -> [Option<ContextId>; 3] {
-    let sg = match (command.source.mode, command.destination.mode) {
+    let copy = match command.payload {
+        CommandPayloadValues::Copy(copy) => copy,
+        CommandPayloadValues::Write(word) | CommandPayloadValues::Fence(word) => {
+            return [Some(ContextId::new(word.target.context)), None, None];
+        }
+        CommandPayloadValues::Wait(wait) => {
+            return [Some(ContextId::new(wait.target.context)), None, None];
+        }
+        CommandPayloadValues::Atomic(atomic) => {
+            return [Some(ContextId::new(atomic.target.context)), None, None];
+        }
+        CommandPayloadValues::Semaphore(semaphore) => {
+            return [Some(ContextId::new(semaphore.target.context)), None, None];
+        }
+        CommandPayloadValues::Fill(fill) => {
+            return [Some(ContextId::new(fill.context)), None, None];
+        }
+        CommandPayloadValues::Trap(_) => return [None, None, None],
+    };
+    let sg = match (copy.source.mode, copy.destination.mode) {
         (EndpointMode::Linear, EndpointMode::Linear) => None,
         (EndpointMode::ScatterGather, _) | (_, EndpointMode::ScatterGather) => {
-            Some(ContextId::new(command.sg_context))
+            Some(ContextId::new(copy.sg_context))
         }
     };
     [
-        Some(ContextId::new(command.source.context)),
-        Some(ContextId::new(command.destination.context)),
+        Some(ContextId::new(copy.source.context)),
+        Some(ContextId::new(copy.destination.context)),
         sg,
     ]
 }

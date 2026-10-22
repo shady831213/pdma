@@ -1,12 +1,15 @@
-use crate::{Dma, Error, Flow};
+use crate::{Completion, Dma, Error, Flow};
 use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
 
-/// Consumes a completed execution outcome and releases its resident owner.
+#[cfg(test)]
+mod tests;
+
+/// Consumes all completed branch outcomes and releases their resident owners.
 #[derive(Debug)]
 pub struct Retire;
 
 impl<M, SB> Stage<Dma<M, SB>> for Retire {
-    type Input = Flow<()>;
+    type Input = Vec<(usize, Flow<Completion>)>;
     type Output = ();
     type Error = Error;
 
@@ -15,12 +18,31 @@ impl<M, SB> Stage<Dma<M, SB>> for Retire {
         dma: &mut Dma<M, SB>,
         input: &mut Option<Self::Input>,
     ) -> StepResult<(), Error> {
-        let Some(flow) = input.take() else {
+        let Some(outputs) = input.take() else {
             return Ok(StepOutcome::InProgress);
         };
-        let result = flow.status();
-        if let Some(work) = flow.work {
-            dma.release_residency(work);
+        let mut result = Ok(());
+        for (_, flow) in outputs {
+            let outcome = flow.lifecycle(&mut dma.execution_context()).and_then(|()| {
+                if let Some(completion) = flow.data() {
+                    if flow.work != Some(completion.work) {
+                        return Err(Error::Routing);
+                    }
+                    let mut context = dma.execution_context();
+                    let selected = context.select(completion.work)?;
+                    if selected.selected.resident != Some(completion.work) {
+                        return Err(Error::Routing);
+                    }
+                }
+                Ok(())
+            });
+            if let Some(work) = flow.work {
+                if flow.data().is_some() || outcome.is_err() {
+                    dma.retire_accepted(work);
+                }
+                dma.release_residency(work);
+            }
+            result = result.and(outcome);
         }
         Ok(StepOutcome::Complete(result))
     }

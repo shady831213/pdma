@@ -2,7 +2,7 @@
 
 use core::marker::PhantomData;
 use hardware_interface_schema::{RecordLayout, record_schema};
-use pdma_model_contract::dma::{Command, Response};
+use pdma_model_contract::dma::{Command, Event};
 use pdma_model_contract::ring::{Ring, RingError, RingPointers};
 
 struct LayoutRing<Entry>(u64, u32, PhantomData<Entry>);
@@ -57,7 +57,7 @@ record_schema! {
 fn entries_follow_wire_layout_and_wrap_for_different_record_types() -> Result<(), RingError> {
     // Given
     let commands = LayoutRing::<Command>::new(0x1000, 4);
-    let responses = LayoutRing::<Response>::new(0x2000, 4);
+    let responses = LayoutRing::<Event>::new(0x2000, 4);
     let tiny = LayoutRing::<TinyEntry>::new(0x3000, 4);
     let aligned = LayoutRing::<AlignedEntry>::new(0x4000, 2);
     // When
@@ -68,7 +68,7 @@ fn entries_follow_wire_layout_and_wrap_for_different_record_types() -> Result<()
         tiny.entry(4)?,
     ];
     // Then
-    assert_eq!(addresses, [0x1138, 0x2048, 0x3006, 0x3000]);
+    assert_eq!(addresses, [0x1150, 0x2048, 0x3006, 0x3000]);
     assert_eq!(commands.entry(4)?, 0x1000);
     assert_eq!(aligned.entry(1)?, 0x4008);
     assert_eq!(commands.base(), 0x1000);
@@ -183,7 +183,7 @@ fn every_accepted_capacity_keeps_entries_contiguous_across_counter_overflow()
 -> Result<(), RingError> {
     for capacity in 1..=8 {
         // Given
-        let ring = LayoutRing::<Response>::new(0x1000, capacity);
+        let ring = LayoutRing::<Event>::new(0x1000, capacity);
         if ring.validate_geometry().is_ok() {
             for pointer in [u32::MAX - 1, u32::MAX] {
                 let current = ring.entry(pointer)?;

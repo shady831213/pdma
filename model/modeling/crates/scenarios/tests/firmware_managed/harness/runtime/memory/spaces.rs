@@ -1,6 +1,8 @@
 use super::PlatformConfigError;
 use crate::harness::runtime::platform::MemoryRequest;
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_runtime::{
+    AtomicAccessError, AtomicOperation, MemoryAccess, MemoryAddress, MemoryAlignment,
+};
 use pdma_model_contract::memory::{ContextAttributes, FunctionId, MemoryIdentity};
 use pdma_model_dma::MemoryFailure;
 use std::fmt;
@@ -91,6 +93,50 @@ impl<M: MemoryAccess> FunctionSpaces<M> {
 
 impl<M: MemoryAccess> MemoryAccess<MemoryRequest> for FunctionSpaces<M> {
     type Error = SpaceError<M::Error>;
+
+    fn atomic32_with_sideband(
+        &self,
+        request: &MemoryRequest,
+        address: MemoryAddress,
+        operation: AtomicOperation<u32>,
+    ) -> Result<u32, AtomicAccessError<Self::Error>> {
+        let memory = self
+            .get(request.identity, address)
+            .map_err(AtomicAccessError::Access)?;
+        let bound = self.bind.map(|bind| bind(memory, *request));
+        bound
+            .as_ref()
+            .unwrap_or(memory)
+            .atomic32(address, operation)
+            .map_err(|error| match error {
+                AtomicAccessError::Unsupported => AtomicAccessError::Unsupported,
+                AtomicAccessError::Access(error) => {
+                    AtomicAccessError::Access(SpaceError::Downstream(error))
+                }
+            })
+    }
+
+    fn atomic64_with_sideband(
+        &self,
+        request: &MemoryRequest,
+        address: MemoryAddress,
+        operation: AtomicOperation<u64>,
+    ) -> Result<u64, AtomicAccessError<Self::Error>> {
+        let memory = self
+            .get(request.identity, address)
+            .map_err(AtomicAccessError::Access)?;
+        let bound = self.bind.map(|bind| bind(memory, *request));
+        bound
+            .as_ref()
+            .unwrap_or(memory)
+            .atomic64(address, operation)
+            .map_err(|error| match error {
+                AtomicAccessError::Unsupported => AtomicAccessError::Unsupported,
+                AtomicAccessError::Access(error) => {
+                    AtomicAccessError::Access(SpaceError::Downstream(error))
+                }
+            })
+    }
 
     fn validate_with_sideband(
         &self,

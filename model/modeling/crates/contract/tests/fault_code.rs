@@ -23,7 +23,9 @@ fn typed_faults_preserve_existing_wire_codes() -> Result<(), Box<dyn std::error:
     for (code, raw) in [
         (ChannelFatalCode::None, 0),
         (ChannelFatalCode::CommandRead, 1),
-        (ChannelFatalCode::ResponseWrite, 2),
+        (ChannelFatalCode::EventWrite, 2),
+        (ChannelFatalCode::EventFull, 3),
+        (ChannelFatalCode::EventConfiguration, 4),
     ] {
         // When: hardware writes an enum into the register field.
         let register = ChannelFatalValues::default().with_code(code);
@@ -38,7 +40,7 @@ fn typed_faults_preserve_existing_wire_codes() -> Result<(), Box<dyn std::error:
 #[test]
 fn unknown_fault_encoding_stays_raw_and_rejects_typed_decode() {
     // Given: a bus value outside the declared enum.
-    let register = ChannelFatalValues::new(3);
+    let register = ChannelFatalValues::new(5);
     // When: interpreting its code as a hardware state.
     let decoded = register.code();
     // Then: unknown is an error, never the no-fatal state; raw inspection remains possible.
@@ -46,8 +48,8 @@ fn unknown_fault_encoding_stays_raw_and_rejects_typed_decode() {
         decoded,
         Err(RegisterValueError::UnknownTag {
             location: ChannelFatal::CODE_IDENTITY.at_bit(0),
-            observed: 3,
+            observed: 5,
         })
     );
-    assert_eq!(register.raw(), 3);
+    assert_eq!(register.raw(), 5);
 }

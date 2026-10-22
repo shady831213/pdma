@@ -2,11 +2,10 @@
 
 use hardware_interface_pipeline::{AsyncExecutor, Operation};
 use hardware_interface_runtime::{
-    InterruptSource, MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
+    MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::dma::{Command, CommandRegisters, Endpoint, Response, ResponseStatus};
-use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
+use pdma_model_contract::dma::{Command, CommandRegisters, Endpoint, Event};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
@@ -28,11 +27,11 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
                 .raw(),
             1,
         )?,
-        response: RingConfig::new(
+        event: RingConfig::new(
             allocator
                 .allocate(
-                    u64::try_from(Response::RECORD_SIZE)?,
-                    MemoryAlignment::try_new(u64::try_from(Response::RECORD_ALIGNMENT)?)?,
+                    u64::try_from(Event::RECORD_SIZE)?,
+                    MemoryAlignment::try_new(u64::try_from(Event::RECORD_ALIGNMENT)?)?,
                 )?
                 .raw(),
             1,
@@ -56,14 +55,15 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
             },
         ))
         .await?;
-    cpu.run_main(channel.submit(Command {
-        copy_length: 8,
-        sg_context: 0,
-        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-        id: 11,
-        source: Endpoint::linear(source.raw(), 0),
-        destination: Endpoint::linear(destination.raw(), 0),
-    }))
+    cpu.run_main(channel.submit(Command::copy(
+        11,
+        pdma_model_contract::dma::CopyCommand {
+            source: Endpoint::linear(source.raw(), 0),
+            destination: Endpoint::linear(destination.raw(), 0),
+            copy_length: 8,
+            sg_context: 0,
+        },
+    )))
     .await?;
     let executor = AsyncExecutor::new(model.clone());
     let mut operation = Operation::new(());
@@ -86,30 +86,20 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
         } => observed?,
         result = executor.run(&mut stage, &mut operation) => assert!(result.is_err(), "driver completed before cancellation"),
     }
-    assert_eq!(cpu.run_main(channel.response()).await?, None);
+    assert_eq!(cpu.run_main(channel.event()).await?, None);
     assert_eq!(
         memory.read_typed::<[u8; 8]>(destination, alignment)?,
         [0; 8]
     );
     assert!(executor.run(&mut stage, &mut operation).await.is_ok());
 
-    // Then: the accepted descriptor yields one response and the correct copied payload.
-    assert_eq!(
-        cpu.run_main(channel.response()).await?,
-        Some(Response {
-            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-            id: 11,
-            status: ResponseStatus::Success,
-            info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 8 }),
-        })
-    );
-    assert_eq!(cpu.run_main(channel.response()).await?, None);
+    // Then: the accepted descriptor completes silently with the correct copied payload.
+    assert!(operation.is_complete());
+    assert_eq!(cpu.run_main(channel.event()).await?, None);
     let mut copied = [0; 8];
     memory.read(destination, alignment, &mut copied)?;
     assert_eq!(&copied, b"retained");
-    assert!(model.irq());
-    assert!(model.clone().claim(()).await?.is_some());
-    assert!(model.clone().claim(()).await?.is_none());
+    assert!(!model.irq());
     assert!(!model.irq());
     Ok(())
 }

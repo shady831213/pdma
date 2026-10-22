@@ -1,7 +1,9 @@
 //! PDMA channel driver and register-only control.
 
 mod bus;
+mod completion;
 mod context;
+pub use completion::CompletionWord;
 mod control;
 mod driver_control;
 mod error;
@@ -14,23 +16,22 @@ use crate::ring::RingConfig;
 use bus::RegisterPort;
 use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Response,
-    ResponseRegisters,
+    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Event, EventRegisters,
 };
 use pdma_model_contract::ring::Ring;
-use rings::{CommandRing, ResponseRing};
+use rings::{CommandRing, EventRing};
 
 const COMMAND: usize = ChannelBlock::COMMAND.offset();
-const RESPONSE: usize = ChannelBlock::RESPONSE.offset();
+const EVENT: usize = ChannelBlock::EVENT.offset();
 const CHANNEL: usize = ChannelBlock::CONTROL.offset();
 
-/// The command and response storage selected by software.
+/// The command and event storage selected by software.
 #[derive(Clone, Copy, Debug)]
 pub struct Rings {
     /// Software-produced command records.
     pub command: RingConfig<Command>,
-    /// Hardware-produced response records.
-    pub response: RingConfig<Response>,
+    /// Hardware-produced event records.
+    pub event: RingConfig<Event>,
 }
 
 /// A hardware channel and its software-owned ring storage.
@@ -48,7 +49,7 @@ pub struct Channel<B, M> {
     port: RegisterPort<B>,
     memory: M,
     command: CommandRing,
-    response: ResponseRing,
+    event: EventRing,
 }
 
 impl<B: RegisterAccess + Send + Sync, M: Send + Sync> Channel<B, M> {
@@ -72,7 +73,7 @@ impl<B: RegisterAccess + Send + Sync, M: Send + Sync> Channel<B, M> {
             port: RegisterPort::new(bus, id, dma_base).await?,
             memory,
             command: CommandRing::new(rings.command),
-            response: ResponseRing::new(rings.response),
+            event: EventRing::new(rings.event),
         };
         channel
             .port
@@ -98,15 +99,15 @@ impl<B: RegisterAccess + Send + Sync, M: Send + Sync> Channel<B, M> {
         channel
             .port
             .channel_write(
-                RESPONSE + ResponseRegisters::BASE.offset(),
-                &rings.response.base().to_le_bytes(),
+                EVENT + EventRegisters::BASE.offset(),
+                &rings.event.base().to_le_bytes(),
             )
             .await?;
         channel
             .port
             .channel_write(
-                RESPONSE + ResponseRegisters::CAPACITY.offset(),
-                &rings.response.capacity().to_le_bytes(),
+                EVENT + EventRegisters::CAPACITY.offset(),
+                &rings.event.capacity().to_le_bytes(),
             )
             .await?;
         channel.set_irq_enabled(true).await?;
@@ -140,10 +141,10 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
         self.command.resume(&self.port, &self.memory).await
     }
 
-    /// Reads and decodes one response before advancing its consumer cursor.
+    /// Reads and decodes one event before advancing its consumer cursor.
     ///
-    /// Cancellation retains the decoded response; another call reconciles consumption.
-    pub async fn response(&mut self) -> Result<Option<Response>, Error<B::Error, M::Error>> {
-        self.response.pop(&self.port, &self.memory).await
+    /// Cancellation retains the decoded event; another call reconciles consumption.
+    pub async fn event(&mut self) -> Result<Option<Event>, Error<B::Error, M::Error>> {
+        self.event.pop(&self.port, &self.memory).await
     }
 }

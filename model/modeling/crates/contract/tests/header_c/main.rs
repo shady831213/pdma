@@ -3,6 +3,7 @@
 #![cfg(feature = "export-c-header")]
 
 mod control_queue;
+mod copy_engine;
 /// Independently specified DMA wire fixtures for the C consumer.
 pub mod dma_wire;
 
@@ -16,7 +17,7 @@ use std::{
 
 use hardware_interface_schema::{Documentation, ResolvedRegisterMap};
 use pdma_model_contract::control::{ControlRequest, ControlResponse};
-use pdma_model_contract::dma::{Command, DmaRegisters, Endpoint, Response, Segment};
+use pdma_model_contract::dma::{Command, DmaRegisters, Endpoint, Event, Segment};
 use pdma_model_contract::hw_components::control::ControlRegisters;
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -50,7 +51,7 @@ fn generated_header_preserves_resolved_contract_descriptions() -> TestResult {
         Segment::SPEC.resolve()?,
         Endpoint::SPEC.resolve()?,
         Command::SPEC.resolve()?,
-        Response::SPEC.resolve()?,
+        Event::SPEC.resolve()?,
         ControlRequest::SPEC.resolve()?,
         ControlResponse::SPEC.resolve()?,
         pdma_model_contract::control::ControlRingState::SPEC.resolve()?,
@@ -119,10 +120,10 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
     assert_success("C consumer", &output);
     let dma_bytes = dma_wire::bytes()?;
     let offsets = [
-        0_u32, 4, 8, 12, 16, 20, 24, 4096, 4104, 4108, 4112, 4120, 4128, 4132, 4136, 4140, 4144,
-        4148, 4152, 4156, 4160, 4164, 4168, 8192, 8200, 8204, 8208, 8216, 8224, 8228, 8232, 8236,
-        8240, 8244, 8248, 8252, 8256, 8260, 8264, 12288, 12296, 12300, 12304, 12312, 12320, 12324,
-        12328, 12332, 12336, 12340, 12344, 12348, 12352, 12356, 12360,
+        0_u32, 4, 8, 12, 16, 20, 24, 28, 4096, 4104, 4108, 4112, 4120, 4128, 4132, 4136, 4140,
+        4144, 4148, 4152, 4156, 4160, 4164, 4168, 4172, 8192, 8200, 8204, 8208, 8216, 8224, 8228,
+        8232, 8236, 8240, 8244, 8248, 8252, 8256, 8260, 8264, 8268, 12288, 12296, 12300, 12304,
+        12312, 12320, 12324, 12328, 12332, 12336, 12340, 12344, 12348, 12352, 12356, 12360, 12364,
     ];
     let resolved = DmaRegisters::new(3)?.resolve()?;
     let rust_offsets = resolved

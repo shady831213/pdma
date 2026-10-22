@@ -8,9 +8,11 @@ use hardware_interface_pipeline::{
     HardwareDriver, Operation, Stage, StepOutcome, StepResult, Then,
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
-use pdma_model_contract::dma::ChannelId;
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelId, Event, EventCode, EventRaw, EventRegisters,
+};
 use pdma_model_dma::{
-    CheckRanges, Error, ExecutionContext, Payload, PrepareChunk, Publish, ReadCopy, WriteCopy,
+    CheckRanges, Error, ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy,
 };
 use support::{TestResult, command, setup, submit};
 
@@ -52,10 +54,7 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
         PrepareChunk::default(),
         Then::new(ReadCopy::default(), InvertPayload),
     );
-    let pipeline = Then::new(
-        pdma_model_dma::CommandExecution::new(Then::new(read, WriteCopy::default())),
-        Then::new(pdma_model_dma::CompletionInput, device.responses()),
-    );
+    let pipeline = pdma_model_dma::CommandExecution::new(Then::new(read, WriteCopy::default()));
     let mut hardware = device.hardware_with(pipeline);
     let mut driver = HardwareDriver::new();
     // When: ordinary stages pass actual payload data through the inserted transform.
@@ -64,15 +63,17 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
             driver.step(&mut hardware, &mut device)?,
             StepOutcome::InProgress
         );
-        if device.irq() {
+        if memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)? == [255, 254, 253, 0]
+        {
             break;
         }
     }
-    // Then: the write uses transformed bytes and normal publication delivers its IRQ.
+    // Then: the write uses transformed bytes without producing an error event or IRQ.
     let mut bytes = [0; 4];
     memory.read(MemoryAddress::new(0x1300), MemoryAlignment::ONE, &mut bytes)?;
     assert_eq!(bytes, [255, 254, 253, 0]);
-    assert!(device.irq());
+    assert!(!device.irq());
+    support::assert_no_event(&mut device)?;
     Ok(())
 }
 
@@ -94,40 +95,54 @@ fn independently_composed_execution_obeys_device_fatal() -> TestResult {
 }
 
 #[test]
-fn rejected_publication_consumes_its_transient_stage_state() -> TestResult {
-    // Given: a real completion sent to a publication port for the wrong channel.
+fn failed_read_consumes_its_transient_state_without_repeating_the_event() -> TestResult {
+    // Given: a real chunk whose source memory is inaccessible.
     let (mut device, memory) = setup(0x1100, 2)?;
-    submit(&mut device, &memory, command())?;
+    let mut descriptor = command();
+    support::copy_mut(&mut descriptor)?.source =
+        pdma_model_contract::dma::Endpoint::linear(0x9000, 0);
+    submit(&mut device, &memory, descriptor)?;
     let channel = ChannelId::new(0);
     let request = support::accept(&mut device, channel)?;
-    let mut execution = Then::new(
-        PrepareChunk::default(),
-        Then::new(ReadCopy::default(), WriteCopy::default()),
-    );
-    let completion = {
+    let chunk = {
         let mut context = device.execution_context();
         let mut operation = Operation::new(request);
-        let mut completion = None;
+        let mut prepare = PrepareChunk::default();
+        let mut chunk = None;
         for _ in 0..128 {
-            if let StepOutcome::Complete(result) = operation.step(&mut execution, &mut context)? {
-                completion = Some(result?);
+            if let StepOutcome::Complete(result) = operation.step(&mut prepare, &mut context)? {
+                chunk = Some(result?);
                 break;
             }
         }
-        completion.ok_or("missing completion")?
+        chunk.ok_or("missing chunk")?
     };
-    let mut publish = Publish::new(ChannelId::new(1));
-    let mut state = Some(completion);
-    let mut context = device.execution_context();
-    // When: publication rejects the actual completion's destination.
+    let mut read = ReadCopy::default();
+    let mut state = Some(chunk);
+    // When: the owner reports the read failure at its originating stage.
     assert!(
-        matches!(publish.step(&mut context, &mut state)?, StepOutcome::Complete(Ok(flow)) if flow.status() == Err(Error::Routing))
+        matches!(read.step(&mut device.execution_context(), &mut state)?, StepOutcome::Complete(Ok(flow)) if flow.status() == Err(Error::Halted))
     );
-    // Then: consumed input cannot replay publication without Operation owning it.
+    // Then: consumed input cannot replay the memory access or report a second event.
     assert!(state.is_none());
     assert!(matches!(
-        publish.step(&mut context, &mut state),
+        read.step(&mut device.execution_context(), &mut state),
         Ok(StepOutcome::InProgress)
     ));
+    assert_eq!(
+        support::read_word(
+            &mut device,
+            ChannelBlock::ALIGNMENT
+                + ChannelBlock::EVENT.offset()
+                + EventRegisters::PRODUCER.offset()
+        )?,
+        1
+    );
+    let raw: EventRaw = memory.read_typed(0x1100.into(), MemoryAlignment::ONE)?;
+    let event = Event::from_bytes(raw.as_ref())?;
+    assert_eq!(
+        (event.id, event.code, event.bytes_completed()),
+        (descriptor.id, EventCode::ReadError, 0)
+    );
     Ok(())
 }

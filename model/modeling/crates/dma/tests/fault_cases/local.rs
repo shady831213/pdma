@@ -46,7 +46,7 @@ fn checkpoint(write: bool) -> TestResult {
         assert!(payload.data().is_none());
         payload.finish()
     };
-    finish(&mut pdma_model_dma::Retire, &mut dma, parked)?;
+    finish(&mut pdma_model_dma::Retire, &mut dma, vec![(0, parked)])?;
     assert_eq!(fault_status(&mut dma)?, 1);
     dma.memory.missing.set(None);
     resume(&mut dma, 1)?;
@@ -84,13 +84,10 @@ fn checkpoint(write: bool) -> TestResult {
     let completion = finish(&mut WriteCopy::default(), &mut context, payload)?;
     // Then: the leaf completes the original command with exact retained bytes.
     assert_eq!(
-        completion
-            .data()
-            .ok_or("completion")?
-            .response()
-            .bytes_completed(),
-        4
+        completion.data().ok_or("completion")?.channel(),
+        ChannelId::new(0)
     );
+    crate::support::assert_no_event(&mut dma)?;
     assert_eq!(
         dma.memory
             .memory

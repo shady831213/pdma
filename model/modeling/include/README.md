@@ -49,8 +49,8 @@ Firmware Ready opens no data window. Boot reporting and the independent control
 transport remain available while data access is closed.
 
 The checked-in headers select three channels: a 16384-byte DMA map with discovery at
-zero and one contiguous administration block at four. Its global control registers
-are at 4, 8 and 12; channel reset registers are at 16, 20 and 24. Data apertures
+zero, atomic capabilities at four and administration at eight. Global control registers
+are at 8, 12 and 16; channel reset registers are at 20, 24 and 28. Data apertures
 start at 4096, 8192 and 12288, each owning a complete 4096-byte page. The page size
 is MMIO layout geometry, not an assumption about the Host OS page size. If the
 administration bank grows beyond the first page, schema placement moves the data
@@ -82,23 +82,39 @@ registers provide no episode or stale-request check. Shared software offers
 `faulted() -> Result<bool, _>` and `resume()` without a ticket argument. See
 [pageable-copy recovery](../docs/page-fault-recovery.md) for ordering and lifetime.
 
-Shared wire records: Segment is 16 bytes, Endpoint 40, Command 104, Response 24,
+Shared wire records: Segment is 16 bytes, Endpoint 40, Command 112, Event 24,
 ControlRequest 32 and ControlResponse 24, ContextAttributes 8, ControlRingState 24,
 ControlEvent 8 (alignment four), and ControlQueue 72. Enum bitfield constants are
-unshifted values. Endpoints use mode zero for linear spans and one for scatter/gather
-lists; WORD0/WORD1 hold the Linear base/offset (WORD2/WORD3 reserved), or all four
-words hold SG list_address/count/index/offset. Each endpoint starts with mode/context
-at 0/4 and parameters at 8. Command copy_length is at 88,
-IOC at 96 and SG context at 100. Response IOC stays at byte 12. The nested source
-and destination payload-context selectors are at bytes 12/52.
-Response has ID/status/flags/info at bytes 0/8/12/16. Success and stopping errors
-use CompletionInfo (eight-byte bytes_completed). Status values 0..5 are valid;
-retired PageFault status 6 is rejected. No fault address/access or continuation
-positions are carried in a response. Suspension produces no response; the final
-completion describes the original command. The generated record-placement
-OFFSET/SIZE constants locate info; use the generated accessors for that slice.
-These are deliberate wire-layout changes, not compatibility aliases. The channel's ring_context register selects one binding for both
-DMA rings; source, destination and SG selectors independently choose data bindings.
+unshifted values. Endpoints select Linear (zero) or ScatterGather (one). Their
+context is at byte four and their mode-selected payload starts at byte eight.
+
+Command stores ID at zero, kind at eight and a 96-byte payload at sixteen. The
+eight kinds are Copy, Write, Fill, Wait, Atomic, Semaphore, Fence and Trap (0..7).
+CopyCommand stores source/destination at 0/40, length at 80 and SG context at 88.
+WordTarget stores address/context/width at 0/8/12. WordWrite adds value at 16.
+FillCommand stores address/length/pattern/context/width at 0/8/16/24/28.
+WaitCommand stores target/value/comparison at 0/16/24. AtomicCommand stores
+target/order/operation/operands at 0/16/20/24; CAS operands contain compare/value
+at 0/8, and other operands contain value at zero. Atomic has no software result
+address. SemaphoreCommand stores target/operation at 0/16. Trap has no payload.
+
+Event stores ID/code/info at 0/8/16. Codes 1..8 select InvalidLength, ReadError,
+WriteError, LengthMismatch, ListReadError, Unsupported, InvalidOperation and
+ArithmeticOverflow. Zero is invalid: successful commands produce no event.
+ErrorInfo contains the committed byte prefix. Recoverable PageFault produces no
+event and waits for owner repair/resume. A full event ring is fatal only when an
+error must be published. Fence writes software completion storage; Trap requests
+notification without ring storage. There is no response or IOC compatibility API.
+
+Discovery capabilities are read-only atomic32/atomic64 bits 0/1. Channel IRQ
+causes are event_non_empty/trap/error/channel_fatal in bits 0..3; only the first
+two have mask bits. TRAP_ACK is write-only bit-zero acknowledgment at channel
+offset 76; it does not retract a platform-pending notification. Each unmasked
+Trap can emit, and enable/unmask never replays old notifications. Error stop is
+latched before event publication and survives event consumption. The ring_context
+register selects one binding for command and event memory; data selectors remain
+independent. PF ControlResponse and ControlEvent are separate and unchanged.
+
 ControlQueue nests command state at byte 0,
 response state at byte 24 and event state at byte 48; each ring stores base/capacity/producer/consumer
 at bytes 0/8/12/16. ControlRequest stores ID/opcode/target Function/channel/context

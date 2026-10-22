@@ -1,6 +1,6 @@
 use crate::channel::RangeCheck;
 use crate::{ChunkInput, CopyProgress, ExecutionContext, FetchedCommand, Flow, Work};
-use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
+use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::MemoryAccess;
 
 /// Incrementally validates the freshly fetched descriptor exactly once.
@@ -22,8 +22,30 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for CheckRanges
             let Some(input) = input.take() else {
                 return Ok(StepOutcome::InProgress);
             };
-            self.state =
-                Some(input.map(|fetched| (fetched.work, RangeCheck::new(fetched.command))));
+            let work = input.work;
+            let value = input.value.and_then(|value| {
+                value.map_or(Ok(None), |fetched| match fetched.command.payload {
+                    pdma_model_contract::dma::CommandPayloadValues::Copy(copy) => {
+                        match fetched.admission {
+                            crate::CommandAdmission::Resume => Ok(None),
+                            crate::CommandAdmission::Fresh => Ok(Some((
+                                fetched.work,
+                                RangeCheck::new(fetched.command.id, copy),
+                            ))),
+                        }
+                    }
+                    pdma_model_contract::dma::CommandPayloadValues::Write(_)
+                    | pdma_model_contract::dma::CommandPayloadValues::Fill(_)
+                    | pdma_model_contract::dma::CommandPayloadValues::Wait(_)
+                    | pdma_model_contract::dma::CommandPayloadValues::Atomic(_)
+                    | pdma_model_contract::dma::CommandPayloadValues::Semaphore(_)
+                    | pdma_model_contract::dma::CommandPayloadValues::Fence(_)
+                    | pdma_model_contract::dma::CommandPayloadValues::Trap(_) => {
+                        Err(crate::Error::Routing)
+                    }
+                })
+            });
+            self.state = Some(Flow::new(work, value));
         }
         Flow::advance(&mut self.state, context, |state, context| {
             let Some((work, scan)) = state.as_mut() else {
@@ -40,16 +62,10 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for CheckRanges
             let work = *work;
             scan.advance(&context.memory_for(work, scan.command.sg_context))
                 .map_or(Ok(StepOutcome::InProgress), |progress| {
-                    if progress.status.halts() {
+                    if progress.status.is_err() {
+                        let event = progress.event().ok_or(RunError::Exhausted)?;
                         *state = None;
-                        return Ok(StepOutcome::Complete(
-                            context
-                                .complete(crate::Completion {
-                                    work,
-                                    response: progress.response(),
-                                })
-                                .map(|()| None),
-                        ));
+                        return Ok(StepOutcome::Complete(Err(context.report(&event))));
                     }
                     let output = CopyProgress { work, progress };
                     *state = None;
@@ -60,7 +76,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for CheckRanges
 }
 
 #[derive(Debug)]
-pub struct Install;
+pub(in crate::stages) struct Install;
 
 impl<M, SB> Stage<ExecutionContext<'_, M, SB>> for Install {
     type Input = Flow<CopyProgress>;
@@ -74,16 +90,6 @@ impl<M, SB> Stage<ExecutionContext<'_, M, SB>> for Install {
         let Some(input) = input.take() else {
             return Ok(StepOutcome::InProgress);
         };
-        let mut state = Some(input);
-        Flow::advance(&mut state, context, |input, context| {
-            let result = match input.take() {
-                Some(progress) => context.install_progress(progress).map(Some),
-                None => Ok(context
-                    .active
-                    .filter(|work| *work == context.work())
-                    .map(ChunkInput::next)),
-            };
-            Ok(StepOutcome::Complete(result))
-        })
+        Ok(StepOutcome::Complete(Ok(context.install_progress(input))))
     }
 }

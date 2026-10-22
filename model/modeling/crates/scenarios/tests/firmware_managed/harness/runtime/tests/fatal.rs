@@ -8,7 +8,7 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::{
     control::{ControlEvent, ControlEventKind, ControlResponseStatus},
-    dma::{ChannelId, Command, CompletionFlagsValues, Endpoint, Response, ResponseStatus},
+    dma::{ChannelId, Command, Endpoint, Event},
     hw_components::control::EventRingErrorCode,
     memory::FunctionId,
 };
@@ -145,7 +145,7 @@ async fn copy(
             id,
             rings: Rings {
                 command: ring::<Command>(allocator).unwrap(),
-                response: ring::<Response>(allocator).unwrap(),
+                event: ring::<Event>(allocator).unwrap(),
             },
         },
     )
@@ -153,23 +153,38 @@ async fn copy(
     .unwrap();
     channel.set_irq_enabled(false).await.unwrap();
     channel
-        .submit(Command {
-            copy_length: 8,
-            id: 17,
-            sg_context: 0,
-            source: Endpoint::linear(source.raw(), 0),
-            destination: Endpoint::linear(destination.raw(), 0),
-            flags: CompletionFlagsValues { ioc: false },
-        })
+        .submit(Command::copy(
+            17,
+            pdma_model_contract::dma::CopyCommand {
+                copy_length: 8,
+                sg_context: 0,
+                source: Endpoint::linear(source.raw(), 0),
+                destination: Endpoint::linear(destination.raw(), 0),
+            },
+        ))
         .await
         .unwrap();
-    let response = loop {
-        if let Some(response) = channel.response().await.unwrap() {
-            break response;
-        }
+    let address = allocator
+        .allocate(8, MemoryAlignment::try_new(8).unwrap())
+        .unwrap();
+    let fence = pdma_model_software::dma::CompletionWord(pdma_model_contract::dma::WordWrite {
+        target: pdma_model_contract::dma::WordTarget {
+            address: address.raw(),
+            context: 0,
+            width: pdma_model_contract::dma::WordTargetWidth::Bits64,
+        },
+        value: 17,
+    });
+    channel.submit(fence.command(17)).await.unwrap();
+    while !fence.is_complete(&memory).unwrap() {
+        assert_eq!(channel.event().await.unwrap(), None);
+        assert_eq!(
+            channel.fatal().await.unwrap(),
+            pdma_model_contract::dma::ChannelFatalCode::None
+        );
         tokio::task::yield_now().await;
-    };
-    assert_eq!(response.status, ResponseStatus::Success);
+    }
+
     assert_eq!(
         memory
             .read_typed::<[u8; 8]>(destination, MemoryAlignment::ONE)

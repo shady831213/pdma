@@ -4,7 +4,7 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::dma::{
-    ChannelRegisters, Command, CommandRegisters, Endpoint, ResponseRegisters,
+    ChannelRegisters, Command, CommandRegisters, Endpoint, EventRegisters,
 };
 use pdma_model_dma::{
     CheckRanges, ChunkInput, CommandRequest, Dma, Fetch, FetchedCommand, Flow, Pipeline,
@@ -14,15 +14,12 @@ use pdma_model_dma::{
 /// Test harness error propagation.
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
-/// Assembles complete command execution through response publication.
-pub fn chunk_pipeline<M>(device: &Dma<M>) -> Pipeline {
-    Then::new(
-        pdma_model_dma::CommandExecution::new(Then::new(
-            PrepareChunk::default(),
-            Then::new(ReadCopy::default(), WriteCopy::default()),
-        )),
-        Then::new(pdma_model_dma::CompletionInput, device.responses()),
-    )
+/// Assembles complete Copy execution with an explicit completion result.
+pub fn chunk_pipeline() -> Pipeline {
+    pdma_model_dma::CommandExecution::new(Then::new(
+        PrepareChunk::default(),
+        Then::new(ReadCopy::default(), WriteCopy::default()),
+    ))
 }
 
 /// Fetches a fresh descriptor through the public selected-channel interface.
@@ -58,20 +55,20 @@ pub fn accept<M: MemoryAccess>(device: &mut Dma<M>, id: ChannelId) -> TestResult
 
 /// Configure mapped test memory and one enabled channel.
 pub fn setup(
-    response_base: u64,
+    event_base: u64,
     capacity: u32,
 ) -> Result<(Dma<SharedMemory>, SharedMemory), Box<dyn std::error::Error>> {
     let memory = SharedMemory::new();
     let region = MemoryRegion::try_new(MemoryAddress::new(0x1000), 0x1000, MemoryAlignment::ONE)?;
     memory.add_regions(&[region])?;
-    let device = configure(memory.clone(), response_base, capacity)?;
+    let device = configure(memory.clone(), event_base, capacity)?;
     Ok((device, memory))
 }
 
 /// Configure a channel over an injected test memory capability.
 pub fn configure<M: MemoryAccess>(
     memory: M,
-    response_base: u64,
+    event_base: u64,
     capacity: u32,
 ) -> Result<Dma<M>, Box<dyn std::error::Error>> {
     let mut device = Dma::new(memory, 1)?;
@@ -84,9 +81,9 @@ pub fn configure<M: MemoryAccess>(
         ),
         (
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
-                + ResponseRegisters::BASE.offset(),
-            response_base,
+                + pdma_model_contract::dma::ChannelBlock::EVENT.offset()
+                + EventRegisters::BASE.offset(),
+            event_base,
         ),
     ] {
         device.write(offset, &value.to_le_bytes())?;
@@ -100,8 +97,8 @@ pub fn configure<M: MemoryAccess>(
         ),
         (
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
-                + ResponseRegisters::CAPACITY.offset(),
+                + pdma_model_contract::dma::ChannelBlock::EVENT.offset()
+                + EventRegisters::CAPACITY.offset(),
             capacity,
         ),
         (
@@ -142,44 +139,77 @@ pub fn submit(
     Ok(())
 }
 
-/// Drive the hardware pipeline to one published response within a fixed bound.
+#[doc = "Drive one finite hardware invocation through actual retirement within a fixed bound."]
 pub fn run(device: &mut Dma<SharedMemory>) -> TestResult {
     let mut hardware = device.hardware();
     let mut operation = Operation::new(());
-    let producer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-        + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
-        + ResponseRegisters::PRODUCER.offset();
-    let initial = read_word(device, producer)?;
     for _ in 0..1024 {
         if let StepOutcome::Complete(result) = operation.step(&mut hardware, device)? {
-            result?;
-            if read_word(device, producer)? != initial {
-                return Ok(());
-            }
-            operation = Operation::new(());
+            return Ok(result?);
         }
     }
     Err("pipeline exceeded interaction bound".into())
 }
 
 /// Read one exact 32-bit register through the device bus.
-pub fn read_word(
-    device: &mut Dma<SharedMemory>,
-    offset: usize,
-) -> Result<u32, Box<dyn std::error::Error>> {
+pub fn read_word<M>(device: &mut Dma<M>, offset: usize) -> Result<u32, Box<dyn std::error::Error>> {
     let mut bytes = [0; 4];
     device.read(offset, &mut bytes)?;
     Ok(u32::from_le_bytes(bytes))
 }
 
+#[doc = "Checks that successful work did not publish a DMA event."]
+pub fn assert_no_event<M>(device: &mut Dma<M>) -> TestResult {
+    let producer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+        + pdma_model_contract::dma::ChannelBlock::EVENT.offset()
+        + EventRegisters::PRODUCER.offset();
+    let count = read_word(device, producer)?;
+    if count == 0 {
+        Ok(())
+    } else {
+        Err(format!("successful command published {count} error events").into())
+    }
+}
+
 /// Canonical four-byte copy input.
 pub const fn command() -> Command {
-    Command {
-        copy_length: 4,
-        sg_context: 0,
-        flags: pdma_model_contract::dma::CompletionFlagsValues { ioc: false },
-        id: 7,
-        source: Endpoint::linear(0x1200, 0),
-        destination: Endpoint::linear(0x1300, 0),
+    Command::copy(
+        7,
+        pdma_model_contract::dma::CopyCommand {
+            copy_length: 4,
+            sg_context: 0,
+            source: Endpoint::linear(0x1200, 0),
+            destination: Endpoint::linear(0x1300, 0),
+        },
+    )
+}
+
+#[doc = "Borrows the Copy payload of a typed test fixture."]
+pub fn copy(command: &Command) -> TestResult<&pdma_model_contract::dma::CopyCommand> {
+    use pdma_model_contract::dma::CommandPayloadValues;
+    match &command.payload {
+        CommandPayloadValues::Copy(copy) => Ok(copy),
+        CommandPayloadValues::Write(_)
+        | CommandPayloadValues::Fill(_)
+        | CommandPayloadValues::Wait(_)
+        | CommandPayloadValues::Atomic(_)
+        | CommandPayloadValues::Semaphore(_)
+        | CommandPayloadValues::Fence(_)
+        | CommandPayloadValues::Trap(_) => Err("Copy fixture required".into()),
+    }
+}
+
+#[doc = "Mutably borrows the Copy payload of a typed test fixture."]
+pub fn copy_mut(command: &mut Command) -> TestResult<&mut pdma_model_contract::dma::CopyCommand> {
+    use pdma_model_contract::dma::CommandPayloadValues;
+    match &mut command.payload {
+        CommandPayloadValues::Copy(copy) => Ok(copy),
+        CommandPayloadValues::Write(_)
+        | CommandPayloadValues::Fill(_)
+        | CommandPayloadValues::Wait(_)
+        | CommandPayloadValues::Atomic(_)
+        | CommandPayloadValues::Semaphore(_)
+        | CommandPayloadValues::Fence(_)
+        | CommandPayloadValues::Trap(_) => Err("Copy fixture required".into()),
     }
 }

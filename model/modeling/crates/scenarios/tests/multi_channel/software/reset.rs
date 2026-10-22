@@ -1,5 +1,5 @@
 use hardware_interface_runtime::RegisterAccess;
-use pdma_model_contract::dma::{ChannelBlock, CommandRegisters, ResponseRegisters};
+use pdma_model_contract::dma::{ChannelBlock, CommandRegisters, EventRegisters};
 use std::error::Error;
 
 use super::{Ports, buffers::Buffers, read_word};
@@ -40,12 +40,11 @@ where
             Scenario::CopyInFlight | Scenario::QueuedChannel | Scenario::WholeDevice => {
                 first.byte_matches(&ports.memory, 0)?
             }
-            Scenario::ResponseBackpressure => {
+            Scenario::SuccessWithoutEvents => {
                 buffers
                     .iter()
-                    .skip(1)
                     .try_fold(true, |ready, buffer| -> TestResult<bool> {
-                        Ok(ready && buffer.byte_matches(&ports.memory, buffer.length - 1)?)
+                        Ok(ready && buffer.fence.is_complete(&ports.memory)?)
                     })?
             }
         };
@@ -56,7 +55,7 @@ where
     }
     match scenario {
         Scenario::CopyInFlight | Scenario::QueuedChannel | Scenario::WholeDevice => Ok(None),
-        Scenario::ResponseBackpressure => {
+        Scenario::SuccessWithoutEvents => {
             let base = first
                 .config
                 .id
@@ -64,7 +63,7 @@ where
                 .ok_or("missing channel registers")?;
             let producer = read_word(
                 &ports.bus,
-                base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset(),
+                base + ChannelBlock::EVENT.offset() + EventRegisters::PRODUCER.offset(),
             )
             .await?;
             let consumer = command_consumer(ports, first).await?;

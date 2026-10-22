@@ -23,7 +23,7 @@ a channel window. Direct-DMA mode retains its privileged software interface.
 at startup and while serving management work. A fatal closes every data window,
 retains channel owners/context bindings, and blocks allocation, channel reset and
 context-management requests with a `DeviceFailed` response. Hardware containment
-does not wait for firmware scheduling. A response-ring-full condition must not
+does not wait for firmware scheduling. A PF response-ring-full condition must not
 prevent fatal observation and window closure. An accepted lifecycle operation is
 not silently cancelled and replayed; its completion must not reopen access after
 a fatal. Firmware publishes one fatal event per fault episode.
@@ -40,8 +40,9 @@ previously issued window-open write that resumes after fatal observation.
 
 **HOST-FATAL-1.** PF handles device-wide recovery and informs affected VFs through
 a platform-provided PF/VF mechanism. VF software must not assume that firmware
-Ready or a previously granted channel means DMA remains operational. A missing
-individual task response is not proof of task completion or safe memory reuse.
+Ready or a previously granted channel means DMA remains operational. Absence of
+an error event is not proof of completion or safe memory reuse; successful work
+uses the explicit Fence contract. Cancelled work requires acknowledged cleanup.
 Drivers/ISRs must handle rejected data accesses after containment, stop using the
 old ring driver, and retain memory until the coordinated reset acknowledgment.
 Such access failures must not disable the PF's independent management/event service.

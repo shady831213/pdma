@@ -15,7 +15,6 @@ use hardware_interface_runtime::{
     InterruptRegistration, MemoryAddress, RegisterAccess, SharedMemoryAccess, SharedMemoryAllocator,
 };
 use interrupts::Handler;
-use pdma_model_contract::dma::Response;
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::firmware;
 use pdma_model_software::control::InterruptEvent;
@@ -55,7 +54,7 @@ pub struct Before {
 pub struct Outcome {
     pub(crate) before: Before,
     pub(crate) after: [Result<(), AccessError>; 3],
-    pub(crate) response: Response,
+    pub(crate) completion: u64,
     pub(crate) destination: MemoryAddress,
     pub(crate) released: u32,
     pub(crate) dma_interrupts: usize,
@@ -119,7 +118,7 @@ pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outco
         ports.bus.write(window_status, &0_u32.to_le_bytes()).await,
     ];
     let bus = ports.bus.clone();
-    let (response, destination, dma_interrupts) = transfer::run(ports, payload, channel).await?;
+    let (completion, destination, dma_interrupts) = transfer::run(ports, payload, channel).await?;
     management
         .release_channel(FunctionId::new(0), channel)
         .await?;
@@ -127,7 +126,7 @@ pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outco
     Ok(Outcome {
         before,
         after,
-        response,
+        completion,
         destination,
         released: u32::from_le_bytes(ready),
         dma_interrupts: dma_interrupts.load(std::sync::atomic::Ordering::SeqCst),

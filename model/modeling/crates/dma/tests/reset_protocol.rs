@@ -6,7 +6,7 @@ pub mod support;
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome, StepResult, Then};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, DmaControl, DmaRegisters,
-    ResponseRegisters,
+    EventRegisters,
 };
 use pdma_model_dma::{Dma, Error};
 use support::{TestResult, command, read_word, setup, submit};
@@ -22,8 +22,8 @@ const DEVICE_RESET: usize = (pdma_model_contract::dma::DmaDiscovery::EXTENT
 struct CommandExit;
 
 impl<M> Stage<pdma_model_dma::ExecutionContext<'_, M>> for CommandExit {
-    type Input = pdma_model_dma::Flow<()>;
-    type Output = pdma_model_dma::Flow<()>;
+    type Input = pdma_model_dma::Flow<pdma_model_dma::Completion>;
+    type Output = pdma_model_dma::Flow<pdma_model_dma::Completion>;
     type Error = std::convert::Infallible;
     fn step(
         &mut self,
@@ -37,8 +37,8 @@ impl<M> Stage<pdma_model_dma::ExecutionContext<'_, M>> for CommandExit {
 }
 
 #[test]
-fn reset_invalidates_a_response_retained_outside_the_pipeline() -> TestResult {
-    // Given: a fetched task retained between custom execution and response ports.
+fn reset_invalidates_completion_retained_outside_the_pipeline() -> TestResult {
+    // Given: a fetched task retained between custom execution and retirement.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
     let input = support::accept(&mut device, ChannelId::new(0))?;
@@ -63,33 +63,19 @@ fn reset_invalidates_a_response_retained_outside_the_pipeline() -> TestResult {
     };
     device.write(RESET, &1_u32.to_le_bytes())?;
     assert_eq!(read_word(&mut device, RESET)?, 1);
-    let mut responses = device.responses();
-    let mut publish = Some(work);
-    // When: the final port rejects the old task before publishing a response.
-    let mut rejected = false;
-    for _ in 0..32 {
-        if let StepOutcome::Complete(Ok(flow)) =
-            responses.step(&mut device.execution_context(), &mut publish)?
-        {
-            assert_eq!(flow.status(), Err(Error::Reset));
-            assert_eq!(read_word(&mut device, RESET)?, 1);
-            assert_eq!(
-                Operation::new(flow).step(&mut pdma_model_dma::Retire, &mut device)?,
-                StepOutcome::Complete(Err(Error::Reset))
-            );
-            rejected = true;
-            break;
-        }
-    }
-    // Then: retirement cleans the owned command and the stale port cannot publish.
-    assert!(rejected);
+    // When: retirement observes the old task after generation invalidation.
+    assert_eq!(
+        Operation::new(vec![(0, work)]).step(&mut pdma_model_dma::Retire, &mut device)?,
+        StepOutcome::Complete(Err(Error::Reset))
+    );
+    // Then: cleanup acknowledges reset without publishing a stale event.
     assert_eq!(read_word(&mut device, RESET)?, 0);
     assert_eq!(
         read_word(
             &mut device,
             ChannelBlock::ALIGNMENT
-                + ChannelBlock::RESPONSE.offset()
-                + ResponseRegisters::PRODUCER.offset()
+                + ChannelBlock::EVENT.offset()
+                + EventRegisters::PRODUCER.offset()
         )?,
         0
     );
@@ -97,18 +83,20 @@ fn reset_invalidates_a_response_retained_outside_the_pipeline() -> TestResult {
 }
 
 #[test]
-fn reset_waits_for_the_resident_tail_after_response_publication() -> TestResult {
-    // Given: a command whose response is published but whose composition has not exited.
+fn reset_waits_for_the_resident_tail_after_event_publication() -> TestResult {
+    // Given: a command whose event is published but whose composition has not exited.
     let (mut device, memory) = setup(0x1100, 2)?;
-    submit(&mut device, &memory, command())?;
-    let chunk = support::chunk_pipeline(&device);
+    let mut request = command();
+    support::copy_mut(&mut request)?.source = pdma_model_contract::dma::Endpoint::linear(0x9000, 0);
+    submit(&mut device, &memory, request)?;
+    let chunk = support::chunk_pipeline();
     let pipeline = Then::new(chunk, CommandExit);
     let mut hardware = device.hardware_with(pipeline);
     let command = &mut hardware;
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let producer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-        + ChannelBlock::RESPONSE.offset()
-        + ResponseRegisters::PRODUCER.offset();
+        + ChannelBlock::EVENT.offset()
+        + EventRegisters::PRODUCER.offset();
     for _ in 0..128 {
         assert!(matches!(
             operation.step(command, &mut device)?,
@@ -119,6 +107,7 @@ fn reset_waits_for_the_resident_tail_after_response_publication() -> TestResult 
         }
     }
     assert_eq!(read_word(&mut device, producer)?, 1);
+    assert!(device.irq());
     // When: reset is requested before the complete command returns.
     device.write(RESET, &1_u32.to_le_bytes())?;
     // Then: the unfinished invocation keeps reset busy until its terminal step.

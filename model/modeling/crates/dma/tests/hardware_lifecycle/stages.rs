@@ -8,7 +8,7 @@ pub(super) struct Stalled(
 );
 impl<M> Stage<ExecutionContext<'_, M>> for Stalled {
     type Input = pdma_model_dma::Flow<ChunkInput>;
-    type Output = Flow<()>;
+    type Output = Flow<pdma_model_dma::Completion>;
     type Error = std::convert::Infallible;
     fn step(
         &mut self,
@@ -41,8 +41,8 @@ impl<M> Stage<ExecutionContext<'_, M>> for Stalled {
 
 pub(super) struct PendingTail;
 impl<M> Stage<ExecutionContext<'_, M>> for PendingTail {
-    type Input = Flow<()>;
-    type Output = Flow<()>;
+    type Input = Flow<pdma_model_dma::Completion>;
+    type Output = Flow<pdma_model_dma::Completion>;
     type Error = std::convert::Infallible;
     fn step(
         &mut self,

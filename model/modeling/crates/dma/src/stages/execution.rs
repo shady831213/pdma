@@ -1,10 +1,8 @@
 mod chunks;
-mod completion;
 mod copy;
 mod validate;
 
 pub use chunks::PrepareChunk;
-pub use completion::CompletionInput;
 pub use copy::{ReadCopy, WriteCopy};
 pub use validate::CheckRanges;
 pub(super) use validate::Install;
@@ -75,9 +73,6 @@ where
                 return Ok(None);
             }
             let accepted = selected.selected.work.as_ref().ok_or(Error::Reset)?;
-            if accepted.completion.is_some() {
-                return Ok(None);
-            }
             let progress = accepted.progress.as_ref().ok_or(Error::Routing)?;
             if progress.remaining == 0 {
                 return Err(Error::Routing);

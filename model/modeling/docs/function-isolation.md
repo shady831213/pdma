@@ -132,10 +132,10 @@ VF bootstrap/doorbell rejection, independent notification directions and open-bi
 ## DMA memory boundary
 
 All command fetches, source/destination SG-list reads, payload reads/writes and
-response publication use the selected channel's memory port. Neither descriptors
+event publication use the selected channel's memory port. Neither descriptors
 nor VF software select a Function ID for these accesses. A missing owner capability
 fails as an unmapped access, without falling back to PF or another Function; existing
-command/response fatal and list/payload response-error semantics remain unchanged.
+command/event fatal and list/payload stopping-error semantics apply. Successful commands use explicit Fence/Trap completion.
 
 The platform owns backing stores and gives each software program its corresponding
 allocator and memory capability. Firmware's control-ring memory is the PF's space,
@@ -168,7 +168,7 @@ for all affected transactions to drain. This synchronous model adds no such queu
 
 The managed Function cases cover identical-address IRQ-driven copies and reset
 during a transfer with independent peer memory. Managed runtime memory boundary tests
-cover command/list/payload/response routing, unmapped foreign addresses and reset
+cover command/list/payload/event routing, unmapped foreign addresses and reset
 before regrant, absent bindings and closed-window access.
 `hw-components/tests/windows/memory.rs` directly verifies identity translation,
 raw/typed access, closed-window retention, reassignment and error propagation.

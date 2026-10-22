@@ -1,7 +1,7 @@
 use super::*;
 use hardware_interface_pipeline::RunError;
-use pdma_model_contract::dma::{ChannelBlock, Endpoint, Response, ResponseRaw, ResponseRegisters};
-use pdma_model_dma::{CommandExecution, Completion, CompletionInput, Flow};
+use pdma_model_contract::dma::{ChannelBlock, Endpoint, EventRegisters};
+use pdma_model_dma::{CommandExecution, Completion, Flow};
 use std::{cell::Cell, rc::Rc};
 
 struct InterruptedChunk {
@@ -44,7 +44,8 @@ impl Stage<ExecutionContext<'_, SharedMemory>> for InterruptedChunk {
 
 struct CommandTail {
     calls: Rc<Cell<usize>>,
-    expected_length: u64,
+    memory: SharedMemory,
+    final_address: hardware_interface_runtime::MemoryAddress,
 }
 
 impl Stage<ExecutionContext<'_, SharedMemory>> for CommandTail {
@@ -62,11 +63,14 @@ impl Stage<ExecutionContext<'_, SharedMemory>> for CommandTail {
         };
         self.calls.set(self.calls.get() + 1);
         assert_eq!(
-            completion
-                .data()
-                .map(|data| data.response().bytes_completed()),
-            Some(self.expected_length)
+            completion.data().map(Completion::channel),
+            Some(ChannelId::new(0))
         );
+        let byte = self
+            .memory
+            .read_typed::<[u8; 1]>(self.final_address, MemoryAlignment::ONE)
+            .map_err(|_| RunError::Exhausted)?;
+        assert_eq!(byte, [0xa5]);
         Ok(StepOutcome::Complete(Ok(completion)))
     }
 }
@@ -76,11 +80,20 @@ fn custom_command_tail_receives_only_final_completion_for_multiple_chunks() -> T
     // Given: a transformed multi-chunk command followed by a command-level observer.
     let (mut device, memory) = setup(0x1100, 2)?;
     let source = [0x5a; 600];
-    let descriptor = pdma_model_contract::dma::Command {
-        copy_length: u64::try_from(source.len())?,
-        source: Endpoint::linear(0x1400, 0),
-        destination: Endpoint::linear(0x1800, 0),
-        ..command()
+    let descriptor = {
+        let original = command();
+        let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload else {
+            return Err("copy fixture required".into());
+        };
+        pdma_model_contract::dma::Command::copy(
+            original.id,
+            pdma_model_contract::dma::CopyCommand {
+                copy_length: u64::try_from(source.len())?,
+                source: Endpoint::linear(0x1400, 0),
+                destination: Endpoint::linear(0x1800, 0),
+                ..copy
+            },
+        )
     };
     memory.write(0x1400.into(), MemoryAlignment::ONE, &source)?;
     submit(&mut device, &memory, descriptor)?;
@@ -94,13 +107,11 @@ fn custom_command_tail_receives_only_final_completion_for_multiple_chunks() -> T
     );
     let pipeline = Then::new(
         CommandExecution::new(chunks),
-        Then::new(
-            CommandTail {
-                calls: Rc::clone(&calls),
-                expected_length: descriptor.copy_length,
-            },
-            Then::new(CompletionInput, device.responses()),
-        ),
+        CommandTail {
+            calls: Rc::clone(&calls),
+            memory: memory.clone(),
+            final_address: (0x1800 + u64::try_from(source.len() - 1)?).into(),
+        },
     );
     let mut hardware = device.hardware_with(pipeline);
     let mut operation = Operation::new(());
@@ -111,7 +122,7 @@ fn custom_command_tail_receives_only_final_completion_for_multiple_chunks() -> T
             break;
         }
     }
-    // Then: the tail sees one final response and all transformed bytes are committed.
+    // Then: the tail sees one final completion and all transformed bytes are committed.
     assert!(operation.is_complete());
     assert_eq!(calls.get(), 1);
     let mut destination = [0; 600];
@@ -121,17 +132,12 @@ fn custom_command_tail_receives_only_final_completion_for_multiple_chunks() -> T
         support::read_word(
             &mut device,
             ChannelBlock::ALIGNMENT
-                + ChannelBlock::RESPONSE.offset()
-                + ResponseRegisters::PRODUCER.offset()
+                + ChannelBlock::EVENT.offset()
+                + EventRegisters::PRODUCER.offset()
         )?,
-        1
+        0
     );
-    let raw: ResponseRaw = memory.read_typed(0x1100.into(), MemoryAlignment::ONE)?;
-    let response = Response::from_bytes(raw.as_ref())?;
-    assert_eq!(
-        (response.id, response.bytes_completed()),
-        (descriptor.id, descriptor.copy_length)
-    );
+
     Ok(())
 }
 
@@ -139,11 +145,20 @@ fn custom_command_tail_receives_only_final_completion_for_multiple_chunks() -> T
 fn raw_child_error_retains_command_and_resumes_without_replaying_committed_chunk() -> TestResult {
     // Given: a chunk-local stage consumes its first result before returning a raw error.
     let (mut device, memory) = setup(0x1100, 2)?;
-    let descriptor = pdma_model_contract::dma::Command {
-        copy_length: 600,
-        source: Endpoint::linear(0x1400, 0),
-        destination: Endpoint::linear(0x1800, 0),
-        ..command()
+    let descriptor = {
+        let original = command();
+        let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload else {
+            return Err("copy fixture required".into());
+        };
+        pdma_model_contract::dma::Command::copy(
+            original.id,
+            pdma_model_contract::dma::CopyCommand {
+                copy_length: 600,
+                source: Endpoint::linear(0x1400, 0),
+                destination: Endpoint::linear(0x1800, 0),
+                ..copy
+            },
+        )
     };
     memory.write(0x1400.into(), MemoryAlignment::ONE, &[0x5a; 600])?;
     submit(&mut device, &memory, descriptor)?;
@@ -162,10 +177,7 @@ fn raw_child_error_retains_command_and_resumes_without_replaying_committed_chunk
             ),
         ),
     );
-    let pipeline = Then::new(
-        CommandExecution::new(chunks),
-        Then::new(CompletionInput, device.responses()),
-    );
+    let pipeline = CommandExecution::new(chunks);
     let mut hardware = device.hardware_with(pipeline);
     let mut operation = Operation::new(());
     let mut interrupted = false;
@@ -203,7 +215,8 @@ fn raw_child_error_retains_command_and_resumes_without_replaying_committed_chunk
     assert!(operation.is_complete());
     assert_eq!(
         calls.get(),
-        usize::try_from(descriptor.copy_length)?.div_ceil(pdma_model_dma::COPY_CHUNK_BYTES)
+        usize::try_from(crate::support::copy(&descriptor)?.copy_length)?
+            .div_ceil(pdma_model_dma::COPY_CHUNK_BYTES)
     );
     let mut destination = [0; 600];
     memory.read(0x1800.into(), MemoryAlignment::ONE, &mut destination)?;
@@ -212,10 +225,10 @@ fn raw_child_error_retains_command_and_resumes_without_replaying_committed_chunk
         support::read_word(
             &mut device,
             ChannelBlock::ALIGNMENT
-                + ChannelBlock::RESPONSE.offset()
-                + ResponseRegisters::PRODUCER.offset()
+                + ChannelBlock::EVENT.offset()
+                + EventRegisters::PRODUCER.offset()
         )?,
-        1
+        0
     );
     Ok(())
 }

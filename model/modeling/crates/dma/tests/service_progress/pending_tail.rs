@@ -4,7 +4,7 @@ use crate::{
 };
 use hardware_interface_pipeline::{Stage, StepOutcome, Then};
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelRegisters, CommandRegisters, Endpoint, ResponseRegisters,
+    ChannelBlock, ChannelRegisters, CommandRegisters, Endpoint, EventRegisters,
 };
 use pdma_model_dma::{COPY_CHUNK_BYTES, PrepareChunk, ReadCopy, WriteCopy};
 use std::{cell::Cell, rc::Rc};
@@ -85,11 +85,20 @@ impl<M> Stage<pdma_model_dma::ExecutionContext<'_, M>> for Tail {
 fn reset_after_committed_chunk_retires_hardware_while_custom_tail_is_pending() -> TestResult {
     // Given: a non-final chunk published progress while a custom tail remains pending.
     let (mut device, memory) = setup(0x1100, 2)?;
-    let descriptor = pdma_model_contract::dma::Command {
-        copy_length: u64::try_from(COPY_CHUNK_BYTES * 2)?,
-        source: Endpoint::linear(0x1400, 0),
-        destination: Endpoint::linear(0x1800, 0),
-        ..command()
+    let descriptor = {
+        let original = command();
+        let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload else {
+            return Err("copy fixture required".into());
+        };
+        pdma_model_contract::dma::Command::copy(
+            original.id,
+            pdma_model_contract::dma::CopyCommand {
+                copy_length: u64::try_from(COPY_CHUNK_BYTES * 2)?,
+                source: Endpoint::linear(0x1400, 0),
+                destination: Endpoint::linear(0x1800, 0),
+                ..copy
+            },
+        )
     };
     submit(&mut device, &memory, descriptor)?;
     let entered = Rc::new(Cell::new(false));
@@ -106,13 +115,10 @@ fn reset_after_committed_chunk_retires_hardware_while_custom_tail_is_pending() -
             state: None,
         },
     );
-    let pipeline = Then::new(
-        pdma_model_dma::CommandExecution::new(Then::new(
-            Then::new(PrepareChunk::default(), ReadCopy::default()),
-            sink,
-        )),
-        Then::new(pdma_model_dma::CompletionInput, device.responses()),
-    );
+    let pipeline = pdma_model_dma::CommandExecution::new(Then::new(
+        Then::new(PrepareChunk::default(), ReadCopy::default()),
+        sink,
+    ));
     let mut hardware = device.hardware_with(pipeline);
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..256 {
@@ -162,11 +168,11 @@ fn reset_after_committed_chunk_retires_hardware_while_custom_tail_is_pending() -
         if let StepOutcome::Complete(result) = operation.step(&mut hardware, &mut device)? {
             result?;
         }
-        if read_word(&mut device, PRODUCER)? == 1 {
+        if completed.get() == 1 {
             break;
         }
     }
-    assert_eq!(read_word(&mut device, PRODUCER)?, 1);
+    assert_eq!(read_word(&mut device, PRODUCER)?, 0);
     assert_eq!(completed.get(), 1);
     Ok(())
 }
@@ -179,7 +185,7 @@ fn reconfigure<M>(device: &mut pdma_model_dma::Dma<M>) -> TestResult {
             0x1000_u64,
         ),
         (
-            base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
+            base + ChannelBlock::EVENT.offset() + EventRegisters::BASE.offset(),
             0x1100,
         ),
     ] {
@@ -191,7 +197,7 @@ fn reconfigure<M>(device: &mut pdma_model_dma::Dma<M>) -> TestResult {
             2_u32,
         ),
         (
-            base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::CAPACITY.offset(),
+            base + ChannelBlock::EVENT.offset() + EventRegisters::CAPACITY.offset(),
             2,
         ),
         (

@@ -3,7 +3,7 @@ use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
-use pdma_model_contract::dma::{ChannelBlock, ChannelId, CommandRegisters, ResponseRegisters};
+use pdma_model_contract::dma::{ChannelBlock, ChannelId, CommandRegisters, EventRegisters};
 use pdma_model_dma::Dma;
 
 #[test]
@@ -28,7 +28,7 @@ fn arbiter_accepts_no_peer_command_until_selected_command_finishes() -> TestResu
     let mut hardware = device.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let mut first_write = false;
-    // When: A reaches its first committed chunk, before response publication.
+    // When: A reaches its first committed chunk, before event publication.
     for _ in 0..128 {
         assert!(matches!(
             operation.step(&mut hardware, &mut device)?,
@@ -44,8 +44,8 @@ fn arbiter_accepts_no_peer_command_until_selected_command_finishes() -> TestResu
         word(
             &mut device,
             ChannelId::new(0).register_offset(3).ok_or("offset")?
-                + ChannelBlock::RESPONSE.offset()
-                + ResponseRegisters::PRODUCER.offset()
+                + ChannelBlock::EVENT.offset()
+                + EventRegisters::PRODUCER.offset()
         )?,
         0
     );
@@ -68,9 +68,6 @@ fn arbiter_accepts_no_peer_command_until_selected_command_finishes() -> TestResu
         )?;
         assert_eq!(bytes, [0; 512]);
     }
-    let producer = ChannelId::new(0).register_offset(3).ok_or("offset")?
-        + ChannelBlock::RESPONSE.offset()
-        + ResponseRegisters::PRODUCER.offset();
     for _ in 0..256 {
         for index in 1..3 {
             assert_eq!(
@@ -83,7 +80,10 @@ fn arbiter_accepts_no_peer_command_until_selected_command_finishes() -> TestResu
                 0
             );
         }
-        if word(&mut device, producer)? == 1 {
+        if device.command_request(ChannelId::new(0))?.is_some() {
+            let mut bytes = [0; 512];
+            memory.read(MemoryAddress::new(0x1400), MemoryAlignment::ONE, &mut bytes)?;
+            assert_eq!(bytes, [7; 512]);
             return Ok(());
         }
         assert_eq!(

@@ -5,21 +5,21 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, CommandRegisters, DmaControl, DmaRegisters, ResponseRegisters,
+    ChannelBlock, ChannelId, CommandRegisters, DmaControl, DmaRegisters, EventRegisters,
 };
 use pdma_model_dma::{Dma, Error};
 
 mod candidates;
 mod command_grant;
+mod completion_routing;
 mod context_abort;
 mod fairness;
 mod reset_boundaries;
-mod response_routing;
 mod scatter_gather_reset;
 mod shared;
 /// Shared raw-bus fixtures for the multi-channel boundary tests.
 pub mod support;
-use support::{TestResult, configure, submit, word};
+use support::{TestResult, completion, configure, submit, word};
 
 #[test]
 fn hardware_count_survives_both_reset_scopes_and_is_read_only() -> TestResult {
@@ -107,7 +107,7 @@ fn device_reset_subsumes_a_busy_channel_reset_and_cleans_idle_peers() -> TestRes
         assert_eq!(
             word(
                 &mut device,
-                base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::CAPACITY.offset()
+                base + ChannelBlock::EVENT.offset() + EventRegisters::CAPACITY.offset()
             )?,
             0
         );
@@ -167,7 +167,7 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
         ));
     }
     assert_eq!(word(&mut device, reset)?, 0);
-    // Then: B/C complete; A's uncommitted suffix and response remain absent.
+    // Then: B/C complete; A's uncommitted suffix and event remain absent.
     for index in 1..3 {
         let mut bytes = [0; 512];
         memory.read(
@@ -180,13 +180,14 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
             word(
                 &mut device,
                 ChannelId::new(index).register_offset(3).ok_or("offset")?
-                    + ChannelBlock::RESPONSE.offset()
-                    + ResponseRegisters::PRODUCER.offset()
+                    + ChannelBlock::EVENT.offset()
+                    + EventRegisters::PRODUCER.offset()
             )?,
-            1
+            0
         );
+        assert_eq!(completion(&device, index)?, u64::try_from(index)? + 1);
     }
-    assert!(device.take_interrupt());
+    assert!(!device.take_interrupt());
     assert!(!device.take_interrupt());
     assert_eq!(
         memory.read_typed::<[u8; 1]>(MemoryAddress::new(0x1500), MemoryAlignment::ONE)?,
@@ -196,8 +197,8 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
         word(
             &mut device,
             ChannelId::new(0).register_offset(3).ok_or("offset")?
-                + ChannelBlock::RESPONSE.offset()
-                + ResponseRegisters::PRODUCER.offset()
+                + ChannelBlock::EVENT.offset()
+                + EventRegisters::PRODUCER.offset()
         )?,
         0
     );
@@ -210,10 +211,11 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
         word(
             &mut device,
             ChannelId::new(0).register_offset(3).ok_or("offset")?
-                + ChannelBlock::RESPONSE.offset()
-                + ResponseRegisters::PRODUCER.offset()
+                + ChannelBlock::EVENT.offset()
+                + EventRegisters::PRODUCER.offset()
         )?,
-        1
+        0
     );
+    assert_eq!(completion(&device, 0)?, 100);
     Ok(())
 }

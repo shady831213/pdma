@@ -4,11 +4,11 @@ mod instances;
 
 use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
 use hardware_interface_runtime::{
-    MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
+    MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::dma::{
-    ChannelId, Command, CompletionFlagsValues, DmaRegisters, Endpoint, Response,
+    ChannelId, Command, DmaRegisters, Event, WordTarget, WordTargetWidth, WordWrite,
 };
 use pdma_model_dma::Dma;
 use pdma_model_host::{
@@ -40,10 +40,10 @@ fn config(allocator: &SharedMemoryAllocator, index: usize) -> TestResult<Channel
                     .raw(),
                 1,
             )?,
-            response: RingConfig::new(
+            event: RingConfig::new(
                 allocator
                     .allocate(
-                        u64::try_from(Response::RECORD_SIZE)?,
+                        u64::try_from(Event::RECORD_SIZE)?,
                         MemoryAlignment::try_new(8)?,
                     )?
                     .raw(),
@@ -144,26 +144,34 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
     let cpu = SoftwareCpu::new();
     cpu.run_main(async {
         let mut channels = Vec::new();
+        let mut completions = Vec::new();
         for index in 0..3 {
             let mut channel =
                 Channel::setup(model.clone(), memory.clone(), config(&allocator, index)?).await?;
+            let completion = allocator.allocate(8, MemoryAlignment::try_new(8)?)?;
             channel
-                .submit(Command {
-                    copy_length: 0,
-                    sg_context: 0,
-                    flags: CompletionFlagsValues::default(),
-                    id: u64::try_from(index)?,
-                    source: Endpoint::linear(0, 0),
-                    destination: Endpoint::linear(0, 0),
-                })
+                .submit(Command::fence(
+                    u64::try_from(index)?,
+                    WordWrite {
+                        target: WordTarget {
+                            address: completion.raw(),
+                            context: 0,
+                            width: WordTargetWidth::Bits64,
+                        },
+                        value: u64::try_from(index + 1)?,
+                    },
+                ))
                 .await?;
             channels.push(channel);
+            completions.push(completion);
         }
         // When: only channel zero is reset before hardware processes the pending work.
         channels.remove(0).reset().await?;
         // Then: the other two drivers retain their submissions and distinct completions.
         for (index, channel) in (1..3).zip(&mut channels) {
-            let mut completed = None;
+            let completion = *completions.get(index).ok_or("completion missing")?;
+            let expected = u64::try_from(index + 1)?.to_le_bytes();
+            let mut completed = [0; 8];
             for _ in 0..256 {
                 assert!(matches!(
                     model
@@ -171,17 +179,21 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
                         .await?,
                     Ok(StepOutcome::InProgress)
                 ));
-                completed = channel.response().await?;
-                if completed.is_some() {
+                completed = memory.read_typed(completion, MemoryAlignment::try_new(8)?)?;
+                if completed == expected {
                     break;
                 }
             }
-            assert_eq!(
-                completed.map(|response| response.id),
-                Some(u64::try_from(index)?)
-            );
-            assert_eq!(channel.response().await?, None);
+            assert_eq!(completed, expected);
+            assert_eq!(channel.event().await?, None);
         }
+        assert_eq!(
+            memory.read_typed::<[u8; 8]>(
+                *completions.first().ok_or("completion missing")?,
+                MemoryAlignment::try_new(8)?
+            )?,
+            [0; 8]
+        );
         Ok::<_, Box<dyn std::error::Error>>(())
     })
     .await

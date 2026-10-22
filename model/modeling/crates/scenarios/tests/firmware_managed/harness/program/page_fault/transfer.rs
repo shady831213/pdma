@@ -1,7 +1,7 @@
 use super::super::buffers::Driver;
 use super::{Grant, Input, Ports, Space, TestResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::{Command, ContextId, Endpoint, Response, Segment};
+use pdma_model_contract::dma::{Command, ContextId, Endpoint, Event, Segment};
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings};
 use pdma_model_software::dma::ChannelControl;
 
@@ -9,7 +9,12 @@ pub(super) async fn prepare<M: Send>(
     ports: &Ports<'_, M>,
     (grant, [lists, source, destination]): (Grant, [&Space; 3]),
     input: &Input,
-) -> TestResult<(Driver<M>, Command, MemoryAddress)> {
+) -> TestResult<(
+    Driver<M>,
+    Command,
+    MemoryAddress,
+    pdma_model_software::dma::CompletionWord,
+)> {
     let Grant {
         channel,
         contexts: [list_id, ring_id, source_id, destination_id],
@@ -32,10 +37,10 @@ pub(super) async fn prepare<M: Send>(
     let alignment = MemoryAlignment::try_new(u64::try_from(Command::RECORD_ALIGNMENT)?)?;
     let commands = ports
         .allocator
-        .allocate(u64::try_from(2 * Command::RECORD_SIZE)?, alignment)?;
+        .allocate(u64::try_from(4 * Command::RECORD_SIZE)?, alignment)?;
     let responses = ports.allocator.allocate(
-        u64::try_from(2 * Response::RECORD_SIZE)?,
-        MemoryAlignment::try_new(u64::try_from(Response::RECORD_ALIGNMENT)?)?,
+        u64::try_from(2 * Event::RECORD_SIZE)?,
+        MemoryAlignment::try_new(u64::try_from(Event::RECORD_ALIGNMENT)?)?,
     )?;
     ChannelControl::discover_at(&ports.bus, channel, ports.bus.addresses().dma)
         .await?
@@ -47,22 +52,35 @@ pub(super) async fn prepare<M: Send>(
         ChannelConfig {
             id: channel,
             rings: Rings {
-                command: RingConfig::new(commands.raw(), 2)?,
-                response: RingConfig::new(responses.raw(), 2)?,
+                command: RingConfig::new(commands.raw(), 4)?,
+                event: RingConfig::new(responses.raw(), 2)?,
             },
         },
         ports.bus.addresses().dma,
     )
     .await?;
-    let request = Command {
-        id: input.id,
-        source: source_endpoint,
-        destination: destination_endpoint,
-        copy_length: length,
-        sg_context: list_id.raw(),
-        ..Command::ZERO
-    };
-    Ok((driver, request, dst))
+    let request = Command::copy(
+        input.id,
+        pdma_model_contract::dma::CopyCommand {
+            source: source_endpoint,
+            destination: destination_endpoint,
+            copy_length: length,
+            sg_context: list_id.raw(),
+        },
+    );
+    let address = ports.allocator.allocate(8, MemoryAlignment::try_new(8)?)?;
+    ports
+        .memory
+        .write(address, MemoryAlignment::ONE, &0_u64.to_le_bytes())?;
+    let fence = pdma_model_software::dma::CompletionWord(pdma_model_contract::dma::WordWrite {
+        target: pdma_model_contract::dma::WordTarget {
+            address: address.raw(),
+            context: ring_id.raw(),
+            width: pdma_model_contract::dma::WordTargetWidth::Bits64,
+        },
+        value: input.id,
+    });
+    Ok((driver, request, dst, fence))
 }
 
 fn endpoint(

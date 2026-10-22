@@ -1,7 +1,7 @@
 # Firmware-managed DMA roadmap
 
 Recorded: 2026-09-15.
-Updated: 2026-10-21.
+Updated: 2026-10-22.
 Status: the architecture MVP, Function-scoped channel management, context selection
 and maintenance, and managed fatal/event recovery are implemented. Actual PCIe/IOMMU
 integration and Function-level reset remain unimplemented. Payload-only retained
@@ -9,7 +9,8 @@ suspension with owner per-channel resume replaces the earlier DSA-like continuat
 the first Signal/Wait implementation has been withdrawn. The agreed next feature set
 adds copy-engine commands and replaces DMA success responses with ordered completion
 writeback, optional notification and a per-channel error event ring. These additions
-are not implemented; the current DMA remains Copy-only with response rings.
+are implemented and model-verified; [copy-engine.md](copy-engine.md) specifies
+exact command, error-event and visibility semantics and records verification.
 HSA remains a semantic reference, not a mandatory AQL migration or conformance goal.
 Generic memory atomics and reset during context maintenance remain implemented.
 This document records decisions and open questions; it is not an execution plan
@@ -72,9 +73,8 @@ no intermediate DMA response, IRQ, firmware event or new PF management opcode.
 
 The [page-fault recovery chapter](page-fault-recovery.md) records the contract,
 software lifetime requirements and superseded decisions. Independent Linear offsets
-and SG entry/local-offset positions remain general subrange inputs. Final responses
-are 24 bytes with statuses 0..5; PageFault status 6 and fault continuation fields
-are retired. Fault status and resume are 32-bit registers with one boolean bit each;
+and SG entry/local-offset positions remain general subrange inputs. The copy-engine protocol replaces final success responses with explicit Fence/Trap
+and 24-byte error events; no PageFault event or continuation fields are retained. Fault status and resume are 32-bit registers with one boolean bit each;
 software must serialize repair/resume with reset/release/reallocation and retire
 old fault handling before reuse. Reset/release cancel parked work without resume. Drain reports ChannelStopped when
 parked work prevents completion; Abort discards matching parked work without a
@@ -103,9 +103,11 @@ The Copy-only implementation is restored to
 specification remain in `247e914` and `50b38bc`. Generic memory atomic32/atomic64,
 backend-owned errors and reset during pending context maintenance are retained.
 The Signal/Wait-specific descriptor, response variants, software helper, routed
-atomic extensions and their dedicated tests are withdrawn together. The managed
-memory adapters are back to their read/write-only baseline; generic backend atomic
-support does not imply an end-to-end managed DMA atomic path.
+atomic extensions and their dedicated tests are withdrawn together. The withdrawal
+restored managed memory adapters to their read/write-only baseline. Preparation on
+2026-10-22 adds authorized atomic forwarding through those data adapters and platform
+memory selection; it does not yet add DMA Atomic/SEM commands or change PF
+control-memory capabilities.
 
 The pipeline/command-continuation refactor remains complete at `ae3b7f3`.
 Preserve its hardware ownership, typed dataflow and command/chunk completion
@@ -243,6 +245,11 @@ remain deferred.
 
 #### Gap matrix against the restored PDMA
 
+This is the 2026-10-21 pre-implementation comparison, retained as decision
+history. Its old file names and response-based behavior describe that checkpoint,
+not current APIs. The following chapter's implementation status and
+[copy-engine spec](copy-engine.md) supersede those gaps.
+
 | Area | Restored PDMA evidence | Gap and proposed disposition |
 | --- | --- | --- |
 | Copy and SG traversal | `contract/src/dma/command.rs`; `dma/src/stages/execution/{validate,copy}.rs` | Retain Linear/independent SG. Add Write and Fill; rectangular/tiled and page-table-specific operations are outside this slice. |
@@ -266,6 +273,11 @@ Decision, 2026-10-21, following the command and completion review. Preserve exis
 Linear/independent-SG Copy and add the command families below. This records the
 approved direction, not an instruction to implement automatically or restore the
 withdrawn Signal/Wait ABI.
+
+Implementation started on 2026-10-22 under explicit user approval. The
+[copy-engine specification chapter](copy-engine.md) now fixes the first-slice
+wire/operation details; its verification section records completed acceptance.
+The heading above dates the original decision rather than current implementation.
 
 | Command | Agreed purpose and boundary |
 | --- | --- |
@@ -432,7 +444,7 @@ interrupts through their own `InterruptRuntime`.
 
 - Move reusable DMA driver capabilities from `host` into `software::dma`.
   Separate register control (discovery, faults, IRQ control and reset) from the
-  queue-owning driver (configuration, submission and response consumption).
+  queue-owning driver (configuration, submission and error-event consumption).
 - Reuse the channel reset request/completion handshake in both Host and firmware.
   Firmware release must not construct a queue-owning `Channel` merely to reset it.
   Preserve Host `Channel::reset(self)` invalidation and each domain's bus permission
@@ -508,7 +520,7 @@ firmware startup, PCIe services, context tables or external reset handshakes.
   Control memory has independent PF-programmed access configuration. These are
   reusable access bindings, not task identifiers; preserve task ID as a
   submission/diagnostic correlation value. The next DMA reporting ring is an error
-  event ring; current code still uses responses. See the [context contract](context-contract.md).
+  event ring. See the [context contract](context-contract.md).
 - Access logic in `hw-components` derives Function identity from the controlled channel
   binding and resolves the selected context to PASID and any required access
   attributes. Lookup must be scoped and authorized; a guessed context ID must not
@@ -528,7 +540,7 @@ firmware startup, PCIe services, context tables or external reset handshakes.
 | `dma` | DMA core: channel execution, admission/stop/reset, local completion facts, and memory requests through injected access capabilities. |
 | `hw-components` | Hardware components outside the DMA core: authorized MMIO views, channel/context-to-request identity resolution, interrupt routing, and ownership of accepted external access obligations. |
 | Device firmware | Resource allocation, management register programming, lifecycle sequencing, and coordination of independently reported completion conditions. |
-| Host software | Use granted channels/contexts, allocate buffers, submit commands, observe completion values and error events under the next protocol (responses today), handle interrupts and coordinate OS address-space lifetimes. |
+| Host software | Use granted channels/contexts, allocate buffers, submit commands, observe completion values and error events under the copy-engine protocol, handle interrupts and coordinate OS address-space lifetimes. |
 | Runtime/platform | Assemble hardware and software execution domains; provide memory backing, transports, wakeups and interrupt delivery. No PDMA traversal, copy or recovery policy. |
 
 Device firmware is a real modeled software actor with its own execution context.
@@ -586,7 +598,7 @@ register state and operations rather than creating shadow registers.
   state do not belong in the PDMA core.
 
 Host software uses an authorized work MMIO view for normal ring submission,
-response consumption today (error-event consumption under the next protocol) and permitted channel/IRQ configuration, without firmware
+error-event consumption and permitted channel/IRQ configuration, without firmware
 proxying every command. Firmware has a separate privileged view of management
 hardware and relevant channel controls. Both views can reach the same underlying
 channel state; neither requires shadow registers. Host accesses cannot bypass the
@@ -611,7 +623,7 @@ unbind or backing-memory reuse safe.
 Keep these completion facts separate:
 
 1. PDMA local stop/reset completion: old work cannot issue new accesses,
-   completion/event writes (response writes in the current implementation) or notifications.
+   completion/event writes or notifications.
 2. External access drain: accepted obligations have reached their qualified
    completion point, as reported by their owning port.
 3. External lifecycle release: controller/integration conditions permit reopening.

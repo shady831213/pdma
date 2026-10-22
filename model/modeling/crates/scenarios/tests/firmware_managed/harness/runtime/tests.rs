@@ -8,12 +8,14 @@ use std::sync::Arc;
 
 use super::{AccessError, Managed};
 
+mod atomic_memory;
 mod backpressure;
 mod boot;
 mod client;
 mod configuration;
 mod contexts;
 mod control;
+mod copy_engine;
 mod fatal;
 mod function_backpressure;
 mod function_dma;

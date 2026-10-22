@@ -1,5 +1,4 @@
 use crate::harness::{self, TestResult};
-use pdma_model_contract::dma::ResponseStatus;
 
 #[tokio::test]
 async fn identical_dma_addresses_resolve_in_the_owning_functions_memory() -> TestResult {
@@ -10,11 +9,7 @@ async fn identical_dma_addresses_resolve_in_the_owning_functions_memory() -> Tes
     // Then: descriptors, payloads and responses stay in each VF's address space.
     for (outcome, payload) in outcomes.iter().zip(payloads) {
         assert_eq!(outcome.bytes, payload);
-        assert_eq!(outcome.response.status, ResponseStatus::Success);
-        assert_eq!(
-            outcome.response.bytes_completed(),
-            u64::try_from(payload.len())?
-        );
+        assert_eq!(outcome.completion, 37);
         assert_eq!(outcome.interrupts, 1);
     }
     Ok(())
@@ -29,11 +24,9 @@ async fn resetting_one_functions_active_copy_preserves_peer_dma() -> TestResult 
     assert!(reset.before_reset > 0 && reset.before_reset < 65_536);
     assert!(reset.at_reset.contains(&0));
     assert_eq!(reset.at_reset, reset.after_peer);
-    assert_eq!(peer.status, ResponseStatus::Success);
-    assert_eq!(peer.id, 200);
+    assert_eq!(peer, 200);
     assert_eq!(bytes, b"peer-function-copy");
-    assert_eq!(reset.fresh.status, ResponseStatus::Success);
-    assert_eq!(reset.fresh.id, 101);
+    assert_eq!(reset.fresh, 101);
     assert_eq!(reset.fresh_bytes, b"after-function-channel-reset");
     Ok(())
 }
@@ -48,11 +41,7 @@ async fn two_functions_copy_through_shared_dma_and_receive_only_their_own_irq() 
     assert_ne!(outcomes[0].channel, outcomes[1].channel);
     for (outcome, payload) in outcomes.iter().zip(payloads) {
         assert_eq!(outcome.bytes, payload);
-        assert_eq!(outcome.response.status, ResponseStatus::Success);
-        assert_eq!(
-            outcome.response.bytes_completed(),
-            u64::try_from(payload.len())?
-        );
+        assert_eq!(outcome.completion, 37);
         assert_eq!(outcome.interrupts, 1);
     }
     Ok(())

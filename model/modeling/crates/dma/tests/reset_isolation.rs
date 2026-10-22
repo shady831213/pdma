@@ -4,7 +4,7 @@ pub mod support;
 
 use hardware_interface_pipeline::{HardwareDriver, Stage, StepOutcome, StepResult};
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelRegisters, CommandRegisters, DmaAdmin, DmaDiscovery, ResponseRegisters,
+    ChannelBlock, ChannelRegisters, CommandRegisters, DmaAdmin, DmaDiscovery, EventRegisters,
 };
 use pdma_model_dma::{ChunkInput, Dma, Error, ExecutionContext};
 use std::{cell::Cell, rc::Rc};
@@ -13,7 +13,7 @@ use support::{TestResult, command, submit};
 struct Stalled(Rc<Cell<bool>>, Option<pdma_model_dma::Flow<ChunkInput>>);
 impl<M> Stage<ExecutionContext<'_, M>> for Stalled {
     type Input = pdma_model_dma::Flow<ChunkInput>;
-    type Output = pdma_model_dma::Flow<()>;
+    type Output = pdma_model_dma::Flow<pdma_model_dma::Completion>;
     type Error = std::convert::Infallible;
     fn step(
         &mut self,
@@ -50,7 +50,7 @@ fn unrelated_idle_reset_completes_without_stepping_stalled_pipeline() -> TestRes
             0x1000_u64,
         ),
         (
-            base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
+            base + ChannelBlock::EVENT.offset() + EventRegisters::BASE.offset(),
             0x1100,
         ),
     ] {
@@ -62,7 +62,7 @@ fn unrelated_idle_reset_completes_without_stepping_stalled_pipeline() -> TestRes
             2_u32,
         ),
         (
-            base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::CAPACITY.offset(),
+            base + ChannelBlock::EVENT.offset() + EventRegisters::CAPACITY.offset(),
             2,
         ),
         (

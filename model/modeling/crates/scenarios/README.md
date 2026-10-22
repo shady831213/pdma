@@ -12,16 +12,17 @@ cargo test -p pdma-model-scenarios --test multi_channel -- --nocapture
 ```
 
 `single_channel` constructs a device with one channel, with a command
-ring, a response ring and IRQ delivery. Its cases cover linear/SG copies and failures
+ring, an error-event ring and explicit Trap IRQ delivery. Its cases cover linear/SG copies and failures
 on that same channel:
 
-- `copy_completes_through_host_irq_delivery`: copied bytes, a Success response,
+- `copy_completes_through_host_irq_delivery`: copied bytes, a Fence completion value,
   one IRQ delivery and no remaining platform notification after its claim.
 - `copy_accepts_a_byte_aligned_destination`: a nine-byte payload is copied into
-  a destination that is not eight-byte aligned, with normal response and IRQ delivery.
-- `response_write_fault_reaches_host_without_a_response_entry`: the copy completes,
-  response publication fails, and the host observes `ChannelFatalCode::ResponseWrite`
-  through IRQ delivery without needing a response entry.
+  a destination that is not eight-byte aligned, followed by Fence and Trap.
+- `successful_copy_ignores_unwritable_event_storage`: Copy, Fence and Trap complete
+  despite an injected event-write rejection because success never writes an Event.
+- `successful_copy_does_not_publish_an_error_event`: successful completion leaves
+  the error-event ring empty.
 - `software_setup_failure_stops_interrupt_runtime`: an unmapped command buffer
   fails submission before ISR registration, and the runtime returns without hanging.
 - `software_allocation_failure_stops_interrupt_runtime`: software receives an exhausted
@@ -35,13 +36,13 @@ on that same channel:
   empty-list and all-zero-list endpoints complete with zero bytes and normal IRQ
   delivery, despite zero-length allocations having no payload backing.
 
-Every successful case verifies `bytes_completed`, the actual destination backing
-bytes, one IRQ delivery and consumption of the platform notification.
+Every successful case verifies the software-selected Fence value, actual destination
+backing bytes, an empty error-event ring, IRQ delivery and notification consumption.
 
-`recovery/` adds IOC-only batched copies and error-response recovery in the same
-runtime. Its software owns allocations, handler registration, response draining and
+`recovery/` adds Fence/Trap batched copies and error-event recovery in the same
+runtime. Its software owns allocations, handler registration, event draining and
 reset/reconfiguration; its hardware module assembles/drives the pipeline and joins
-worker teardown. The batch selects IOC on its last command; the recovery case masks
+worker teardown. The batch publishes Fence completion then requests Trap; the recovery case masks
 both routine notification sources and proves error notification still arrives.
 
 ## Firmware-managed architecture MVP
@@ -82,7 +83,7 @@ the window/context rejection layer. The managed page-fault backend owns `PageErr
 and maps it to DMA's `MemoryFailure` only at the execution boundary. Its system case
 receives independent platform fault reports, repairs source and destination PASIDs,
 observes the channel's faulted bit, and writes one to resume the original retained command.
-The granted VF receives one final response; foreign and closed-channel resume
+The granted VF observes its final Fence value; foreign and closed-channel resume
 accesses remain denied.
 
 ```sh
@@ -168,7 +169,7 @@ Fault cases select a generated ring-base register in the harness. The forwarding
 records the address software writes there, and the injected memory view rejects writes
 at that entry address with `MemoryAccessError::Unmapped`. Both software and hardware use
 that view over the allocator's real backing. Software runs the same allocation path in
-all cases and has no fault-mode branches. Hardware behavior and driving still come from
+all cases. Successful commands never attempt an event write. Hardware behavior and driving still come from
 the existing device and pipeline crates.
 These tests run in ordinary `cargo test --workspace`; crate-local boundary tests
 stay in contract, device, host and the building-block crates.
@@ -188,13 +189,12 @@ The cases cover:
   destination stays identical to its pre-reset snapshot while B/C and fresh A complete.
 - A queued B reset while A is copying. A and C complete exactly, B's original
   destination stays untouched, and fresh B work succeeds.
-- A full one-entry response ring while B/C finish. A's second command remains
-  unconsumed and its destination untouched; resetting A discards the old response
-  and queued command before fresh A work completes.
+- Successful commands with a one-entry event ring while B/C finish. Copies reach
+  their Fence without consuming event capacity; reset still isolates fresh work.
 - A device reset while A is copying and B/C remain queued. A's committed prefix
   stays unchanged and B/C remain untouched; only fresh A work completes.
 
-Every case checks the exact completion IDs and byte counts. Software also verifies
+Every case checks software-selected Fence values and actual copied bytes. Software also verifies
 that channel-count discovery rejects writes and preserves its instance value across reset.
 
 The software program polls payload memory with cooperative yields. It observes

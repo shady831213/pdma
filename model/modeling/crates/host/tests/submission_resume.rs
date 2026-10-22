@@ -4,7 +4,7 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, Command, CommandRegisters, Endpoint, Response,
+    ChannelBlock, ChannelId, Command, CommandRegisters, Endpoint, Event,
 };
 use pdma_model_dma::Dma;
 use pdma_model_host::{
@@ -54,9 +54,9 @@ async fn cancelled_committed_submission_resumes_without_republication()
                 .raw(),
             1,
         )?,
-        response: RingConfig::new(
+        event: RingConfig::new(
             allocator
-                .allocate(u64::try_from(Response::RECORD_SIZE)?, alignment)?
+                .allocate(u64::try_from(Event::RECORD_SIZE)?, alignment)?
                 .raw(),
             1,
         )?,
@@ -80,14 +80,15 @@ async fn cancelled_committed_submission_resumes_without_republication()
             },
         ))
         .await?;
-    let command = Command {
-        copy_length: 0,
-        sg_context: 0,
-        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-        id: 41,
-        source: Endpoint::linear(0, 0),
-        destination: Endpoint::linear(0, 0),
-    };
+    let command = Command::copy(
+        41,
+        pdma_model_contract::dma::CopyCommand {
+            source: Endpoint::linear(0, 0),
+            destination: Endpoint::linear(0, 0),
+            copy_length: 0,
+            sg_context: 0,
+        },
+    );
     pause.store(true, Ordering::SeqCst);
     commits.store(0, Ordering::SeqCst);
     // When: cancellation follows the committed producer write and software retries.

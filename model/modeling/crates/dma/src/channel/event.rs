@@ -1,25 +1,24 @@
 use crate::{ChannelFatal, Error};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::{Encode, RegisterAccessError, RegisterWindow};
-use pdma_model_contract::dma::{Response, ResponseRegisters};
+use pdma_model_contract::dma::{Event, EventRegisters};
 use pdma_model_contract::register::ReadWordValues;
 use pdma_model_contract::ring::{Ring, RingPointers};
 
-/// Response queue state, including its own generated registers.
+/// Event queue state, including its own generated registers.
 #[derive(Debug)]
-pub struct ResponseRing {
-    pub(crate) registers: RegisterWindow<ResponseRegisters>,
-    pub(crate) last_ioc: Option<u32>,
+pub struct EventRing {
+    pub(crate) registers: RegisterWindow<EventRegisters>,
 }
 
-impl Default for ResponseRing {
+impl Default for EventRing {
     fn default() -> Self {
         Self::new(0)
     }
 }
 
-impl Ring for ResponseRing {
-    type Entry = Response;
+impl Ring for EventRing {
+    type Entry = Event;
 
     fn base(&self) -> u64 {
         self.registers.values.base.raw()
@@ -30,12 +29,11 @@ impl Ring for ResponseRing {
     }
 }
 
-impl ResponseRing {
+impl EventRing {
     /// Places this ring's MMIO window in its parent's address space.
     pub const fn new(base: usize) -> Self {
         Self {
             registers: RegisterWindow::new(base),
-            last_ioc: None,
         }
     }
 
@@ -65,7 +63,6 @@ impl ResponseRing {
     ) -> Result<(), RegisterAccessError<Error>> {
         let pointers = self.pointers();
         let base = self.registers.base();
-        let last_ioc = &mut self.last_ioc;
         self.registers.write_with(
             address,
             bytes,
@@ -83,41 +80,31 @@ impl ResponseRing {
                     .map_err(|_| Error::Cursor)?;
                 Ok(())
             },
-            |_, next| {
-                if last_ioc.is_some_and(|boundary| {
-                    boundary.wrapping_sub(pointers.consumer)
-                        <= next.consumer.raw().wrapping_sub(pointers.consumer)
-                }) {
-                    *last_ioc = None;
-                }
-            },
+            |_, _| {},
         )
     }
 
     pub(crate) fn push(
         &mut self,
         memory: &impl MemoryAccess,
-        response: &Response,
-    ) -> Result<bool, ChannelFatal> {
+        event: &Event,
+    ) -> Result<(), ChannelFatal> {
         let pointers = self.pointers();
         let address = MemoryAddress::new(
             self.entry(pointers.producer)
-                .map_err(|_| ChannelFatal::ResponseWrite)?,
+                .map_err(|_| ChannelFatal::EventConfiguration)?,
         );
         if pointers.pending() == self.capacity() {
-            return Ok(false);
+            return Err(ChannelFatal::EventFull);
         }
         let next = self
             .advance_producer(pointers, 1)
-            .map_err(|_| ChannelFatal::ResponseWrite)?;
-        let raw = response.encode().map_err(|_| ChannelFatal::ResponseWrite)?;
+            .map_err(|_| ChannelFatal::EventConfiguration)?;
+        let raw = event.encode().map_err(|_| ChannelFatal::EventWrite)?;
         memory
             .write_typed(address, MemoryAlignment::ONE, &raw)
-            .map_err(|_| ChannelFatal::ResponseWrite)?;
+            .map_err(|_| ChannelFatal::EventWrite)?;
         self.registers.values.producer = ReadWordValues::new(next.producer);
-        if response.flags.ioc {
-            self.last_ioc = Some(next.producer);
-        }
-        Ok(true)
+        Ok(())
     }
 }

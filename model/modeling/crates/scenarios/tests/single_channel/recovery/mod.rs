@@ -5,8 +5,8 @@ mod software;
 
 use crate::harness::TestResult;
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::dma::{ChannelFatalCode, CompletionFlagsValues, Response, ResponseStatus};
-use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
+use pdma_model_contract::dma::{ChannelFatalCode, Event, EventCode};
+use pdma_model_contract::dma::{ErrorInfo, EventInfoValues};
 
 #[derive(Clone, Copy, Debug)]
 enum Scenario {
@@ -15,33 +15,21 @@ enum Scenario {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn recovery_batch_last_ioc_notifies_once_and_drains_all_responses() -> TestResult {
-    // Given: three copies with nonempty notifications masked and IOC on the last only.
+async fn recovery_batch_fence_and_trap_notify_once_without_events() -> TestResult {
+    // Given: three copies followed by one Fence and one Trap.
     let payload = b"batch-copy";
     // When: the complete software program submits and drains through its registered ISR.
     let report = hardware::run(Scenario::Batch, payload).await?;
-    // Then: one notification exposes every response and every destination's copied bytes.
+    // Then: one notification exposes the Fence and all copied bytes without error events.
     assert_eq!(report.summary.deliveries(), 1);
     assert!(report.worker.is_cancelled());
-    assert_eq!(report.outcome.responses.len(), 3);
-    for (index, response) in report.outcome.responses.iter().enumerate() {
-        assert_eq!(
-            *response,
-            Response {
-                id: 40 + u64::try_from(index)?,
-                status: ResponseStatus::Success,
-                flags: CompletionFlagsValues { ioc: index == 2 },
-                info: ResponseInfoValues::Success(CompletionInfo {
-                    bytes_completed: u64::try_from(payload.len())?
-                }),
-            }
-        );
-    }
+    assert!(report.outcome.events.is_empty());
+    assert_eq!(report.outcome.completed, 42);
     assert_eq!(report.outcome.causes.len(), 1);
     let cause = report.outcome.causes.first().ok_or("missing batch cause")?;
-    assert!(cause.response_non_empty());
-    assert!(cause.ioc());
-    assert!(!cause.response_error());
+    assert!(!cause.event_non_empty());
+    assert!(cause.trap());
+    assert!(!cause.error());
     let mut copied = vec![0; payload.len() * 3];
     report.storage.read(
         report.outcome.destination,
@@ -63,36 +51,26 @@ async fn recovery_error_irq_allows_channel_reset_and_next_copy_in_same_runtime()
     assert_eq!(report.summary.deliveries(), 2);
     assert!(report.worker.is_cancelled());
     assert_eq!(
-        report.outcome.responses,
-        vec![
-            Response {
-                id: 41,
-                status: ResponseStatus::LengthMismatch,
-                flags: CompletionFlagsValues::default(),
-                info: ResponseInfoValues::LengthMismatch(CompletionInfo { bytes_completed: 0 }),
-            },
-            Response {
-                id: 42,
-                status: ResponseStatus::Success,
-                flags: CompletionFlagsValues::default(),
-                info: ResponseInfoValues::Success(CompletionInfo {
-                    bytes_completed: u64::try_from(payload.len())?
-                }),
-            },
-        ]
+        report.outcome.events,
+        vec![Event {
+            id: 41,
+            code: EventCode::LengthMismatch,
+            info: EventInfoValues::LengthMismatch(ErrorInfo { bytes_completed: 0 })
+        }]
     );
     assert_eq!(report.outcome.fatal, ChannelFatalCode::None);
     assert_eq!(report.outcome.causes.len(), 2);
     let first = report.outcome.causes.first().ok_or("missing error cause")?;
-    assert!(first.response_error());
+    assert!(first.error());
     let second = report
         .outcome
         .causes
         .get(1)
         .ok_or("missing recovered cause")?;
-    assert!(second.response_non_empty());
-    assert!(!second.response_error());
-    assert!(!second.ioc());
+    assert!(!second.event_non_empty());
+    assert!(!second.error());
+    assert!(second.trap());
+    assert_eq!(report.outcome.completed, 42);
     let mut copied = vec![0; payload.len()];
     report.storage.read(
         report.outcome.destination,

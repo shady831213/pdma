@@ -46,11 +46,11 @@ fn stale_fetch_cannot_substitute_a_reconfigured_head() -> TestResult {
         &2_u32.to_le_bytes(),
     )?;
     device.write(
-        base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
+        base + ChannelBlock::EVENT.offset() + EventRegisters::BASE.offset(),
         &0x1800_u64.to_le_bytes(),
     )?;
     device.write(
-        base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::CAPACITY.offset(),
+        base + ChannelBlock::EVENT.offset() + EventRegisters::CAPACITY.offset(),
         &2_u32.to_le_bytes(),
     )?;
     device.write(

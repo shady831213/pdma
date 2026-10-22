@@ -34,7 +34,7 @@ fn rejected_fault_register_accesses_preserve_parked_work() -> TestResult {
     assert_eq!(fault_status(&mut device)?, 1);
     assert_eq!(device.memory.faults.get(), 1);
     assert_eq!(
-        read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
+        read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
         0
     );
     Ok(())
@@ -54,13 +54,13 @@ fn reset_discards_old_task_and_new_fault_requires_resume() -> TestResult {
     assert_eq!(read_word(&mut device, reset)?, 0);
     for (offset, value) in [
         (CMD + CommandRegisters::BASE.offset(), 0x1000_u64),
-        (RESP + ResponseRegisters::BASE.offset(), 0x1100),
+        (EVENT + EventRegisters::BASE.offset(), 0x1100),
     ] {
         device.write(offset, &value.to_le_bytes())?;
     }
     for offset in [
         CMD + CommandRegisters::CAPACITY.offset(),
-        RESP + ResponseRegisters::CAPACITY.offset(),
+        EVENT + EventRegisters::CAPACITY.offset(),
         CTRL + ChannelRegisters::ENABLE.offset(),
     ] {
         device.write(offset, &1_u32.to_le_bytes())?;
@@ -77,15 +77,14 @@ fn reset_discards_old_task_and_new_fault_requires_resume() -> TestResult {
     // Then: only an explicit resume permits the new task to complete.
     assert_eq!(fault_status(&mut device)?, 1);
     assert_eq!(
-        read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
+        read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
         0
     );
     resume(&mut device, 1)?;
-    device.until(|dma| Ok(read_word(dma, RESP + ResponseRegisters::PRODUCER.offset())? == 1))?;
-    assert_eq!(response(&device)?.id, replacement.id);
+    completed(&mut device, replacement.id)?;
     assert_eq!(
-        read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
-        1
+        read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
+        0
     );
     Ok(())
 }
@@ -126,7 +125,7 @@ fn resume_does_not_enable_a_disabled_channel_or_clear_device_fatal() -> TestResu
         }
         // Then: resume cannot bypass the independent stop condition.
         assert_eq!(
-            read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
+            read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
             0
         );
         assert_eq!(
@@ -145,10 +144,11 @@ fn resume_does_not_enable_a_disabled_channel_or_clear_device_fatal() -> TestResu
                 CTRL + ChannelRegisters::ENABLE.offset(),
                 &1_u32.to_le_bytes(),
             )?;
-            device.until(|dma| {
-                Ok(read_word(dma, RESP + ResponseRegisters::PRODUCER.offset())? == 1)
-            })?;
-            assert_eq!(response(&device)?.bytes_completed(), command.copy_length);
+            completed(&mut device, command.id)?;
+            assert_eq!(
+                read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
+                0
+            );
         }
     }
     Ok(())
@@ -174,7 +174,7 @@ fn resume_without_a_fault_does_not_prearm_later_faults() -> TestResult {
         assert_eq!(fault_status(&mut device)?, 1);
         assert_eq!(device.memory.faults.get(), 1);
         assert_eq!(
-            read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
+            read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
             0
         );
     }

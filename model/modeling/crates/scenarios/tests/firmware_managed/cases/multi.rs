@@ -1,7 +1,6 @@
 use crate::harness::runtime::AccessError;
 use crate::harness::{self, TestResult};
 use pdma_model_contract::control::ControlResponseStatus;
-use pdma_model_contract::dma::ResponseStatus;
 use std::sync::Arc;
 
 #[tokio::test(flavor = "current_thread")]
@@ -27,11 +26,8 @@ async fn multi_channel_lifecycle_keeps_peer_copy_and_drains_released_memory() ->
         assert_eq!(response.id, *request);
         assert_eq!(response.status, ControlResponseStatus::Success);
     }
-    for (response, id, length) in [(outcome.peer, 202, 24), (outcome.fresh, 303, 24)] {
-        assert_eq!(response.id, id);
-        assert_eq!(response.status, ResponseStatus::Success);
-        assert_eq!(response.bytes_completed(), length);
-    }
+    assert_eq!(outcome.peer, 202);
+    assert_eq!(outcome.fresh, 303);
     assert_eq!(outcome.unallocated_access, Err(AccessError::Closed));
     assert_eq!(outcome.released_access, Err(AccessError::Closed));
     assert_eq!(outcome.peer_access, Ok(()));

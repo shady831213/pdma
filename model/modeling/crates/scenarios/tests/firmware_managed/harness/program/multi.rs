@@ -7,7 +7,7 @@ use crate::harness::runtime::{AccessError, HostBus};
 use buffers::Transfer;
 use hardware_interface_runtime::{RegisterAccess, SharedMemoryAccess};
 use pdma_model_contract::control::ControlResponse;
-use pdma_model_contract::dma::{ChannelId, Response};
+use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::{Management, firmware};
 use pdma_model_software::control::InterruptEvent;
@@ -21,8 +21,8 @@ pub struct Outcome {
     pub(crate) partial_bytes: usize,
     pub(crate) drained_bytes: usize,
     pub(crate) old_destination: [Vec<u8>; 2],
-    pub(crate) peer: Response,
-    pub(crate) fresh: Response,
+    pub(crate) peer: u64,
+    pub(crate) fresh: u64,
     pub(crate) peer_bytes: Vec<u8>,
     pub(crate) fresh_bytes: Vec<u8>,
     pub(crate) unallocated_access: Result<(), AccessError>,
@@ -80,7 +80,7 @@ pub(in crate::harness) async fn main(ports: Ports<'_>) -> TestResult<Outcome> {
             }
         }
         if peer_response.is_none() {
-            peer_response = peer.driver.response().await?;
+            peer_response = peer.try_completed().await?;
         }
         tokio::task::yield_now().await;
     }

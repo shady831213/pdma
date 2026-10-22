@@ -28,7 +28,7 @@ fn entry_stride_is_available_before_ring_configuration() -> Result<(), RingError
     // When
     let stride = ring.entry_stride()?;
     // Then
-    assert_eq!(stride, 104);
+    assert_eq!(stride, 112);
     assert_eq!(ring.validate_geometry(), Err(RingError::Geometry));
     assert_eq!(ring.entry(0), Err(RingError::Geometry));
     Ok(())
@@ -52,7 +52,7 @@ fn default_algorithms_use_current_registers_without_publishing_pointers() -> Res
     ring.registers.base = pdma_model_contract::register::AddressValues::new(0x2000);
     let second = ring.entry(3)?;
     // Then: addresses follow the owner; calculating a cursor does not publish it.
-    assert_eq!((first, second), (0x1068, 0x2068));
+    assert_eq!((first, second), (0x1070, 0x2070));
     assert_eq!(
         next,
         RingPointers {

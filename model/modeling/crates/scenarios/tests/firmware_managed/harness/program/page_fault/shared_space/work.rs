@@ -7,6 +7,7 @@ pub(super) struct Work<M> {
     pub driver: Driver<M>,
     pub request: Command,
     pub destination: MemoryAddress,
+    pub fence: pdma_model_software::dma::CompletionWord,
 }
 
 pub(super) struct Parked<M> {
@@ -36,20 +37,29 @@ pub(super) async fn pair<M: Send>(
         work.push(Work {
             channel,
             driver: setup::driver(ports, channel, session.ring_context).await?,
-            request: Command {
+            request: Command::copy(
                 id,
-                destination: Endpoint {
-                    context: session.payload_context.raw(),
-                    ..Endpoint::linear(destination.raw(), 0)
+                pdma_model_contract::dma::CopyCommand {
+                    destination: Endpoint {
+                        context: session.payload_context.raw(),
+                        ..Endpoint::linear(destination.raw(), 0)
+                    },
+                    ..match request.payload {
+                        pdma_model_contract::dma::CommandPayloadValues::Copy(copy) => copy,
+                        _ => return Err("expected Copy".into()),
+                    }
                 },
-                ..request
-            },
+            ),
+            fence: setup::fence(ports, session.ring_context, id)?,
             destination,
         });
     }
     let mut faults = Vec::new();
     for task in work.iter_mut().rev() {
         task.driver.submit(task.request).await?;
+        task.driver
+            .submit(task.fence.command(task.request.id))
+            .await?;
         let report = recovery
             .reports
             .recv()

@@ -1,9 +1,9 @@
 use super::Error;
-use super::{COMMAND, RESPONSE, bus::RegisterPort};
+use super::{COMMAND, EVENT, bus::RegisterPort};
 use crate::ring::RingConfig;
 use crate::ring::{RingCursorRegisters, SoftRing};
 use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
-use pdma_model_contract::dma::{Command, CommandRegisters, Response, ResponseRegisters};
+use pdma_model_contract::dma::{Command, CommandRegisters, Event, EventRegisters};
 
 #[derive(Debug)]
 pub(super) struct CommandRing(SoftRing<Command>);
@@ -59,10 +59,10 @@ fn command_registers<B, E>() -> Result<RingCursorRegisters, Error<B, E>> {
 }
 
 #[derive(Debug)]
-pub(super) struct ResponseRing(SoftRing<Response>);
+pub(super) struct EventRing(SoftRing<Event>);
 
-impl ResponseRing {
-    pub(super) const fn new(config: RingConfig<Response>) -> Self {
+impl EventRing {
+    pub(super) const fn new(config: RingConfig<Event>) -> Self {
         Self(SoftRing::new(config))
     }
 
@@ -70,22 +70,22 @@ impl ResponseRing {
         &mut self,
         port: &RegisterPort<B>,
         memory: &M,
-    ) -> Result<Option<Response>, Error<B::Error, M::Error>>
+    ) -> Result<Option<Event>, Error<B::Error, M::Error>>
     where
         B: RegisterAccess + Send + Sync,
         M: MemoryAccess + Send + Sync,
     {
         let registers = RingCursorRegisters {
-            producer: u32::try_from(RESPONSE + ResponseRegisters::PRODUCER.offset())
+            producer: u32::try_from(EVENT + EventRegisters::PRODUCER.offset())
                 .map_err(|_| Error::Geometry)?,
-            consumer: u32::try_from(RESPONSE + ResponseRegisters::CONSUMER.offset())
+            consumer: u32::try_from(EVENT + EventRegisters::CONSUMER.offset())
                 .map_err(|_| Error::Geometry)?,
         };
         let io = port.ring_io(memory, registers)?;
-        let Some(response) = self.0.peek(&io).await? else {
+        let Some(event) = self.0.peek(&io).await? else {
             return Ok(None);
         };
         self.0.consume(&io).await?;
-        Ok(Some(response))
+        Ok(Some(event))
     }
 }

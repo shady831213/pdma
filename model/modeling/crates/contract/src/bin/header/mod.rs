@@ -6,7 +6,8 @@ use pdma_model_contract::control::{
     ControlEvent, ControlQueue, ControlRequest, ControlResponse, ControlRingState,
 };
 use pdma_model_contract::dma::{
-    Command, CompletionInfo, DmaRegisters, Endpoint, Response, Segment,
+    AtomicCommand, Command, CopyCommand, DmaRegisters, Endpoint, ErrorInfo, Event, FillCommand,
+    Segment, SemaphoreCommand, WaitCommand, WordTarget, WordWrite,
 };
 use pdma_model_contract::hw_components::context::ContextTableRegisters;
 use pdma_model_contract::hw_components::control::ControlRegisters;
@@ -37,8 +38,15 @@ pub fn generate_with_contexts(count: usize, contexts: usize) -> Result<HeaderSet
         ("segment", Segment::SPEC.resolve()?),
         ("endpoint", Endpoint::SPEC.resolve()?),
         ("command", Command::SPEC.resolve()?),
-        ("response", Response::SPEC.resolve()?),
-        ("completioninfo", CompletionInfo::SPEC.resolve()?),
+        ("copycommand", CopyCommand::SPEC.resolve()?),
+        ("wordtarget", WordTarget::SPEC.resolve()?),
+        ("wordwrite", WordWrite::SPEC.resolve()?),
+        ("fillcommand", FillCommand::SPEC.resolve()?),
+        ("waitcommand", WaitCommand::SPEC.resolve()?),
+        ("atomiccommand", AtomicCommand::SPEC.resolve()?),
+        ("semaphorecommand", SemaphoreCommand::SPEC.resolve()?),
+        ("event", Event::SPEC.resolve()?),
+        ("errorinfo", ErrorInfo::SPEC.resolve()?),
         ("contextattributes", ContextAttributes::SPEC.resolve()?),
         ("controlrequest", ControlRequest::SPEC.resolve()?),
         ("controlresponse", ControlResponse::SPEC.resolve()?),

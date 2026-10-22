@@ -28,7 +28,7 @@ fn reset_waits_for_resident_child_to_observe_and_complete_cleanup() -> TestResul
     }
     impl<M, SB> Stage<ExecutionContext<'_, M, SB>> for Resident {
         type Input = Flow<ChunkInput>;
-        type Output = Flow<()>;
+        type Output = Flow<crate::Completion>;
         type Error = Infallible;
         fn step(
             &mut self,
@@ -120,12 +120,7 @@ fn stale_fetch_cannot_enter_the_next_task_on_the_same_generation() -> TestResult
         ),
     ));
     let completion = finish(&mut execution, &mut dma.execution_context(), chunk)?;
-    let response = finish(
-        &mut dma.responses(),
-        &mut dma.execution_context(),
-        completion,
-    )?;
-    finish(&mut Retire, &mut dma, response)?;
+    finish(&mut Retire, &mut dma, vec![(0, completion)])?;
     dma.memory.write(
         (0x1000 + u64::try_from(Command::RECORD_SIZE)?).into(),
         MemoryAlignment::ONE,
@@ -146,9 +141,9 @@ fn stale_fetch_cannot_enter_the_next_task_on_the_same_generation() -> TestResult
     assert!(rejected.work.is_none());
     assert!(fetched.work.is_some());
     dma.request_reset();
-    finish(&mut Retire, &mut dma, rejected.finish())?;
+    finish(&mut Retire, &mut dma, vec![(0, rejected.finish())])?;
     assert!(dma.resetting());
-    assert!(finish(&mut Retire, &mut dma, fetched.stop(Error::Reset)).is_err());
+    assert!(finish(&mut Retire, &mut dma, vec![(0, fetched.stop(Error::Reset))]).is_err());
     assert!(!dma.resetting());
     Ok(())
 }
@@ -162,9 +157,13 @@ fn admission_does_not_replace_resident_ownership() -> TestResult {
     let rejected = finish(&mut Fetch, &mut dma, next)?;
     assert!(rejected.work.is_none());
     dma.request_reset();
-    finish(&mut Retire, &mut dma, rejected.finish())?;
+    finish(&mut Retire, &mut dma, vec![(0, rejected.finish())])?;
     assert!(dma.resetting());
-    let result = finish(&mut Retire, &mut dma, accepted.stop(Error::Reset));
+    let result = finish(
+        &mut Retire,
+        &mut dma,
+        vec![(0, accepted.stop(Error::Reset))],
+    );
     assert!(result.is_err());
     assert!(!dma.resetting());
     Ok(())
@@ -175,7 +174,7 @@ fn custom_domain_stop_passes_through_retirement() -> TestResult {
     struct Stop;
     impl<M, SB> Stage<ExecutionContext<'_, M, SB>> for Stop {
         type Input = Flow<ChunkInput>;
-        type Output = Flow<()>;
+        type Output = Flow<crate::Completion>;
         type Error = Infallible;
         fn step(
             &mut self,
@@ -203,6 +202,8 @@ fn custom_domain_stop_passes_through_retirement() -> TestResult {
             .iter()
             .all(|channel| channel.resident.is_none())
     );
+    assert!(dma.channels.iter().all(|channel| channel.work.is_none()));
+    assert!(dma.active.is_none());
     dma.request_reset();
     assert!(!dma.resetting());
     Ok(())
@@ -213,11 +214,11 @@ fn custom_tail_preserves_first_domain_stop() -> TestResult {
     let mut dma = crate::stages::tests::queued_copy(0x1100, false)?;
     let request = dma.command_request(ChannelId::new(0))?;
     let accepted = finish(&mut Fetch, &mut dma, request)?;
-    let stopped: Flow<()> = accepted
+    let stopped: Flow<crate::Completion> = accepted
         .stop::<ChunkInput>(Error::Reset)
         .stop(Error::Routing);
     assert_eq!(stopped.status(), Err(Error::Reset));
-    let mut input = Some(stopped);
+    let mut input = Some(vec![(0, stopped)]);
     assert_eq!(
         Retire.step(&mut dma, &mut input)?,
         StepOutcome::Complete(Err(Error::Reset))

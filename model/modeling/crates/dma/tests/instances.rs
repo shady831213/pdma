@@ -5,7 +5,7 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
 };
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, ResponseRegisters,
+    ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, EventRegisters,
 };
 use pdma_model_dma::Dma;
 use std::cell::Cell;
@@ -68,7 +68,7 @@ fn idle_or_fatal_devices_keep_driving_without_memory_or_queue_effects()
                         0x1000_u64,
                     ),
                     (
-                        ChannelBlock::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
+                        ChannelBlock::EVENT.offset() + EventRegisters::BASE.offset(),
                         0x2000,
                     ),
                 ] {
@@ -80,7 +80,7 @@ fn idle_or_fatal_devices_keep_driving_without_memory_or_queue_effects()
                         2_u32,
                     ),
                     (
-                        ChannelBlock::RESPONSE.offset() + ResponseRegisters::CAPACITY.offset(),
+                        ChannelBlock::EVENT.offset() + EventRegisters::CAPACITY.offset(),
                         2,
                     ),
                     (
@@ -126,11 +126,11 @@ fn idle_or_fatal_devices_keep_driving_without_memory_or_queue_effects()
                         0,
                     ),
                     (
-                        ChannelBlock::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset(),
+                        ChannelBlock::EVENT.offset() + EventRegisters::PRODUCER.offset(),
                         0,
                     ),
                     (
-                        ChannelBlock::RESPONSE.offset() + ResponseRegisters::CONSUMER.offset(),
+                        ChannelBlock::EVENT.offset() + EventRegisters::CONSUMER.offset(),
                         0,
                     ),
                 ] {

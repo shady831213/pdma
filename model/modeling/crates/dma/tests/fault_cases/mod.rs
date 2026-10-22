@@ -15,13 +15,13 @@ use crate::support::{TestResult, configure};
 use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelRegisters, Command, CommandRegisters, Endpoint, Response, ResponseRaw,
-    ResponseRegisters, ResponseStatus, Segment,
+    ChannelBlock, ChannelRegisters, Command, CommandRegisters, Endpoint, Event, EventCode,
+    EventRaw, EventRegisters, Segment,
 };
 use pdma_model_dma::{Dma, Hardware};
 
 const CMD: usize = ChannelBlock::ALIGNMENT + ChannelBlock::COMMAND.offset();
-const RESP: usize = ChannelBlock::ALIGNMENT + ChannelBlock::RESPONSE.offset();
+const EVENT: usize = ChannelBlock::ALIGNMENT + ChannelBlock::EVENT.offset();
 const CTRL: usize = ChannelBlock::ALIGNMENT + ChannelBlock::CONTROL.offset();
 
 struct Fixture {
@@ -120,7 +120,8 @@ fn run(device: &mut Fixture) -> TestResult {
 }
 
 fn submit(device: &mut Dma<Paged>, command: Command, sequence: u32) -> TestResult {
-    let slot = u64::from(sequence % 2);
+    let capacity = read_word(device, CMD + CommandRegisters::CAPACITY.offset())?;
+    let slot = u64::from(sequence % capacity);
     device.memory.memory.write(
         (0x1000 + slot * u64::try_from(Command::RECORD_SIZE)?).into(),
         MemoryAlignment::ONE,
@@ -133,12 +134,44 @@ fn submit(device: &mut Dma<Paged>, command: Command, sequence: u32) -> TestResul
     Ok(())
 }
 
-fn response(device: &Dma<Paged>) -> TestResult<Response> {
+fn event(device: &Dma<Paged>) -> TestResult<Event> {
     let raw = device
         .memory
         .memory
-        .read_typed::<ResponseRaw>(0x1100.into(), MemoryAlignment::ONE)?;
-    Ok(Response::from_bytes(raw.as_ref())?)
+        .read_typed::<EventRaw>(0x1100.into(), MemoryAlignment::ONE)?;
+    Ok(Event::from_bytes(raw.as_ref())?)
+}
+
+fn completed(device: &mut Fixture, value: u64) -> TestResult {
+    let sequence = read_word(device, CMD + CommandRegisters::PRODUCER.offset())?;
+    device
+        .memory
+        .memory
+        .write(0x1ff0.into(), MemoryAlignment::ONE, &0_u64.to_le_bytes())?;
+    let fence = Command::fence(
+        value,
+        pdma_model_contract::dma::WordWrite {
+            target: pdma_model_contract::dma::WordTarget {
+                address: 0x1ff0,
+                context: 0,
+                width: pdma_model_contract::dma::WordTargetWidth::Bits64,
+            },
+            value,
+        },
+    );
+    submit(device, fence, sequence)?;
+    device.until(|dma| {
+        Ok(u64::from_le_bytes(
+            dma.memory
+                .memory
+                .read_typed::<[u8; 8]>(0x1ff0.into(), MemoryAlignment::ONE)?,
+        ) == value)
+    })?;
+    assert_eq!(
+        read_word(device, EVENT + EventRegisters::PRODUCER.offset())?,
+        0
+    );
+    Ok(())
 }
 
 fn streams(device: &Dma<Paged>) -> TestResult<Command> {
@@ -165,11 +198,19 @@ fn streams(device: &Dma<Paged>) -> TestResult<Command> {
             )?;
         }
     }
-    Ok(Command {
-        id: 7,
-        copy_length: 8,
-        source: Endpoint::scatter_gather(0x1400, 2),
-        destination: Endpoint::scatter_gather(0x1500, 2),
-        ..Command::ZERO
+    Ok({
+        let original = Command::ZERO;
+        let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload else {
+            return Err("copy fixture required".into());
+        };
+        Command::copy(
+            7,
+            pdma_model_contract::dma::CopyCommand {
+                copy_length: 8,
+                source: Endpoint::scatter_gather(0x1400, 2),
+                destination: Endpoint::scatter_gather(0x1500, 2),
+                ..copy
+            },
+        )
     })
 }

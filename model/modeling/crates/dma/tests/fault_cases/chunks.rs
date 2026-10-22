@@ -15,12 +15,15 @@ fn early_write_resume_ends_old_invocation_without_repeating_read_or_transform() 
 fn chunked_transform(fault: bool) -> TestResult {
     // Given: a three-chunk command with a non-idempotent payload transform.
     let mut device = setup()?.dma;
-    let command = Command {
-        copy_length: 600,
-        source: Endpoint::linear(0x1400, 0),
-        destination: Endpoint::linear(0x1800, 0),
-        ..crate::support::command()
-    };
+    let command = Command::copy(
+        crate::support::command().id,
+        pdma_model_contract::dma::CopyCommand {
+            copy_length: 600,
+            source: Endpoint::linear(0x1400, 0),
+            destination: Endpoint::linear(0x1800, 0),
+            sg_context: 0,
+        },
+    );
     device
         .memory
         .memory
@@ -33,10 +36,10 @@ fn chunked_transform(fault: bool) -> TestResult {
         PrepareChunk::default(),
         Then::new(ReadCopy::default(), InvertPayload),
     );
-    let mut service = device.hardware_with(Then::new(
-        pdma_model_dma::CommandExecution::new(Then::new(chunks, WriteCopy::default())),
-        Then::new(pdma_model_dma::CompletionInput, device.responses()),
-    ));
+    let mut service = device.hardware_with(pdma_model_dma::CommandExecution::new(Then::new(
+        chunks,
+        WriteCopy::default(),
+    )));
     let mut operation = Operation::new(());
     let mut resumed = false;
     let mut released_accesses = None;
@@ -55,7 +58,7 @@ fn chunked_transform(fault: bool) -> TestResult {
         if fault_status(&mut device)? == 1 {
             assert!(!resumed);
             assert_eq!(
-                read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
+                read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
                 0
             );
             device.memory.missing.set(None);
@@ -71,11 +74,19 @@ fn chunked_transform(fault: bool) -> TestResult {
             result?;
             if released_accesses.take().is_some() {
                 assert_eq!(
-                    read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
+                    read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
                     0
                 );
             }
-            if read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())? == 1 {
+            if !fault
+                || resumed
+                    && released_accesses.is_none()
+                    && device
+                        .memory
+                        .memory
+                        .read_typed::<[u8; 1]>(0x1a57.into(), MemoryAlignment::ONE)?
+                        == [!0x5a]
+            {
                 break;
             }
             operation = Operation::new(());
@@ -99,12 +110,9 @@ fn chunked_transform(fault: bool) -> TestResult {
         1
     );
     assert_eq!(
-        read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
-        1
+        read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
+        0
     );
-    assert_eq!(
-        (response(&device)?.id, response(&device)?.bytes_completed()),
-        (command.id, 600)
-    );
+
     Ok(())
 }

@@ -1,15 +1,15 @@
-use super::support::{TestResult, configure, submit, word};
+use super::support::{TestResult, completion, configure, submit, word};
 use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
-use pdma_model_contract::dma::{ChannelBlock, ChannelId, ChannelRegisters, ResponseRegisters};
+use pdma_model_contract::dma::{ChannelBlock, ChannelId, ChannelRegisters, EventRegisters};
 use pdma_model_dma::Dma;
 
 #[test]
-fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {
+fn stopped_or_fatal_channel_does_not_stall_peers() -> TestResult {
     for fatal in [false, true] {
-        // Given: A is either faulted or has a full response ring; B/C have fresh work.
+        // Given: A has a command-fetch fatal or a stopping error; B/C have fresh work.
         let memory = SharedMemory::new();
         let (start, length) = if fatal {
             (0x2000, 0x2000)
@@ -33,13 +33,13 @@ fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {
                 &1_u32.to_le_bytes(),
             )?;
         } else {
-            fill_response_ring(&mut device, base)?;
+            stop_channel(&mut device, base)?;
         }
         for index in 1..3 {
             configure(&mut device, index)?;
             submit(&mut device, index, u64::try_from(index)?)?;
         }
-        // When: the sustained graph visits all channels while A cannot publish.
+        // When: the sustained graph visits all channels while A remains stopped.
         let mut hardware = device.hardware();
         let mut operation = hardware_interface_pipeline::HardwareDriver::new();
         for _ in 0..512 {
@@ -48,17 +48,18 @@ fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {
                 StepOutcome::InProgress
             ));
         }
-        // Then: both peers complete, and A's fault or full ring stays local.
+        // Then: both peer Fences complete, and A's stopping condition stays local.
         for index in 1..3 {
             assert_eq!(
                 word(
                     &mut device,
                     ChannelId::new(index).register_offset(3).ok_or("offset")?
-                        + ChannelBlock::RESPONSE.offset()
-                        + ResponseRegisters::PRODUCER.offset()
+                        + ChannelBlock::EVENT.offset()
+                        + EventRegisters::PRODUCER.offset()
                 )?,
-                1
+                0
             );
+            assert_eq!(completion(&device, index)?, u64::try_from(index)? + 1);
         }
         if fatal {
             assert_eq!(
@@ -72,60 +73,52 @@ fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {
             assert_eq!(
                 word(
                     &mut device,
-                    base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset()
+                    base + ChannelBlock::EVENT.offset() + EventRegisters::PRODUCER.offset()
                 )?,
-                2
+                1
             );
         }
     }
     Ok(())
 }
 
-fn fill_response_ring(device: &mut Dma<SharedMemory>, base: usize) -> TestResult {
-    let command = pdma_model_contract::dma::Command {
-        copy_length: 0,
-        sg_context: 0,
-        id: 1,
-        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-        source: pdma_model_contract::dma::Endpoint::linear(0x1200, 0),
-        destination: pdma_model_contract::dma::Endpoint::linear(0x1400, 0),
-    };
-    for producer in 1..=3_u32 {
-        device.memory.write(
-            MemoryAddress::new(
-                0x1000
-                    + u64::from((producer - 1) % 2)
-                        * u64::try_from(pdma_model_contract::dma::Command::RECORD_SIZE)?,
-            ),
-            MemoryAlignment::ONE,
-            &command.to_bytes()?,
-        )?;
-        device.write(
-            base + ChannelBlock::COMMAND.offset()
-                + pdma_model_contract::dma::CommandRegisters::PRODUCER.offset(),
-            &producer.to_le_bytes(),
-        )?;
-        if producer == 3 {
-            break;
-        }
-        let mut hardware = device.hardware();
-        let mut operation = hardware_interface_pipeline::Operation::new(());
-        let mut finished = false;
-        for _ in 0..128 {
-            if let StepOutcome::Complete(result) = operation.step(&mut hardware, device)? {
-                result?;
-                if word(
-                    device,
-                    base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset(),
-                )? == producer
-                {
-                    finished = true;
-                    break;
-                }
-                operation = hardware_interface_pipeline::Operation::new(());
+fn stop_channel(device: &mut Dma<SharedMemory>, base: usize) -> TestResult {
+    let command = pdma_model_contract::dma::Command::copy(
+        1,
+        pdma_model_contract::dma::CopyCommand {
+            copy_length: 4,
+            sg_context: 0,
+            source: pdma_model_contract::dma::Endpoint::linear(0, 0),
+            destination: pdma_model_contract::dma::Endpoint::linear(0x1400, 0),
+        },
+    );
+    device.memory.write(
+        MemoryAddress::new(0x1000),
+        MemoryAlignment::ONE,
+        &command.to_bytes()?,
+    )?;
+    device.write(
+        base + ChannelBlock::COMMAND.offset()
+            + pdma_model_contract::dma::CommandRegisters::PRODUCER.offset(),
+        &1_u32.to_le_bytes(),
+    )?;
+    let mut hardware = device.hardware();
+    let mut operation = hardware_interface_pipeline::Operation::new(());
+    let mut finished = false;
+    for _ in 0..128 {
+        if let StepOutcome::Complete(result) = operation.step(&mut hardware, device)? {
+            result?;
+            if word(
+                device,
+                base + ChannelBlock::EVENT.offset() + EventRegisters::PRODUCER.offset(),
+            )? == 1
+            {
+                finished = true;
+                break;
             }
+            operation = hardware_interface_pipeline::Operation::new(());
         }
-        assert!(finished);
     }
+    assert!(finished);
     Ok(())
 }

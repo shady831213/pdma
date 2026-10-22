@@ -5,8 +5,7 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, CompletionFlagsValues,
-    Endpoint, ResponseRegisters,
+    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Endpoint, EventRegisters,
 };
 use pdma_model_dma::{Candidate, CommandRequest, Dma, Fetch, FetchedCommand, RoundRobin};
 use std::cell::RefCell;
@@ -70,14 +69,15 @@ fn fixture() -> TestResult<Dma<ObservedMemory>> {
     for index in 0..2 {
         let base = ChannelId::new(index).register_offset(2).ok_or("channel")?;
         let address = 0x1000 + u64::try_from(index)? * 0x100;
-        let command = Command {
-            id: address,
-            copy_length: 4,
-            flags: CompletionFlagsValues { ioc: false },
-            sg_context: 0,
-            source: Endpoint::linear(0x2000, 0),
-            destination: Endpoint::linear(0x2100, 0),
-        };
+        let command = Command::copy(
+            address,
+            pdma_model_contract::dma::CopyCommand {
+                copy_length: 4,
+                sg_context: 0,
+                source: Endpoint::linear(0x2000, 0),
+                destination: Endpoint::linear(0x2100, 0),
+            },
+        );
         device
             .memory
             .backing
@@ -88,7 +88,7 @@ fn fixture() -> TestResult<Dma<ObservedMemory>> {
                 address,
             ),
             (
-                ChannelBlock::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
+                ChannelBlock::EVENT.offset() + EventRegisters::BASE.offset(),
                 address + 0x800,
             ),
         ] {
@@ -100,7 +100,7 @@ fn fixture() -> TestResult<Dma<ObservedMemory>> {
                 2_u32,
             ),
             (
-                ChannelBlock::RESPONSE.offset() + ResponseRegisters::CAPACITY.offset(),
+                ChannelBlock::EVENT.offset() + EventRegisters::CAPACITY.offset(),
                 2,
             ),
             (

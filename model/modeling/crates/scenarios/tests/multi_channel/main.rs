@@ -13,6 +13,6 @@ type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 enum Scenario {
     CopyInFlight,
     QueuedChannel,
-    ResponseBackpressure,
+    SuccessWithoutEvents,
     WholeDevice,
 }

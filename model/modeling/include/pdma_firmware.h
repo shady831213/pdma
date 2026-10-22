@@ -321,14 +321,14 @@
  * Registers owned by the software-produced, hardware-consumed command ring. Software programs storage before enabling the channel and publishes descriptors through its producer cursor.
  */
 /*
- * DmaRegisters.channels[0].response
- * Response queue interface
- * Registers owned by the hardware-produced, software-consumed response ring. Software programs storage before enabling the channel and releases responses through its consumer cursor.
+ * DmaRegisters.channels[0].event
+ * Event queue interface
+ * Registers owned by the hardware-produced, software-consumed event ring. Software programs storage before enabling the channel and releases events through its consumer cursor.
  */
 /*
  * DmaRegisters.channels[0].control
  * Channel management interface
- * Processing enable, interrupt causes and sticky channel fatal. There is no separate event ring.
+ * Processing enable, interrupt causes and sticky channel fatal. Trap notifications do not use event storage.
  */
 /*
  * DmaRegisters.channels[1]
@@ -341,14 +341,14 @@
  * Registers owned by the software-produced, hardware-consumed command ring. Software programs storage before enabling the channel and publishes descriptors through its producer cursor.
  */
 /*
- * DmaRegisters.channels[1].response
- * Response queue interface
- * Registers owned by the hardware-produced, software-consumed response ring. Software programs storage before enabling the channel and releases responses through its consumer cursor.
+ * DmaRegisters.channels[1].event
+ * Event queue interface
+ * Registers owned by the hardware-produced, software-consumed event ring. Software programs storage before enabling the channel and releases events through its consumer cursor.
  */
 /*
  * DmaRegisters.channels[1].control
  * Channel management interface
- * Processing enable, interrupt causes and sticky channel fatal. There is no separate event ring.
+ * Processing enable, interrupt causes and sticky channel fatal. Trap notifications do not use event storage.
  */
 /*
  * DmaRegisters.channels[2]
@@ -361,14 +361,14 @@
  * Registers owned by the software-produced, hardware-consumed command ring. Software programs storage before enabling the channel and publishes descriptors through its producer cursor.
  */
 /*
- * DmaRegisters.channels[2].response
- * Response queue interface
- * Registers owned by the hardware-produced, software-consumed response ring. Software programs storage before enabling the channel and releases responses through its consumer cursor.
+ * DmaRegisters.channels[2].event
+ * Event queue interface
+ * Registers owned by the hardware-produced, software-consumed event ring. Software programs storage before enabling the channel and releases events through its consumer cursor.
  */
 /*
  * DmaRegisters.channels[2].control
  * Channel management interface
- * Processing enable, interrupt causes and sticky channel fatal. There is no separate event ring.
+ * Processing enable, interrupt causes and sticky channel fatal. Trap notifications do not use event storage.
  */
 
 /*
@@ -383,7 +383,28 @@
 #define C_FDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_WRITABLE_MASK UINT64_C(0)
 
 /*
- * Enable control
+ * Immutable native or exclusive atomic operation support by word width
+ * Immutable native or exclusive atomic operation support by word width.
+ */
+/*
+ * atomic32
+ * 32-bit atomic and semaphore operations are supported
+ * 32-bit atomic and semaphore operations are supported.
+ */
+/*
+ * atomic64
+ * 64-bit atomic and semaphore operations are supported
+ * 64-bit atomic and semaphore operations are supported.
+ */
+#define C_FDMA_C_QUCQUAQUPQUAQUBQUIQULQUIQUTQUIQUEQUS_OFFSET UINT64_C(4)
+#define C_FDMA_C_QUCQUAQUPQUAQUBQUIQULQUIQUTQUIQUEQUS_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUCQUAQUPQUAQUBQUIQULQUIQUTQUIQUEQUS_ACCESS C_FDMA_ACCESS_READ_ONLY
+#define C_FDMA_C_QUCQUAQUPQUAQUBQUIQULQUIQUTQUIQUEQUS_RESET_KIND C_FDMA_RESET_POST_RESET
+#define C_FDMA_C_QUCQUAQUPQUAQUBQUIQULQUIQUTQUIQUEQUS_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUCQUAQUPQUAQUBQUIQULQUIQUTQUIQUEQUS_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Enables notification of device fatal independently of channel IRQ enable
  * Enables notification of device fatal independently of channel IRQ enable.
  */
 /*
@@ -391,7 +412,7 @@
  * Enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_OFFSET UINT64_C(4)
+#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_OFFSET UINT64_C(8)
 #define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_WIDTH UINT64_C(4)
 #define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_ACCESS C_FDMA_ACCESS_READ_WRITE
 #define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_RESET_KIND C_FDMA_RESET_ZERO
@@ -399,16 +420,17 @@
 #define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_WRITABLE_MASK UINT64_C(1)
 
 /*
- * Dma fatal state
+ * Dma fatal cause; read-only and sticky until device reset
  * Dma fatal cause; read-only and sticky until device reset.
  */
 /*
  * code
+ * Zero is healthy; Internal is a device-wide unrecoverable hardware fatal
  * Zero is healthy; Internal is a device-wide unrecoverable hardware fatal.
  */
 #define C_FDMA_C_QUFQUAQUTQUAQUL__1_C_CODE_C_QUNONE UINT64_C(0)
 #define C_FDMA_C_QUFQUAQUTQUAQUL__1_C_CODE_C_QUINTERNAL UINT64_C(1)
-#define C_FDMA_C_QUFQUAQUTQUAQUL__1_OFFSET UINT64_C(8)
+#define C_FDMA_C_QUFQUAQUTQUAQUL__1_OFFSET UINT64_C(12)
 #define C_FDMA_C_QUFQUAQUTQUAQUL__1_WIDTH UINT64_C(4)
 #define C_FDMA_C_QUFQUAQUTQUAQUL__1_ACCESS C_FDMA_ACCESS_READ_ONLY
 #define C_FDMA_C_QUFQUAQUTQUAQUL__1_RESET_KIND C_FDMA_RESET_ZERO
@@ -416,14 +438,15 @@
 #define C_FDMA_C_QUFQUAQUTQUAQUL__1_WRITABLE_MASK UINT64_C(0)
 
 /*
- * Hardware reset request and busy state
+ * Requests reset of device controls and every channel, including retained execution
  * Requests reset of device controls and every channel, including retained execution. Reads busy until all affected memory accesses drain and cleanup completes. Hardware channel count is preserved.
  */
 /*
  * request
+ * Write one to request reset; read one while busy and zero after hardware cleanup
  * Write one to request reset; read one while busy and zero after hardware cleanup. Writing zero cannot clear a pending request.
  */
-#define C_FDMA_C_QURQUEQUSQUEQUT__1_OFFSET UINT64_C(12)
+#define C_FDMA_C_QURQUEQUSQUEQUT__1_OFFSET UINT64_C(16)
 #define C_FDMA_C_QURQUEQUSQUEQUT__1_WIDTH UINT64_C(4)
 #define C_FDMA_C_QURQUEQUSQUEQUT__1_ACCESS C_FDMA_ACCESS_READ_WRITE
 #define C_FDMA_C_QURQUEQUSQUEQUT__1_RESET_KIND C_FDMA_RESET_ZERO
@@ -436,9 +459,10 @@
  */
 /*
  * request
+ * Write one to request reset; read one while busy and zero after hardware cleanup
  * Write one to request reset; read one while busy and zero after hardware cleanup. Writing zero cannot clear a pending request.
  */
-#define C_FDMA_C_QURQUEQUSQUEQUT__2_OFFSET UINT64_C(16)
+#define C_FDMA_C_QURQUEQUSQUEQUT__2_OFFSET UINT64_C(20)
 #define C_FDMA_C_QURQUEQUSQUEQUT__2_WIDTH UINT64_C(4)
 #define C_FDMA_C_QURQUEQUSQUEQUT__2_ACCESS C_FDMA_ACCESS_READ_WRITE
 #define C_FDMA_C_QURQUEQUSQUEQUT__2_RESET_KIND C_FDMA_RESET_ZERO
@@ -451,9 +475,10 @@
  */
 /*
  * request
+ * Write one to request reset; read one while busy and zero after hardware cleanup
  * Write one to request reset; read one while busy and zero after hardware cleanup. Writing zero cannot clear a pending request.
  */
-#define C_FDMA_C_QURQUEQUSQUEQUT__3_OFFSET UINT64_C(20)
+#define C_FDMA_C_QURQUEQUSQUEQUT__3_OFFSET UINT64_C(24)
 #define C_FDMA_C_QURQUEQUSQUEQUT__3_WIDTH UINT64_C(4)
 #define C_FDMA_C_QURQUEQUSQUEQUT__3_ACCESS C_FDMA_ACCESS_READ_WRITE
 #define C_FDMA_C_QURQUEQUSQUEQUT__3_RESET_KIND C_FDMA_RESET_ZERO
@@ -466,9 +491,10 @@
  */
 /*
  * request
+ * Write one to request reset; read one while busy and zero after hardware cleanup
  * Write one to request reset; read one while busy and zero after hardware cleanup. Writing zero cannot clear a pending request.
  */
-#define C_FDMA_C_QURQUEQUSQUEQUT__4_OFFSET UINT64_C(24)
+#define C_FDMA_C_QURQUEQUSQUEQUT__4_OFFSET UINT64_C(28)
 #define C_FDMA_C_QURQUEQUSQUEQUT__4_WIDTH UINT64_C(4)
 #define C_FDMA_C_QURQUEQUSQUEQUT__4_ACCESS C_FDMA_ACCESS_READ_WRITE
 #define C_FDMA_C_QURQUEQUSQUEQUT__4_RESET_KIND C_FDMA_RESET_ZERO
@@ -477,7 +503,7 @@
 
 /*
  * Command ring base address
- * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 104 bytes apart. The value cannot change after the channel's first successful enable until reset.
+ * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 112 bytes apart. The value cannot change after the channel's first successful enable until reset.
  */
 #define C_FDMA_C_QUBQUAQUSQUE__1_OFFSET UINT64_C(4096)
 #define C_FDMA_C_QUBQUAQUSQUE__1_WIDTH UINT64_C(8)
@@ -520,8 +546,8 @@
 #define C_FDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_WRITABLE_MASK UINT64_C(0)
 
 /*
- * Response ring base address
- * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
+ * Event ring base address
+ * Start of event storage in the attached memory backend, aligned to eight bytes. Event slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
  */
 #define C_FDMA_C_QUBQUAQUSQUE__2_OFFSET UINT64_C(4120)
 #define C_FDMA_C_QUBQUAQUSQUE__2_WIDTH UINT64_C(8)
@@ -531,8 +557,8 @@
 #define C_FDMA_C_QUBQUAQUSQUE__2_WRITABLE_MASK UINT64_C(18446744073709551615)
 
 /*
- * Response ring capacity
- * Number of response slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
+ * Event ring capacity
+ * Number of event slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
  */
 #define C_FDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_OFFSET UINT64_C(4128)
 #define C_FDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_WIDTH UINT64_C(4)
@@ -542,8 +568,8 @@
 #define C_FDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_WRITABLE_MASK UINT64_C(4294967295)
 
 /*
- * Published response count
- * Hardware advances this cursor only after writing a complete response. Empty-to-non-empty transitions and IOC publication independently request notification unless masked.
+ * Published event count
+ * Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
  */
 #define C_FDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_OFFSET UINT64_C(4132)
 #define C_FDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_WIDTH UINT64_C(4)
@@ -553,8 +579,8 @@
 #define C_FDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_WRITABLE_MASK UINT64_C(0)
 
 /*
- * Consumed response count
- * Software advances this wrapping cursor after reading and decoding responses. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
+ * Consumed event count
+ * Software advances this wrapping cursor after reading and decoding events. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
  */
 #define C_FDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_OFFSET UINT64_C(4136)
 #define C_FDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_WIDTH UINT64_C(4)
@@ -602,7 +628,7 @@
 /*
  * code
  * Fatal code
- * Distinguishes normal operation from command-fetch and response-publication failures. Other encodings are invalid.
+ * Distinguishes normal operation from command-fetch and event-publication failures. Other encodings are invalid.
  */
 /*
  * None
@@ -617,11 +643,23 @@
  */
 #define C_FDMA_C_QUFQUAQUTQUAQUL__2_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
 /*
- * ResponseWrite
- * Response publication failed
- * Hardware could not publish a response ring entry; its producer cursor was not advanced. The payload copy may already have completed.
+ * EventWrite
+ * Event publication failed
+ * Hardware could not publish an event ring entry; its producer cursor was not advanced. The payload copy may already have completed.
  */
-#define C_FDMA_C_QUFQUAQUTQUAQUL__2_C_CODE_C_QURESPONSEQUWRITE UINT64_C(2)
+#define C_FDMA_C_QUFQUAQUTQUAQUL__2_C_CODE_C_QUEVENTQUWRITE UINT64_C(2)
+/*
+ * EventFull
+ * Error publication encountered a full event ring
+ * Error publication encountered a full event ring.
+ */
+#define C_FDMA_C_QUFQUAQUTQUAQUL__2_C_CODE_C_QUEVENTQUFULL UINT64_C(3)
+/*
+ * EventConfiguration
+ * Error publication encountered invalid event geometry or cursors
+ * Error publication encountered invalid event geometry or cursors.
+ */
+#define C_FDMA_C_QUFQUAQUTQUAQUL__2_C_CODE_C_QUEVENTQUCONFIGURATION UINT64_C(4)
 #define C_FDMA_C_QUFQUAQUTQUAQUL__2_OFFSET UINT64_C(4148)
 #define C_FDMA_C_QUFQUAQUTQUAQUL__2_WIDTH UINT64_C(4)
 #define C_FDMA_C_QUFQUAQUTQUAQUL__2_ACCESS C_FDMA_ACCESS_READ_ONLY
@@ -630,23 +668,27 @@
 #define C_FDMA_C_QUFQUAQUTQUAQUL__2_WRITABLE_MASK UINT64_C(0)
 
 /*
- * Channel interrupt causes
- * Response non-empty, IOC, response error and channel fatal causes, visible even while masked.
+ * Event non-empty, Trap, event error and channel fatal causes, visible even while masked
+ * Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
  */
 /*
- * response_non_empty
- * The response ring currently contains unread entries.
+ * event_non_empty
+ * The event ring currently contains unread entries
+ * The event ring currently contains unread entries.
  */
 /*
- * ioc
- * At least one published IOC response remains unconsumed.
+ * trap
+ * A Trap command executed since the last Trap acknowledgment
+ * A Trap command executed since the last Trap acknowledgment.
  */
 /*
- * response_error
- * A stopping error response was published; processing is stopped until reset. Payload suspension does not set this cause.
+ * error
+ * A stopping command error is latched before event publication; processing remains stopped until reset
+ * A stopping command error is latched before event publication; processing remains stopped until reset. Payload suspension does not set this cause.
  */
 /*
  * channel_fatal
+ * The channel fatal register contains a fatal error
  * The channel fatal register contains a fatal error.
  */
 #define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_OFFSET UINT64_C(4152)
@@ -657,16 +699,18 @@
 #define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_WRITABLE_MASK UINT64_C(0)
 
 /*
- * Channel response notification masks
- * Independent non-empty and IOC notification masks. Unmask does not replay past events.
+ * Independent non-empty and Trap notification masks
+ * Independent non-empty and Trap notification masks. Unmask does not replay past events.
  */
 /*
- * response_non_empty
- * Mask notifications on response empty-to-non-empty transitions.
+ * event_non_empty
+ * Mask notifications on event empty-to-non-empty transitions
+ * Mask notifications on event empty-to-non-empty transitions.
  */
 /*
- * ioc
- * Mask notifications on publication of IOC responses.
+ * trap
+ * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
+ * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
  */
 #define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_OFFSET UINT64_C(4156)
 #define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_WIDTH UINT64_C(4)
@@ -676,8 +720,8 @@
 #define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_WRITABLE_MASK UINT64_C(3)
 
 /*
- * Read/write word
- * Context shared by command and response ring accesses. Locked with ring geometry until reset completes.
+ * Context shared by command and event ring accesses
+ * Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
  */
 #define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_OFFSET UINT64_C(4160)
 #define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_WIDTH UINT64_C(4)
@@ -688,10 +732,11 @@
 
 /*
  * Payload fault status
- * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA response or interrupt.
+ * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
  */
 /*
  * faulted
+ * A payload page fault awaits software repair and an explicit resume request
  * A payload page fault awaits software repair and an explicit resume request.
  */
 #define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_OFFSET UINT64_C(4164)
@@ -707,6 +752,7 @@
  */
 /*
  * request
+ * Write one to clear faulted after mapping repair; reserved bits must be zero
  * Write one to clear faulted after mapping repair; reserved bits must be zero.
  */
 #define C_FDMA_C_QURQUEQUSQUUQUMQUE__1_OFFSET UINT64_C(4168)
@@ -717,8 +763,24 @@
 #define C_FDMA_C_QURQUEQUSQUUQUMQUE__1_WRITABLE_MASK UINT64_C(1)
 
 /*
+ * Write one to clear sticky Trap cause without retracting platform notifications
+ * Write one to clear sticky Trap cause without retracting platform notifications.
+ */
+/*
+ * request
+ * Write one to clear the sticky Trap cause
+ * Write one to clear the sticky Trap cause.
+ */
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__1_OFFSET UINT64_C(4172)
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__1_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__1_ACCESS C_FDMA_ACCESS_WRITE_ONLY
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__1_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__1_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__1_WRITABLE_MASK UINT64_C(1)
+
+/*
  * Command ring base address
- * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 104 bytes apart. The value cannot change after the channel's first successful enable until reset.
+ * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 112 bytes apart. The value cannot change after the channel's first successful enable until reset.
  */
 #define C_FDMA_C_QUBQUAQUSQUE__3_OFFSET UINT64_C(8192)
 #define C_FDMA_C_QUBQUAQUSQUE__3_WIDTH UINT64_C(8)
@@ -761,8 +823,8 @@
 #define C_FDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__3_WRITABLE_MASK UINT64_C(0)
 
 /*
- * Response ring base address
- * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
+ * Event ring base address
+ * Start of event storage in the attached memory backend, aligned to eight bytes. Event slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
  */
 #define C_FDMA_C_QUBQUAQUSQUE__4_OFFSET UINT64_C(8216)
 #define C_FDMA_C_QUBQUAQUSQUE__4_WIDTH UINT64_C(8)
@@ -772,8 +834,8 @@
 #define C_FDMA_C_QUBQUAQUSQUE__4_WRITABLE_MASK UINT64_C(18446744073709551615)
 
 /*
- * Response ring capacity
- * Number of response slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
+ * Event ring capacity
+ * Number of event slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
  */
 #define C_FDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__4_OFFSET UINT64_C(8224)
 #define C_FDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__4_WIDTH UINT64_C(4)
@@ -783,8 +845,8 @@
 #define C_FDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__4_WRITABLE_MASK UINT64_C(4294967295)
 
 /*
- * Published response count
- * Hardware advances this cursor only after writing a complete response. Empty-to-non-empty transitions and IOC publication independently request notification unless masked.
+ * Published event count
+ * Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
  */
 #define C_FDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_OFFSET UINT64_C(8228)
 #define C_FDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_WIDTH UINT64_C(4)
@@ -794,8 +856,8 @@
 #define C_FDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_WRITABLE_MASK UINT64_C(0)
 
 /*
- * Consumed response count
- * Software advances this wrapping cursor after reading and decoding responses. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
+ * Consumed event count
+ * Software advances this wrapping cursor after reading and decoding events. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
  */
 #define C_FDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__4_OFFSET UINT64_C(8232)
 #define C_FDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__4_WIDTH UINT64_C(4)
@@ -843,7 +905,7 @@
 /*
  * code
  * Fatal code
- * Distinguishes normal operation from command-fetch and response-publication failures. Other encodings are invalid.
+ * Distinguishes normal operation from command-fetch and event-publication failures. Other encodings are invalid.
  */
 /*
  * None
@@ -858,11 +920,23 @@
  */
 #define C_FDMA_C_QUFQUAQUTQUAQUL__3_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
 /*
- * ResponseWrite
- * Response publication failed
- * Hardware could not publish a response ring entry; its producer cursor was not advanced. The payload copy may already have completed.
+ * EventWrite
+ * Event publication failed
+ * Hardware could not publish an event ring entry; its producer cursor was not advanced. The payload copy may already have completed.
  */
-#define C_FDMA_C_QUFQUAQUTQUAQUL__3_C_CODE_C_QURESPONSEQUWRITE UINT64_C(2)
+#define C_FDMA_C_QUFQUAQUTQUAQUL__3_C_CODE_C_QUEVENTQUWRITE UINT64_C(2)
+/*
+ * EventFull
+ * Error publication encountered a full event ring
+ * Error publication encountered a full event ring.
+ */
+#define C_FDMA_C_QUFQUAQUTQUAQUL__3_C_CODE_C_QUEVENTQUFULL UINT64_C(3)
+/*
+ * EventConfiguration
+ * Error publication encountered invalid event geometry or cursors
+ * Error publication encountered invalid event geometry or cursors.
+ */
+#define C_FDMA_C_QUFQUAQUTQUAQUL__3_C_CODE_C_QUEVENTQUCONFIGURATION UINT64_C(4)
 #define C_FDMA_C_QUFQUAQUTQUAQUL__3_OFFSET UINT64_C(8244)
 #define C_FDMA_C_QUFQUAQUTQUAQUL__3_WIDTH UINT64_C(4)
 #define C_FDMA_C_QUFQUAQUTQUAQUL__3_ACCESS C_FDMA_ACCESS_READ_ONLY
@@ -871,23 +945,27 @@
 #define C_FDMA_C_QUFQUAQUTQUAQUL__3_WRITABLE_MASK UINT64_C(0)
 
 /*
- * Channel interrupt causes
- * Response non-empty, IOC, response error and channel fatal causes, visible even while masked.
+ * Event non-empty, Trap, event error and channel fatal causes, visible even while masked
+ * Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
  */
 /*
- * response_non_empty
- * The response ring currently contains unread entries.
+ * event_non_empty
+ * The event ring currently contains unread entries
+ * The event ring currently contains unread entries.
  */
 /*
- * ioc
- * At least one published IOC response remains unconsumed.
+ * trap
+ * A Trap command executed since the last Trap acknowledgment
+ * A Trap command executed since the last Trap acknowledgment.
  */
 /*
- * response_error
- * A stopping error response was published; processing is stopped until reset. Payload suspension does not set this cause.
+ * error
+ * A stopping command error is latched before event publication; processing remains stopped until reset
+ * A stopping command error is latched before event publication; processing remains stopped until reset. Payload suspension does not set this cause.
  */
 /*
  * channel_fatal
+ * The channel fatal register contains a fatal error
  * The channel fatal register contains a fatal error.
  */
 #define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_OFFSET UINT64_C(8248)
@@ -898,16 +976,18 @@
 #define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_WRITABLE_MASK UINT64_C(0)
 
 /*
- * Channel response notification masks
- * Independent non-empty and IOC notification masks. Unmask does not replay past events.
+ * Independent non-empty and Trap notification masks
+ * Independent non-empty and Trap notification masks. Unmask does not replay past events.
  */
 /*
- * response_non_empty
- * Mask notifications on response empty-to-non-empty transitions.
+ * event_non_empty
+ * Mask notifications on event empty-to-non-empty transitions
+ * Mask notifications on event empty-to-non-empty transitions.
  */
 /*
- * ioc
- * Mask notifications on publication of IOC responses.
+ * trap
+ * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
+ * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
  */
 #define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_OFFSET UINT64_C(8252)
 #define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_WIDTH UINT64_C(4)
@@ -917,8 +997,8 @@
 #define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_WRITABLE_MASK UINT64_C(3)
 
 /*
- * Read/write word
- * Context shared by command and response ring accesses. Locked with ring geometry until reset completes.
+ * Context shared by command and event ring accesses
+ * Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
  */
 #define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_OFFSET UINT64_C(8256)
 #define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_WIDTH UINT64_C(4)
@@ -929,10 +1009,11 @@
 
 /*
  * Payload fault status
- * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA response or interrupt.
+ * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
  */
 /*
  * faulted
+ * A payload page fault awaits software repair and an explicit resume request
  * A payload page fault awaits software repair and an explicit resume request.
  */
 #define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_OFFSET UINT64_C(8260)
@@ -948,6 +1029,7 @@
  */
 /*
  * request
+ * Write one to clear faulted after mapping repair; reserved bits must be zero
  * Write one to clear faulted after mapping repair; reserved bits must be zero.
  */
 #define C_FDMA_C_QURQUEQUSQUUQUMQUE__2_OFFSET UINT64_C(8264)
@@ -958,8 +1040,24 @@
 #define C_FDMA_C_QURQUEQUSQUUQUMQUE__2_WRITABLE_MASK UINT64_C(1)
 
 /*
+ * Write one to clear sticky Trap cause without retracting platform notifications
+ * Write one to clear sticky Trap cause without retracting platform notifications.
+ */
+/*
+ * request
+ * Write one to clear the sticky Trap cause
+ * Write one to clear the sticky Trap cause.
+ */
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__2_OFFSET UINT64_C(8268)
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__2_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__2_ACCESS C_FDMA_ACCESS_WRITE_ONLY
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__2_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__2_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__2_WRITABLE_MASK UINT64_C(1)
+
+/*
  * Command ring base address
- * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 104 bytes apart. The value cannot change after the channel's first successful enable until reset.
+ * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 112 bytes apart. The value cannot change after the channel's first successful enable until reset.
  */
 #define C_FDMA_C_QUBQUAQUSQUE__5_OFFSET UINT64_C(12288)
 #define C_FDMA_C_QUBQUAQUSQUE__5_WIDTH UINT64_C(8)
@@ -1002,8 +1100,8 @@
 #define C_FDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__5_WRITABLE_MASK UINT64_C(0)
 
 /*
- * Response ring base address
- * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
+ * Event ring base address
+ * Start of event storage in the attached memory backend, aligned to eight bytes. Event slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
  */
 #define C_FDMA_C_QUBQUAQUSQUE__6_OFFSET UINT64_C(12312)
 #define C_FDMA_C_QUBQUAQUSQUE__6_WIDTH UINT64_C(8)
@@ -1013,8 +1111,8 @@
 #define C_FDMA_C_QUBQUAQUSQUE__6_WRITABLE_MASK UINT64_C(18446744073709551615)
 
 /*
- * Response ring capacity
- * Number of response slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
+ * Event ring capacity
+ * Number of event slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
  */
 #define C_FDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__6_OFFSET UINT64_C(12320)
 #define C_FDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__6_WIDTH UINT64_C(4)
@@ -1024,8 +1122,8 @@
 #define C_FDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__6_WRITABLE_MASK UINT64_C(4294967295)
 
 /*
- * Published response count
- * Hardware advances this cursor only after writing a complete response. Empty-to-non-empty transitions and IOC publication independently request notification unless masked.
+ * Published event count
+ * Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
  */
 #define C_FDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_OFFSET UINT64_C(12324)
 #define C_FDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_WIDTH UINT64_C(4)
@@ -1035,8 +1133,8 @@
 #define C_FDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_WRITABLE_MASK UINT64_C(0)
 
 /*
- * Consumed response count
- * Software advances this wrapping cursor after reading and decoding responses. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
+ * Consumed event count
+ * Software advances this wrapping cursor after reading and decoding events. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
  */
 #define C_FDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__6_OFFSET UINT64_C(12328)
 #define C_FDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__6_WIDTH UINT64_C(4)
@@ -1084,7 +1182,7 @@
 /*
  * code
  * Fatal code
- * Distinguishes normal operation from command-fetch and response-publication failures. Other encodings are invalid.
+ * Distinguishes normal operation from command-fetch and event-publication failures. Other encodings are invalid.
  */
 /*
  * None
@@ -1099,11 +1197,23 @@
  */
 #define C_FDMA_C_QUFQUAQUTQUAQUL__4_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
 /*
- * ResponseWrite
- * Response publication failed
- * Hardware could not publish a response ring entry; its producer cursor was not advanced. The payload copy may already have completed.
+ * EventWrite
+ * Event publication failed
+ * Hardware could not publish an event ring entry; its producer cursor was not advanced. The payload copy may already have completed.
  */
-#define C_FDMA_C_QUFQUAQUTQUAQUL__4_C_CODE_C_QURESPONSEQUWRITE UINT64_C(2)
+#define C_FDMA_C_QUFQUAQUTQUAQUL__4_C_CODE_C_QUEVENTQUWRITE UINT64_C(2)
+/*
+ * EventFull
+ * Error publication encountered a full event ring
+ * Error publication encountered a full event ring.
+ */
+#define C_FDMA_C_QUFQUAQUTQUAQUL__4_C_CODE_C_QUEVENTQUFULL UINT64_C(3)
+/*
+ * EventConfiguration
+ * Error publication encountered invalid event geometry or cursors
+ * Error publication encountered invalid event geometry or cursors.
+ */
+#define C_FDMA_C_QUFQUAQUTQUAQUL__4_C_CODE_C_QUEVENTQUCONFIGURATION UINT64_C(4)
 #define C_FDMA_C_QUFQUAQUTQUAQUL__4_OFFSET UINT64_C(12340)
 #define C_FDMA_C_QUFQUAQUTQUAQUL__4_WIDTH UINT64_C(4)
 #define C_FDMA_C_QUFQUAQUTQUAQUL__4_ACCESS C_FDMA_ACCESS_READ_ONLY
@@ -1112,23 +1222,27 @@
 #define C_FDMA_C_QUFQUAQUTQUAQUL__4_WRITABLE_MASK UINT64_C(0)
 
 /*
- * Channel interrupt causes
- * Response non-empty, IOC, response error and channel fatal causes, visible even while masked.
+ * Event non-empty, Trap, event error and channel fatal causes, visible even while masked
+ * Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
  */
 /*
- * response_non_empty
- * The response ring currently contains unread entries.
+ * event_non_empty
+ * The event ring currently contains unread entries
+ * The event ring currently contains unread entries.
  */
 /*
- * ioc
- * At least one published IOC response remains unconsumed.
+ * trap
+ * A Trap command executed since the last Trap acknowledgment
+ * A Trap command executed since the last Trap acknowledgment.
  */
 /*
- * response_error
- * A stopping error response was published; processing is stopped until reset. Payload suspension does not set this cause.
+ * error
+ * A stopping command error is latched before event publication; processing remains stopped until reset
+ * A stopping command error is latched before event publication; processing remains stopped until reset. Payload suspension does not set this cause.
  */
 /*
  * channel_fatal
+ * The channel fatal register contains a fatal error
  * The channel fatal register contains a fatal error.
  */
 #define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_OFFSET UINT64_C(12344)
@@ -1139,16 +1253,18 @@
 #define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_WRITABLE_MASK UINT64_C(0)
 
 /*
- * Channel response notification masks
- * Independent non-empty and IOC notification masks. Unmask does not replay past events.
+ * Independent non-empty and Trap notification masks
+ * Independent non-empty and Trap notification masks. Unmask does not replay past events.
  */
 /*
- * response_non_empty
- * Mask notifications on response empty-to-non-empty transitions.
+ * event_non_empty
+ * Mask notifications on event empty-to-non-empty transitions
+ * Mask notifications on event empty-to-non-empty transitions.
  */
 /*
- * ioc
- * Mask notifications on publication of IOC responses.
+ * trap
+ * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
+ * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
  */
 #define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_OFFSET UINT64_C(12348)
 #define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_WIDTH UINT64_C(4)
@@ -1158,8 +1274,8 @@
 #define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_WRITABLE_MASK UINT64_C(3)
 
 /*
- * Read/write word
- * Context shared by command and response ring accesses. Locked with ring geometry until reset completes.
+ * Context shared by command and event ring accesses
+ * Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
  */
 #define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_OFFSET UINT64_C(12352)
 #define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_WIDTH UINT64_C(4)
@@ -1170,10 +1286,11 @@
 
 /*
  * Payload fault status
- * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA response or interrupt.
+ * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
  */
 /*
  * faulted
+ * A payload page fault awaits software repair and an explicit resume request
  * A payload page fault awaits software repair and an explicit resume request.
  */
 #define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_OFFSET UINT64_C(12356)
@@ -1189,6 +1306,7 @@
  */
 /*
  * request
+ * Write one to clear faulted after mapping repair; reserved bits must be zero
  * Write one to clear faulted after mapping repair; reserved bits must be zero.
  */
 #define C_FDMA_C_QURQUEQUSQUUQUMQUE__3_OFFSET UINT64_C(12360)
@@ -1198,8 +1316,24 @@
 #define C_FDMA_C_QURQUEQUSQUUQUMQUE__3_RESET_VALUE UINT64_C(0)
 #define C_FDMA_C_QURQUEQUSQUUQUMQUE__3_WRITABLE_MASK UINT64_C(1)
 
+/*
+ * Write one to clear sticky Trap cause without retracting platform notifications
+ * Write one to clear sticky Trap cause without retracting platform notifications.
+ */
+/*
+ * request
+ * Write one to clear the sticky Trap cause
+ * Write one to clear the sticky Trap cause.
+ */
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__3_OFFSET UINT64_C(12364)
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__3_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__3_ACCESS C_FDMA_ACCESS_WRITE_ONLY
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__3_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__3_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUTQURQUAQUPQSQUAQUCQUK__3_WRITABLE_MASK UINT64_C(1)
+
 #define C_FDMA_C_CHANNELS__1_INDEX UINT64_C(0)
-#define C_FDMA_C_CHANNELS__1_BASE UINT64_C(16)
+#define C_FDMA_C_CHANNELS__1_BASE UINT64_C(20)
 #define C_FDMA_C_CHANNELS__1_COUNT UINT64_C(3)
 #define C_FDMA_C_CHANNELS__1_STRIDE UINT64_C(4)
 

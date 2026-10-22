@@ -1,20 +1,20 @@
 #[cfg(test)]
 mod tests;
 
-use super::{Candidate, CheckRanges, Fetch, Retire, execution::Install};
-use crate::{
-    ChunkInput, CommandRequest, CopyProgress, Dma, Error, ExecutionContext, FetchedCommand, Flow,
-    Pipeline, RoundRobin,
-};
+use super::opcodes::{Branches, branches};
+use super::{Candidate, Retire};
+use crate::{CommandRequest, Completion, Dma, Error, Flow, Pipeline, RoundRobin};
 use hardware_interface_pipeline::{
-    Arbitrate, FanIn, MapError, Stage, StepOutcome, StepResult, Then,
+    Arbitrate, BranchError, FanIn, MapError, Stage, StepOutcome, StepResult, Then,
 };
 use pdma_model_contract::dma::ChannelId;
 use std::convert::Infallible;
 
-type ExecutionGraph<S> = Then<CheckRanges, Then<Install, S, Flow<ChunkInput>>, Flow<CopyProgress>>;
-type TaskExecution<S> = Then<Fetch, Resources<ExecutionGraph<S>>, Flow<FetchedCommand>>;
-type TaskPath<S> = Then<MapError<TaskExecution<S>, fn(Infallible) -> Error>, Retire, Flow<()>>;
+type TaskPath<S> = Then<
+    MapError<Branches<S>, fn(BranchError<Infallible>) -> Error>,
+    Retire,
+    Vec<(usize, Flow<Completion>)>,
+>;
 type Commands<S> = FanIn<
     Candidate,
     Arbitrate<RoundRobin>,
@@ -47,14 +47,16 @@ impl<S> Hardware<S> {
                     Arbitrate::snapshots(RoundRobin::default()),
                     Then::new(
                         MapError::new(
-                            Then::new(
-                                Fetch,
-                                Resources(Then::new(
-                                    CheckRanges::default(),
-                                    Then::new(Install, pipeline),
-                                )),
-                            ),
-                            impossible as fn(Infallible) -> Error,
+                            branches(pipeline),
+                            (|error| match error {
+                                BranchError::Application(error) => match error {},
+                                BranchError::InvalidIndex { .. }
+                                | BranchError::DuplicateIndex { .. }
+                                | BranchError::Unavailable { .. }
+                                | BranchError::EmptyInput
+                                | BranchError::InputCount { .. }
+                                | BranchError::OutputCount { .. } => Error::Routing,
+                            }) as fn(BranchError<Infallible>) -> Error,
                         ),
                         Retire,
                     ),
@@ -96,33 +98,5 @@ where
             Ok(StepOutcome::InProgress) => Ok(StepOutcome::InProgress),
             Err(error) => Err(error),
         }
-    }
-}
-
-const fn impossible(error: Infallible) -> Error {
-    match error {}
-}
-
-#[derive(Debug)]
-struct Resources<S>(S);
-
-impl<M, SB, S> Stage<Dma<M, SB>> for Resources<S>
-where
-    for<'a> S: Stage<
-            ExecutionContext<'a, M, SB>,
-            Input = Flow<FetchedCommand>,
-            Output = Flow<()>,
-            Error = Infallible,
-        >,
-{
-    type Input = Flow<FetchedCommand>;
-    type Output = Flow<()>;
-    type Error = Infallible;
-    fn step(
-        &mut self,
-        dma: &mut Dma<M, SB>,
-        input: &mut Option<Self::Input>,
-    ) -> StepResult<Self::Output, Self::Error> {
-        self.0.step(&mut dma.execution_context(), input)
     }
 }

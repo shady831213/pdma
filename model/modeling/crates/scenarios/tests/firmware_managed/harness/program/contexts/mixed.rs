@@ -2,7 +2,7 @@ use super::{Spaces, TestResult, Transfer};
 use crate::harness::runtime::HostBus;
 use hardware_interface_runtime::SharedMemoryAccess;
 use pdma_model_contract::control::ControlResponseStatus;
-use pdma_model_contract::dma::{ContextId, Response};
+use pdma_model_contract::dma::{ContextId, Event};
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::Management;
 
@@ -10,7 +10,7 @@ use pdma_model_host::Management;
 #[doc = "Observed peer progress and target retirement during one maintenance request."]
 pub struct MixedOutcome {
     pub(crate) partial: usize,
-    pub(crate) responses: Vec<Response>,
+    pub(crate) completions: Vec<Result<u64, Event>>,
     pub(crate) target: [u8; 4],
     pub(crate) peer: [u8; 4],
     pub(crate) status: ControlResponseStatus,
@@ -37,14 +37,11 @@ pub(super) async fn run(
                 .await?;
         }
         let status = management.next_response().await?.status;
-        let mut responses = Vec::new();
-        for _ in 0..if abort { 2 } else { 3 } {
-            responses.push(transfer.completed().await?);
-        }
+        let completions = vec![transfer.completed().await?];
         let (target, peer) = queued.bytes(spaces)?;
         outcomes.push(MixedOutcome {
             partial: queued.partial,
-            responses,
+            completions,
             target,
             peer,
             status,

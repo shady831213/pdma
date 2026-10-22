@@ -8,24 +8,23 @@ mod service_progress {
     mod pending_tail;
 }
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::dma::{ChannelBlock, CommandRegisters, Endpoint, ResponseRegisters};
+use pdma_model_contract::dma::{ChannelBlock, CommandRegisters, Endpoint, EventRegisters};
 use pdma_model_dma::COPY_CHUNK_BYTES;
 use support::{TestResult, command, read_word, setup, submit};
 
 const CONSUMER: usize =
     ChannelBlock::ALIGNMENT + ChannelBlock::COMMAND.offset() + CommandRegisters::CONSUMER.offset();
-const PRODUCER: usize = ChannelBlock::ALIGNMENT
-    + ChannelBlock::RESPONSE.offset()
-    + ResponseRegisters::PRODUCER.offset();
+const PRODUCER: usize =
+    ChannelBlock::ALIGNMENT + ChannelBlock::EVENT.offset() + EventRegisters::PRODUCER.offset();
 
 #[test]
 fn one_command_invocation_completes_all_chunks_without_fetching_again() -> TestResult {
     // Given: a descriptor requiring three bounded copy interactions.
     let (mut device, memory) = setup(0x1100, 2)?;
     let mut descriptor = command();
-    descriptor.copy_length = 600;
-    descriptor.source = Endpoint::linear(0x1400, 0);
-    descriptor.destination = Endpoint::linear(0x1800, 0);
+    crate::support::copy_mut(&mut descriptor)?.copy_length = 600;
+    crate::support::copy_mut(&mut descriptor)?.source = Endpoint::linear(0x1400, 0);
+    crate::support::copy_mut(&mut descriptor)?.destination = Endpoint::linear(0x1800, 0);
     memory.write(0x1400.into(), MemoryAlignment::ONE, &[0x5a; 600])?;
     submit(&mut device, &memory, descriptor)?;
     let mut before = [0xff; 600];
@@ -38,7 +37,7 @@ fn one_command_invocation_completes_all_chunks_without_fetching_again() -> TestR
     for _ in 0..256 {
         if let StepOutcome::Complete(result) = operation.step(&mut service, &mut device)? {
             result?;
-            assert_eq!(read_word(&mut device, PRODUCER)?, 1);
+            assert_eq!(read_word(&mut device, PRODUCER)?, 0);
             break;
         }
         if read_word(&mut device, CONSUMER)? == 1 {
@@ -51,7 +50,7 @@ fn one_command_invocation_completes_all_chunks_without_fetching_again() -> TestR
     memory.read(0x1800.into(), MemoryAlignment::ONE, &mut bytes)?;
     assert_eq!(bytes, [0x5a; 600]);
     assert_eq!(read_word(&mut device, CONSUMER)?, 1);
-    assert_eq!(read_word(&mut device, PRODUCER)?, 1);
+    assert_eq!(read_word(&mut device, PRODUCER)?, 0);
     Ok(())
 }
 
@@ -60,9 +59,9 @@ fn reset_between_chunks_retires_retained_progress() -> TestResult {
     // Given: accepted command state retained after its first chunk.
     let (mut device, memory) = setup(0x1100, 2)?;
     let mut descriptor = command();
-    descriptor.copy_length = 600;
-    descriptor.source = Endpoint::linear(0x1400, 0);
-    descriptor.destination = Endpoint::linear(0x1800, 0);
+    crate::support::copy_mut(&mut descriptor)?.copy_length = 600;
+    crate::support::copy_mut(&mut descriptor)?.source = Endpoint::linear(0x1400, 0);
+    crate::support::copy_mut(&mut descriptor)?.destination = Endpoint::linear(0x1800, 0);
     memory.write(0x1400.into(), MemoryAlignment::ONE, &[0x5a; 600])?;
     submit(&mut device, &memory, descriptor)?;
     let mut hardware = device.hardware();
@@ -107,11 +106,21 @@ fn reset_at_every_chunk_boundary_retires_without_more_writes() -> TestResult {
     for prefix in 0..24 {
         // Given: one committed chunk and each subsequent local boundary.
         let (mut device, memory) = setup(0x1100, 2)?;
-        let descriptor = pdma_model_contract::dma::Command {
-            copy_length: u64::try_from(COPY_CHUNK_BYTES * 3)?,
-            source: Endpoint::linear(0x1400, 0),
-            destination: Endpoint::linear(0x1800, 0),
-            ..command()
+        let descriptor = {
+            let original = command();
+            let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload
+            else {
+                return Err("copy fixture required".into());
+            };
+            pdma_model_contract::dma::Command::copy(
+                original.id,
+                pdma_model_contract::dma::CopyCommand {
+                    copy_length: u64::try_from(COPY_CHUNK_BYTES * 3)?,
+                    source: Endpoint::linear(0x1400, 0),
+                    destination: Endpoint::linear(0x1800, 0),
+                    ..copy
+                },
+            )
         };
         memory.write(
             0x1400.into(),

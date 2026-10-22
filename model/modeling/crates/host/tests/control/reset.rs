@@ -1,6 +1,6 @@
 use super::{
-    AsyncExecutor, Channel, ChannelConfig, ChannelRegisters, Command, CompletionFlagsValues,
-    DmaControl, DmaFatalCode, Endpoint, Model, RegisterAccess, SoftwareCpu, fixture,
+    AsyncExecutor, Channel, ChannelConfig, ChannelRegisters, Command, DmaControl, DmaFatalCode,
+    Endpoint, Model, RegisterAccess, SoftwareCpu, fixture,
 };
 
 #[tokio::test]
@@ -51,7 +51,7 @@ async fn reset_operations_can_run_on_another_cpu() -> Result<(), Box<dyn std::er
 #[tokio::test]
 async fn channel_reset_allows_fresh_setup_with_the_same_rings()
 -> Result<(), Box<dyn std::error::Error>> {
-    // Given: a configured channel with one published response.
+    // Given: a configured channel with one published event.
     let (device, memory, rings) = fixture()?;
     let mut hardware = device.hardware();
     let model = Model::new(device);
@@ -69,19 +69,20 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
                 },
             ))
             .await?;
-        let command = Command {
-            copy_length: 0,
-            sg_context: 0,
-            flags: CompletionFlagsValues::default(),
-            id: 9,
-            source: Endpoint::linear(0, 0),
-            destination: Endpoint::linear(0, 0),
-        };
+        let command = Command::copy(
+            9,
+            pdma_model_contract::dma::CopyCommand {
+                source: Endpoint::linear(0, 0),
+                destination: Endpoint::linear(0, 0),
+                copy_length: 1,
+                sg_context: 0,
+            },
+        );
         cpu.run_main(channel.submit(command)).await?;
         let producer = u32::try_from(
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
-                + pdma_model_contract::dma::ResponseRegisters::PRODUCER.offset(),
+                + pdma_model_contract::dma::ChannelBlock::EVENT.offset()
+                + pdma_model_contract::dma::EventRegisters::PRODUCER.offset(),
         )?;
         let mut published = false;
         for _ in 0..256 {
@@ -109,15 +110,15 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
         cpu.run_main(channel.submit(command)).await?;
         let mut completed = None;
         for _ in 0..256 {
-            completed = cpu.run_main(channel.response()).await?;
+            completed = cpu.run_main(channel.event()).await?;
             if completed.is_some() {
                 break;
             }
             tokio::task::yield_now().await;
         }
         // Then: the fresh cursors expose exactly the new completion.
-        assert_eq!(completed.map(|response| response.id), Some(9));
-        assert_eq!(cpu.run_main(channel.response()).await?, None);
+        assert_eq!(completed.map(|event| event.id), Some(9));
+        assert_eq!(cpu.run_main(channel.event()).await?, None);
         Ok::<_, Box<dyn std::error::Error>>(())
     };
     tokio::select! {

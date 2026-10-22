@@ -45,7 +45,7 @@ async fn setup_uses_each_instances_discovered_channel_range() -> TestResult {
             )
             .await?;
             // Then: the highest channel is usable, and invalid selections write no registers.
-            assert_eq!(channel.response().await?, None);
+            assert_eq!(channel.event().await?, None);
             for index in [count, usize::MAX] {
                 let writes = Arc::new(AtomicUsize::new(0));
                 let bus = CountWrites {
@@ -92,7 +92,7 @@ async fn instance_channel_counts_survive_channel_and_device_resets() -> TestResu
             model.read(u32::try_from(COUNT)?, &mut bytes).await?;
             assert_eq!(u32::from_le_bytes(bytes), u32::try_from(count)?);
             let mut channel = Channel::setup(model.clone(), memory.clone(), config).await?;
-            assert_eq!(channel.response().await?, None);
+            assert_eq!(channel.event().await?, None);
             Ok::<_, Box<dyn std::error::Error>>(())
         })
         .await?;

@@ -1,20 +1,20 @@
 mod command;
+mod event;
 mod mmio;
-mod response;
 #[cfg(test)]
 mod tests;
 mod work;
 
 pub use command::CommandRing;
-pub use response::ResponseRing;
+pub use event::EventRing;
 
 use crate::ChannelFatal;
 use hardware_interface_schema::RegisterWindow;
 use pdma_model_contract::dma::{
     ChannelAdmin, ChannelBlock, ChannelFatalCode, ChannelIrqCauseValues, ChannelRegisters,
-    FaultStatusValues, ResetValues, Response,
+    FaultStatusValues, ResetValues,
 };
-use pdma_model_contract::dma::{Command, ResponseStatus};
+use pdma_model_contract::dma::{Command, EventCode};
 pub use work::COPY_CHUNK_BYTES;
 use work::Cursor;
 
@@ -23,8 +23,8 @@ use work::Cursor;
 pub struct Channel {
     /// Host-produced command ring.
     pub command: CommandRing,
-    /// Dma-produced response ring.
-    pub response: ResponseRing,
+    /// Dma-produced event ring.
+    pub event: EventRing,
     pub(crate) registers: RegisterWindow<ChannelRegisters>,
     pub(crate) admin: RegisterWindow<ChannelAdmin>,
     pub(crate) configured: bool,
@@ -38,7 +38,7 @@ impl Default for Channel {
     fn default() -> Self {
         Self {
             command: CommandRing::new(ChannelBlock::COMMAND.offset()),
-            response: ResponseRing::new(ChannelBlock::RESPONSE.offset()),
+            event: EventRing::new(ChannelBlock::EVENT.offset()),
             registers: RegisterWindow::new(ChannelBlock::CONTROL.offset()),
             admin: RegisterWindow::new(0),
             configured: false,
@@ -69,26 +69,52 @@ impl Channel {
 
     pub(crate) fn update_irq(&mut self) {
         self.registers.values.irq_cause = ChannelIrqCauseValues::new(
-            u32::from(!self.response.pointers().is_empty())
-                | (u32::from(self.response.last_ioc.is_some()) << 1)
-                | (self.registers.values.irq_cause.raw() & 4)
+            u32::from(!self.event.pointers().is_empty())
+                | (self.registers.values.irq_cause.raw() & 6)
                 | (u32::from(self.registers.values.fatal.code() != Ok(ChannelFatalCode::None))
                     << 3),
         );
     }
 
-    pub(crate) fn published(&mut self, response: &Response, was_empty: bool) {
-        let error = response.status.halts();
-        if error {
-            self.registers.values.irq_cause =
-                ChannelIrqCauseValues::new(self.registers.values.irq_cause.raw() | 4);
+    pub(crate) fn report<M: hardware_interface_runtime::MemoryAccess>(
+        &mut self,
+        work: crate::Work,
+        event: &pdma_model_contract::dma::Event,
+        memory: &M,
+    ) -> crate::Error {
+        if self.generation != work.generation || self.resetting() {
+            return crate::Error::Reset;
         }
-        let mask = self.registers.values.irq_mask;
-        self.irq |= self.registers.values.irq_enable.raw() != 0
-            && ((was_empty && !mask.response_non_empty())
-                || (response.flags.ioc && !mask.ioc())
-                || error);
-        self.update_irq();
+        if self.resident != Some(work) || self.work.is_none() {
+            return crate::Error::Routing;
+        }
+        if self.halted() {
+            return crate::Error::Halted;
+        }
+        self.stop();
+        match self.event.push(memory, event) {
+            Ok(()) => {
+                self.irq |= self.registers.values.irq_enable.raw() != 0;
+                self.update_irq();
+                crate::Error::Halted
+            }
+            Err(fatal) => {
+                self.latch(fatal);
+                crate::Error::ChannelFatal(fatal)
+            }
+        }
+    }
+
+    pub(crate) const fn stop(&mut self) {
+        self.registers.values.irq_cause =
+            ChannelIrqCauseValues::new(self.registers.values.irq_cause.raw() | 4);
+    }
+
+    pub(crate) fn trap(&mut self) {
+        self.registers.values.irq_cause =
+            ChannelIrqCauseValues::new(self.registers.values.irq_cause.raw() | 2);
+        self.irq |=
+            self.registers.values.irq_enable.raw() != 0 && !self.registers.values.irq_mask.trap();
     }
 
     pub(crate) fn request_reset(&mut self) {
@@ -115,8 +141,14 @@ impl Channel {
 
     pub(crate) fn halted(&self) -> bool {
         match self.registers.values.fatal.code() {
-            Ok(ChannelFatalCode::None) => self.registers.values.irq_cause.response_error(),
-            Ok(ChannelFatalCode::CommandRead | ChannelFatalCode::ResponseWrite) | Err(_) => true,
+            Ok(ChannelFatalCode::None) => self.registers.values.irq_cause.error(),
+            Ok(
+                ChannelFatalCode::CommandRead
+                | ChannelFatalCode::EventWrite
+                | ChannelFatalCode::EventFull
+                | ChannelFatalCode::EventConfiguration,
+            )
+            | Err(_) => true,
         }
     }
     pub(crate) const fn enabled(&self) -> bool {
@@ -129,19 +161,20 @@ pub(crate) struct Accepted {
     pub(crate) command: Command,
     pub(crate) unread: Option<crate::Chunk>,
     pub(crate) payload: Option<Box<crate::Payload>>,
-    pub(crate) completion: Option<crate::Completion>,
     pub(crate) progress: Option<CopyState>,
+    pub(crate) fill_completed: u64,
 }
 
 /// Retained traversal of one command's two byte streams.
 #[derive(Debug)]
 pub(crate) struct CopyState {
-    pub(crate) command: Command,
+    pub(crate) command: pdma_model_contract::dma::CopyCommand,
+    id: u64,
     source: Cursor,
     destination: Cursor,
     pub(crate) remaining: u64,
     bytes_completed: u64,
-    pub(crate) status: ResponseStatus,
+    pub(crate) status: Result<(), EventCode>,
 }
 
 #[derive(Debug)]
@@ -153,7 +186,8 @@ enum Side {
 /// Incremental validation of selected ranges, without payload access.
 #[derive(Debug)]
 pub struct RangeCheck {
-    pub(crate) command: Command,
+    pub(crate) command: pdma_model_contract::dma::CopyCommand,
+    id: u64,
     cursor: Cursor,
     side: Side,
     remaining: u64,

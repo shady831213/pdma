@@ -1,7 +1,7 @@
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess, SharedMemoryAllocator,
 };
-use pdma_model_contract::dma::{ChannelId, Command, CompletionFlagsValues, Endpoint, Response};
+use pdma_model_contract::dma::{ChannelId, Command, Endpoint, Event};
 use pdma_model_host::{ChannelConfig, RingConfig, Rings};
 
 use crate::TestResult;
@@ -12,17 +12,18 @@ pub(super) struct Buffers {
     pub(super) destination: MemoryAddress,
     pub(super) length: usize,
     pub(super) value: u8,
+    pub(super) fence: pdma_model_software::dma::CompletionWord,
 }
 
 impl Buffers {
     pub(super) fn allocate(allocator: &SharedMemoryAllocator, index: usize) -> TestResult<Self> {
         let command = allocator.allocate(
-            4 * u64::try_from(Command::RECORD_SIZE)?,
+            8 * u64::try_from(Command::RECORD_SIZE)?,
             MemoryAlignment::try_new(u64::try_from(Command::RECORD_ALIGNMENT)?)?,
         )?;
         let response = allocator.allocate(
-            u64::try_from(Response::RECORD_SIZE)?,
-            MemoryAlignment::try_new(u64::try_from(Response::RECORD_ALIGNMENT)?)?,
+            u64::try_from(Event::RECORD_SIZE)?,
+            MemoryAlignment::try_new(u64::try_from(Event::RECORD_ALIGNMENT)?)?,
         )?;
         let length = if index == 0 { 1024 } else { 16_384 };
         let source = allocator.allocate(u64::try_from(length)?, MemoryAlignment::ONE)?;
@@ -31,32 +32,45 @@ impl Buffers {
         allocator
             .memory_access()
             .write(source, MemoryAlignment::ONE, &vec![value; length])?;
+        let fence = allocator.allocate(8, MemoryAlignment::try_new(8)?)?;
+        allocator
+            .memory_access()
+            .write(fence, MemoryAlignment::ONE, &0_u64.to_le_bytes())?;
         Ok(Self {
             config: ChannelConfig {
                 id: ChannelId::new(index),
                 rings: Rings {
-                    command: RingConfig::new(command.raw(), 4)?,
-                    response: RingConfig::new(response.raw(), 1)?,
+                    command: RingConfig::new(command.raw(), 8)?,
+                    event: RingConfig::new(response.raw(), 1)?,
                 },
             },
             source,
             destination,
             length,
             value,
+            fence: pdma_model_software::dma::CompletionWord(pdma_model_contract::dma::WordWrite {
+                target: pdma_model_contract::dma::WordTarget {
+                    address: fence.raw(),
+                    context: 0,
+                    width: pdma_model_contract::dma::WordTargetWidth::Bits64,
+                },
+                value: 0,
+            }),
         })
     }
 
     pub(super) fn command(&self, id: u64, second: bool) -> TestResult<Command> {
         let length = u64::try_from(self.length)?;
         let destination = self.destination.raw() + if second { length } else { 0 };
-        Ok(Command {
-            copy_length: length,
-            sg_context: 0,
+        Ok(Command::copy(
             id,
-            source: Endpoint::linear(self.source.raw(), 0),
-            destination: Endpoint::linear(destination, 0),
-            flags: CompletionFlagsValues::default(),
-        })
+            pdma_model_contract::dma::CopyCommand {
+                copy_length: length,
+                sg_context: 0,
+                source: Endpoint::linear(self.source.raw(), 0),
+                destination: Endpoint::linear(destination, 0),
+            },
+        ))
     }
 
     pub(super) fn byte_matches(

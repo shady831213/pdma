@@ -6,8 +6,12 @@ use std::fmt::{self, Display, Formatter};
 pub enum ChannelFatal {
     /// The command ring could not be read.
     CommandRead,
-    /// A completion record could not be written.
-    ResponseWrite,
+    /// A stopping-error event could not be written.
+    EventWrite,
+    /// Error reporting found no free event slot.
+    EventFull,
+    /// Error reporting found invalid event-ring geometry.
+    EventConfiguration,
 }
 
 impl ChannelFatal {
@@ -15,7 +19,9 @@ impl ChannelFatal {
     pub const fn code(self) -> ChannelFatalCode {
         match self {
             Self::CommandRead => ChannelFatalCode::CommandRead,
-            Self::ResponseWrite => ChannelFatalCode::ResponseWrite,
+            Self::EventWrite => ChannelFatalCode::EventWrite,
+            Self::EventFull => ChannelFatalCode::EventFull,
+            Self::EventConfiguration => ChannelFatalCode::EventConfiguration,
         }
     }
 }
@@ -43,7 +49,7 @@ pub enum Error {
     Cursor,
     /// A hardware fatal was latched during this operation.
     ChannelFatal(ChannelFatal),
-    /// The channel remains stopped after a stopping response error or hardware fatal.
+    /// The channel remains stopped after a stopping event error or hardware fatal.
     Halted,
     /// Hardware reset invalidated this retained operation before another interaction.
     Reset,

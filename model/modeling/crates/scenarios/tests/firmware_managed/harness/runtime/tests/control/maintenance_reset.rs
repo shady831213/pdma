@@ -1,8 +1,6 @@
 use super::*;
 use hardware_interface_runtime::MemoryAccess;
-use pdma_model_contract::dma::{
-    Command, CommandRegisters, CompletionFlagsValues, ContextId, Endpoint, Response,
-};
+use pdma_model_contract::dma::{Command, CommandRegisters, ContextId, Endpoint, Event};
 use pdma_model_contract::memory::{
     ContextAttributes, ContextAttributesAddressSpace, MemoryIdentity,
 };
@@ -126,26 +124,27 @@ async fn submit_copy(
             id,
             rings: Rings {
                 command: ring::<Command>(allocator)?,
-                response: ring::<Response>(allocator)?,
+                event: ring::<Event>(allocator)?,
             },
         },
     )
     .await?;
     channel
-        .submit(Command {
-            id: 71,
-            flags: CompletionFlagsValues::default(),
-            sg_context: payload.raw(),
-            source: Endpoint {
-                context: payload.raw(),
-                ..Endpoint::linear(source.raw(), 0)
+        .submit(Command::copy(
+            71,
+            pdma_model_contract::dma::CopyCommand {
+                sg_context: payload.raw(),
+                source: Endpoint {
+                    context: payload.raw(),
+                    ..Endpoint::linear(source.raw(), 0)
+                },
+                destination: Endpoint {
+                    context: payload.raw(),
+                    ..Endpoint::linear(destination.raw(), 0)
+                },
+                copy_length: u64::try_from(source_bytes.len())?,
             },
-            destination: Endpoint {
-                context: payload.raw(),
-                ..Endpoint::linear(destination.raw(), 0)
-            },
-            copy_length: u64::try_from(source_bytes.len())?,
-        })
+        ))
         .await?;
     let consumer = u32::try_from(
         id.register_offset(1).ok_or("channel layout")? + CommandRegisters::CONSUMER.offset(),

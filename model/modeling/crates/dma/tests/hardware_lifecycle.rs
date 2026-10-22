@@ -10,7 +10,7 @@ mod hardware_lifecycle {
     use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
     use pdma_model_contract::dma::{
         ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, ContextId, DmaAdmin,
-        DmaDiscovery, Endpoint, Response, ResponseRegisters, ResponseStatus,
+        DmaDiscovery, Endpoint, Event, EventCode, EventRegisters,
     };
     use pdma_model_dma::{CommandRequest, Fetch};
 
@@ -20,17 +20,18 @@ mod hardware_lifecycle {
     const CONSUMER: usize = ChannelBlock::ALIGNMENT
         + ChannelBlock::COMMAND.offset()
         + CommandRegisters::CONSUMER.offset();
-    const PRODUCER: usize = ChannelBlock::ALIGNMENT
-        + ChannelBlock::RESPONSE.offset()
-        + ResponseRegisters::PRODUCER.offset();
+    const PRODUCER: usize =
+        ChannelBlock::ALIGNMENT + ChannelBlock::EVENT.offset() + EventRegisters::PRODUCER.offset();
 
     #[test]
     fn irq_causes_refresh_after_publication_while_data_tail_stalls() -> TestResult {
         // Given: a publishing execution graph with an indefinitely stalled final stage.
         let (mut dma, memory) = setup(0x1100, 2)?;
-        submit(&mut dma, &memory, command())?;
+        let mut descriptor = command();
+        crate::support::copy_mut(&mut descriptor)?.source = Endpoint::linear(0x9000, 0);
+        submit(&mut dma, &memory, descriptor)?;
         let mut hardware =
-            dma.hardware_with(Then::new(crate::support::chunk_pipeline(&dma), PendingTail));
+            dma.hardware_with(Then::new(crate::support::chunk_pipeline(), PendingTail));
         let mut driver = HardwareDriver::new();
         let causes = ChannelBlock::ALIGNMENT
             + ChannelBlock::CONTROL.offset()
@@ -44,11 +45,11 @@ mod hardware_lifecycle {
             if read_word(&mut dma, PRODUCER)? == 1 {
                 break;
             }
-            assert_eq!(read_word(&mut dma, causes)?, 0);
+            assert!([0, 4].contains(&read_word(&mut dma, causes)?));
         }
-        // Then: publication exposes the response cause even though the tail cannot finish.
+        // Then: publication exposes the event cause even though the tail cannot finish.
         assert_eq!(read_word(&mut dma, PRODUCER)?, 1);
-        assert_eq!(read_word(&mut dma, causes)?, 1);
+        assert_eq!(read_word(&mut dma, causes)?, 5);
         assert!(dma.irq());
         assert!(!driver.is_complete());
         Ok(())
@@ -103,12 +104,22 @@ mod hardware_lifecycle {
     fn stale_fetch_leaves_the_next_abort_target_for_fresh_arbitration() -> TestResult {
         // Given: two Abort targets and a snapshot of the original head.
         let (mut dma, memory) = setup(0x1100, 2)?;
-        let target = Command {
-            source: Endpoint {
-                context: 7,
-                ..Endpoint::linear(0x1200, 0)
-            },
-            ..command()
+        let target = {
+            let original = command();
+            let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload
+            else {
+                return Err("copy fixture required".into());
+            };
+            Command::copy(
+                original.id,
+                pdma_model_contract::dma::CopyCommand {
+                    source: Endpoint {
+                        context: 7,
+                        ..Endpoint::linear(0x1200, 0)
+                    },
+                    ..copy
+                },
+            )
         };
         submit(&mut dma, &memory, target)?;
         memory.write(
@@ -156,7 +167,7 @@ mod hardware_lifecycle {
 
     #[test]
     fn preaccept_reset_refreshes_identity_through_normal_and_error_completion() -> TestResult {
-        for status in [ResponseStatus::Success, ResponseStatus::ReadError] {
+        for failure in [false, true] {
             for prefix in 0..16 {
                 // Given: every boundary before a candidate becomes accepted hardware work.
                 let (mut dma, memory) = setup(0x1100, 2)?;
@@ -191,7 +202,7 @@ mod hardware_lifecycle {
                         0x1000_u64,
                     ),
                     (
-                        base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
+                        base + ChannelBlock::EVENT.offset() + EventRegisters::BASE.offset(),
                         0x1100,
                     ),
                 ] {
@@ -203,8 +214,7 @@ mod hardware_lifecycle {
                         2_u32,
                     ),
                     (
-                        base + ChannelBlock::RESPONSE.offset()
-                            + ResponseRegisters::CAPACITY.offset(),
+                        base + ChannelBlock::EVENT.offset() + EventRegisters::CAPACITY.offset(),
                         2,
                     ),
                     (
@@ -214,39 +224,46 @@ mod hardware_lifecycle {
                 ] {
                     dma.write(offset, &value.to_le_bytes())?;
                 }
-                let fresh = Command {
-                    id: 99,
-                    source: Endpoint::linear(
-                        if status == ResponseStatus::Success {
-                            0x1200
-                        } else {
-                            0x9000
+                let fresh = {
+                    let original = command();
+                    let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) =
+                        original.payload
+                    else {
+                        return Err("copy fixture required".into());
+                    };
+                    Command::copy(
+                        99,
+                        pdma_model_contract::dma::CopyCommand {
+                            source: Endpoint::linear(if failure { 0x9000 } else { 0x1200 }, 0),
+                            ..copy
                         },
-                        0,
-                    ),
-                    ..command()
+                    )
                 };
+                memory.write(0x1200.into(), MemoryAlignment::ONE, &[9; 4])?;
                 submit(&mut dma, &memory, fresh)?;
                 for _ in 0..128 {
                     assert!(matches!(
                         invocation.step(&mut path, &mut dma)?,
                         StepOutcome::InProgress
                     ));
-                    if read_word(&mut dma, PRODUCER)? == 1 {
-                        break;
-                    }
                 }
-                // Then: the same connected graph publishes the newly accepted generation's response.
                 assert!(!invocation.is_complete());
                 assert_eq!(
                     read_word(&mut dma, PRODUCER)?,
-                    1,
-                    "prefix {prefix}, status {status:?}"
+                    u32::from(failure),
+                    "prefix {prefix}, failure {failure}"
                 );
-                let mut bytes = [0; Response::RECORD_SIZE];
-                memory.read(0x1100.into(), MemoryAlignment::ONE, &mut bytes)?;
-                let response = Response::from_bytes(&bytes)?;
-                assert_eq!((response.id, response.status), (fresh.id, status));
+                if failure {
+                    let mut bytes = [0; Event::RECORD_SIZE];
+                    memory.read(0x1100.into(), MemoryAlignment::ONE, &mut bytes)?;
+                    let event = Event::from_bytes(&bytes)?;
+                    assert_eq!((event.id, event.code), (fresh.id, EventCode::ReadError));
+                } else {
+                    assert_eq!(
+                        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+                        [9; 4]
+                    );
+                }
             }
         }
         Ok(())

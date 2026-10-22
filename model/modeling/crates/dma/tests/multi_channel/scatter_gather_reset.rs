@@ -1,12 +1,11 @@
 mod observed;
 
-use super::support::{TestResult, configure, word};
+use super::support::{TestResult, completion, configure, publish_fence, word};
 use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion};
 use observed::Observed;
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, Command, CommandRegisters, CompletionFlagsValues, DmaControl,
-    Endpoint, Response, ResponseRegisters, ResponseStatus, Segment,
+    ChannelBlock, ChannelId, Command, DmaControl, Endpoint, EventRegisters, Segment,
 };
 use pdma_model_dma::Dma;
 
@@ -59,14 +58,15 @@ fn setup() -> TestResult<Dma<Observed>> {
     }
     publish(
         &mut device,
-        Command {
-            copy_length: 512,
-            sg_context: 0,
-            id: 7,
-            flags: CompletionFlagsValues { ioc: true },
-            source: Endpoint::scatter_gather(0x1800, 2),
-            destination: Endpoint::scatter_gather(0x1900, 2),
-        },
+        Command::copy(
+            7,
+            pdma_model_contract::dma::CopyCommand {
+                copy_length: 512,
+                sg_context: 0,
+                source: Endpoint::scatter_gather(0x1800, 2),
+                destination: Endpoint::scatter_gather(0x1900, 2),
+            },
+        ),
     )?;
     Ok(device)
 }
@@ -77,13 +77,7 @@ fn publish(device: &mut Dma<Observed>, command: Command) -> TestResult {
         MemoryAlignment::ONE,
         &command.to_bytes()?,
     )?;
-    device.write(
-        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-            + ChannelBlock::COMMAND.offset()
-            + CommandRegisters::PRODUCER.offset(),
-        &1_u32.to_le_bytes(),
-    )?;
-    Ok(())
+    publish_fence(device, 0, command.id)
 }
 
 fn snapshot(device: &Dma<Observed>, address: u64) -> TestResult<[u8; 512]> {
@@ -153,21 +147,22 @@ fn reset_stops_sg_interactions_before_completion_and_keeps_them_stopped() -> Tes
             assert_eq!(device.memory.interactions.get(), accesses);
             assert_eq!(snapshot(&device, 0x1400)?, before);
             let producer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-                + ChannelBlock::RESPONSE.offset()
-                + ResponseRegisters::PRODUCER.offset();
+                + ChannelBlock::EVENT.offset()
+                + EventRegisters::PRODUCER.offset();
             assert_eq!(word(&mut device, producer)?, 0);
             assert!(!device.irq());
             configure(&mut device, 0)?;
             publish(
                 &mut device,
-                Command {
-                    copy_length: 512,
-                    sg_context: 0,
-                    id: 99,
-                    flags: CompletionFlagsValues::default(),
-                    source: Endpoint::linear(0x1200, 0),
-                    destination: Endpoint::linear(0x1600, 0),
-                },
+                Command::copy(
+                    99,
+                    pdma_model_contract::dma::CopyCommand {
+                        copy_length: 512,
+                        sg_context: 0,
+                        source: Endpoint::linear(0x1200, 0),
+                        destination: Endpoint::linear(0x1600, 0),
+                    },
+                ),
             )?;
             for _ in 0..256 {
                 assert!(matches!(
@@ -175,21 +170,10 @@ fn reset_stops_sg_interactions_before_completion_and_keeps_them_stopped() -> Tes
                     StepOutcome::InProgress
                 ));
             }
-            assert_eq!(word(&mut device, producer)?, 1);
+            assert_eq!(word(&mut device, producer)?, 0);
             assert_eq!(snapshot(&device, 0x1400)?, before);
             assert_eq!(snapshot(&device, 0x1600)?, [7; 512]);
-            let raw = device
-                .memory
-                .memory
-                .read_typed::<pdma_model_contract::dma::ResponseRaw>(
-                    MemoryAddress::new(0x1100),
-                    MemoryAlignment::ONE,
-                )?;
-            let response = Response::from_bytes(raw.as_ref())?;
-            assert_eq!(
-                (response.id, response.status, response.bytes_completed()),
-                (99, ResponseStatus::Success, 512)
-            );
+            assert_eq!(completion(&device, 0)?, 100);
         }
     }
     Ok(())

@@ -10,7 +10,7 @@ use crate::harness::{
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, RegisterAccess};
 use pdma_model_contract::{
-    dma::{ChannelId, ContextId, Response, ResponseStatus},
+    dma::{ChannelId, ContextId},
     memory::FunctionId,
 };
 use tokio::sync::{mpsc, oneshot};
@@ -32,7 +32,7 @@ pub(in crate::harness) struct Recovery {
 #[derive(Debug, Default)]
 /// Software-observed platform faults and the original command's completion.
 pub struct Outcome {
-    pub(crate) responses: Vec<Response>,
+    pub(crate) completions: Vec<u64>,
     pub(crate) faults: Vec<FaultReport>,
     pub(crate) faulted: Vec<bool>,
     pub(crate) bytes: Vec<u8>,
@@ -56,7 +56,7 @@ pub(in crate::harness) async fn main<M: Send>(
     let mut handler = sources
         .handler(FunctionId::new(1), &[channel])
         .ok_or("unknown granted source")?;
-    let (mut driver, request, dst) = transfer::prepare(
+    let (mut driver, request, dst, fence) = transfer::prepare(
         &ports,
         (Grant { channel, contexts }, [&lists, &source, &destination]),
         input,
@@ -68,6 +68,10 @@ pub(in crate::harness) async fn main<M: Send>(
         .register(HostVector::Dma, Handler::Wake(wake))?;
     let mut outcome = Outcome::default();
     driver.submit(request).await?;
+    driver.submit(fence.command(input.id)).await?;
+    driver
+        .submit(pdma_model_contract::dma::Command::trap(input.id))
+        .await?;
     for _ in 0..2 {
         let report = tokio::select! {
             report = reports.recv() => report.ok_or("platform fault reporter stopped")?,
@@ -76,7 +80,7 @@ pub(in crate::harness) async fn main<M: Send>(
         if handler.resolve(&report) != Some(channel) {
             return Err("fault source is outside this grant".into());
         }
-        if driver.response().await?.is_some() {
+        if driver.event().await?.is_some() {
             return Err("suspended command published a response".into());
         }
         let faulted = loop {
@@ -105,15 +109,14 @@ pub(in crate::harness) async fn main<M: Send>(
         driver.resume().await?;
     }
     notifications.recv().await.ok_or("DMA ISR stopped")?;
-    let response = driver
-        .response()
-        .await?
-        .ok_or("notification without response")?;
-    if response.id != request.id || response.status != ResponseStatus::Success {
-        return Err("original command failed to complete".into());
+    if !fence.is_complete(&ports.memory)?
+        || driver.fatal().await? != pdma_model_contract::dma::ChannelFatalCode::None
+    {
+        return Err("copy Fence missing or channel fatal".into());
     }
-    outcome.responses.push(response);
-    if driver.response().await?.is_some() {
+    driver.acknowledge_trap().await?;
+    outcome.completions.push(fence.0.value);
+    if driver.event().await?.is_some() {
         return Err("duplicate command response".into());
     }
     outcome.bytes.resize(input.payload.len(), 0);

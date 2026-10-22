@@ -7,7 +7,7 @@ use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelRegisters, CommandRegisters, DmaAdmin, DmaControl, DmaDiscovery, Endpoint,
-    ResponseRegisters,
+    EventRegisters,
 };
 use support::{TestResult, command, read_word, setup, submit};
 
@@ -67,8 +67,8 @@ fn reset_invalidates_a_retained_copy_without_rolling_back_memory() -> TestResult
         read_word(
             &mut device,
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
-                + ResponseRegisters::CAPACITY.offset()
+                + pdma_model_contract::dma::ChannelBlock::EVENT.offset()
+                + EventRegisters::CAPACITY.offset()
         )?,
         0
     );
@@ -134,15 +134,15 @@ fn reset_after_committed_chunk_discards_remaining_copy_after_reconfiguration() -
         let (mut device, memory) = setup(0x1100, 2)?;
         memory.write(MemoryAddress::new(0x1200), MemoryAlignment::ONE, &[7; 512])?;
         let mut input = command();
-        input.copy_length = 512;
-        input.destination = Endpoint::linear(0x1600, 0);
+        crate::support::copy_mut(&mut input)?.copy_length = 512;
+        crate::support::copy_mut(&mut input)?.destination = Endpoint::linear(0x1600, 0);
         submit(&mut device, &memory, input)?;
         let mut hardware = device.hardware();
         let mut operation = hardware_interface_pipeline::HardwareDriver::new();
         let mut first_committed = false;
         let mut first_chunk = [0; 256];
         for _ in 0..64 {
-            let _ = operation.step(&mut hardware, &mut device);
+            let _ = operation.step(&mut hardware, &mut device)?;
             memory.read(
                 MemoryAddress::new(0x1600),
                 MemoryAlignment::ONE,
@@ -175,8 +175,8 @@ fn reset_after_committed_chunk_discards_remaining_copy_after_reconfiguration() -
         )?;
         device.write(
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
-                + ResponseRegisters::BASE.offset(),
+                + pdma_model_contract::dma::ChannelBlock::EVENT.offset()
+                + EventRegisters::BASE.offset(),
             &0x1100_u64.to_le_bytes(),
         )?;
         for offset in [
@@ -184,8 +184,8 @@ fn reset_after_committed_chunk_discards_remaining_copy_after_reconfiguration() -
                 + pdma_model_contract::dma::ChannelBlock::COMMAND.offset()
                 + CommandRegisters::CAPACITY.offset(),
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
-                + ResponseRegisters::CAPACITY.offset(),
+                + pdma_model_contract::dma::ChannelBlock::EVENT.offset()
+                + EventRegisters::CAPACITY.offset(),
         ] {
             device.write(offset, &2_u32.to_le_bytes())?;
         }
@@ -216,14 +216,10 @@ fn reset_after_committed_chunk_discards_remaining_copy_after_reconfiguration() -
                 Ok(StepOutcome::InProgress)
             ));
         }
+        support::assert_no_event(&mut device)?;
         assert_eq!(
-            read_word(
-                &mut device,
-                pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-                    + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
-                    + ResponseRegisters::PRODUCER.offset()
-            )?,
-            1
+            memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+            [7; 4]
         );
     }
     Ok(())

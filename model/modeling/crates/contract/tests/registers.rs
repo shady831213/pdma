@@ -6,7 +6,7 @@ use hardware_interface_schema::{
 };
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelBlockValues, ChannelIrqMaskValues, ChannelRegisters, DmaControl,
-    DmaRegisters, ResponseRegisters,
+    DmaRegisters, EventRegisters,
 };
 
 #[test]
@@ -20,15 +20,18 @@ fn register_offsets_are_aligned_when_maps_are_nested() -> Result<(), Box<dyn std
         .map(|register| (register.path().to_owned(), register.offset()))
         .collect::<Vec<_>>();
     // Then: device discovery precedes three aligned, independent channel maps.
-    let mut expected = vec![("DmaRegisters.discovery.channel_num".to_owned(), 0)];
+    let mut expected = vec![
+        ("DmaRegisters.discovery.channel_num".to_owned(), 0),
+        ("DmaRegisters.discovery.capabilities".to_owned(), 4),
+    ];
     expected.extend(
-        [("irq_enable", 4), ("fatal", 8), ("reset", 12)]
+        [("irq_enable", 8), ("fatal", 12), ("reset", 16)]
             .map(|(name, offset)| (format!("DmaRegisters.admin.control.{name}"), offset)),
     );
     expected.extend((0..3).map(|index| {
         (
             format!("DmaRegisters.admin.channels[{index}].reset"),
-            16 + index * 4,
+            20 + index * 4,
         )
     }));
     for (index, base) in [(0, 4096), (1, 8192), (2, 12288)] {
@@ -38,10 +41,10 @@ fn register_offsets_are_aligned_when_maps_are_nested() -> Result<(), Box<dyn std
                 ("command.capacity", 8),
                 ("command.producer", 12),
                 ("command.consumer", 16),
-                ("response.base", 24),
-                ("response.capacity", 32),
-                ("response.producer", 36),
-                ("response.consumer", 40),
+                ("event.base", 24),
+                ("event.capacity", 32),
+                ("event.producer", 36),
+                ("event.consumer", 40),
                 ("control.enable", 44),
                 ("control.irq_enable", 48),
                 ("control.fatal", 52),
@@ -50,6 +53,7 @@ fn register_offsets_are_aligned_when_maps_are_nested() -> Result<(), Box<dyn std
                 ("control.ring_context", 64),
                 ("control.fault_status", 68),
                 ("control.resume", 72),
+                ("control.trap_ack", 76),
             ]
             .map(|(name, offset)| {
                 (
@@ -71,14 +75,14 @@ fn generated_access_updates_selected_leaf_when_registers_are_nested() {
     let mut channel = ChannelBlockValues::default();
     let command_producer = 9;
     let response_producer = 17;
-    let response_offset = ChannelBlock::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset();
+    let response_offset = ChannelBlock::EVENT.offset() + EventRegisters::PRODUCER.offset();
     channel.command.producer = pdma_model_contract::register::WordValues::new(command_producer);
     // When: hardware updates the response producer through generated offset dispatch.
     let result =
         ChannelBlock::write_register(&mut channel, response_offset, u64::from(response_producer));
     // Then: only the selected nested leaf changes.
     assert_eq!(result, Some(()));
-    assert_eq!(channel.response.producer.raw(), response_producer);
+    assert_eq!(channel.event.producer.raw(), response_producer);
     assert_eq!(channel.command.producer.raw(), command_producer);
     assert_eq!(
         ChannelBlock::read_register(&channel, response_offset),
@@ -121,6 +125,7 @@ fn channel_control_metadata_defines_software_access() -> Result<(), Box<dyn std:
             (20, Access::ReadWrite, 0xffff_ffff, ResetKind::Zero, 0),
             (24, Access::ReadOnly, 0, ResetKind::Zero, 0),
             (28, Access::WriteOnly, 1, ResetKind::Zero, 0),
+            (32, Access::WriteOnly, 1, ResetKind::Zero, 0),
         ]
     );
     Ok(())
@@ -132,8 +137,8 @@ fn response_notification_masks_have_independent_wire_bits() -> Result<(), Box<dy
     // Given: reset notification masks.
     let masks = ChannelIrqMaskValues::default();
     // When: software masks each response notification source.
-    let non_empty = masks.with_response_non_empty(true)?;
-    let ioc = masks.with_ioc(true)?;
+    let non_empty = masks.with_event_non_empty(true)?;
+    let ioc = masks.with_trap(true)?;
     // Then: each source occupies its declared bit with reserved bits clear.
     assert_eq!(non_empty.raw(), 1);
     assert_eq!(ioc.raw(), 2);

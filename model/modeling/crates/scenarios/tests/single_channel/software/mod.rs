@@ -3,10 +3,13 @@
 mod buffers;
 
 use hardware_interface_runtime::{
-    InterruptHandler, InterruptRegistration, MemoryAlignment, RegisterAccess, SharedMemoryAccess,
-    SharedMemoryAllocator,
+    InterruptHandler, InterruptRegistration, MemoryAccess, MemoryAddress, MemoryAlignment,
+    RegisterAccess, SharedMemoryAccess, SharedMemoryAllocator,
 };
-use pdma_model_contract::dma::{ChannelFatalCode, ChannelId, Command, Response, Segment};
+use pdma_model_contract::dma::{
+    ChannelFatalCode, ChannelId, Command, CopyCommand, Event, Segment, WordTarget, WordTargetWidth,
+    WordWrite,
+};
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as HostError, RingConfig, Rings, runtime::Irq,
 };
@@ -45,7 +48,7 @@ impl<'a> Input<'a> {
 }
 
 /// Result delivered from the ISR to the main software program.
-pub type Completion = (Option<Response>, ChannelFatalCode);
+pub type Completion = (Option<Event>, ChannelFatalCode, bool);
 /// Platform capabilities visible to the software program.
 #[derive(Debug)]
 pub struct Ports<'a, B> {
@@ -62,19 +65,23 @@ pub struct Ports<'a, B> {
 /// Software completion with the destination available for independent verification.
 #[derive(Debug)]
 pub struct Outcome {
-    /// Response consumed by the ISR, if hardware published one.
-    pub response: Option<Response>,
+    /// Event consumed by the ISR, if hardware published one.
+    pub event: Option<Event>,
     /// Sticky fatal observed by the ISR.
     pub fatal: ChannelFatalCode,
+    #[doc = "Whether the ISR observed the software-selected Fence value."]
+    pub completed: bool,
     /// Software-allocated destination of the DMA copy.
     pub destination: Vec<Segment>,
 }
 
-/// Persistent software owner of response consumption and IRQ masking.
+/// Persistent software owner of event consumption and IRQ masking.
 #[derive(Debug)]
 pub struct CompletionHandler<B> {
     channel: Channel<B, SharedMemoryAccess>,
     completion: Option<oneshot::Sender<Completion>>,
+    memory: SharedMemoryAccess,
+    fence: MemoryAddress,
 }
 
 impl<B: RegisterAccess + Send + Sync> InterruptHandler<Irq> for CompletionHandler<B> {
@@ -82,15 +89,28 @@ impl<B: RegisterAccess + Send + Sync> InterruptHandler<Irq> for CompletionHandle
 
     async fn handle(&mut self, _: &Irq) -> Result<(), Self::Error> {
         let fatal = self.channel.fatal().await?;
-        let response = self.channel.response().await?;
+        let event = self.channel.event().await?;
         match fatal {
             ChannelFatalCode::None => {}
-            ChannelFatalCode::CommandRead | ChannelFatalCode::ResponseWrite => {
+            ChannelFatalCode::CommandRead
+            | ChannelFatalCode::EventWrite
+            | ChannelFatalCode::EventFull
+            | ChannelFatalCode::EventConfiguration => {
                 self.channel.set_irq_enabled(false).await?;
             }
         }
+        self.channel.acknowledge_trap().await?;
+        let mut bytes = [0; 8];
+        self.memory
+            .read(
+                self.fence,
+                MemoryAlignment::try_new(8).map_err(|_| HostError::Geometry)?,
+                &mut bytes,
+            )
+            .map_err(HostError::Memory)?;
+        let completed = u64::from_le_bytes(bytes) == 7;
         if let Some(completion) = self.completion.take() {
-            let _receiver_closed = completion.send((response, fatal));
+            let _receiver_closed = completion.send((event, fatal, completed));
         }
         Ok(())
     }
@@ -105,14 +125,14 @@ where
     B: RegisterAccess + Send + Sync,
     B::Error: Error + Send + Sync + 'static,
 {
-    const CAPACITY: usize = 2;
+    const CAPACITY: usize = 4;
     let command = ports.allocator.allocate(
         u64::try_from(CAPACITY * Command::RECORD_SIZE)?,
         MemoryAlignment::try_new(u64::try_from(Command::RECORD_ALIGNMENT)?)?,
     )?;
-    let response = ports.allocator.allocate(
-        u64::try_from(CAPACITY * Response::RECORD_SIZE)?,
-        MemoryAlignment::try_new(u64::try_from(Response::RECORD_ALIGNMENT)?)?,
+    let event = ports.allocator.allocate(
+        u64::try_from(CAPACITY * Event::RECORD_SIZE)?,
+        MemoryAlignment::try_new(u64::try_from(Event::RECORD_ALIGNMENT)?)?,
     )?;
     let buffers = buffers::Builder {
         allocator: &ports.allocator,
@@ -122,23 +142,42 @@ where
     let destination = buffers.build(input.destination, &vec![0; input.data.len()])?;
     let rings = Rings {
         command: RingConfig::new(command.raw(), u32::try_from(CAPACITY)?)?,
-        response: RingConfig::new(response.raw(), u32::try_from(CAPACITY)?)?,
+        event: RingConfig::new(event.raw(), u32::try_from(CAPACITY)?)?,
     };
     let config = ChannelConfig {
         id: ChannelId::new(0),
         rings,
     };
-    let mut channel = Channel::setup(ports.bus, ports.memory, config).await?;
+    let fence = ports.allocator.allocate(8, MemoryAlignment::try_new(8)?)?;
+    ports
+        .memory
+        .write(fence, MemoryAlignment::try_new(8)?, &0_u64.to_le_bytes())?;
+    let mut channel = Channel::setup(ports.bus, ports.memory.clone(), config).await?;
     channel
-        .submit(Command {
-            copy_length: u64::try_from(input.data.len())?,
-            sg_context: 0,
-            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-            id: 7,
-            source: source.endpoint,
-            destination: destination.endpoint,
-        })
+        .submit(Command::copy(
+            7,
+            CopyCommand {
+                copy_length: u64::try_from(input.data.len())?,
+                sg_context: 0,
+                source: source.endpoint,
+                destination: destination.endpoint,
+            },
+        ))
         .await?;
+    channel
+        .submit(Command::fence(
+            8,
+            WordWrite {
+                target: WordTarget {
+                    address: fence.raw(),
+                    context: 0,
+                    width: WordTargetWidth::Bits64,
+                },
+                value: 7,
+            },
+        ))
+        .await?;
+    channel.submit(Command::trap(9)).await?;
 
     let (completion, received) = oneshot::channel();
     ports.interrupts.register(
@@ -146,12 +185,15 @@ where
         CompletionHandler {
             channel,
             completion: Some(completion),
+            memory: ports.memory,
+            fence,
         },
     )?;
-    let (response, fatal) = received.await?;
+    let (event, fatal, completed) = received.await?;
     Ok(Outcome {
-        response,
+        event,
         fatal,
+        completed,
         destination: destination.segments,
     })
 }

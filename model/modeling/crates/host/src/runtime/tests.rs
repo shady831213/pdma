@@ -3,7 +3,7 @@ mod cooperative;
 mod notifications;
 use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
 use hardware_interface_runtime::{RegisterAccess, SharedMemory};
-use pdma_model_contract::dma::{ChannelRegisters, CommandRegisters, ResponseRegisters};
+use pdma_model_contract::dma::{ChannelRegisters, CommandRegisters, EventRegisters};
 use pdma_model_dma::{ChannelFatal, Dma, Error};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -87,8 +87,8 @@ async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestRe
                 + pdma_model_contract::dma::ChannelBlock::COMMAND.offset())
                 + CommandRegisters::CAPACITY.offset(),
             (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset())
-                + ResponseRegisters::CAPACITY.offset(),
+                + pdma_model_contract::dma::ChannelBlock::EVENT.offset())
+                + EventRegisters::CAPACITY.offset(),
             (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::dma::ChannelBlock::CONTROL.offset())
                 + ChannelRegisters::ENABLE.offset(),
@@ -108,7 +108,8 @@ async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestRe
         for _ in 0..256 {
             if let StepOutcome::Complete(Ok(flow)) = operation.step(&mut hardware, &mut *device)? {
                 outcome = Some(
-                    Operation::new(flow.finish()).step(&mut pdma_model_dma::Retire, &mut *device),
+                    Operation::new(vec![(0, flow.finish())])
+                        .step(&mut pdma_model_dma::Retire, &mut *device),
                 );
                 break;
             }

@@ -16,6 +16,18 @@ impl Work {
 }
 
 impl<M, S> Dma<M, S> {
+    pub(crate) fn retire_accepted(&mut self, work: Work) {
+        if let Some(channel) = self.channels.get_mut(work.channel.index())
+            && channel.resident == Some(work)
+            && channel.generation == work.generation
+        {
+            channel.retire();
+            if self.active == Some(work) {
+                self.active = None;
+            }
+        }
+    }
+
     pub(crate) fn release_residency(&mut self, work: Work) {
         let halted = self.halted();
         let abort_context = self

@@ -9,19 +9,19 @@ use crate::{
     software,
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::{ChannelFatalCode, Response, ResponseStatus, Segment};
-use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
+use pdma_model_contract::dma::{ChannelFatalCode, Segment};
 
 async fn copy(response_fault: bool, input: software::Input<'_>) -> TestResult<Vec<Segment>> {
     let injection = if response_fault {
-        FaultInjection::ResponseWrite
+        FaultInjection::EventWrite
     } else {
         FaultInjection::None
     };
     let report = harness::run(injection, input).await?;
     let software::Outcome {
-        response,
+        event,
         fatal,
+        completed,
         destination,
     } = report.program?;
     assert!(report.worker.is_cancelled());
@@ -47,24 +47,9 @@ async fn copy(response_fault: bool, input: software::Input<'_>) -> TestResult<Ve
     assert_eq!(copied, input.data);
     assert_eq!(report.summary.deliveries(), 1);
     assert!(!report.irq);
-    if response_fault {
-        assert_eq!(fatal, ChannelFatalCode::ResponseWrite);
-        assert_eq!(response, None);
-        println!("fatal: copied={copied:?}, sticky_fault={fatal:?}, IRQ handled and masked");
-    } else {
-        assert_eq!(
-            response,
-            Some(Response {
-                flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-                id: 7,
-                status: ResponseStatus::Success,
-                info: ResponseInfoValues::Success(CompletionInfo {
-                    bytes_completed: u64::try_from(input.data.len())?
-                }),
-            })
-        );
-        assert_eq!(fatal, ChannelFatalCode::None);
-        println!("copy: copied={copied:?}, response={response:?}, IRQ handled and cleared");
-    }
+    assert!(completed);
+    assert_eq!(event, None);
+    assert_eq!(fatal, ChannelFatalCode::None);
+    println!("copy: copied={copied:?}, fence observed, no error event");
     Ok(destination)
 }

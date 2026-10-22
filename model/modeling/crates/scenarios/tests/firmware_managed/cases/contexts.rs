@@ -1,6 +1,5 @@
 use crate::harness::{self, TestResult};
 use pdma_model_contract::control::ControlResponseStatus;
-use pdma_model_contract::dma::ResponseStatus;
 
 #[tokio::test]
 async fn pasid_control_bootstraps_contexts_and_copies_between_identical_addresses() -> TestResult {
@@ -10,9 +9,8 @@ async fn pasid_control_bootstraps_contexts_and_copies_between_identical_addresse
     // Then: independent control, list, source and destination bindings all reach their backing.
     assert!(outcome.same_address);
     assert_eq!(outcome.bytes, b"PASID-backed scatter gather copy");
-    let copied = outcome.responses.first().ok_or("missing copy response")?;
-    assert_eq!(copied.status, ResponseStatus::Success);
-    assert_eq!(copied.bytes_completed(), 32);
+    let copied = outcome.completions.first().ok_or("missing copy response")?;
+    assert_eq!(*copied, Ok(37));
     assert_eq!(
         outcome
             .management
@@ -31,32 +29,13 @@ async fn pasid_control_bootstraps_contexts_and_copies_between_identical_addresse
         assert!(batch.partial > 0 && batch.partial < 65_536);
         assert_eq!(batch.status, ControlResponseStatus::Success);
         assert_eq!(batch.peer, *b"peer");
-        assert!(
-            batch
-                .responses
-                .iter()
-                .all(|response| response.status == ResponseStatus::Success)
-        );
+        assert!(batch.completions.iter().all(Result::is_ok));
     }
     let drained = outcome.mixed.first().ok_or("missing drain batch")?;
     let aborted = outcome.mixed.get(1).ok_or("missing abort batch")?;
-    assert_eq!(
-        drained
-            .responses
-            .iter()
-            .map(|response| response.id)
-            .collect::<Vec<_>>(),
-        [100, 101, 102]
-    );
+    assert_eq!(drained.completions, [Ok(102)]);
     assert_eq!(drained.target, [0x6d; 4]);
-    assert_eq!(
-        aborted
-            .responses
-            .iter()
-            .map(|response| response.id)
-            .collect::<Vec<_>>(),
-        [200, 202]
-    );
+    assert_eq!(aborted.completions, [Ok(202)]);
     assert_eq!(aborted.target, [0xa5; 4]);
     Ok(())
 }
@@ -67,14 +46,14 @@ async fn context_failure_reports_recovery_channel_and_control_survives_reset() -
     // When: software requests drain after the fault and recovers through ResetChannel.
     let outcome = Box::pin(harness::contexts::run(true)).await?;
     // Then: maintenance reports the stopped channel and the live control service recovers it.
-    assert_ne!(
-        outcome
-            .responses
-            .first()
-            .ok_or("missing failed copy")?
-            .status,
-        ResponseStatus::Success
-    );
+    let failure = outcome
+        .completions
+        .first()
+        .ok_or("missing failed copy")?
+        .as_ref()
+        .expect_err("copy must fail");
+    assert_eq!(failure.code, pdma_model_contract::dma::EventCode::ReadError);
+    assert_eq!(failure.bytes_completed(), 0);
     assert_eq!(
         outcome
             .management
@@ -91,14 +70,7 @@ async fn context_failure_reports_recovery_channel_and_control_survives_reset() -
             .channel,
         0
     );
-    assert_eq!(
-        outcome
-            .responses
-            .get(1)
-            .ok_or("missing recovered copy")?
-            .status,
-        ResponseStatus::Success
-    );
+    assert_eq!(outcome.completions.get(1), Some(&Ok(37)));
     assert_eq!(outcome.bytes, b"PASID-backed scatter gather copy");
     assert_eq!(
         outcome.management.last().unwrap().status,

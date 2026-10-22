@@ -22,7 +22,7 @@ fn instance_bank_matches_resolved_register_addresses() -> Result<(), Box<dyn std
             assert_eq!(bank.offset(index), Some(address));
             assert_eq!(
                 ChannelId::new(index).admin_offset(count),
-                Some(16 + 4 * index)
+                Some(20 + 4 * index)
             );
             assert_eq!(
                 resolved.locate(address + 36).unwrap().offset(),

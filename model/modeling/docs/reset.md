@@ -2,7 +2,7 @@
 
 Channel and device reset separate a software request from hardware completion.
 Completion is the memory-lifetime boundary: affected old work can no longer issue
-a command read, SG-list read, payload read/write or response write. It is not a
+a command read, SG-list read, payload read/write or event/completion write. It is not a
 promise that the old command completed successfully.
 
 ## Interrupting context maintenance
@@ -50,7 +50,7 @@ register reads remain available. Software may configure and enable the scope aga
 after it observes completion.
 
 Channel reset clears that channel's configuration, ring pointers, fault, IRQ causes
-and notification controls. It discards its buffered payload and unpublished response.
+and notification controls. It discards its buffered payload and unpublished error event.
 This includes parked payload-fault work and its retained read scratch; no repair
 or RESUME is required to finish reset. The visible FAULT_STATUS.faulted bit clears.
 Software must serialize repair/resume with reset and retire old fault handlers and
@@ -102,15 +102,22 @@ An execution exit caused by parking is not command retirement while Channel reta
 
 Fetch records pipeline residency, separately from the accepted command and shared
 execution grant. Flow values retain its identity across connecting buffers and
-local processing. Publication or parking can release the grant before a tail exits.
+local processing. Parking can release the grant before a tail exits. An error's
+owner-local event push can notify software before its tail has exited, but does
+not retire accepted ownership or release residency.
 Reset first prevents admission and invalidates old work. A resident stage observes
 the request through its borrowed context during step, before data-readiness checks
 or further effects. It releases the storage it owns and returns a stopped Flow.
 Then passes that result through the remaining data path to Retire. Accepted
 execution stages have Infallible domain-error ports so they cannot skip retirement
 through Complete(Err). Custom stages forward stopped results without further data
-effects, after releasing their own local work. Retire consumes the result and
-releases residency; no enclosing controller observes child completion for cleanup.
+effects, after releasing their own local work. FanOut collects completed branch
+results and Then delivers that collection directly to Retire. Retire processes
+every receipt, performs terminal accepted cleanup and releases residency; an
+earlier error does not skip later cleanup. The first error is returned after the
+collection is processed, and branch indices do not select owners. Waiting/parked commands retain
+accepted ownership unless reset/Abort requires cancellation. No enclosing controller
+observes child completion for cleanup.
 Buffered values that have not yet been accepted reach their receiving stage, which
 checks the same lifecycle state before acting. Context projection never reaches into
 child storage or invokes an external flush method. In RTL, reset similarly must
@@ -139,7 +146,7 @@ is an additional stale-task guard, not the reset acknowledgment predicate.
 Custom finite graphs use `Dma::hardware_with` and ordinary composition. Their stages
 receive concrete chunk, payload or completion data and a selected borrowed
 ExecutionContext resource bank, not the full Dma. Each Flow identifies its owner;
-custom stages observe Flow::lifecycle(context), and standard memory/publication stages check
+custom stages observe Flow::lifecycle(context), and standard memory stages and owner-local reporting check
 the private generation-bound identity before effects; a transform may modify
 owned bytes but cannot replace their geometry or identity. Persistent custom
 hardware effects need explicit storage and retirement rules. Merely dropping a
@@ -167,7 +174,7 @@ completion was observed. Reuse requires fresh channel setup.
 
 Caller deadlines and cancellation are software policy. Dropping the wait does not
 cancel an accepted hardware request, and a timeout or failed poll does not establish
-completion. Keep affected command rings, SG lists, payload buffers and response
+completion. Keep affected command rings, SG lists, payload buffers and event/completion
 rings valid until reset completion is observed. For device reset, this applies to
 every channel. No timeout value is modeled as a hardware cleanup duration.
 
@@ -225,7 +232,7 @@ These tests specify the observable contract; this list is not a test-run report.
 | Test source | Boundary covered |
 | --- | --- |
 | [`dma/tests/reset_protocol.rs`](../crates/dma/tests/reset_protocol.rs) | Visible busy state, rejected configuration, channel-owned work cleanup, repeated/zero writes and device reset scope. |
-| [`dma/tests/multi_channel/reset_boundaries.rs`](../crates/dma/tests/multi_channel/reset_boundaries.rs) | Reset across command/payload/response interactions, preserved peer work and fresh configuration. |
+| [`dma/tests/multi_channel/reset_boundaries.rs`](../crates/dma/tests/multi_channel/reset_boundaries.rs) | Reset across command/payload/event interactions, preserved peer work and fresh configuration. |
 | [`dma/tests/multi_channel/scatter_gather_reset.rs`](../crates/dma/tests/multi_channel/scatter_gather_reset.rs) | SG access boundaries and absence of stale interactions after completion. |
 | [`host/tests/reset_handshake/main.rs`](../crates/host/tests/reset_handshake/main.rs) | Polling after write acknowledgment, completion, read errors, CPU checks and cancellation. |
 | [`scenarios/tests/multi_channel/cases.rs`](../crates/scenarios/tests/multi_channel/cases.rs) | Independently driven hardware/software reset isolation, fresh work and device-wide reset. |

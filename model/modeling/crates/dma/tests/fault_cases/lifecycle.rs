@@ -3,7 +3,7 @@ use pdma_model_contract::dma::{ChannelId, ContextId};
 use pdma_model_dma::MaintenanceError;
 
 #[test]
-fn payload_fault_does_not_publish_a_response() -> TestResult {
+fn payload_fault_does_not_publish_an_event() -> TestResult {
     // Given: an accepted command with a missing source payload page.
     let mut device = setup()?;
     let command = streams(&device)?;
@@ -13,7 +13,7 @@ fn payload_fault_does_not_publish_a_response() -> TestResult {
     device.until(|dma| Ok(fault_status(dma)? == 1))?;
     // Then: the command remains retained without completion or interrupt.
     assert_eq!(
-        read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
+        read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
         0
     );
     assert!(!device.take_interrupt());
@@ -38,7 +38,7 @@ fn reset_discards_parked_work_and_clears_fault_status() -> TestResult {
     resume(&mut device, 1)?;
     assert_eq!(fault_status(&mut device)?, 0);
     assert_eq!(
-        read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
+        read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
         0
     );
     assert_eq!(
@@ -58,11 +58,11 @@ fn drain_reports_parked_channel_and_abort_discards_without_completion() -> TestR
         // Given: a parked command holds a non-ring context.
         let mut device = setup()?;
         let mut command = streams(&device)?;
-        command.source.context = 7;
+        crate::support::copy_mut(&mut command)?.source.context = 7;
         device.memory.missing.set(Some((0x1242, false)));
         submit(&mut device, command, 0)?;
         device.until(|dma| Ok(fault_status(dma)? == 1))?;
-        let context = ContextId::new(command.source.context);
+        let context = ContextId::new(crate::support::copy(&command)?.source.context);
         let channel = ChannelId::new(0);
         // When: management requests maintenance of the retained reference.
         if abort {
@@ -87,7 +87,7 @@ fn drain_reports_parked_channel_and_abort_discards_without_completion() -> TestR
             assert_eq!(fault_status(&mut device)?, 1);
         }
         assert_eq!(
-            read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
+            read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
             0
         );
         assert!(!device.take_interrupt());
@@ -100,13 +100,13 @@ fn abort_of_running_task_discards_it_only_when_payload_fault_parks_it() -> TestR
     // Given: a command has been accepted before Abort arrives.
     let mut device = setup()?;
     let mut command = streams(&device)?;
-    command.destination.context = 7;
+    crate::support::copy_mut(&mut command)?.destination.context = 7;
     device.memory.missing.set(Some((0x1242, false)));
     submit(&mut device, command, 0)?;
     device.until(|dma| Ok(read_word(dma, CMD + CommandRegisters::CONSUMER.offset())? == 1))?;
     assert_eq!(device.memory.faults.get(), 0);
     // When: Abort waits for the running command and that command encounters a page fault.
-    let context = ContextId::new(command.destination.context);
+    let context = ContextId::new(crate::support::copy(&command)?.destination.context);
     device.abort_context(context, &[ChannelId::new(0)])?;
     device.until(|dma| Ok(dma.context_status(context) != Ok(false)))?;
     // Then: committed bytes remain and maintenance completes without requiring resume.
@@ -114,7 +114,7 @@ fn abort_of_running_task_discards_it_only_when_payload_fault_parks_it() -> TestR
     assert_eq!(device.memory.faults.get(), 1);
     assert_eq!(fault_status(&mut device)?, 0);
     assert_eq!(
-        read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
+        read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
         0
     );
     assert_eq!(

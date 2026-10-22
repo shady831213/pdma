@@ -78,18 +78,24 @@ async fn inflight_boundary_needs_only_first_destination_byte() -> TestResult {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn backpressure_boundary_needs_only_peer_last_destination_bytes() -> TestResult {
+async fn completion_boundary_needs_only_fence_storage() -> TestResult {
     // Given: only the last byte of each peer's first destination is mapped and copied.
     let fixture = Fixture::new()?;
-    for peer in fixture.buffers.iter().skip(1) {
-        let last = peer
-            .destination
-            .checked_add(u64::try_from(peer.length - 1)?)
-            .ok_or("last address overflow")?;
-        fixture.install_byte(last, peer.value)?;
+    for peer in &fixture.buffers {
+        let address = MemoryAddress::new(peer.fence.0.target.address);
+        fixture.readable.add_regions(&[MemoryRegion::try_new(
+            address,
+            8,
+            MemoryAlignment::ONE,
+        )?])?;
+        fixture.readable.write(
+            address,
+            MemoryAlignment::ONE,
+            &peer.fence.0.value.to_le_bytes(),
+        )?;
     }
     // When: software waits for peers to finish before checking A's cursors.
-    let result = fixture.wait(Scenario::ResponseBackpressure).await?;
+    let result = fixture.wait(Scenario::SuccessWithoutEvents).await?;
     // Then: neither A nor the peers' other bytes need to be readable.
     assert_eq!(result, Some((0, 0)));
     Ok(())
@@ -118,23 +124,20 @@ async fn boundary_waits_for_the_selected_byte_to_match() -> TestResult {
 
 #[tokio::test(flavor = "current_thread")]
 async fn boundary_propagates_the_selected_byte_memory_error() -> TestResult {
-    for scenario in [Scenario::CopyInFlight, Scenario::ResponseBackpressure] {
+    for scenario in [Scenario::CopyInFlight, Scenario::SuccessWithoutEvents] {
         // Given: the selected byte is unmapped; backpressure's earlier peer is complete.
         let fixture = Fixture::new()?;
         let address = match scenario {
-            Scenario::ResponseBackpressure => {
-                let peer = fixture.buffers.get(1).ok_or("missing B")?;
-                let last = peer
-                    .destination
-                    .checked_add(u64::try_from(peer.length - 1)?)
-                    .ok_or("last address overflow")?;
-                fixture.install_byte(last, peer.value)?;
-                let final_peer = fixture.buffers.get(2).ok_or("missing C")?;
-                final_peer
-                    .destination
-                    .checked_add(u64::try_from(final_peer.length - 1)?)
-                    .ok_or("last address overflow")?
-            }
+            Scenario::SuccessWithoutEvents => MemoryAddress::new(
+                fixture
+                    .buffers
+                    .first()
+                    .ok_or("missing A")?
+                    .fence
+                    .0
+                    .target
+                    .address,
+            ),
             Scenario::CopyInFlight | Scenario::QueuedChannel | Scenario::WholeDevice => {
                 fixture.buffers.first().ok_or("missing A")?.destination
             }

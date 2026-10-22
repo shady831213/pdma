@@ -1,35 +1,57 @@
-//! IOC bits are shared wire metadata, not a separate command protocol.
+#![doc = "Copy-engine wire and notification boundary assertions."]
 
+use hardware_interface_schema::Access;
 use pdma_model_contract::dma::{
-    Command, CompletionFlagsValues, Endpoint, Response, ResponseStatus,
+    Capabilities, ChannelIrqCauseValues, ChannelIrqMaskValues, DmaDiscovery, TrapAck, TrapAckValues,
 };
-use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 
 #[test]
-fn ioc_round_trips_in_command_and_response() -> Result<(), Box<dyn std::error::Error>> {
-    // Given
-    let flags = CompletionFlagsValues { ioc: true };
-    let command = Command {
-        copy_length: 4,
-        sg_context: 0,
-        id: 7,
-        source: Endpoint::linear(0x100, 0),
-        destination: Endpoint::linear(0x200, 0),
-        flags,
-    };
-    let response = Response {
-        id: 7,
-        status: ResponseStatus::Success,
-        flags,
-        info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 4 }),
-    };
-    // When
-    let command_bytes = command.to_bytes()?;
-    let response_bytes = response.to_bytes()?;
-    // Then
-    assert_eq!(command_bytes[96], 1);
-    assert_eq!(response_bytes[12], 1);
-    assert_eq!(Command::from_bytes(&command_bytes)?, command);
-    assert_eq!(Response::from_bytes(&response_bytes)?, response);
-    Ok(())
+fn trap_ack_has_write_one_storage_and_write_only_access() {
+    // Given: an acknowledgment request with reserved bits clear.
+    let request = TrapAckValues::default().with_request(true).unwrap();
+    // When: the request is encoded for MMIO.
+    let bytes = request.raw().to_le_bytes();
+    // Then: exactly bit zero is sent through a write-only register.
+    assert_eq!(bytes, [1, 0, 0, 0]);
+    assert_eq!(TrapAck::SPEC.access(), Access::WriteOnly);
+    assert_eq!(TrapAck::SPEC.writable_mask(), 1);
+}
+
+#[test]
+fn causes_and_masks_keep_error_independent_of_optional_notifications() {
+    // Given: distinct event, Trap, stopping error and fatal causes.
+    let cause = ChannelIrqCauseValues::default()
+        .with_event_non_empty(true)
+        .unwrap()
+        .with_trap(true)
+        .unwrap()
+        .with_error(true)
+        .unwrap()
+        .with_channel_fatal(true)
+        .unwrap();
+    // When: both optional notification sources are masked.
+    let mask = ChannelIrqMaskValues::default()
+        .with_event_non_empty(true)
+        .unwrap()
+        .with_trap(true)
+        .unwrap();
+    // Then: error and fatal have no mask bits.
+    assert_eq!(cause.raw(), 15);
+    assert_eq!(mask.raw(), 3);
+}
+
+#[test]
+fn discovered_atomic_capabilities_are_read_only() {
+    // Given: discovery metadata for atomic support.
+    let map = DmaDiscovery::resolve().unwrap();
+    // When: software resolves the capability register.
+    let register = map
+        .registers()
+        .iter()
+        .find(|register| register.offset() == 4)
+        .unwrap();
+    // Then: capability support cannot be programmed through MMIO.
+    assert_eq!(register.definition().access(), Access::ReadOnly);
+    assert_eq!(register.definition().writable_mask(), 0);
+    assert_eq!(Capabilities::SPEC.width(), 4);
 }

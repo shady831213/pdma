@@ -1,18 +1,17 @@
-//! Cancellation after a committed DMA write preserves publication state.
+//! Cancellation after a committed DMA write preserves retirement state.
 
 use hardware_interface_pipeline::{AsyncExecutor, Operation};
 use hardware_interface_runtime::{
-    InterruptSource, MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
+    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::dma::{Command, Endpoint, Response, ResponseStatus};
-use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
+use pdma_model_contract::dma::{Command, Endpoint, Event};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
 
 #[tokio::test]
-async fn committed_copy_is_not_replayed_when_cancelled_before_response_publication()
+async fn committed_copy_is_not_replayed_when_cancelled_before_retirement()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: an operation with externally observable source and destination storage.
     let allocator =
@@ -28,11 +27,11 @@ async fn committed_copy_is_not_replayed_when_cancelled_before_response_publicati
                 .raw(),
             1,
         )?,
-        response: RingConfig::new(
+        event: RingConfig::new(
             allocator
                 .allocate(
-                    u64::try_from(Response::RECORD_SIZE)?,
-                    MemoryAlignment::try_new(u64::try_from(Response::RECORD_ALIGNMENT)?)?,
+                    u64::try_from(Event::RECORD_SIZE)?,
+                    MemoryAlignment::try_new(u64::try_from(Event::RECORD_ALIGNMENT)?)?,
                 )?
                 .raw(),
             1,
@@ -56,14 +55,15 @@ async fn committed_copy_is_not_replayed_when_cancelled_before_response_publicati
             },
         ))
         .await?;
-    cpu.run_main(channel.submit(Command {
-        copy_length: 8,
-        sg_context: 0,
-        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-        id: 23,
-        source: Endpoint::linear(source.raw(), 0),
-        destination: Endpoint::linear(destination.raw(), 0),
-    }))
+    cpu.run_main(channel.submit(Command::copy(
+        23,
+        pdma_model_contract::dma::CopyCommand {
+            source: Endpoint::linear(source.raw(), 0),
+            destination: Endpoint::linear(destination.raw(), 0),
+            copy_length: 8,
+            sg_context: 0,
+        },
+    )))
     .await?;
     let executor = AsyncExecutor::new(model.clone());
     let mut operation = Operation::new(());
@@ -89,29 +89,19 @@ async fn committed_copy_is_not_replayed_when_cancelled_before_response_publicati
     };
     assert!(copied_before_completion);
     assert!(!operation.is_complete());
-    assert_eq!(cpu.run_main(channel.response()).await?, None);
+    assert_eq!(cpu.run_main(channel.event()).await?, None);
     memory.write(source, alignment, b"new-data")?;
     memory.write(destination, alignment, b"sentinel")?;
     assert!(executor.run(&mut stage, &mut operation).await.is_ok());
 
-    // Then: publication completes exactly once without replaying either DMA step.
-    assert!(model.irq());
-    assert_eq!(
-        cpu.run_main(channel.response()).await?,
-        Some(Response {
-            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-            id: 23,
-            status: ResponseStatus::Success,
-            info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 8 }),
-        })
-    );
-    assert_eq!(cpu.run_main(channel.response()).await?, None);
+    // Then: retirement completes exactly once without replaying either DMA step.
+    assert!(!model.irq());
+    assert!(operation.is_complete());
+    assert_eq!(cpu.run_main(channel.event()).await?, None);
     let mut copied = [0; 8];
     memory.read(destination, alignment, &mut copied)?;
     assert_eq!(&copied, b"sentinel");
-    assert!(model.irq());
-    assert!(model.clone().claim(()).await?.is_some());
-    assert!(model.clone().claim(()).await?.is_none());
+    assert!(!model.irq());
     assert!(!model.irq());
     Ok(())
 }

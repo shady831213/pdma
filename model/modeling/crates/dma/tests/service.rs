@@ -8,9 +8,7 @@ mod service {
 
 use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::{
-    ChannelBlock, ChannelRegisters, CommandRegisters, ResponseRegisters,
-};
+use pdma_model_contract::dma::{ChannelBlock, ChannelRegisters, CommandRegisters, EventRegisters};
 use pdma_model_dma::Error;
 use support::{TestResult, chunk_pipeline, command, read_word, setup, submit};
 
@@ -22,8 +20,8 @@ const CONSUMER: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
     + ChannelBlock::COMMAND.offset()
     + CommandRegisters::CONSUMER.offset();
 const PRODUCER: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-    + ChannelBlock::RESPONSE.offset()
-    + ResponseRegisters::PRODUCER.offset();
+    + ChannelBlock::EVENT.offset()
+    + EventRegisters::PRODUCER.offset();
 
 #[test]
 fn custom_service_publishes_completion() -> TestResult {
@@ -35,7 +33,7 @@ fn custom_service_publishes_completion() -> TestResult {
         &[3, 1, 4, 1],
     )?;
     submit(&mut device, &memory, command())?;
-    let pipeline = chunk_pipeline(&device);
+    let pipeline = chunk_pipeline();
     let mut hardware = device.hardware_with(pipeline);
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     // When: the custom command is driven to its terminal boundary.
@@ -45,17 +43,17 @@ fn custom_service_publishes_completion() -> TestResult {
             operation.step(&mut hardware, &mut device)?,
             StepOutcome::InProgress
         ));
-        if read_word(&mut device, PRODUCER)? == 1 {
+        if memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)? == [3, 1, 4, 1] {
             completed = true;
             break;
         }
     }
-    // Then: payload and response are published, and terminal ownership permits reset.
+    // Then: payload and event are published, and terminal ownership permits reset.
     assert!(completed);
     let mut bytes = [0; 4];
     memory.read(MemoryAddress::new(0x1300), MemoryAlignment::ONE, &mut bytes)?;
     assert_eq!(bytes, [3, 1, 4, 1]);
-    assert_eq!(read_word(&mut device, PRODUCER)?, 1);
+    assert_eq!(read_word(&mut device, PRODUCER)?, 0);
     device.write(RESET, &1_u32.to_le_bytes())?;
     for _ in 0..128 {
         assert!(matches!(
@@ -76,7 +74,7 @@ fn custom_pipeline_retires_reset_work_before_accepting_new_work() -> TestResult 
     let (mut device, memory) = setup(0x1100, 2)?;
     memory.write(MemoryAddress::new(0x1300), MemoryAlignment::ONE, &[9; 4])?;
     submit(&mut device, &memory, command())?;
-    let pipeline = chunk_pipeline(&device);
+    let pipeline = chunk_pipeline();
     let mut hardware = device.hardware_with(pipeline);
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..32 {
@@ -105,7 +103,7 @@ fn custom_pipeline_retires_reset_work_before_accepting_new_work() -> TestResult 
             break;
         }
     }
-    // Then: old work retires without payload or response writes; the same hardware runs new work.
+    // Then: old work retires without payload or event writes; the same hardware runs new work.
     assert!(!operation.is_complete());
     assert_eq!(read_word(&mut device, RESET)?, 0);
     assert_eq!(read_word(&mut device, PRODUCER)?, 0);
@@ -118,7 +116,7 @@ fn custom_pipeline_retires_reset_work_before_accepting_new_work() -> TestResult 
             0x1000_u64,
         ),
         (
-            ChannelBlock::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
+            ChannelBlock::EVENT.offset() + EventRegisters::BASE.offset(),
             0x1100_u64,
         ),
     ] {
@@ -133,7 +131,7 @@ fn custom_pipeline_retires_reset_work_before_accepting_new_work() -> TestResult 
             2_u32,
         ),
         (
-            ChannelBlock::RESPONSE.offset() + ResponseRegisters::CAPACITY.offset(),
+            ChannelBlock::EVENT.offset() + EventRegisters::CAPACITY.offset(),
             2_u32,
         ),
     ] {
@@ -164,6 +162,6 @@ fn custom_pipeline_retires_reset_work_before_accepting_new_work() -> TestResult 
     assert!(!operation.is_complete());
     memory.read(MemoryAddress::new(0x1300), MemoryAlignment::ONE, &mut bytes)?;
     assert_eq!(bytes, [2, 7, 1, 8]);
-    assert_eq!(read_word(&mut device, PRODUCER)?, 1);
+    assert_eq!(read_word(&mut device, PRODUCER)?, 0);
     Ok(())
 }

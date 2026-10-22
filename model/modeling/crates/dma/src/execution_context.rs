@@ -14,6 +14,7 @@ pub(crate) struct SelectedResources<'a, M, S = ()> {
     pub(crate) active: &'a mut Option<Work>,
     pub(crate) abort_context: Option<ContextId>,
     pub(crate) maintenance: &'a mut Option<crate::Maintenance>,
+    pub(crate) capabilities: pdma_model_contract::dma::CapabilitiesValues,
 }
 
 impl<M, S> Dma<M, S> {
@@ -26,6 +27,7 @@ impl<M, S> Dma<M, S> {
             sideband: self.sideband,
             active: &mut self.active,
             maintenance: &mut self.maintenance,
+            capabilities: self.discovery.values.capabilities,
         }
     }
 }
@@ -39,6 +41,7 @@ pub struct ExecutionContext<'a, M, S = ()> {
     halted: bool,
     active: &'a mut Option<Work>,
     maintenance: &'a mut Option<crate::Maintenance>,
+    capabilities: pdma_model_contract::dma::CapabilitiesValues,
 }
 
 impl<M, S> ExecutionContext<'_, M, S> {
@@ -89,6 +92,7 @@ impl<M, S> ExecutionContext<'_, M, S> {
             active: self.active,
             abort_context,
             maintenance: self.maintenance,
+            capabilities: self.capabilities,
         })
     }
 }
@@ -187,14 +191,23 @@ impl<M, S> SelectedResources<'_, M, S> {
         self.changed();
         Ok(())
     }
+}
 
-    pub(crate) fn complete(&mut self, completion: crate::Completion) -> Result<(), Error> {
-        let work = completion.work;
-        self.channel(work)?
-            .work
-            .as_mut()
-            .ok_or(Error::Reset)?
-            .completion = Some(completion);
-        Ok(())
+impl<M: hardware_interface_runtime::MemoryAccess<S>, S> SelectedResources<'_, M, S> {
+    pub(crate) fn report(&mut self, event: &pdma_model_contract::dma::Event) -> Error {
+        if let Err(error) = self.lifecycle() {
+            return error;
+        }
+        let work = self.work();
+        let memory = BoundMemory::new(
+            self.memory,
+            (self.sideband)(DmaAccess {
+                channel: self.id,
+                context: ContextId::new(self.selected.registers.values.ring_context.raw()),
+            }),
+        );
+        let error = self.selected.report(work, event, &memory);
+        self.changed();
+        error
     }
 }

@@ -65,19 +65,20 @@ pub(super) async fn fixture(cpu: &SoftwareCpu) -> Result<Fixture, Box<dyn std::e
                 id: ChannelId::new(1),
                 rings: Rings {
                     command: RingConfig::new(0x1000, 1)?,
-                    response: RingConfig::new(0x2000, 1)?,
+                    event: RingConfig::new(0x2000, 1)?,
                 },
             },
         ))
         .await?;
-    cpu.run_main(channel.submit(Command {
-        copy_length: 0,
-        sg_context: 0,
-        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-        id: 71,
-        source: Endpoint::linear(0, 0),
-        destination: Endpoint::linear(0, 0),
-    }))
+    cpu.run_main(channel.submit(Command::copy(
+        71,
+        pdma_model_contract::dma::CopyCommand {
+            source: Endpoint::linear(0, 0),
+            destination: Endpoint::linear(0, 0),
+            copy_length: 0,
+            sg_context: 0,
+        },
+    )))
     .await?;
     let consumer = u32::try_from(
         ChannelId::new(1)
@@ -102,7 +103,7 @@ pub(super) async fn fixture(cpu: &SoftwareCpu) -> Result<Fixture, Box<dyn std::e
         }
     }
     assert!(accepted);
-    assert_eq!(cpu.run_main(channel.response()).await?, None);
+    assert_eq!(cpu.run_main(channel.event()).await?, None);
     Ok(Fixture {
         channel,
         model,

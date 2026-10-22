@@ -1,23 +1,23 @@
 //! Host-owned ring configuration and constructor validation.
 
-use pdma_model_contract::dma::{Command, Response};
+use pdma_model_contract::dma::{Command, Event};
 use pdma_model_contract::ring::{Ring, RingError};
 
 #[test]
 fn configuration_uses_the_selected_entry_layout() -> Result<(), Box<dyn std::error::Error>> {
     // Given
     let command_base = 0x1000;
-    let response_base = 0x2000;
+    let event_base = 0x2000;
     let command = pdma_model_host::RingConfig::<Command>::new(command_base, 2)?;
-    let response = pdma_model_host::RingConfig::<Response>::new(response_base, 2)?;
+    let event = pdma_model_host::RingConfig::<Event>::new(event_base, 2)?;
     // When
-    let addresses = (command.entry(1)?, response.entry(1)?);
+    let addresses = (command.entry(1)?, event.entry(1)?);
     // Then
     assert_eq!(
         addresses,
         (
             command_base + u64::try_from(Command::RECORD_SIZE)?,
-            response_base + u64::try_from(Response::RECORD_SIZE)?,
+            event_base + u64::try_from(Event::RECORD_SIZE)?,
         )
     );
     Ok(())

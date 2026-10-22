@@ -2,7 +2,7 @@
 
 use hardware_interface_pipeline::Arbitration;
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, ResponseRegisters,
+    ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, EventRegisters,
 };
 use pdma_model_dma::{Dma, RoundRobin};
 
@@ -20,7 +20,7 @@ fn round_robin_rotates_completed_eligible_values_and_skips_idle_channels()
                 1_u32,
             ),
             (
-                ChannelBlock::RESPONSE.offset() + ResponseRegisters::CAPACITY.offset(),
+                ChannelBlock::EVENT.offset() + EventRegisters::CAPACITY.offset(),
                 1,
             ),
             (

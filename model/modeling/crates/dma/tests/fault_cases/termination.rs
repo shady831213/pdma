@@ -10,7 +10,7 @@ struct PeerFailure {
 
 impl Stage<ExecutionContext<'_, Paged>> for PeerFailure {
     type Input = pdma_model_dma::Flow<ChunkInput>;
-    type Output = pdma_model_dma::Flow<()>;
+    type Output = pdma_model_dma::Flow<pdma_model_dma::Completion>;
     type Error = std::convert::Infallible;
     fn step(
         &mut self,
@@ -52,7 +52,7 @@ fn peer_pipeline_termination_preserves_parked_hardware_until_reset() -> TestResu
     for raw_error in [false, true] {
         // Given: one faulted channel and a peer whose custom pipeline will terminate.
         let (mut device, _, _) = super::peers::pair()?;
-        let pipeline = crate::support::chunk_pipeline(&device);
+        let pipeline = crate::support::chunk_pipeline();
         let mut engine = device.hardware_with(PeerFailure {
             pipeline,
             raw_error,
@@ -116,7 +116,7 @@ fn peer_pipeline_termination_preserves_parked_hardware_until_reset() -> TestResu
         assert_eq!(fault_status(&mut device)?, 0);
         assert_eq!(device.memory.faults.get(), 1);
         assert_eq!(
-            read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
+            read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
             0
         );
     }

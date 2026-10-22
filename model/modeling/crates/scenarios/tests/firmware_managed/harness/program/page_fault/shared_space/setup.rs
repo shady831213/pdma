@@ -12,8 +12,8 @@ pub(super) async fn driver<M: Send>(
         MemoryAlignment::try_new(u64::try_from(Command::RECORD_ALIGNMENT)?)?,
     )?;
     let responses = ports.allocator.allocate(
-        u64::try_from(2 * Response::RECORD_SIZE)?,
-        MemoryAlignment::try_new(u64::try_from(Response::RECORD_ALIGNMENT)?)?,
+        u64::try_from(2 * Event::RECORD_SIZE)?,
+        MemoryAlignment::try_new(u64::try_from(Event::RECORD_ALIGNMENT)?)?,
     )?;
     ChannelControl::discover_at(&ports.bus, channel, ports.bus.addresses().dma)
         .await?
@@ -26,7 +26,7 @@ pub(super) async fn driver<M: Send>(
             id: channel,
             rings: Rings {
                 command: RingConfig::new(commands.raw(), 2)?,
-                response: RingConfig::new(responses.raw(), 2)?,
+                event: RingConfig::new(responses.raw(), 2)?,
             },
         },
         ports.bus.addresses().dma,
@@ -40,19 +40,28 @@ pub(super) async fn parked<M: Send>(driver: &mut Driver<M>) -> TestResult {
     while !driver.faulted().await? {
         tokio::task::yield_now().await;
     }
-    if driver.response().await?.is_some() {
+    if driver.event().await?.is_some() {
         return Err("parked channel published a response".into());
     }
     Ok(())
 }
 
-pub(super) async fn completed<M: Send>(driver: &mut Driver<M>) -> TestResult<Response> {
+pub(super) async fn completed<M: Send>(
+    driver: &mut Driver<M>,
+    (memory, fence): (
+        &hardware_interface_runtime::SharedMemoryAccess,
+        pdma_model_software::dma::CompletionWord,
+    ),
+) -> TestResult<u64> {
     loop {
-        if let Some(response) = driver.response().await? {
-            if driver.response().await?.is_some() {
-                return Err("duplicate response".into());
-            }
-            return Ok(response);
+        if let Some(event) = driver.event().await? {
+            return Err(format!("DMA error: {event:?}").into());
+        }
+        if driver.fatal().await? != pdma_model_contract::dma::ChannelFatalCode::None {
+            return Err("DMA fatal".into());
+        }
+        if fence.is_complete(memory)? {
+            return Ok(fence.0.value);
         }
         tokio::task::yield_now().await;
     }
@@ -147,18 +156,42 @@ pub(super) fn requests(
         .write(source, MemoryAlignment::ONE, data)?;
     payload.pages.evict(source);
     Ok((
-        Command {
-            source: Endpoint {
-                context: context.raw(),
-                ..Endpoint::linear(source.raw(), 0)
+        Command::copy(
+            0,
+            pdma_model_contract::dma::CopyCommand {
+                source: Endpoint {
+                    context: context.raw(),
+                    ..Endpoint::linear(source.raw(), 0)
+                },
+                destination: Endpoint {
+                    context: context.raw(),
+                    ..Endpoint::linear(0, 0)
+                },
+                copy_length: length,
+                ..pdma_model_contract::dma::CopyCommand::ZERO
             },
-            destination: Endpoint {
-                context: context.raw(),
-                ..Endpoint::linear(0, 0)
-            },
-            copy_length: length,
-            ..Command::ZERO
-        },
+        ),
         destinations,
+    ))
+}
+
+pub(super) fn fence<M>(
+    ports: &Ports<'_, M>,
+    context: ContextId,
+    value: u64,
+) -> TestResult<pdma_model_software::dma::CompletionWord> {
+    let address = ports.allocator.allocate(8, MemoryAlignment::try_new(8)?)?;
+    ports
+        .memory
+        .write(address, MemoryAlignment::ONE, &0_u64.to_le_bytes())?;
+    Ok(pdma_model_software::dma::CompletionWord(
+        pdma_model_contract::dma::WordWrite {
+            target: pdma_model_contract::dma::WordTarget {
+                address: address.raw(),
+                context: context.raw(),
+                width: pdma_model_contract::dma::WordTargetWidth::Bits64,
+            },
+            value,
+        },
     ))
 }

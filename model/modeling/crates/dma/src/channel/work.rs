@@ -5,9 +5,7 @@ mod validation;
 use super::CopyState;
 use crate::Channel;
 pub(super) use cursor::Cursor;
-use pdma_model_contract::dma::{
-    Command, CompletionInfo, Response, ResponseInfoValues, ResponseStatus,
-};
+use pdma_model_contract::dma::{Command, CopyCommand, Event, EventCode};
 
 /// Scratch space per copy interaction, not a protocol transfer-length limit.
 pub const COPY_CHUNK_BYTES: usize = 256;
@@ -27,39 +25,24 @@ impl CopyState {
         self.bytes_completed += count;
         Ok(())
     }
-    const fn new(command: Command, status: ResponseStatus) -> Self {
+    const fn new(id: u64, command: CopyCommand, status: Result<(), EventCode>) -> Self {
         Self {
             source: Cursor::new(command.source, command.copy_length),
             destination: Cursor::new(command.destination, command.copy_length),
             command,
+            id,
             remaining: command.copy_length,
             bytes_completed: 0,
             status,
         }
     }
 
-    pub(crate) const fn response(&self) -> Response {
-        self.response_with(self.status)
+    pub(crate) fn event(&self) -> Option<Event> {
+        self.status.err().map(|code| self.event_with(code))
     }
 
-    pub(crate) const fn response_with(&self, status: ResponseStatus) -> Response {
-        let progress = CompletionInfo {
-            bytes_completed: self.bytes_completed,
-        };
-        let info = match status {
-            ResponseStatus::Success => ResponseInfoValues::Success(progress),
-            ResponseStatus::InvalidLength => ResponseInfoValues::InvalidLength(progress),
-            ResponseStatus::ReadError => ResponseInfoValues::ReadError(progress),
-            ResponseStatus::WriteError => ResponseInfoValues::WriteError(progress),
-            ResponseStatus::LengthMismatch => ResponseInfoValues::LengthMismatch(progress),
-            ResponseStatus::ListReadError => ResponseInfoValues::ListReadError(progress),
-        };
-        Response {
-            flags: self.command.flags,
-            id: self.command.id,
-            status: info.tag(),
-            info,
-        }
+    pub(crate) const fn event_with(&self, code: EventCode) -> Event {
+        Event::stopping(self.id, code, self.bytes_completed)
     }
 }
 

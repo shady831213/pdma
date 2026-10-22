@@ -9,7 +9,7 @@ use pdma_model_dma::{CheckRanges, CommandRequest, Fetch, PrepareChunk, ReadCopy,
 use support::{TestResult, command, setup, submit};
 
 #[test]
-fn stage_outputs_carry_descriptor_addresses_bytes_and_response() -> TestResult {
+fn stage_outputs_carry_descriptor_addresses_bytes_and_completion() -> TestResult {
     // Given: a real command and source bytes in shared memory.
     let (mut dma, memory) = setup(0x1100, 2)?;
     submit(&mut dma, &memory, command())?;
@@ -41,19 +41,12 @@ fn stage_outputs_carry_descriptor_addresses_bytes_and_response() -> TestResult {
         .bytes_mut()?
         .copy_from_slice(b"WXYZ");
     let completion = finish(&mut WriteCopy::default(), &mut context, payload)?;
-    // Then: downstream consumes the modified bytes and the actual response value.
+    // Then: downstream consumes the modified bytes and retains their owner identity.
     assert_eq!(
-        completion.data().ok_or("completion")?.response().id,
-        command().id
+        completion.data().ok_or("completion")?.channel(),
+        ChannelId::new(0)
     );
-    assert_eq!(
-        completion
-            .data()
-            .ok_or("completion")?
-            .response()
-            .bytes_completed(),
-        4
-    );
+    support::assert_no_event(&mut dma)?;
     assert_eq!(
         memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
         *b"WXYZ"

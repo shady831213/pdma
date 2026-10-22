@@ -118,7 +118,7 @@ impl ChannelControl {
 
     /// Enables or masks all channel interrupt notifications.
     ///
-    /// Enabling does not replay masked events; inspect causes and pending responses.
+    /// Enabling does not replay masked events; inspect causes and pending events.
     pub async fn set_irq_enabled<B: RegisterAccess + Sync>(
         &self,
         bus: &B,
@@ -132,9 +132,9 @@ impl ChannelControl {
         .await
     }
 
-    /// Masks selected routine response events; error and fatal events bypass this mask.
+    /// Masks event-nonempty and Trap notifications; errors and fatals bypass this mask.
     ///
-    /// Clearing a mask does not replay events; inspect causes and pending responses.
+    /// Clearing a mask does not replay events; inspect causes and pending events.
     pub async fn set_irq_mask<B: RegisterAccess + Sync>(
         &self,
         bus: &B,
@@ -158,9 +158,22 @@ impl ChannelControl {
             .map(ChannelIrqCauseValues::new)
     }
 
+    /// Acknowledges Trap without retracting a platform-pending notification.
+    pub async fn acknowledge_trap<B: RegisterAccess + Sync>(
+        &self,
+        bus: &B,
+    ) -> Result<(), Error<B::Error>> {
+        self.channel_write(
+            bus,
+            CHANNEL + ChannelRegisters::TRAP_ACK.offset(),
+            &1_u32.to_le_bytes(),
+        )
+        .await
+    }
+
     /// Requests channel reset and waits for disabled, unconfigured hardware.
     ///
-    /// Success means all prior command, list, payload and response memory accesses have
+    /// Success means all prior command, list, payload and event memory accesses have
     /// drained and no later access can belong to that work. External memory is preserved;
     /// construct a fresh ring driver before reuse. Hardware must run independently.
     ///
@@ -235,7 +248,7 @@ impl ChannelControl {
 
     /// Requests device reset and waits for every channel to become disabled and unconfigured.
     ///
-    /// Success drains all prior command, list, payload and response memory accesses across
+    /// Success drains all prior command, list, payload and event memory accesses across
     /// all channels and prevents later accesses by that work. External memory is preserved;
     /// construct fresh drivers before reuse. Hardware must run independently.
     ///

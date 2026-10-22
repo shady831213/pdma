@@ -1,9 +1,19 @@
 use crate::{Channel, Dma};
 use hardware_interface_schema::{RegisterBankError, RegisterWindow};
 use pdma_model_contract::dma::{
-    ChannelCountValues, DmaAccess, DmaAdmin, DmaControl, DmaDiscovery, DmaRegisters,
+    CapabilitiesValues, ChannelCountValues, DmaAccess, DmaAdmin, DmaControl, DmaDiscovery,
+    DmaRegisters,
 };
 use std::{collections::TryReserveError, fmt};
+
+/// Immutable instance sizing and supported atomic widths.
+#[derive(Clone, Copy, Debug)]
+pub struct DmaConfig {
+    /// Number of independently configured DMA channels.
+    pub channels: usize,
+    /// Atomic widths provided by the injected platform memory capability.
+    pub capabilities: CapabilitiesValues,
+}
 
 /// Instance construction failure, separate from hardware or MMIO errors.
 #[derive(Debug)]
@@ -28,6 +38,11 @@ impl<M> Dma<M> {
     pub fn new(memory: M, channel_count: usize) -> Result<Self, BuildError> {
         Self::with_sideband(memory, channel_count, |_| ())
     }
+
+    /// Builds a channel population with explicit immutable capabilities.
+    pub fn with_config(memory: M, config: DmaConfig) -> Result<Self, BuildError> {
+        Self::with_config_and_sideband(memory, config, |_| ())
+    }
 }
 
 impl<M, S> Dma<M, S> {
@@ -37,6 +52,23 @@ impl<M, S> Dma<M, S> {
         channel_count: usize,
         sideband: fn(DmaAccess) -> S,
     ) -> Result<Self, BuildError> {
+        Self::with_config_and_sideband(
+            memory,
+            DmaConfig {
+                channels: channel_count,
+                capabilities: CapabilitiesValues::new(0),
+            },
+            sideband,
+        )
+    }
+
+    /// Builds an explicitly configured instance with platform access tags.
+    pub fn with_config_and_sideband(
+        memory: M,
+        config: DmaConfig,
+        sideband: fn(DmaAccess) -> S,
+    ) -> Result<Self, BuildError> {
+        let channel_count = config.channels;
         let count = u32::try_from(channel_count).map_err(|_| BuildError::AddressSpace)?;
         let layout = DmaRegisters::new(channel_count).map_err(BuildError::Layout)?;
         let _ = u32::try_from(layout.extent()).map_err(|_| BuildError::AddressSpace)?;
@@ -49,6 +81,7 @@ impl<M, S> Dma<M, S> {
             RegisterWindow::<DmaControl>::new(layout.admin().base() + DmaAdmin::CONTROL.offset());
         let mut discovery = RegisterWindow::<DmaDiscovery>::new(DmaRegisters::DISCOVERY.offset());
         discovery.values.channel_num = ChannelCountValues::new(count);
+        discovery.values.capabilities = config.capabilities;
         Ok(Self {
             layout,
             discovery,

@@ -5,22 +5,24 @@ use hardware_interface_runtime::{
     InterruptSource, MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::dma::{ChannelFatalCode, Command, Endpoint, Response, ResponseStatus};
-use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
+use pdma_model_contract::dma::{
+    ChannelFatalCode, Command, Endpoint, ErrorInfo, Event, EventCode, EventInfoValues, WordTarget,
+    WordTargetWidth, WordWrite,
+};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
 
 #[tokio::test]
-async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
+async fn malformed_event_is_not_consumed_before_explicit_decode_succeeds()
 -> Result<(), Box<dyn std::error::Error>> {
-    // Given: hardware has published a response, then its backing bytes are corrupted.
+    // Given: hardware has published a event, then its backing bytes are corrupted.
     let allocator =
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
     let alignment = MemoryAlignment::try_new(8)?;
-    let response_address = allocator.allocate(
-        u64::try_from(Response::RECORD_SIZE)?,
-        MemoryAlignment::try_new(u64::try_from(Response::RECORD_ALIGNMENT)?)?,
+    let event_address = allocator.allocate(
+        u64::try_from(Event::RECORD_SIZE)?,
+        MemoryAlignment::try_new(u64::try_from(Event::RECORD_ALIGNMENT)?)?,
     )?;
     let rings = Rings {
         command: RingConfig::new(
@@ -32,7 +34,7 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
                 .raw(),
             1,
         )?,
-        response: RingConfig::new(response_address.raw(), 1)?,
+        event: RingConfig::new(event_address.raw(), 1)?,
     };
     let memory = allocator.memory_access();
     let device = Dma::new(memory.clone(), 1)?;
@@ -49,28 +51,27 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
             },
         ))
         .await?;
-    cpu.run_main(channel.submit(Command {
-        copy_length: 0,
-        sg_context: 0,
-        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-        id: 13,
-        source: Endpoint::linear(0, 0),
-        destination: Endpoint::linear(0, 0),
-    }))
+    cpu.run_main(channel.submit(Command::copy(
+        13,
+        pdma_model_contract::dma::CopyCommand {
+            source: Endpoint::linear(0, 0),
+            destination: Endpoint::linear(0, 0),
+            copy_length: 1,
+            sg_context: 0,
+        },
+    )))
     .await?;
     until_irq(model.clone(), &mut hardware).await?;
-    assert!(model.irq(), "response did not arrive before watchdog");
-    let expected = Response {
-        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
+    let expected = Event {
         id: 13,
-        status: ResponseStatus::Success,
-        info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 0 }),
+        code: EventCode::ReadError,
+        info: EventInfoValues::ReadError(ErrorInfo { bytes_completed: 0 }),
     };
     let mut corrupted = expected.to_bytes()?;
-    *corrupted.get_mut(8).ok_or("response status byte missing")? = 255;
-    memory.write(response_address, alignment, &corrupted)?;
+    *corrupted.get_mut(8).ok_or("event status byte missing")? = 255;
+    memory.write(event_address, alignment, &corrupted)?;
     // When: software attempts to consume the malformed record.
-    let result = cpu.run_main(channel.response()).await;
+    let result = cpu.run_main(channel.event()).await;
     // Then: codec rejection leaves the entry and IRQ pending; repairing it allows consumption.
     assert!(matches!(
         result,
@@ -79,8 +80,8 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
         ))
     ));
     assert!(model.irq());
-    memory.write(response_address, alignment, &expected.to_bytes()?)?;
-    assert_eq!(cpu.run_main(channel.response()).await?, Some(expected));
+    memory.write(event_address, alignment, &expected.to_bytes()?)?;
+    assert_eq!(cpu.run_main(channel.event()).await?, Some(expected));
     assert!(model.irq());
     assert!(model.clone().claim(()).await?.is_some());
     assert!(model.clone().claim(()).await?.is_none());
@@ -89,7 +90,7 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
 }
 
 #[tokio::test]
-async fn copy_completes_when_host_submits_and_consumes_response()
+async fn copy_fence_then_trap_exposes_completion_and_payload()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: externally allocated rings and payload memory.
     let allocator =
@@ -99,17 +100,17 @@ async fn copy_completes_when_host_submits_and_consumes_response()
         command: RingConfig::new(
             allocator
                 .allocate(
-                    u64::try_from(2 * Command::RECORD_SIZE)?,
+                    u64::try_from(4 * Command::RECORD_SIZE)?,
                     MemoryAlignment::try_new(u64::try_from(Command::RECORD_ALIGNMENT)?)?,
                 )?
                 .raw(),
-            2,
+            4,
         )?,
-        response: RingConfig::new(
+        event: RingConfig::new(
             allocator
                 .allocate(
-                    u64::try_from(2 * Response::RECORD_SIZE)?,
-                    MemoryAlignment::try_new(u64::try_from(Response::RECORD_ALIGNMENT)?)?,
+                    u64::try_from(2 * Event::RECORD_SIZE)?,
+                    MemoryAlignment::try_new(u64::try_from(Event::RECORD_ALIGNMENT)?)?,
                 )?
                 .raw(),
             2,
@@ -117,6 +118,7 @@ async fn copy_completes_when_host_submits_and_consumes_response()
     };
     let source = allocator.allocate(8, alignment)?;
     let destination = allocator.allocate(8, alignment)?;
+    let completion = allocator.allocate(8, alignment)?;
     let memory = allocator.memory_access();
     memory.write(source, alignment, b"dma-copy")?;
     let device = Dma::new(memory.clone(), 1)?;
@@ -135,30 +137,39 @@ async fn copy_completes_when_host_submits_and_consumes_response()
         .await?;
 
     // When: a real async worker executes the submitted command.
-    cpu.run_main(channel.submit(Command {
-        copy_length: 8,
-        sg_context: 0,
-        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-        id: 7,
-        source: Endpoint::linear(source.raw(), 0),
-        destination: Endpoint::linear(destination.raw(), 0),
-    }))
+    cpu.run_main(channel.submit(Command::copy(
+        7,
+        pdma_model_contract::dma::CopyCommand {
+            source: Endpoint::linear(source.raw(), 0),
+            destination: Endpoint::linear(destination.raw(), 0),
+            copy_length: 8,
+            sg_context: 0,
+        },
+    )))
     .await?;
+    cpu.run_main(channel.submit(Command::fence(
+        8,
+        WordWrite {
+            target: WordTarget {
+                address: completion.raw(),
+                context: 0,
+                width: WordTargetWidth::Bits64,
+            },
+            value: 7,
+        },
+    )))
+    .await?;
+    cpu.run_main(channel.submit(Command::trap(9))).await?;
     until_irq(model.clone(), &mut hardware).await?;
-    assert!(model.irq(), "response did not arrive before watchdog");
     model.wait_ready().await?;
     assert!(model.claim(()).await?.is_some());
-    let response = cpu.run_main(channel.response()).await?;
+    let event = cpu.run_main(channel.event()).await?;
 
-    // Then: response, payload and claimed notification agree.
+    // Then: Fence, payload and claimed notification agree.
+    assert_eq!(event, None);
     assert_eq!(
-        response,
-        Some(Response {
-            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-            id: 7,
-            status: ResponseStatus::Success,
-            info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 8 }),
-        })
+        memory.read_typed::<[u8; 8]>(completion, alignment)?,
+        7_u64.to_le_bytes()
     );
     let mut copied = [0; 8];
     memory.read(destination, alignment, &mut copied)?;
@@ -169,9 +180,9 @@ async fn copy_completes_when_host_submits_and_consumes_response()
 }
 
 #[tokio::test]
-async fn fault_interrupt_arrives_when_response_write_is_unmapped()
+async fn fault_interrupt_arrives_when_event_write_is_unmapped()
 -> Result<(), Box<dyn std::error::Error>> {
-    // Given: the response ring points outside the injected memory backend.
+    // Given: the event ring points outside the injected memory backend.
     let allocator =
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
     let alignment = MemoryAlignment::try_new(8)?;
@@ -185,9 +196,8 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
                 .raw(),
             1,
         )?,
-        response: RingConfig::new(0x8000, 1)?,
+        event: RingConfig::new(0x8000, 1)?,
     };
-    let source = allocator.allocate(8, alignment)?;
     let destination = allocator.allocate(8, alignment)?;
     let memory = allocator.memory_access();
     let device = Dma::new(memory.clone(), 1)?;
@@ -204,37 +214,34 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
             },
         ))
         .await?;
-    cpu.run_main(channel.submit(Command {
-        copy_length: 8,
-        sg_context: 0,
-        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-        id: 9,
-        source: Endpoint::linear(source.raw(), 0),
-        destination: Endpoint::linear(destination.raw(), 0),
-    }))
+    cpu.run_main(channel.submit(Command::copy(
+        9,
+        pdma_model_contract::dma::CopyCommand {
+            source: Endpoint::linear(0, 0),
+            destination: Endpoint::linear(destination.raw(), 0),
+            copy_length: 8,
+            sg_context: 0,
+        },
+    )))
     .await?;
 
-    // When: response publication fails at the real memory boundary.
+    // When: event publication fails at the real memory boundary.
     until_irq(model.clone(), &mut hardware).await?;
-    assert!(
-        model.irq(),
-        "fatal notification did not arrive before watchdog"
-    );
 
     // Then: the notification is claimed once while the fatal remains visible through masking.
     model.wait_ready().await?;
     assert!(model.claim(()).await?.is_some());
     assert_eq!(
         cpu.run_main(channel.fatal()).await?,
-        ChannelFatalCode::ResponseWrite
+        ChannelFatalCode::EventWrite
     );
-    assert_eq!(cpu.run_main(channel.response()).await?, None);
+    assert_eq!(cpu.run_main(channel.event()).await?, None);
     cpu.run_main(channel.set_irq_enabled(false)).await?;
     assert!(model.claim(()).await?.is_none());
     assert!(!model.irq());
     assert_eq!(
         cpu.run_main(channel.fatal()).await?,
-        ChannelFatalCode::ResponseWrite
+        ChannelFatalCode::EventWrite
     );
     Ok(())
 }
@@ -249,11 +256,12 @@ async fn until_irq(
         result = executor.drive(hardware, &mut driver) => {
             Err(format!("hardware stopped: {result:?}").into())
         }
-        () = async {
+        result = async {
             for _ in 0..512 {
-                if model.irq() { break; }
+                if model.irq() { return Ok(()); }
                 tokio::task::yield_now().await;
             }
-        } => Ok(()),
+            Err("interrupt watchdog expired".into())
+        } => result,
     }
 }

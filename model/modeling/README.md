@@ -7,10 +7,12 @@ DMA/event recovery. Raw DMA-wide fatal notification goes to firmware; PF receive
 firmware events and coordinates affected VFs.
 
 The [roadmap and SDMA gap comparison](docs/firmware-dma-goal.md#copy-engine-synchronization-reassessment)
-record the withdrawal of the first Signal/Wait implementation. The model is Copy-only;
-generic memory atomics and reset during context maintenance remain available.
-Synchronization will be reconsidered against copy-engine workloads and SDMA examples,
-with HSA as a semantic reference rather than a mandatory AQL compatibility target. The broader
+record the withdrawal of the first Signal/Wait implementation. The approved
+[copy-engine contract](docs/copy-engine.md) now defines Copy, Write, Fill, Wait,
+Atomic, Semaphore, Fence and Trap. Success produces no event; Fence stores completion
+and Trap explicitly requests notification. Generic memory atomics and reset during
+context maintenance remain available. HSA is a semantic reference rather than an
+AQL compatibility target. The broader
 firmware-managed direction preserves the ordinary configuration and prepares
 SR-IOV, PASID and Function reset integration boundaries.
 The implemented first milestone is the [architecture MVP](docs/firmware-dma-mvp.md): an
@@ -40,7 +42,7 @@ cargo test -p pdma-model-scenarios --test firmware_managed -- --nocapture
 ```
 
 The system tests run all four linear/SG endpoint combinations, unequal segment
-boundaries, multi-chunk and zero-total transfers, plus response-ring write faults. They use
+boundaries, multi-chunk and zero-total transfers, plus event-ring write faults. They use
 real memory access, the same composed device pipeline, a software CPU, and the
 existing interrupt dispatcher. Worker construction/join belongs to the harness;
 case modules own inputs and acceptance assertions. Buffer allocation, payload initialization,
@@ -66,12 +68,13 @@ backend errors. New platform error categories need no generic runtime change.
 | Location | Responsibility |
 | --- | --- |
 | `crates/contract/src/dma.rs` | Public DMA contract facade; explicit exports from the owning modules. |
-| `crates/contract/src/dma/command.rs` | Command descriptors and command-requested completion flags. |
+| `crates/contract/src/dma/command.rs` | Tagged command descriptors and Copy payload. |
+| `crates/contract/src/dma/operations.rs` | Scalar, Fill, Wait and Semaphore payloads; atomic operations in its child module. |
 | `crates/contract/src/dma/endpoint.rs` | Payload endpoint geometry, SG segments and typed positions. |
-| `crates/contract/src/dma/response.rs` | Final completion records and committed progress. |
+| `crates/contract/src/dma/event.rs` | Error-only event records and committed progress. |
 | `crates/contract/src/register.rs` | Register types shared by DMA and management hardware. |
 | `crates/contract/src/dma/registers.rs` | DMA discovery and administration schemas, composed into the top-level register map. |
-| `crates/contract/src/dma/registers/channel.rs` | Channel control/IRQ schemas and command/response ring register maps. |
+| `crates/contract/src/dma/registers/channel.rs` | Channel control/IRQ schemas and command/event ring register maps. |
 | `crates/contract/src/dma/access.rs` | Channel/context selectors and outgoing DMA sideband; channel address helpers use the register layout. |
 | `crates/contract/src/hw_components/windows.rs` | Peripheral channel ownership, access-window control and Host readiness maps. |
 | `crates/contract/src/hw_components/context.rs` | Peripheral context table and firmware maintenance registers. |
@@ -108,8 +111,10 @@ backend errors. New platform error categories need no generic runtime change.
 | `crates/dma/src/stages/execution/validate.rs` | Range validation and validated traversal installation. |
 | `crates/dma/src/stages/execution/chunks.rs` | Shared bounded-chunk preparation stage. |
 | `crates/dma/src/stages/execution/copy.rs` | Shared chunk read/write stages with selected execution resources. |
-| `crates/dma/src/stages/responses.rs` | Generation-bound response dispatch and publication through channel rings. |
-| `crates/software/src/dma.rs` | Shared DMA driver configuration, submit and response consumption; reexported by Host. |
+| `crates/dma/src/stages/opcodes.rs` | One opcode Dispatch connecting Fetch to the selected command execution branch. |
+| `crates/dma/src/stages/operations.rs` | Bounded scalar execution and retained Fill progress; word/atomic access in child modules. |
+| `crates/dma/src/channel.rs` | Generation-bound owner-local error reporting and IRQ/fatal state. |
+| `crates/software/src/dma.rs` | Shared DMA driver configuration, submit and event consumption; reexported by Host. |
 | `crates/host/src/runtime.rs` | PDMA transport: async context access, cooperative yielding and pending notification delivery. |
 | `crates/software/src/dma/control.rs` | Shared discovery, fatal, IRQ and register-only reset access. |
 | `crates/dma/src/reset.rs` | Reset completion after affected channel-owned work retires. |
@@ -121,128 +126,113 @@ backend errors. New platform error categories need no generic runtime change.
 | `crates/scenarios/tests/single_channel/software/` | Complete software program, buffer allocation and interrupt handler. |
 | `crates/scenarios/tests/multi_channel/` | Three-channel reset isolation through the same hardware/software/harness separation. |
 
-`device.hardware()` returns one finite connected admission-to-execution graph.
-Custom execution supplies a complete ordinary
-stage graph, with explicit data and completion boundaries:
+`device.hardware()` returns one finite connected admission-to-retirement graph.
+Custom Copy execution supplies an ordinary graph with a command-completion result:
 
 ```rust
 let read = Then::new(PrepareChunk::default(), ReadCopy::default());
 let execute = CommandExecution::new(Then::new(read, WriteCopy::default()));
-let publish = Then::new(CompletionInput, device.responses());
-device.hardware_with(Then::new(execute, publish))
+device.hardware_with(execute)
 ```
 
-A transform composes after ReadCopy inside CommandExecution. Chunk-local stages
-belong inside that composite. Application stages observing command completion
-compose outside it, after CompletionInput and before or after publication as appropriate.
-The data-path constructor accepts the complete graph without inspecting or rearranging its internal
-Then structure. A write-fault retry restores retained bytes at
-WriteCopy's own input boundary and continues through that same completion tail.
-The upstream graph carries empty inputs, not the retained payload; it performs
-no repeated read or valid-data transformation. Custom stages distinguish a Flow
-without data from a payload and preserve its identity and retained stop status.
+A transform composes after ReadCopy inside CommandExecution; chunk-local stages
+belong inside that composite. Command-local tails compose after it and preserve
+the typed completion result. The constructor does not inspect or rearrange a
+caller's Then graph. All branches return to common Retire; callers do not compose
+an event publisher or release ownership themselves.
 
 Channel is a persistent hardware object, not a pipeline. It retains the accepted
-descriptor ledger, validated traversal and concrete fault checkpoints. Current
-validation, chunk, payload and completion values move through stage inputs,
-outputs and local state. Moving those values does not release accepted ownership.
-There is no global Action enum telling every stage which operation to execute,
-and no Channel-owned Rust Operation or generic composition continuation.
+descriptor ledger, validated traversal and concrete fault checkpoints. Validation,
+chunk and payload values move through stage inputs/outputs and local state without
+releasing ownership. No Channel stores a Rust Operation, child stage or generic
+continuation. No global controller selects child execution phases.
 
-Candidate produces a non-owning task request carrying its originating channel.
-FanIn and Arbitrate::snapshots select a task through DMA's RoundRobin policy, without calling source stages
-from the selected output. Fresh requests enter Fetch then CheckRanges. Fetch
-rechecks current eligibility at acceptance, reads the descriptor, advances consumer
-and establishes accepted ownership atomically. Its FetchedCommand output carries
-the actual command. CheckRanges owns its incremental scan and produces validated
-CopyProgress, installed once as authoritative hardware traversal.
-
-Candidates are revalidated, not replaced by a newer task from the same channel.
-A stale descriptor head or generation is rejected before consumption. Retained
-task requests also capture the consumer position so a continuation cannot select
-a same-generation successor. Every later memory access rejects stale reset work.
-
-Normal execution dataflow is:
+Candidate produces a non-owning task request. FanIn and Arbitrate::snapshots select
+a task through DMA's RoundRobin policy. Fetch rechecks the selected head, generation
+and eligibility, reads a fresh descriptor, advances consumer and records accepted
+ownership and residency. Both fresh and resumed outputs carry the accepted descriptor
+with an explicit execution origin. Retained requests use the saved descriptor, never
+read the ring again, and resume that same command rather than a successor.
+Opcode routing occurs once at this command boundary, directly to the corresponding
+execution branch, without an intermediate Copy/Operation family classification.
+Copy owns its CheckRanges and installation prefix; resumed Copy skips fresh validation.
+The public Copy-validation boundary rejects other opcodes with a retained Routing
+error, rather than turning them into a resume bubble. Normal retirement still runs.
+The selected execution branch produces a completion or propagates a domain stop
+or yielded path, then the common retirement boundary handles ownership.
 
 | Boundary | Transferred data |
 | --- | --- |
-| Fetch -> CheckRanges | `Flow<FetchedCommand>`: descriptor and accepted identity |
-| CheckRanges -> hardware installation | `Flow<CopyProgress>`: validated traversal |
-| PrepareChunk -> ReadCopy | `Flow<Chunk>`: source/destination spans, selectors and length |
-| ReadCopy -> transform/write | `Flow<Payload>`: actual bounded bytes and chunk geometry |
-| WriteCopy -> CommandExecution | `Flow<Completion>`: chunk result, with a Response only at command completion |
-| CommandExecution -> completion tail | `Flow<Completion>`: command exit, including parked/stopped work |
-| Publication/custom tail -> Retire | `Flow<()>`: owner and terminal domain result |
+| Fetch -> command dispatch | Accepted descriptor, fresh/resumed origin and owner identity |
+| Copy CheckRanges -> installation | `Flow<CopyProgress>`: validated traversal |
+| Installation -> custom Copy execution | `Flow<ChunkInput>`: Copy-only traversal request |
+| PrepareChunk -> ReadCopy | `Flow<Chunk>`: spans, contexts and length |
+| ReadCopy -> transform/write | `Flow<Payload>`: bounded bytes and their geometry |
+| WriteCopy -> CommandExecution | `Flow<Completion>`: successful command completion; no data for an intermediate chunk |
+| Execution/custom tail -> FanOut | `Flow<Completion>`: completion, domain stop or yielded path with owner identity |
+| FanOut -> Retire | `Vec<(branch_index, Flow<Completion>)>`: completed branch results |
+| Retire -> enclosing graph | Unit result after all supplied receipts have been handled |
 
-These values have private metadata and are not clonable. Transform code accesses
-`Payload::bytes_mut()`, not a global scratch lookup, and cannot resize the payload
-or replace validated addresses, lengths or response metadata.
+Values carry private identity metadata and cannot be cloned or forged by an
+application. Transform code accesses `Payload::bytes_mut()`; it cannot replace
+validated addresses or lengths. `Flow<T>` preserves the identity through data,
+bubbles and domain stops. Accepted execution uses an Infallible stage-error port:
+domain failures travel as Flow data through Then, so a child error cannot bypass
+retirement. Raw driving errors leave the continuation unfinished. Unit output
+remains valid in the generic pipeline crate.
 
-Stopping command errors retain a real completion in channel-owned hardware storage
-and emit no normal data. The completion input merges this retained response into
-the same configured completion tail; a failed read does not fabricate payload
-bytes for a transform or require the top level to select a response stage.
-Lifecycle rejection, channel/device fatal and repairable PageFault keep distinct
-handling. A successful empty transfer remains normal completion.
+Error reporting is a Channel operation, not a separately driven pipeline.
+The stage detecting a stopping error calls its generation-guarded owner operation.
+Hardware chooses the error code and committed progress; contract constructs the
+matching Event code/union representation for both Copy and other commands.
+That operation latches stop, writes the owning Event ring and updates IRQ; failed
+reporting latches fatal without retry/backpressure. Later stages propagate the
+already-reported stop, without fabricating payload or publishing it again.
+Success does not touch the Event ring. There is no per-channel Publish stage,
+Events FanOut, retained-event merge stage or branch-local reporting tail.
 
-Execution and publication stages implement `Stage<ExecutionContext<'_, M, SB>>`.
-This context borrows the execution resource bank, without device MMIO layout or
-arbitration policy. Each leaf selects narrow channel resources using its input's
-identity. The borrow ends each step, so subsequent interactions observe reset,
-enable and fault changes. Candidate, Fetch and Retire use the DMA owner for
-observation, acceptance and retirement respectively. Lifecycle transitions notify
-context maintenance when its observed channel state changes.
+Event visibility does not prove that all pipeline-local work has retired.
+Accepted ownership and residency remain until the common Retire boundary consumes
+the result, including when software requests reset immediately after the error IRQ.
+Terminal success/error releases accepted ownership; a waiting or faulted path
+releases residency without discarding its retained command unless lifecycle policy
+requires cancellation. Reset completes only after affected resident work has exited.
 
-DMA-local `Flow<T>` carries actual typed data, its retained identity, and a domain
-stop or bubble. `Flow<Payload>` contains real payload bytes, not just a Work token.
-Custom transforms use data() or data_mut(), preserve identity through map(), and
-propagate stops with stop(). Accepted execution uses `Error = Infallible`: reset,
-halt and other domain stops travel to Retire as data rather than skipping it
-through a Then error. Raw driving errors retain the continuation. The framework
-remains free to use any output, including unit; only this DMA execution interface
-requires an ownership-bearing result. Dropping that result is not retirement.
+Then connects the opcode FanOut directly to Retire; there is no Opcodes stage
+unwrapping a singleton result. Retire consumes the result collection in order,
+retains the first error and still performs necessary cleanup for later receipts.
+The branch index is routing metadata, never a channel selector: each Flow carries
+its own guarded owner identity. An empty collection completes without effects;
+an absent input is not a collection and leaves the stage InProgress.
 
-The engine's active grant backpressures peer tasks while command work remains.
-CommandExecution retains the accepted invocation while its child stages process
-successive chunks. Each step advances the supplied child graph once; on a completed
-healthy intermediate result it prepares the next input from channel-owned progress
-and stays InProgress. No Continue request or repeated outer admission is needed.
-Fresh and resumed tasks compete only after the grant is released. Completed child
-results terminate execution on an actual completion, domain stop, or released grant;
-retained stopping responses still pass through CompletionInput. Missing traversal
-is a routing error, not permission to restart work. Stage completion means only
-that local transform has finished; it is not command retirement.
-Publish consumes the real completion, updates its channel's
-response/IRQ state and retires accepted ownership only after successful storage.
+Execution stages borrow `ExecutionContext`, selecting narrow resources by the
+input's Work identity and reset generation. The borrow ends each step. Candidate,
+Fetch and Retire use the DMA owner for observation, admission and retirement.
+No leaf invokes a previous stage, and context projection performs no lifecycle
+cleanup. Custom stages check `Flow::lifecycle(context)` before effects/readiness
+and preserve stops while releasing their own local data.
 
-Payload PageFault ends the current finite path without response or DMA IRQ.
-A read checkpoint retains the concrete unread Chunk. A write checkpoint retains
-the already read/transformed Payload. Both keep command traversal and accepted
-references alive while releasing shared execution capacity. Resume arbitrates
-the parked task again. ReadCopy and WriteCopy consume their respective checkpoints
-at their own boundaries; the top level does not interpret a retry phase. This does
-not refetch, revalidate or transform retained write bytes. Even immediate RESUME cannot
-revive a failed path. The assembly can be replaced while parked because checkpoints
-are concrete hardware data, not saved Rust stage continuations.
+A healthy Copy retains the shared grant across all chunks. CommandExecution
+advances its opaque child graph once per step and supplies another chunk only
+after the previous child invocation completes. It stays InProgress until the
+command ends, parks or stops; it never restarts admission or opcode dispatch for
+each chunk. Fill likewise retains its selected execution branch while advancing
+its bounded writes. Operand projection happens when that branch accepts input.
+False Wait/SEM relinquishes the grant but keeps accepted work, allowing peers
+to satisfy the dependency without a PageFault or RESUME obligation.
 
-FanIn's output is Fetch, CheckRanges, Install, the configured execution pipeline
-and Retire connected through Then. Fetch validates the exact request and records
-residency; it cannot replace an outstanding resident transfer. Retire consumes the
-execution result and releases that residency, including after publication or a
-domain stop. Selected and its whole-subpipeline lifecycle observation are removed.
-A stateless resource projection only borrows context and delegates stepping; it
-stores no task identity and performs no acceptance or cleanup.
-Install forwards its chunk request without a separate execution round. The data-path wrapper only
-adapts its unit input and treats reset/halt/channel-fatal termination as the end of
-that invocation, not permanent simulation failure. It neither steps sibling units
-nor interprets their results. An old faulted invocation drains before the external
-driver can restart admission and reacquire its grant.
+Payload PageFault parks concrete hardware data in Channel. A read fault retains
+the unread Chunk; a write fault retains the already transformed Payload.
+ReadCopy and WriteCopy restore their own checkpoints after fresh arbitration,
+without refetching, revalidating or replaying successful reads/transforms/writes.
+Even immediate RESUME cannot revive the old invocation: it must drain before the
+external driver starts the next one. A custom completion tail cannot acknowledge
+reset while still holding old-generation data.
 
-Channel source mutations update IRQ causes directly. Publication retires completed
-work; stopping and reset operations release the storage they own. Context
-maintenance observes acceptance, cursor advancement, suspension and retirement;
-Fetch discards unstarted Abort-target descriptors within the captured frontier.
-These operations are not independently driven pipelines.
+Channel source mutations update IRQ causes. Context maintenance observes
+acceptance, cursor advancement, suspension and retirement. Fetch discards
+unstarted Abort targets within the captured frontier. These are owner operations,
+not independently driven lifecycle pipelines.
 
 Reset is an out-of-band hardware request. Idle scopes can clear their storage and
 complete immediately. Resident stages observe reset through context in step and
@@ -282,6 +272,10 @@ the post-step yield; resuming delivery does not replay the hardware interaction.
 
 `Dma<M, S = ()>` uses `MemoryAccess<S>` with a `DmaAccess` selector containing
 channel and context IDs. Plain `Dma::new` keeps unit-sideband memory access.
+`Dma::with_config(memory, DmaConfig { channels, capabilities })` and
+`with_config_and_sideband(memory, config, sideband)` select immutable atomic widths;
+`new` and `with_sideband` default both atomic capabilities off. Discovery is read-only,
+and reset preserves these instance capabilities.
 Without a context table, `hw-components::windows::ChannelMemoryAccess` resolves the Function
 owner. With a table, `ContextMemoryAccess` validates ownership and supplies a
 `MemoryIdentity` containing Function and extensible Default/PASID attributes.
@@ -320,12 +314,12 @@ Entry I/O uses the schema-independent `MemoryAccess::read_typed`/`write_typed`
 defaults on generated raw-byte owners. Ring operations explicitly decode/encode
 semantic records, then publish pointers only after successful access and decoding.
 
-| Endpoint | Command ring | Response ring |
+| Endpoint | Command ring | Error-event ring |
 | --- | --- | --- |
 | Host | Write entry, then publish producer through MMIO | Read/decode entry, then publish consumer through MMIO |
 | Device | Read/decode entry, then advance its consumer register | Write entry, then advance its producer register |
 
-Device `CommandRing`/`ResponseRing` implement the trait directly over their own
+Device `CommandRing`/`EventRing` implement the trait directly over their own
 registers and expose inherent synchronous operations. Host concrete rings delegate
 asynchronous publication and consumption to `software::ring::SoftRing`, shared
 with firmware.
@@ -357,13 +351,13 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   Different counts can coexist in the same program. Host `ChannelConfig { id, rings }` selects a
   channel after reading discovery; setup does not change the device-wide IRQ gate.
   All channels share one notification output, so software checks every channel's
-  causes and drains their responses when servicing an interrupt.
-- One command ring and one response ring, with 32-bit wrapping cursors. Capacities
+  causes and drains their error events when servicing an interrupt.
+- One command ring and one error-event ring, with 32-bit wrapping cursors. Capacities
   are powers of two below 2^31, so slot order remains continuous across counter
   overflow; bases are 8-byte aligned. Geometry freezes on first
   enable, including across disable/re-enable. Software owns allocation and ensures
   rings and payload have appropriate backing and do not alias unintentionally.
-- Generated commands contain an ID and two independent endpoints. Each endpoint is
+- Generated commands contain an ID and a tagged operation payload. Copy has two independent endpoints. Each endpoint is
   either Linear(address,offset) or ScatterGather(list_address,count) with an explicit
   start index and local offset. One command copy_length selects both ranges. Segment records
   contain address/length; ring and list storage uses generated size/alignment metadata,
@@ -381,7 +375,7 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
 - Explicitly repairable payload translation misses park the original command,
   both cursors and committed prefix. A failed write retains its successful read
   scratch; resume retries the failed access without replaying committed writes.
-  No response, DMA IRQ or firmware event reports this suspension. The platform
+  No event, DMA IRQ or firmware event reports this suspension. The platform
   MMU/backend independently reports fault identity/address/access; owner software
   repairs mappings/TLB state, observes 32-bit FAULT_STATUS.faulted and writes
   32-bit RESUME.request=1 through channel work MMIO. Resume clears faulted without
@@ -392,33 +386,43 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   A failed PageFault write commits no bytes
   from that call. See [pageable-copy requirements](docs/page-fault-recovery.md).
 - Other payload failures return `ReadError` or `WriteError` and stop further copying. One
-  response reports bytes_completed from successful writes; earlier writes are not rolled
+  error event reports bytes_completed from successful writes; earlier writes are not rolled
   back. Overlap is neither detected nor rejected. Later reads observe earlier writes
   according to actual chunk order; there is no whole-transfer memmove guarantee.
-- Full command ring is a host submission error. Full response ring is hardware
-  backpressure: arbitration leaves that channel's commands queued and serves eligible peers.
-  With at most one accepted command per channel, its free response slot cannot be
-  taken by a successor before publication. The composable Publish stage retains a response if driven
-  independently against a full ring.
-- Command fetch failure latches fatal code 1 without consuming the command. Response
-  publication failure latches code 2 without advancing response producer. Payload
-  copy may already have completed in the latter case; software must not assume retry
-  is safe. No event ring or memory write is needed to expose the fatal.
-- Successful publication notifies on response empty-to-non-empty transitions and,
-  independently, when the command's IOC flag is set. `irq_mask` bit 0 masks the
-  first source and bit 1 masks IOC; one means masked. Both masks reset to zero.
-  `irq_enable` gates all channel notifications. There is no watermark. Software can
-  use IOC-only batches, but must leave enough response space to reach the IOC entry.
-- `irq_cause` is read-only: bit 0 is current response non-empty, bit 1 means an
-  unconsumed IOC response exists, bit 2 is sticky response-error stop, bit 3 is
-  channel fatal. IOC clears when consumer passes the latest IOC response, even if
-  ordinary responses remain. Causes are visible regardless of notification masks.
-  There is no W1C ACK or exposed IOC task pointer. Stopping error responses and new channel
-  fatal events bypass the two routine masks, including when response is already non-empty.
+- Write stores a naturally aligned little-endian 32/64-bit word. Fill repeats the low
+  one, four or eight pattern bytes over an arbitrary byte-aligned length, including a
+  partial tail. Recoverable target faults retain the accepted command and committed prefix.
+- Wait loads the selected word width and evaluates its comparison with acquire semantics
+  on success. A false comparison releases the shared grant without setting fault status;
+  it retries through arbitration while same-channel successors remain blocked. Reached
+  uses signed-width modular subtraction; software maintains distance below half range.
+- Atomic performs one width-truncated RMW through the generic memory capability, with no
+  software old-value destination. Arithmetic wraps; a CAS mismatch succeeds unchanged.
+  Unsupported widths stop before mutation. Semaphore Signal uses release, rejects overflow
+  before modification and increments one permit; Wait acquires and consumes only a positive
+  count. A bounded CAS mismatch or zero permit count yields for later arbitration.
+- Fence writes software-provided non-faulting completion storage with release scope over
+  prior accesses in its channel, including across contexts. It does not drain peers.
+  Failed Fence writes stop with WriteError instead of parking. Trap requests notification
+  independently of error reporting. Success never creates an Event.
+- Full command ring is a host submission error. Event capacity does not gate command
+  admission or successful execution. A stopping error latches stop before event I/O;
+  full or invalid event storage is fatal without retry or backpressure.
+- Command fetch failure latches CommandRead without consuming the command. Event write
+  failure latches EventWrite without advancing its producer; full and invalid geometry
+  latch EventFull and EventConfiguration. No successful event write is needed to expose
+  fatal status or emit its notification. Reset does not undo earlier payload effects.
+- `irq_mask` bit 0 masks event-non-empty notifications and bit 1 masks Trap; one means
+  masked. `irq_enable` gates all channel notifications. Error and new fatal notifications
+  bypass the routine masks. There is no IOC flag, watermark or success event.
+- `irq_cause` is read-only: bit 0 is current event non-empty, bit 1 is sticky Trap,
+  bit 2 is sticky error stop, and bit 3 is channel fatal. Writing TRAP_ACK.request=1
+  clears only Trap; consuming events never clears error stop. Every unmasked Trap can
+  emit even if its sticky cause was already set. Causes remain visible while masked.
 - Device-side unmask/enabling never replays historical events. Software must check
-  responses and errors after enabling before it waits. Software drains through fresh
+  events and errors after enabling before it waits. Software drains through fresh
   producer snapshots until empty, or explicitly schedules further consumption.
-  Notification coalescing does not promise one handler call per IOC.
+  Notification coalescing does not promise one handler call per Trap.
 - Hardware emits notifications without knowing software handlers. `take_interrupt`
   hands them to the platform. Runtime retains a pending notification until the existing
   dispatcher claims it; draining, masking or reset cannot retract a delivered event.
@@ -439,8 +443,8 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   until that channel is re-enabled or reset.
   Resetting one channel neither changes peer registers nor restarts a peer's active command.
   If the reset channel owns the shared engine, retiring its old buffered data and
-  unpublished response can delay peers. Completion guarantees that old work cannot
-  make another command, SG-list, payload or response memory access. The model's memory
+  unpublished completion can delay peers. Completion guarantees that old work cannot
+  make another command, SG-list, payload or event memory access. The model's memory
   calls finish synchronously within a step; it models no outstanding bus transactions
   or timed drain. See [reset semantics and hardware comparison](docs/reset.md).
 - `Dma::signal_fatal()` represents a device-wide internal hardware fault input.
@@ -449,12 +453,13 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   Ordinary memory-backend diagnostics are not automatically promoted to device fatal.
 
 `ChannelRegisters.fatal` uses the dedicated `ChannelFatal` register schema. Its
-`code` field is `ChannelFatalCode::{None, CommandRead, ResponseWrite}` with wire
-values 0, 1 and 2. Host `Channel::fatal()` returns this enum and rejects unknown
+`code` field is `ChannelFatalCode::{None, CommandRead, EventWrite, EventFull, EventConfiguration}`
+with wire values 0 through 4. Host `Channel::fatal()` returns this enum and rejects unknown
 encodings. Hardware updates the generated field directly; enum values and their
 descriptions are also exported to the C header from the same schema metadata.
 
-This is not the predecessor's ABI. The DMA datapath has no event ring; the managed PF control transport has one.
+This is not the predecessor's ABI. DMA channel error-event rings are independent
+of the managed PF firmware event transport.
 There is no resource credit policy,
 old semantic API, custom future, or additional
 executor. Historical scenarios are preserved on the backup branch only. The old

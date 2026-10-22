@@ -3,18 +3,15 @@
 /// Shared raw-bus test fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
-    ChannelRegisters, Command, CommandRegisters, Endpoint, Response, ResponseRegisters,
-    ResponseStatus,
+    ChannelRegisters, Command, CommandRegisters, Endpoint, Event, EventCode, EventRegisters,
 };
-use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use pdma_model_dma::ChannelFatal;
 use support::{TestResult, command, read_word, run, setup, submit};
 
 #[test]
-fn copy_publishes_response_before_notification_is_taken() -> TestResult {
+fn copy_retires_with_payload_visible_and_no_event_or_notification() -> TestResult {
     // Given
     let (mut device, memory) = setup(0x1100, 2)?;
     memory.write(
@@ -33,38 +30,23 @@ fn copy_publishes_response_before_notification_is_taken() -> TestResult {
         &mut destination,
     )?;
     assert_eq!(destination, [3, 1, 4, 1]);
-    let mut bytes = [0; Response::RECORD_SIZE];
-    memory.read(MemoryAddress::new(0x1100), MemoryAlignment::ONE, &mut bytes)?;
-    assert_eq!(
-        Response::from_bytes(&bytes)?,
-        Response {
-            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-            id: 7,
-            status: ResponseStatus::Success,
-            info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 4 }),
-        }
-    );
-    assert!(device.irq());
-    assert!(device.take_interrupt());
-    device.write(
-        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
-            + ResponseRegisters::CONSUMER.offset(),
-        &1_u32.to_le_bytes(),
-    )?;
+    support::assert_no_event(&mut device)?;
     assert!(!device.irq());
+    assert!(!device.take_interrupt());
     Ok(())
 }
 
 #[test]
-fn response_write_fault_is_reported_without_response_memory() -> TestResult {
+fn event_write_fault_is_reported_without_event_memory() -> TestResult {
     // Given
     let (mut device, memory) = setup(0x8000, 2)?;
-    submit(&mut device, &memory, command())?;
+    let mut request = command();
+    support::copy_mut(&mut request)?.source = Endpoint::linear(0x9000, 0);
+    submit(&mut device, &memory, request)?;
     // When
     let result = run(&mut device);
     // Then
-    assert!(result.is_err());
+    assert!(result.is_ok());
     assert!(device.irq());
     assert_eq!(
         read_word(
@@ -73,14 +55,14 @@ fn response_write_fault_is_reported_without_response_memory() -> TestResult {
                 + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
                 + ChannelRegisters::FATAL.offset()
         )?,
-        ChannelFatal::ResponseWrite.code().raw()
+        ChannelFatal::EventWrite.code().raw()
     );
     assert_eq!(
         read_word(
             &mut device,
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
-                + ResponseRegisters::PRODUCER.offset()
+                + pdma_model_contract::dma::ChannelBlock::EVENT.offset()
+                + EventRegisters::PRODUCER.offset()
         )?,
         0
     );
@@ -92,7 +74,7 @@ fn response_write_fault_is_reported_without_response_memory() -> TestResult {
     )?;
     assert!(device.take_interrupt());
     assert!(!device.irq());
-    assert!(run(&mut device).is_err());
+    run(&mut device)?;
     assert_eq!(
         read_word(
             &mut device,
@@ -106,26 +88,28 @@ fn response_write_fault_is_reported_without_response_memory() -> TestResult {
 }
 
 #[test]
-fn source_fault_produces_failure_response_not_success() -> TestResult {
+fn source_access_failure_reports_a_stopping_event() -> TestResult {
     // Given
     let (mut device, memory) = setup(0x1100, 2)?;
-    submit(
-        &mut device,
-        &memory,
-        Command {
-            source: Endpoint::linear(0x8000, 0),
-            ..command()
-        },
-    )?;
+    submit(&mut device, &memory, {
+        let original = command();
+        let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload else {
+            return Err("copy fixture required".into());
+        };
+        Command::copy(
+            original.id,
+            pdma_model_contract::dma::CopyCommand {
+                source: Endpoint::linear(0x8000, 0),
+                ..copy
+            },
+        )
+    })?;
     // When
     run(&mut device)?;
     // Then
-    let mut bytes = [0; Response::RECORD_SIZE];
+    let mut bytes = [0; Event::RECORD_SIZE];
     memory.read(MemoryAddress::new(0x1100), MemoryAlignment::ONE, &mut bytes)?;
-    assert_eq!(
-        Response::from_bytes(&bytes)?.status,
-        ResponseStatus::ReadError
-    );
+    assert_eq!(Event::from_bytes(&bytes)?.code, EventCode::ReadError);
     assert!(device.irq());
     assert_eq!(
         read_word(
@@ -140,8 +124,7 @@ fn source_fault_produces_failure_response_not_success() -> TestResult {
 }
 
 #[test]
-fn full_response_ring_defers_command_acceptance_until_space_is_available() -> TestResult {
-    // Given
+fn successive_successes_reuse_command_slots_without_event_consumption() -> TestResult {
     let (mut device, memory) = setup(0x1100, 1)?;
     submit(&mut device, &memory, command())?;
     run(&mut device)?;
@@ -157,15 +140,7 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
             + CommandRegisters::PRODUCER.offset(),
         &2_u32.to_le_bytes(),
     )?;
-    let mut hardware = device.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
-    // When
-    for _ in 0..32 {
-        assert!(matches!(
-            operation.step(&mut hardware, &mut device)?,
-            StepOutcome::InProgress
-        ));
-    }
+    run(&mut device)?;
     assert_eq!(
         read_word(
             &mut device,
@@ -173,41 +148,13 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
                 + pdma_model_contract::dma::ChannelBlock::COMMAND.offset()
                 + CommandRegisters::CONSUMER.offset()
         )?,
-        1
+        2
     );
     assert_eq!(
         memory.read_typed::<[u8; 4]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
-        [0; 4]
+        [2; 4]
     );
-    device.write(
-        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
-            + ResponseRegisters::CONSUMER.offset(),
-        &1_u32.to_le_bytes(),
-    )?;
-    let mut finished = false;
-    for _ in 0..128 {
-        let _ = operation.step(&mut hardware, &mut device)?;
-        if read_word(
-            &mut device,
-            pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
-                + ResponseRegisters::PRODUCER.offset(),
-        )? == 2
-        {
-            finished = true;
-            break;
-        }
-    }
-    // Then
-    assert!(finished);
-    let mut destination = [0; 4];
-    memory.read(
-        MemoryAddress::new(0x1300),
-        MemoryAlignment::ONE,
-        &mut destination,
-    )?;
-    assert_eq!(destination, [2; 4]);
+    support::assert_no_event(&mut device)?;
     assert_eq!(
         read_word(
             &mut device,

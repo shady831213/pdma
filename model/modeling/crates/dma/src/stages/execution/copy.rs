@@ -1,7 +1,7 @@
 use crate::{COPY_CHUNK_BYTES, Chunk, Completion, ExecutionContext, Flow, MemoryFailure, Payload};
 use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::dma::ResponseStatus;
+use pdma_model_contract::dma::EventCode;
 
 /// Reads a concrete bounded chunk and transfers its bytes to the next stage.
 #[derive(Debug, Default)]
@@ -85,14 +85,9 @@ where
                                 .as_ref()
                                 .and_then(|work| work.progress.as_ref())
                                 .ok_or(RunError::Exhausted)?;
-                            let completion = Completion {
-                                work: chunk.work,
-                                response: progress.response_with(ResponseStatus::ReadError),
-                            };
+                            let event = progress.event_with(EventCode::ReadError);
                             *state = None;
-                            return Ok(StepOutcome::Complete(
-                                context.complete(completion).map(|()| None),
-                            ));
+                            return Ok(StepOutcome::Complete(Err(context.report(&event))));
                         }
                     }
                 }
@@ -203,12 +198,9 @@ where
                                 .as_ref()
                                 .and_then(|accepted| accepted.progress.as_ref())
                                 .ok_or(RunError::Exhausted)?;
-                            let completion = Completion {
-                                work,
-                                response: progress.response_with(ResponseStatus::WriteError),
-                            };
+                            let event = progress.event_with(EventCode::WriteError);
                             *state = None;
-                            return Ok(StepOutcome::Complete(Ok(Some(completion))));
+                            return Ok(StepOutcome::Complete(Err(context.report(&event))));
                         }
                     },
                 }
@@ -216,12 +208,9 @@ where
             *state = None;
             let accepted = context.selected.work.as_mut().ok_or(RunError::Exhausted)?;
             let progress = accepted.progress.as_ref().ok_or(RunError::Exhausted)?;
-            Ok(StepOutcome::Complete(Ok((progress.remaining == 0).then(
-                || Completion {
-                    work,
-                    response: progress.response(),
-                },
-            ))))
+            Ok(StepOutcome::Complete(Ok(
+                (progress.remaining == 0).then_some(Completion { work })
+            )))
         })
     }
 }

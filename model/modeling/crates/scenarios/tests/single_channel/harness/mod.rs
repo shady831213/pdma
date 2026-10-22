@@ -9,7 +9,7 @@ use hardware_interface_runtime::{
     InterruptRuntime, InterruptSummary, MemoryAddress, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::dma::{ChannelBlock, ChannelId, CommandRegisters, ResponseRegisters};
+use pdma_model_contract::dma::{ChannelBlock, ChannelId, CommandRegisters, EventRegisters};
 use pdma_model_host::runtime::Model;
 use std::{error::Error, sync::Arc};
 use tokio::task::JoinError;
@@ -22,8 +22,8 @@ pub type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 pub enum FaultInjection {
     /// Normal memory and transport.
     None,
-    /// Reject the response entry write.
-    ResponseWrite,
+    /// Reject an error-event entry write.
+    EventWrite,
     /// Reject the software command entry write.
     CommandWrite,
     /// Exhaust address space before software allocates its rings.
@@ -53,9 +53,7 @@ pub async fn run(injection: FaultInjection, input: software::Input<'_>) -> TestR
     let storage = Arc::new(SharedMemory::new());
     let first_address = match injection {
         FaultInjection::AllocationExhausted => u64::MAX,
-        FaultInjection::None | FaultInjection::ResponseWrite | FaultInjection::CommandWrite => {
-            0x1000
-        }
+        FaultInjection::None | FaultInjection::EventWrite | FaultInjection::CommandWrite => 0x1000,
     };
     let allocator =
         SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(first_address));
@@ -67,8 +65,8 @@ pub async fn run(injection: FaultInjection, input: software::Input<'_>) -> TestR
         .register_offset(1)
         .ok_or("channel zero missing")?;
     let base_register = match injection {
-        FaultInjection::ResponseWrite => Some(u32::try_from(
-            channel_base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
+        FaultInjection::EventWrite => Some(u32::try_from(
+            channel_base + ChannelBlock::EVENT.offset() + EventRegisters::BASE.offset(),
         )?),
         FaultInjection::CommandWrite => Some(u32::try_from(
             channel_base + ChannelBlock::COMMAND.offset() + CommandRegisters::BASE.offset(),

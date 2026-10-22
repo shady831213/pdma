@@ -4,8 +4,8 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Endpoint, Response,
-    ResponseRegisters,
+    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Endpoint, Event,
+    EventRegisters,
 };
 use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_dma::Dma;
@@ -68,7 +68,7 @@ pub(super) fn configure(dma: &mut Hardware, id: ChannelId) -> TestResult {
             0x1000_u64,
         ),
         (
-            ChannelBlock::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
+            ChannelBlock::EVENT.offset() + EventRegisters::BASE.offset(),
             0x1100_u64,
         ),
     ] {
@@ -80,7 +80,7 @@ pub(super) fn configure(dma: &mut Hardware, id: ChannelId) -> TestResult {
             2_u32,
         ),
         (
-            ChannelBlock::RESPONSE.offset() + ResponseRegisters::CAPACITY.offset(),
+            ChannelBlock::EVENT.offset() + EventRegisters::CAPACITY.offset(),
             2_u32,
         ),
     ] {
@@ -100,6 +100,19 @@ pub(super) fn publish(
         MemoryAlignment::ONE,
         &command.to_bytes()?,
     )?;
+    let fence = pdma_model_contract::dma::WordWrite {
+        target: pdma_model_contract::dma::WordTarget {
+            address: 0x1180,
+            context: 0,
+            width: pdma_model_contract::dma::WordTargetWidth::Bits64,
+        },
+        value: command.id,
+    };
+    memory.write(
+        MemoryAddress::new(0x1000 + u64::try_from(Command::RECORD_SIZE)?),
+        MemoryAlignment::ONE,
+        &Command::fence(command.id, fence).to_bytes()?,
+    )?;
     dma.write(
         id.register_offset(2).ok_or("channel")?
             + ChannelBlock::CONTROL.offset()
@@ -110,7 +123,7 @@ pub(super) fn publish(
         id.register_offset(2).ok_or("channel")?
             + ChannelBlock::COMMAND.offset()
             + CommandRegisters::PRODUCER.offset(),
-        &1_u32.to_le_bytes(),
+        &2_u32.to_le_bytes(),
     )?;
     Ok(())
 }
@@ -134,12 +147,12 @@ pub(super) fn advance(
 }
 
 /// Decodes the first software-visible completion.
-pub(super) fn response(memory: &SharedMemory) -> TestResult<Response> {
-    let bytes = memory.read_typed::<pdma_model_contract::dma::ResponseRaw>(
+pub(super) fn response(memory: &SharedMemory) -> TestResult<Event> {
+    let bytes = memory.read_typed::<pdma_model_contract::dma::EventRaw>(
         MemoryAddress::new(0x1100),
         MemoryAlignment::ONE,
     )?;
-    Ok(Response::from_bytes(bytes.as_ref())?)
+    Ok(Event::from_bytes(bytes.as_ref())?)
 }
 
 /// Reads an exact output or sentinel extent.
@@ -155,12 +168,13 @@ pub(super) fn bytes<const N: usize>(memory: &SharedMemory, address: u64) -> Test
 
 /// Constructs the fixture's linear copy descriptor.
 pub(super) const fn command(id: u64) -> Command {
-    Command {
-        copy_length: 8,
-        sg_context: 0,
+    Command::copy(
         id,
-        source: Endpoint::linear(0x1200, 0),
-        destination: Endpoint::linear(0x1300, 0),
-        flags: pdma_model_contract::dma::CompletionFlagsValues { ioc: false },
-    }
+        pdma_model_contract::dma::CopyCommand {
+            copy_length: 8,
+            sg_context: 0,
+            source: Endpoint::linear(0x1200, 0),
+            destination: Endpoint::linear(0x1300, 0),
+        },
+    )
 }

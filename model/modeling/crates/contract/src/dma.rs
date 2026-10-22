@@ -1,13 +1,15 @@
 mod access;
 mod command;
 mod endpoint;
+mod event;
+mod operations;
 mod registers;
-mod response;
 
 pub use access::{ChannelId, ContextId, DmaAccess};
 pub use command::{
-    Command, CommandRaw, CommandView, CommandViewMut, CompletionFlags, CompletionFlagsFieldId,
-    CompletionFlagsRaw, CompletionFlagsValues,
+    Command, CommandKind, CommandKindRaw, CommandPayloadRaw, CommandPayloadValues, CommandRaw,
+    CommandView, CommandViewMut, CopyCommand, CopyCommandRaw, CopyCommandView, CopyCommandViewMut,
+    TrapCommand,
 };
 pub use endpoint::{
     Endpoint, EndpointMode, EndpointModeRaw, EndpointPayloadLinearValues, EndpointPayloadRaw,
@@ -15,6 +17,10 @@ pub use endpoint::{
     EndpointViewMut, Position, PositionMode, PositionModeRaw, PositionPayloadLinearValues,
     PositionPayloadRaw, PositionPayloadScatterGatherValues, PositionPayloadValues, PositionRaw,
     PositionView, PositionViewMut, Segment, SegmentRaw, SegmentView, SegmentViewMut,
+};
+pub use event::{
+    ErrorInfo, ErrorInfoRaw, ErrorInfoView, ErrorInfoViewMut, Event, EventCode, EventCodeRaw,
+    EventInfoRaw, EventInfoValues, EventRaw, EventView, EventViewMut,
 };
 pub use registers::{
     ChannelAdmin, ChannelAdminRaw, ChannelAdminRegisterId, ChannelAdminValues, ChannelAdminView,
@@ -33,15 +39,29 @@ pub use registers::{
     DmaControlValues, DmaControlView, DmaControlViewMut, DmaDiscovery, DmaDiscoveryRaw,
     DmaDiscoveryRegisterId, DmaDiscoveryValues, DmaDiscoveryView, DmaDiscoveryViewMut, DmaFatal,
     DmaFatalCode, DmaFatalCodeRaw, DmaFatalFieldId, DmaFatalRaw, DmaFatalValues, DmaFatalView,
-    DmaFatalViewMut, DmaRegisters, DmaRegistersLayout, DmaRegistersRegisterId, FaultStatus,
-    FaultStatusFieldId, FaultStatusRaw, FaultStatusValues, FaultStatusView, FaultStatusViewMut,
-    Reset, ResetFieldId, ResetRaw, ResetValues, ResetView, ResetViewMut, ResponseRegisters,
-    ResponseRegistersRaw, ResponseRegistersRegisterId, ResponseRegistersValues,
-    ResponseRegistersView, ResponseRegistersViewMut, Resume, ResumeFieldId, ResumeRaw,
-    ResumeValues, ResumeView, ResumeViewMut,
+    DmaFatalViewMut, DmaRegisters, DmaRegistersLayout, DmaRegistersRegisterId, EventRegisters,
+    EventRegistersRaw, EventRegistersRegisterId, EventRegistersValues, EventRegistersView,
+    EventRegistersViewMut, FaultStatus, FaultStatusFieldId, FaultStatusRaw, FaultStatusValues,
+    FaultStatusView, FaultStatusViewMut, Reset, ResetFieldId, ResetRaw, ResetValues, ResetView,
+    ResetViewMut, Resume, ResumeFieldId, ResumeRaw, ResumeValues, ResumeView, ResumeViewMut,
 };
-pub use response::{
-    CompletionInfo, CompletionInfoRaw, CompletionInfoView, CompletionInfoViewMut, Response,
-    ResponseInfoRaw, ResponseInfoValues, ResponseRaw, ResponseStatus, ResponseStatusRaw,
-    ResponseView, ResponseViewMut,
+
+pub use operations::{
+    AtomicCommand, AtomicCommandOperandsAddValues, AtomicCommandOperandsAndValues,
+    AtomicCommandOperandsCompareExchangeValues, AtomicCommandOperandsExchangeValues,
+    AtomicCommandOperandsOrValues, AtomicCommandOperandsRaw, AtomicCommandOperandsSubtractValues,
+    AtomicCommandOperandsValues, AtomicCommandOperandsXorValues, AtomicCommandOperation,
+    AtomicCommandOperationRaw, AtomicCommandOrder, AtomicCommandOrderRaw, AtomicCommandRaw,
+    AtomicCommandView, AtomicCommandViewMut, FillCommand, FillCommandRaw, FillCommandView,
+    FillCommandViewMut, FillCommandWidth, FillCommandWidthRaw, SemaphoreCommand,
+    SemaphoreCommandOperation, SemaphoreCommandOperationRaw, SemaphoreCommandRaw,
+    SemaphoreCommandView, SemaphoreCommandViewMut, WaitCommand, WaitCommandComparison,
+    WaitCommandComparisonRaw, WaitCommandRaw, WaitCommandView, WaitCommandViewMut, WordTarget,
+    WordTargetRaw, WordTargetView, WordTargetViewMut, WordTargetWidth, WordTargetWidthRaw,
+    WordWrite, WordWriteRaw, WordWriteView, WordWriteViewMut,
+};
+pub use registers::{
+    Capabilities, CapabilitiesFieldId, CapabilitiesRaw, CapabilitiesValues, CapabilitiesView,
+    CapabilitiesViewMut, TrapAck, TrapAckFieldId, TrapAckRaw, TrapAckValues, TrapAckView,
+    TrapAckViewMut,
 };

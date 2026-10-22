@@ -1,7 +1,6 @@
 //! Software programs coordinating an active channel reset with peer DMA.
 use super::super::{Ports, TestResult, buffers};
 use super::Grant;
-use pdma_model_contract::dma::Response;
 use tokio::sync::oneshot;
 
 pub(in crate::harness) struct ResetSignals {
@@ -24,7 +23,7 @@ pub struct Outcome {
     pub(crate) before_reset: usize,
     pub(crate) at_reset: Vec<u8>,
     pub(crate) after_peer: Vec<u8>,
-    pub(crate) fresh: Response,
+    pub(crate) fresh: u64,
     pub(crate) fresh_bytes: Vec<u8>,
 }
 
@@ -70,7 +69,7 @@ pub(in crate::harness) async fn peer(
     ports: Ports<'_>,
     grant: Grant,
     signals: PeerSignals,
-) -> TestResult<(Response, Vec<u8>)> {
+) -> TestResult<(u64, Vec<u8>)> {
     let id = grant.channel.await?;
     let mut transfer = buffers::Transfer::new(&ports, id, b"peer-function-copy").await?;
     signals.started.await?;

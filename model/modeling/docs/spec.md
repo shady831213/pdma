@@ -21,12 +21,17 @@ PCIe, IOMMU translation, caches and an actual interconnect are integration scope
 | [Contexts](context-contract.md) | Context bindings, maintenance frontiers, lifetime and non-faulting migration-copy obligations |
 | [Pageable copy](page-fault-recovery.md) | Selected ranges, retained suspension, owner write-one resume and repair/lifetime obligations |
 | [Fatal and events](fatal-events.md) | System fatal handling, PF events and managed recovery |
+| [Copy engine](copy-engine.md) | Commands, dependency waits, atomics, Fence/Trap completion and channel error events |
 
 The fatal/event chapter describes the managed recovery extension. Its verification
 section records implementation coverage. Other
 chapters describe the existing model except sections explicitly marked future.
 The architecture goal and MVP documents are background, not additional acceptance
 requirements. Removed specifications on the backup branch are not authoritative.
+
+The copy-engine chapter replaces mandatory DMA success responses and IOC with
+software-selected Fence/Trap boundaries and an errors-only channel event ring.
+PF management responses and events remain independent protocols.
 
 The agreed [non-faulting migration-copy usage](context-contract.md#non-faulting-page-migration-copy)
 uses existing copy behavior with explicit software/platform preconditions. It is
@@ -62,7 +67,7 @@ and instance-sized banks. Generated Host and firmware headers are projections of
 the same contract, not independent ABI definitions. Platform bases remain inputs.
 
 RTL must preserve the specified ordering of descriptor acceptance, memory side
-effects, response publication, notifications and reset completion. A Rust memory
+effects, completion/event publication, notifications and reset completion. A Rust memory
 call completes within one model step; an RTL port may have multiple outstanding
 transactions. Before reporting reset/drain complete it must retire **all** affected
 transactions and retained work, not only the currently visible request. Neither

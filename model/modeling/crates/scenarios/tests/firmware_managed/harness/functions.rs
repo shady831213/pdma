@@ -6,10 +6,8 @@ use program::functions::{Assignment, Grant};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::oneshot;
 
-pub(crate) async fn run_reset() -> TestResult<(
-    program::functions::reset::Outcome,
-    (pdma_model_contract::dma::Response, Vec<u8>),
-)> {
+pub(crate) async fn run_reset() -> TestResult<(program::functions::reset::Outcome, (u64, Vec<u8>))>
+{
     use program::functions::reset::{self, PeerSignals, ResetSignals};
     let [manager_memory, a_memory, b_memory] = std::array::from_fn(|_| {
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000))

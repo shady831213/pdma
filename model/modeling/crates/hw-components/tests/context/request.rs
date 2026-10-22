@@ -1,6 +1,6 @@
 //! Atomic selector/action submission at the hardware access boundary.
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, ResponseRegisters,
+    ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, EventRegisters,
 };
 use pdma_model_contract::hw_components::context::{
     ContextEntryRegisters, ContextManagementRegisters, ContextTableRegisters,
@@ -86,13 +86,13 @@ fn pending_request_cannot_be_replaced_or_have_its_binding_invalidated() {
     let base = ChannelId::new(0).register_offset(1).unwrap();
     for offset in [
         ChannelBlock::COMMAND.offset() + CommandRegisters::BASE.offset(),
-        ChannelBlock::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
+        ChannelBlock::EVENT.offset() + EventRegisters::BASE.offset(),
     ] {
         dma.write(base + offset, &0x1000_u64.to_le_bytes()).unwrap();
     }
     for offset in [
         ChannelBlock::COMMAND.offset() + CommandRegisters::CAPACITY.offset(),
-        ChannelBlock::RESPONSE.offset() + ResponseRegisters::CAPACITY.offset(),
+        ChannelBlock::EVENT.offset() + EventRegisters::CAPACITY.offset(),
         ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
         ChannelBlock::COMMAND.offset() + CommandRegisters::PRODUCER.offset(),
     ] {

@@ -13,6 +13,50 @@ use pdma_model_hw_components::{context::MemoryError, windows::ChannelWindows};
 use std::cell::Cell;
 
 #[test]
+fn atomic_context_authorization_precedes_unsupported_backend() {
+    use hardware_interface_runtime::{AtomicAccessError, AtomicOperation, AtomicReadOrder};
+    // Given: valid and foreign contexts over a backend without atomic support.
+    let windows = ChannelWindows::new(2, 0, 0x10000).unwrap();
+    let table = configured_table(&windows).unwrap();
+    let backend = PlatformMemory::new().unwrap();
+    let port = table.memory(&windows, &backend).map_sideband(sideband);
+    let valid = DmaAccess {
+        channel: ChannelId::new(0),
+        context: ContextId::new(0),
+    };
+    let foreign = DmaAccess {
+        context: ContextId::new(1),
+        ..valid
+    };
+    // When: valid and foreign requests ask for indivisible word loads.
+    let valid32 = port.atomic32_with_sideband(
+        &valid,
+        ADDRESS,
+        AtomicOperation::Load(AtomicReadOrder::Acquire),
+    );
+    let valid64 = port.atomic64_with_sideband(
+        &valid,
+        ADDRESS,
+        AtomicOperation::Load(AtomicReadOrder::Acquire),
+    );
+    let denied = port.atomic64_with_sideband(
+        &foreign,
+        ADDRESS,
+        AtomicOperation::Load(AtomicReadOrder::Acquire),
+    );
+    // Then: valid requests preserve Unsupported, while foreign requests fail authorization first.
+    assert_eq!(valid32, Err(AtomicAccessError::Unsupported));
+    assert_eq!(valid64, Err(AtomicAccessError::Unsupported));
+    assert_eq!(
+        denied,
+        Err(AtomicAccessError::Access(MemoryError::OwnerMismatch {
+            context: ContextId::new(1),
+            owner: FunctionId::new(0)
+        }))
+    );
+}
+
+#[test]
 fn rejected_context_accesses_never_call_platform_mapper_or_backend() {
     // Given: a mapper with observable effects behind context authorization.
     let windows = ChannelWindows::new(2, 0, 0x10000).unwrap();

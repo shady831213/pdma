@@ -2,9 +2,7 @@ const PF: FunctionId = FunctionId::new(0);
 
 use super::*;
 use hardware_interface_runtime::{MemoryAccess, MemoryAccessError};
-use pdma_model_contract::dma::{
-    Command, CompletionFlagsValues, Endpoint, Response, ResponseStatus,
-};
+use pdma_model_contract::dma::{Command, Endpoint, Event};
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::{Channel, ChannelConfig, Rings};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -86,11 +84,14 @@ async fn reset_case(release: bool) {
         .unwrap();
         let id = management.acquire_channel(PF).await.unwrap();
         let command = ring::<Command>(&allocator).unwrap();
-        let response = ring::<Response>(&allocator).unwrap();
+        let response = ring::<Event>(&allocator).unwrap();
         let (source, destination) = prepare_copy(&allocator, &observed);
         let config = ChannelConfig {
             id,
-            rings: Rings { command, response },
+            rings: Rings {
+                command,
+                event: response,
+            },
         };
         let mut channel = Channel::setup(host.bus.clone(), memory.clone(), config)
             .await
@@ -147,14 +148,8 @@ async fn reset_case(release: bool) {
             .submit(copy(202, (source, destination), 5))
             .await
             .unwrap();
-        let completion = loop {
-            if let Some(response) = channel.response().await.unwrap() {
-                break response;
-            }
-            tokio::task::yield_now().await;
-        };
-        assert_eq!(completion.id, 202);
-        assert_eq!(completion.status, ResponseStatus::Success);
+        complete(&mut channel, &allocator).await;
+
         let mut bytes = [0; 5];
         memory
             .read(destination, MemoryAlignment::ONE, &mut bytes)
@@ -189,12 +184,39 @@ fn prepare_copy(
 }
 
 fn copy(id: u64, (source, destination): (MemoryAddress, MemoryAddress), length: u64) -> Command {
-    Command {
-        copy_length: length,
-        sg_context: 0,
+    Command::copy(
         id,
-        source: Endpoint::linear(source.raw(), 0),
-        destination: Endpoint::linear(destination.raw(), 0),
-        flags: CompletionFlagsValues::default(),
+        pdma_model_contract::dma::CopyCommand {
+            copy_length: length,
+            sg_context: 0,
+            source: Endpoint::linear(source.raw(), 0),
+            destination: Endpoint::linear(destination.raw(), 0),
+        },
+    )
+}
+
+async fn complete(
+    channel: &mut Channel<super::super::super::HostBus<ObservedMemory>, SharedMemoryAccess>,
+    allocator: &SharedMemoryAllocator,
+) {
+    let address = allocator
+        .allocate(8, MemoryAlignment::try_new(8).unwrap())
+        .unwrap();
+    let fence = pdma_model_software::dma::CompletionWord(pdma_model_contract::dma::WordWrite {
+        target: pdma_model_contract::dma::WordTarget {
+            address: address.raw(),
+            context: 0,
+            width: pdma_model_contract::dma::WordTargetWidth::Bits64,
+        },
+        value: 202,
+    });
+    channel.submit(fence.command(202)).await.unwrap();
+    while !fence.is_complete(&allocator.memory_access()).unwrap() {
+        assert_eq!(channel.event().await.unwrap(), None);
+        assert_eq!(
+            channel.fatal().await.unwrap(),
+            pdma_model_contract::dma::ChannelFatalCode::None
+        );
+        tokio::task::yield_now().await;
     }
 }

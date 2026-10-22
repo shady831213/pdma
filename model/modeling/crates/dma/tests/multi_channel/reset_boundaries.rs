@@ -1,14 +1,12 @@
 mod observed;
 
-use super::support::{TestResult, configure, submit, word};
+use super::support::{TestResult, completion, configure, publish_fence, submit, word};
 use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use observed::Observed;
-use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, CommandRegisters, Response, ResponseRegisters,
-};
+use pdma_model_contract::dma::{ChannelBlock, ChannelId, CommandRegisters, EventRegisters};
 use pdma_model_dma::Dma;
 use std::cell::Cell;
 
@@ -111,7 +109,7 @@ fn reset_at_each_interaction_boundary_preserves_only_valid_work() -> TestResult 
                     &mut device,
                     register(
                         0,
-                        ChannelBlock::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset()
+                        ChannelBlock::EVENT.offset() + EventRegisters::PRODUCER.offset()
                     )?
                 )?,
                 0
@@ -159,7 +157,7 @@ fn reset_at_each_interaction_boundary_preserves_only_valid_work() -> TestResult 
                     StepOutcome::InProgress
                 ));
             }
-            // Then: stale work produces no additional writes or response; active peers and fresh work finish exactly once.
+            // Then: stale work produces no additional writes or event; active peers and fresh work finish exactly once.
             assert_eq!(bytes(&device.memory.memory, 0x1400)?, expected);
             assert_eq!(
                 bytes(&device.memory.memory, 0x2400)?,
@@ -167,41 +165,32 @@ fn reset_at_each_interaction_boundary_preserves_only_valid_work() -> TestResult 
             );
             assert_eq!(bytes(&device.memory.memory, 0x3400)?, [7; 512]);
             assert_eq!(bytes(&device.memory.memory, memory_base + 0x800)?, [7; 512]);
-            assert_responses(&mut device, reset_index)?;
+            assert_completions(&mut device, reset_index)?;
         }
     }
     Ok(())
 }
 
-fn assert_responses(device: &mut Dma<Observed>, reset_index: usize) -> TestResult {
+fn assert_completions(device: &mut Dma<Observed>, reset_index: usize) -> TestResult {
     for index in 0..3 {
         assert_eq!(
             word(
                 device,
                 register(
                     index,
-                    ChannelBlock::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset()
+                    ChannelBlock::EVENT.offset() + EventRegisters::PRODUCER.offset()
                 )?
             )?,
-            1
+            0
         );
-        let raw = device
-            .memory
-            .memory
-            .read_typed::<pdma_model_contract::dma::ResponseRaw>(
-                MemoryAddress::new(0x1100 + u64::try_from(index)? * 0x1000),
-                MemoryAlignment::ONE,
-            )?;
-        let response = Response::from_bytes(raw.as_ref())?;
         assert_eq!(
-            response.id,
+            completion(device, index)?,
             if index == reset_index {
-                99
+                100
             } else {
-                u64::try_from(index)?
+                u64::try_from(index)? + 1
             }
         );
-        assert_eq!(response.bytes_completed(), 512);
     }
     Ok(())
 }
@@ -209,25 +198,20 @@ fn assert_responses(device: &mut Dma<Observed>, reset_index: usize) -> TestResul
 fn replace(device: &mut Dma<Observed>, reset_index: usize) -> TestResult<u64> {
     configure(device, reset_index)?;
     let memory_base = 0x1000 + u64::try_from(reset_index)? * 0x1000;
-    let fresh = pdma_model_contract::dma::Command {
-        copy_length: 512,
-        sg_context: 0,
-        id: 99,
-        flags: pdma_model_contract::dma::CompletionFlagsValues { ioc: true },
-        source: pdma_model_contract::dma::Endpoint::linear(memory_base + 0x200, 0),
-        destination: pdma_model_contract::dma::Endpoint::linear(memory_base + 0x800, 0),
-    };
+    let fresh = pdma_model_contract::dma::Command::copy(
+        99,
+        pdma_model_contract::dma::CopyCommand {
+            copy_length: 512,
+            sg_context: 0,
+            source: pdma_model_contract::dma::Endpoint::linear(memory_base + 0x200, 0),
+            destination: pdma_model_contract::dma::Endpoint::linear(memory_base + 0x800, 0),
+        },
+    );
     device.memory.memory.write(
         MemoryAddress::new(memory_base),
         MemoryAlignment::ONE,
         &fresh.to_bytes()?,
     )?;
-    device.write(
-        register(
-            reset_index,
-            ChannelBlock::COMMAND.offset() + CommandRegisters::PRODUCER.offset(),
-        )?,
-        &1_u32.to_le_bytes(),
-    )?;
+    publish_fence(device, reset_index, 99)?;
     Ok(memory_base)
 }

@@ -2,8 +2,8 @@
 
 use hardware_interface_schema::Documentation;
 use pdma_model_contract::dma::{
-    ChannelFatal, ChannelRegisters, Command, CommandRegisters, DmaRegisters, Endpoint, Response,
-    ResponseRegisters, Segment,
+    ChannelFatal, ChannelRegisters, Command, CommandRegisters, DmaRegisters, Endpoint, Event,
+    EventRegisters, Segment,
 };
 use pdma_model_contract::register::{Address, ReadWord, Switch, Word};
 
@@ -42,7 +42,7 @@ fn register_definitions_and_placements_have_complete_documentation()
     for docs in [
         DmaRegisters::DOCUMENTATION,
         CommandRegisters::SPEC.documentation(),
-        ResponseRegisters::SPEC.documentation(),
+        EventRegisters::SPEC.documentation(),
         ChannelRegisters::SPEC.documentation(),
     ] {
         assert_documented("map definition", docs);
@@ -64,10 +64,9 @@ fn register_definitions_and_placements_have_complete_documentation()
 }
 
 #[test]
-fn command_and_response_records_describe_every_wire_field() -> Result<(), Box<dyn std::error::Error>>
-{
+fn command_and_event_records_describe_every_wire_field() -> Result<(), Box<dyn std::error::Error>> {
     // Given: both record definitions used by the channel's rings.
-    let definitions = [Segment::SPEC, Endpoint::SPEC, Command::SPEC, Response::SPEC];
+    let definitions = [Segment::SPEC, Endpoint::SPEC, Command::SPEC, Event::SPEC];
     // When: their metadata is resolved through the public schema surface.
     let records = definitions
         .iter()

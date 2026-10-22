@@ -9,10 +9,8 @@ use hardware_interface_runtime::{
     MemoryRegionError,
 };
 use pdma_model_contract::dma::{
-    ChannelRegisters, Command, CommandRegisters, Endpoint, Response, ResponseRegisters,
-    ResponseStatus,
+    ChannelRegisters, Command, CommandRegisters, Endpoint, EventRegisters,
 };
-use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use pdma_model_dma::Dma;
 use std::{cell::RefCell, ops::Range};
 
@@ -134,14 +132,15 @@ fn flat_store_preserves_bytes_when_write_crosses_extent() -> TestResult {
 fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
     // Given
     let mut device = Dma::new(FlatMemory::new()?, 1)?;
-    let command = Command {
-        copy_length: 4,
-        sg_context: 0,
-        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-        id: 91,
-        source: Endpoint::linear(256, 0),
-        destination: Endpoint::linear(320, 0),
-    };
+    let command = Command::copy(
+        91,
+        pdma_model_contract::dma::CopyCommand {
+            copy_length: 4,
+            sg_context: 0,
+            source: Endpoint::linear(256, 0),
+            destination: Endpoint::linear(320, 0),
+        },
+    );
     device.memory.write(
         MemoryAddress::new(0),
         MemoryAlignment::ONE,
@@ -152,8 +151,8 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
         .write(MemoryAddress::new(256), MemoryAlignment::ONE, &[8, 6, 7, 5])?;
     device.write(
         pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
-            + ResponseRegisters::BASE.offset(),
+            + pdma_model_contract::dma::ChannelBlock::EVENT.offset()
+            + EventRegisters::BASE.offset(),
         &128_u64.to_le_bytes(),
     )?;
     for offset in [
@@ -161,8 +160,8 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
             + pdma_model_contract::dma::ChannelBlock::COMMAND.offset()
             + CommandRegisters::CAPACITY.offset(),
         pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
-            + ResponseRegisters::CAPACITY.offset(),
+            + pdma_model_contract::dma::ChannelBlock::EVENT.offset()
+            + EventRegisters::CAPACITY.offset(),
         pdma_model_contract::dma::ChannelBlock::ALIGNMENT
             + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
             + ChannelRegisters::IRQ_ENABLE.offset(),
@@ -175,7 +174,7 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
     ] {
         device.write(offset, &1_u32.to_le_bytes())?;
     }
-    let mut hardware = support::chunk_pipeline(&device);
+    let mut hardware = support::chunk_pipeline();
     let mut state = Some(support::accept(
         &mut device,
         pdma_model_contract::dma::ChannelId::new(0),
@@ -190,7 +189,7 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
             StepOutcome::InProgress => {}
             StepOutcome::Complete(result) => {
                 assert_eq!(
-                    hardware_interface_pipeline::Operation::new(result?)
+                    hardware_interface_pipeline::Operation::new(vec![(0, result?)])
                         .step(&mut pdma_model_dma::Retire, &mut device)?,
                     StepOutcome::Complete(Ok(()))
                 );
@@ -208,19 +207,7 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
         &mut destination,
     )?;
     assert_eq!(destination, [8, 6, 7, 5]);
-    let mut response = [0; Response::RECORD_SIZE];
-    device
-        .memory
-        .read(MemoryAddress::new(128), MemoryAlignment::ONE, &mut response)?;
-    assert_eq!(
-        Response::from_bytes(&response)?,
-        Response {
-            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-            id: 91,
-            status: ResponseStatus::Success,
-            info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 4 }),
-        }
-    );
-    assert!(device.irq());
+    support::assert_no_event(&mut device)?;
+    assert!(!device.irq());
     Ok(())
 }

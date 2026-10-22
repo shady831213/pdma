@@ -41,10 +41,7 @@ fn resumed_write_uses_the_same_custom_completion_tail_as_healthy_write() -> Test
         let chunk = Then::new(PrepareChunk::default(), ReadCopy::default());
         let mut hardware = device.hardware_with(Then::new(
             pdma_model_dma::CommandExecution::new(Then::new(chunk, WriteCopy::default())),
-            Then::new(
-                pdma_model_dma::CompletionInput,
-                Then::new(ObserveCompletion(Rc::clone(&count)), device.responses()),
-            ),
+            ObserveCompletion(Rc::clone(&count)),
         ));
         let mut driver = HardwareDriver::new();
         let mut repaired = false;
@@ -60,15 +57,15 @@ fn resumed_write_uses_the_same_custom_completion_tail_as_healthy_write() -> Test
                 resume(&mut device, 1)?;
                 repaired = true;
             }
-            if read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())? == 1 {
+            if count.get() == 1 {
                 break;
             }
         }
         // Then: both ingress paths preserve the supplied completion tail exactly once.
         assert_eq!(repaired, fault);
         assert_eq!(
-            read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
-            1
+            read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
+            0
         );
         assert_eq!(count.get(), 1, "fault={fault}");
         assert_eq!(

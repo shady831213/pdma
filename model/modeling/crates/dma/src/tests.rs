@@ -7,20 +7,20 @@ use pdma_model_contract::dma::{
 #[test]
 fn nested_admin_bank_preserves_selection_and_absolute_misses()
 -> Result<(), Box<dyn std::error::Error>> {
-    // Given: administration crosses the first page in a 1021-channel instance.
-    let mut device = Dma::new((), 1021)?;
+    // Given: administration crosses the first page in a 1020-channel instance.
+    let mut device = Dma::new((), 1020)?;
     // When: the last channel's reset is requested through its administrative aperture.
     device.write_admin(4096, &1_u32.to_le_bytes())?;
     // Then: only that channel reset, and misses retain the root address and output.
     for (index, channel) in device.channels.iter().enumerate() {
-        assert_eq!(channel.generation, u64::from(index == 1020));
+        assert_eq!(channel.generation, u64::from(index == 1019));
     }
-    for (address, expected) in [(16, 0), (4092, 0), (4096, 0)] {
+    for (address, expected) in [(20, 0), (4092, 0), (4096, 0)] {
         let mut out = [0; 4];
         device.read_admin(address, &mut out)?;
         assert_eq!(u32::from_le_bytes(out), expected);
     }
-    for address in [0, 4, 12, 4100, 8192, usize::MAX] {
+    for address in [0, 4, 16, 4100, 8192, usize::MAX] {
         let mut out = [0xa5; 4];
         assert_eq!(
             device.read_admin(address, &mut out),

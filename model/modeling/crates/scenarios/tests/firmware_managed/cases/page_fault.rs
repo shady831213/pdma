@@ -3,10 +3,7 @@ use crate::harness::{
     page_fault::{self, FaultAccess},
     runtime::AccessError,
 };
-use pdma_model_contract::{
-    dma::ResponseStatus,
-    memory::{ContextAttributes, ContextAttributesAddressSpace, FunctionId},
-};
+use pdma_model_contract::memory::{ContextAttributes, ContextAttributesAddressSpace, FunctionId};
 
 #[tokio::test(flavor = "current_thread")]
 async fn shared_pasid_channel_tags_select_one_channel_and_retire_before_reset() -> TestResult {
@@ -56,19 +53,11 @@ fn assert_shared_recovery(
     assert!(result.peer_stayed_parked);
     assert!(result.stale_rejected);
     assert!(result.foreign_rejected);
-    let mut responses: Vec<_> = result
-        .responses
-        .iter()
-        .map(|response| (response.id, response.status, response.bytes_completed()))
-        .collect();
-    responses.sort_by_key(|response| response.0);
+    let mut completions = result.completions.clone();
+    completions.sort_unstable();
     let mut ids = input.ids;
     ids.sort_unstable();
-    let length = u64::try_from(input.payload.len())?;
-    assert_eq!(
-        responses,
-        ids.map(|id| (id, ResponseStatus::Success, length))
-    );
+    assert_eq!(completions, ids);
     assert_eq!(result.bytes, vec![input.payload.clone(); 2]);
     Ok(())
 }
@@ -107,18 +96,7 @@ async fn page_fault_recovery_preserves_varied_command_and_address_space_inputs()
 async fn assert_isolated_recovery(input: &page_fault::Input) -> TestResult {
     let (result, foreign_resume) = page_fault::run(input).await?;
     // Then: the original ID completes exactly once, with all bytes and isolated channel access.
-    assert_eq!(
-        result
-            .responses
-            .iter()
-            .map(|r| (r.id, r.status, r.bytes_completed()))
-            .collect::<Vec<_>>(),
-        vec![(
-            input.id,
-            ResponseStatus::Success,
-            u64::try_from(input.payload.len())?
-        )]
-    );
+    assert_eq!(result.completions, vec![input.id]);
     assert_eq!(
         result
             .faults

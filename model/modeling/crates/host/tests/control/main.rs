@@ -8,8 +8,7 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::dma::{
-    ChannelIrqMaskValues, ChannelRegisters, Command, CompletionFlagsValues, DmaControl,
-    DmaFatalCode, Endpoint, Response,
+    ChannelIrqMaskValues, ChannelRegisters, Command, DmaControl, DmaFatalCode, Endpoint, Event,
 };
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
@@ -34,10 +33,10 @@ fn fixture()
                 .raw(),
             1,
         )?,
-        response: RingConfig::new(
+        event: RingConfig::new(
             allocator
                 .allocate(
-                    u64::try_from(Response::RECORD_SIZE)?,
+                    u64::try_from(Event::RECORD_SIZE)?,
                     MemoryAlignment::try_new(8)?,
                 )?
                 .raw(),
@@ -116,9 +115,9 @@ async fn software_explicitly_enables_device_and_channel_interrupts()
 }
 
 #[tokio::test]
-async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
+async fn masked_trap_cause_remains_visible_without_unmask_catch_up()
 -> Result<(), Box<dyn std::error::Error>> {
-    // Given: both routine completion events are masked.
+    // Given: both routine notification sources are masked.
     let (device, memory, rings) = fixture()?;
     let mut hardware = device.hardware();
     let model = Model::new(device);
@@ -135,16 +134,8 @@ async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
         .await?;
     cpu.run_main(channel.set_irq_mask(ChannelIrqMaskValues::new(3)))
         .await?;
-    cpu.run_main(channel.submit(Command {
-        copy_length: 0,
-        sg_context: 0,
-        flags: CompletionFlagsValues { ioc: true },
-        id: 7,
-        source: Endpoint::linear(0, 0),
-        destination: Endpoint::linear(0, 0),
-    }))
-    .await?;
-    // When: hardware publishes a masked IOC completion and software unmasks.
+    cpu.run_main(channel.submit(Command::trap(7))).await?;
+    // When: hardware publishes a masked Trap and software unmasks.
     let executor = AsyncExecutor::new(model.clone());
     let mut driver = HardwareDriver::new();
     tokio::select! {
@@ -153,7 +144,7 @@ async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
         }
         result = async {
             for _ in 0..512 {
-                if cpu.run_main(channel.irq_cause()).await?.response_non_empty() {
+                if cpu.run_main(channel.irq_cause()).await?.trap() {
                     return Ok::<(), Box<dyn std::error::Error>>(());
                 }
                 tokio::task::yield_now().await;
@@ -163,17 +154,14 @@ async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
     }
     cpu.run_main(channel.set_irq_mask(ChannelIrqMaskValues::default()))
         .await?;
-    // Then: software can inspect both causes and consume the response without a catch-up IRQ.
+    // Then: software sees and acknowledges Trap without a catch-up IRQ.
     assert!(!model.irq());
     let cause = cpu.run_main(channel.irq_cause()).await?;
-    assert!(cause.response_non_empty());
-    assert!(cause.ioc());
-    assert_eq!(
-        cpu.run_main(channel.response())
-            .await?
-            .map(|response| response.id),
-        Some(7)
-    );
+    assert!(!cause.event_non_empty());
+    assert!(cause.trap());
+    assert_eq!(cpu.run_main(channel.event()).await?, None);
+    cpu.run_main(channel.acknowledge_trap()).await?;
+    assert!(!cpu.run_main(channel.irq_cause()).await?.trap());
     Ok(())
 }
 

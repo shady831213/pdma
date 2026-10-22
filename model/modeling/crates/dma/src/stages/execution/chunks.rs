@@ -38,10 +38,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for PrepareChun
                 }
             }
             let accepted = context.selected.work.as_ref().ok_or(RunError::Exhausted)?;
-            if accepted.unread.is_some()
-                || accepted.payload.is_some()
-                || accepted.completion.is_some()
-            {
+            if accepted.unread.is_some() || accepted.payload.is_some() {
                 *state = None;
                 return Ok(StepOutcome::Complete(Ok(None)));
             }
@@ -59,15 +56,10 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for PrepareChun
                 }),
             );
             let span = progress.prepare(&memory);
-            if progress.status.halts() {
-                let completion = crate::Completion {
-                    work,
-                    response: progress.response(),
-                };
+            if progress.status.is_err() {
+                let event = progress.event().ok_or(RunError::Exhausted)?;
                 *state = None;
-                return Ok(StepOutcome::Complete(
-                    context.complete(completion).map(|()| None),
-                ));
+                return Ok(StepOutcome::Complete(Err(context.report(&event))));
             }
             let Some((source, destination, length)) = span else {
                 return Ok(StepOutcome::InProgress);

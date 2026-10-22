@@ -12,7 +12,7 @@ use crate::harness::{
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::{
     control::ControlResponseStatus,
-    dma::{ChannelId, Command, ContextId, Endpoint, Response},
+    dma::{ChannelId, Command, ContextId, Endpoint, Event},
     memory::{ContextAttributes, FunctionId},
 };
 use pdma_model_software::control::InterruptEvent;
@@ -38,7 +38,7 @@ pub(in crate::harness) struct Recovery {
 #[derive(Debug)]
 pub struct Outcome {
     pub(crate) faults: Vec<FaultReport>,
-    pub(crate) responses: Vec<Response>,
+    pub(crate) completions: Vec<u64>,
     pub(crate) bytes: Vec<Vec<u8>>,
     pub(crate) peer_stayed_parked: bool,
     pub(crate) stale_rejected: bool,
@@ -79,15 +79,16 @@ pub(in crate::harness) async fn main<M: Send>(
         .ok_or("source outside grant")?;
     let request = task.request;
     task.driver.resume().await?;
-    let first_response = setup::completed(&mut task.driver).await?;
+    let first_response = setup::completed(&mut task.driver, (&ports.memory, task.fence)).await?;
     let peer_task = work
         .iter_mut()
         .find(|task| task.channel == peer)
         .ok_or("peer outside grant")?;
     let peer_stayed_parked =
-        peer_task.driver.faulted().await? && peer_task.driver.response().await?.is_none();
+        peer_task.driver.faulted().await? && peer_task.driver.event().await?.is_none();
     peer_task.driver.resume().await?;
-    let second_response = setup::completed(&mut peer_task.driver).await?;
+    let second_response =
+        setup::completed(&mut peer_task.driver, (&ports.memory, peer_task.fence)).await?;
     let foreign = foreign_sources
         .handler(function, &session.channels)
         .ok_or("foreign catalog")?;
@@ -108,11 +109,13 @@ pub(in crate::harness) async fn main<M: Send>(
             ..request
         })
         .await?;
+    let fence = setup::fence(&ports, session.ring_context, input.ids[2])?;
+    next_driver.submit(fence.command(input.ids[2])).await?;
     let fresh = reports.recv().await.ok_or("missing fresh fault")?;
     setup::parked(&mut next_driver).await?;
     let stale_rejected = handler.resolve(&first).is_none()
         && next_driver.faulted().await?
-        && next_driver.response().await?.is_none();
+        && next_driver.event().await?.is_none();
     if next_handler.resolve(&fresh) != Some(new_channel) {
         return Err("new fault source mismatch".into());
     }
@@ -120,7 +123,7 @@ pub(in crate::harness) async fn main<M: Send>(
         return Err("fresh page was present".into());
     }
     next_driver.resume().await?;
-    let last = setup::completed(&mut next_driver).await?;
+    let last = setup::completed(&mut next_driver, (&ports.memory, fence)).await?;
     next_handler.retire();
     reports.close();
     session
@@ -134,7 +137,7 @@ pub(in crate::harness) async fn main<M: Send>(
         .collect::<TestResult<_>>()?;
     Ok(Outcome {
         faults: vec![first, second],
-        responses: vec![first_response, second_response, last],
+        completions: vec![first_response, second_response, last],
         bytes,
         peer_stayed_parked,
         stale_rejected,

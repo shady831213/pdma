@@ -1,4 +1,4 @@
-//! Software allocation/submission failures and hardware response publication failure.
+//! Software allocation/submission failures and independent error-event storage.
 
 use super::{TestResult, copy};
 use crate::{
@@ -7,11 +7,11 @@ use crate::{
 };
 
 #[tokio::test(flavor = "current_thread")]
-async fn response_write_fault_reaches_host_without_a_response_entry() -> TestResult {
-    // Given: the memory endpoint will reject writes to the configured response ring.
-    // When: hardware copies the payload but cannot publish its response.
+async fn successful_copy_ignores_unwritable_event_storage() -> TestResult {
+    // Given: the memory endpoint rejects writes to the configured event ring.
+    // When: hardware executes Copy, Fence and Trap successfully.
     copy(true, software::Input::linear(b"dma-copy")).await?;
-    // Then: the shared case assertions verified copied bytes, typed sticky fault and masked IRQ.
+    // Then: the shared assertions verify copied bytes, Fence completion and no fatal.
     Ok(())
 }
 

@@ -5,8 +5,8 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, CompletionFlagsValues,
-    ContextId, Endpoint, Response, ResponseRegisters, ResponseStatus, Segment,
+    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, ContextId, Endpoint,
+    EventRegisters, Segment,
 };
 use pdma_model_dma::{Dma, Hardware};
 use std::cell::RefCell;
@@ -73,7 +73,7 @@ struct Fixture {
     normal: Command,
 }
 
-fn full_response_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
+fn retired_copy_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
     let memory = SharedMemory::new();
     memory.add_regions(&[MemoryRegion::try_new(
         0x1000.into(),
@@ -90,16 +90,16 @@ fn full_response_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
     let channel = ChannelId::new(0);
     let base = channel.register_offset(1).ok_or("channel layout")?;
     let control = base + ChannelBlock::CONTROL.offset();
-    let responses = base + ChannelBlock::RESPONSE.offset();
+    let events = base + ChannelBlock::EVENT.offset();
     for (offset, value) in [
         (base + CommandRegisters::BASE.offset(), 0x1000_u64),
-        (responses + ResponseRegisters::BASE.offset(), 0x1100),
+        (events + EventRegisters::BASE.offset(), 0x1100),
     ] {
         dma.write(offset, &value.to_le_bytes())?;
     }
     for offset in [
         base + CommandRegisters::CAPACITY.offset(),
-        responses + ResponseRegisters::CAPACITY.offset(),
+        events + EventRegisters::CAPACITY.offset(),
         control + ChannelRegisters::IRQ_ENABLE.offset(),
         control + ChannelRegisters::ENABLE.offset(),
     ] {
@@ -117,14 +117,15 @@ fn full_response_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
         )?;
     }
     memory.write(0x1600.into(), MemoryAlignment::ONE, &[1, 3, 5, 7])?;
-    let normal = Command {
-        copy_length: 4,
-        id: 1,
-        flags: CompletionFlagsValues { ioc: false },
-        sg_context: 0,
-        source: Endpoint::scatter_gather(0x1400, 1),
-        destination: Endpoint::scatter_gather(0x1500, 1),
-    };
+    let normal = Command::copy(
+        1,
+        pdma_model_contract::dma::CopyCommand {
+            copy_length: 4,
+            sg_context: 0,
+            source: Endpoint::scatter_gather(0x1400, 1),
+            destination: Endpoint::scatter_gather(0x1500, 1),
+        },
+    );
     memory.write(0x1000.into(), MemoryAlignment::ONE, &normal.to_bytes()?)?;
     dma.write(
         base + CommandRegisters::PRODUCER.offset(),
@@ -140,10 +141,6 @@ fn full_response_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
     }
     let copied: [u8; 4] = memory.read_typed(0x1700.into(), MemoryAlignment::ONE)?;
     assert_eq!(copied, [1, 3, 5, 7]);
-    let response_bytes: pdma_model_contract::dma::ResponseRaw =
-        memory.read_typed(0x1100.into(), MemoryAlignment::ONE)?;
-    let response = Response::from_bytes(response_bytes.as_ref())?;
-    assert_eq!((response.id, response.status), (1, ResponseStatus::Success));
     {
         let accesses = dma.memory.accesses.borrow();
         for access in [
@@ -151,7 +148,6 @@ fn full_response_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
             Access::Read(0x1500, Segment::RECORD_SIZE),
             Access::Read(0x1600, 4),
             Access::Write(0x1700, 4),
-            Access::Write(0x1100, Response::RECORD_SIZE),
         ] {
             assert!(
                 accesses.contains(&access),
@@ -159,7 +155,7 @@ fn full_response_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
             );
         }
     }
-    assert!(dma.take_interrupt());
+    assert!(!dma.take_interrupt());
     Ok(Fixture {
         dma,
         memory,
@@ -170,33 +166,37 @@ fn full_response_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn abort_with_full_response_ring_has_no_sg_payload_response_or_irq_effects()
+fn abort_after_retired_copy_has_no_sg_payload_event_or_irq_effects()
 -> Result<(), Box<dyn std::error::Error>> {
-    // Given: a real observed SG copy has filled the only response slot.
+    // Given: a real observed SG copy has retired without an event.
     let Fixture {
         mut dma,
         memory,
         mut pipeline,
         mut operation,
         normal,
-    } = full_response_fixture()?;
+    } = retired_copy_fixture()?;
     let channel = ChannelId::new(0);
     let base = channel.register_offset(1).ok_or("channel layout")?;
-    let responses = base + ChannelBlock::RESPONSE.offset();
-    let target = Command {
-        copy_length: normal.copy_length,
-        id: 2,
-        flags: CompletionFlagsValues { ioc: true },
-        sg_context: 7,
-        source: Endpoint {
-            context: 7,
-            ..normal.source
-        },
-        destination: Endpoint {
-            context: 7,
-            ..normal.destination
-        },
+    let events = base + ChannelBlock::EVENT.offset();
+    let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = normal.payload else {
+        return Err("copy fixture".into());
     };
+    let target = Command::copy(
+        2,
+        pdma_model_contract::dma::CopyCommand {
+            copy_length: copy.copy_length,
+            sg_context: 7,
+            source: Endpoint {
+                context: 7,
+                ..copy.source
+            },
+            destination: Endpoint {
+                context: 7,
+                ..copy.destination
+            },
+        },
+    );
     memory.write(0x1600.into(), MemoryAlignment::ONE, &[2, 4, 6, 8])?;
     memory.write(0x1700.into(), MemoryAlignment::ONE, &[9; 4])?;
     memory.write(0x1000.into(), MemoryAlignment::ONE, &target.to_bytes()?)?;
@@ -209,11 +209,11 @@ fn abort_with_full_response_ring_has_no_sg_payload_response_or_irq_effects()
     let log_start = dma.memory.accesses.borrow().len();
     let mut producer_before = [0; 4];
     dma.read(
-        responses + ResponseRegisters::PRODUCER.offset(),
+        events + EventRegisters::PRODUCER.offset(),
         &mut producer_before,
     )?;
-    assert_eq!(u32::from_le_bytes(producer_before), 1);
-    // When: Abort arrives before target acceptance while response space remains full.
+    assert_eq!(u32::from_le_bytes(producer_before), 0);
+    // When: Abort arrives before the queued target is accepted.
     dma.abort_context(ContextId::new(7), &[channel])?;
     assert_eq!(dma.context_status(ContextId::new(7)), Ok(false));
     for _ in 0..64 {
@@ -242,7 +242,7 @@ fn abort_with_full_response_ring_has_no_sg_payload_response_or_irq_effects()
     assert_eq!(after, before);
     let mut producer_after = [0; 4];
     dma.read(
-        responses + ResponseRegisters::PRODUCER.offset(),
+        events + EventRegisters::PRODUCER.offset(),
         &mut producer_after,
     )?;
     assert_eq!(producer_after, producer_before);

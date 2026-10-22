@@ -1,6 +1,8 @@
 use super::ContextTable;
 use crate::windows::ChannelWindows;
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_runtime::{
+    AtomicAccessError, AtomicOperation, MemoryAccess, MemoryAddress, MemoryAlignment,
+};
 use pdma_model_contract::dma::{ChannelId, ContextId, DmaAccess};
 use pdma_model_contract::memory::{FunctionId, MemoryIdentity};
 
@@ -82,6 +84,39 @@ where
     F: Fn(DmaAccess, MemoryIdentity) -> S,
 {
     type Error = MemoryError<M::Error>;
+    fn atomic32_with_sideband(
+        &self,
+        access: &DmaAccess,
+        address: MemoryAddress,
+        operation: AtomicOperation<u32>,
+    ) -> Result<u32, AtomicAccessError<Self::Error>> {
+        let identity = self.identity(*access).map_err(AtomicAccessError::Access)?;
+        self.downstream
+            .atomic32_with_sideband(&(self.map)(*access, identity), address, operation)
+            .map_err(|error| match error {
+                AtomicAccessError::Unsupported => AtomicAccessError::Unsupported,
+                AtomicAccessError::Access(error) => {
+                    AtomicAccessError::Access(MemoryError::Downstream(error))
+                }
+            })
+    }
+
+    fn atomic64_with_sideband(
+        &self,
+        access: &DmaAccess,
+        address: MemoryAddress,
+        operation: AtomicOperation<u64>,
+    ) -> Result<u64, AtomicAccessError<Self::Error>> {
+        let identity = self.identity(*access).map_err(AtomicAccessError::Access)?;
+        self.downstream
+            .atomic64_with_sideband(&(self.map)(*access, identity), address, operation)
+            .map_err(|error| match error {
+                AtomicAccessError::Unsupported => AtomicAccessError::Unsupported,
+                AtomicAccessError::Access(error) => {
+                    AtomicAccessError::Access(MemoryError::Downstream(error))
+                }
+            })
+    }
     fn validate_with_sideband(
         &self,
         access: &DmaAccess,

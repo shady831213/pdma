@@ -5,8 +5,7 @@ pub mod support;
 
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::{
-    Command, CompletionInfo, Endpoint, Position, Response, ResponseInfoValues, ResponseRaw,
-    ResponseStatus, Segment,
+    Command, Endpoint, ErrorInfo, Event, EventCode, EventInfoValues, EventRaw, Position, Segment,
 };
 use support::{TestResult, run, setup, submit};
 
@@ -21,10 +20,10 @@ fn segments(memory: &SharedMemory, entries: &[Segment]) -> TestResult {
     Ok(())
 }
 
-fn response(memory: &SharedMemory) -> Result<Response, Box<dyn std::error::Error>> {
-    Ok(Response::from_bytes(
+fn event(memory: &SharedMemory) -> Result<Event, Box<dyn std::error::Error>> {
+    Ok(Event::from_bytes(
         memory
-            .read_typed::<ResponseRaw>(MemoryAddress::new(0x1100), MemoryAlignment::ONE)?
+            .read_typed::<EventRaw>(MemoryAddress::new(0x1100), MemoryAlignment::ONE)?
             .as_ref(),
     )?)
 }
@@ -44,25 +43,25 @@ fn insufficient_selected_range_leaves_payload_untouched() -> TestResult {
     submit(
         &mut device,
         &memory,
-        Command {
-            copy_length: 5,
-            sg_context: 0,
-            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-            id: 1,
-            source: Endpoint::scatter_gather(0x1400, 1),
-            destination: Endpoint::linear(0x1300, 0),
-        },
+        Command::copy(
+            1,
+            pdma_model_contract::dma::CopyCommand {
+                copy_length: 5,
+                sg_context: 0,
+                source: Endpoint::scatter_gather(0x1400, 1),
+                destination: Endpoint::linear(0x1300, 0),
+            },
+        ),
     )?;
     // When: hardware validates the endpoint totals.
     run(&mut device)?;
     // Then: mismatch wins before any payload access and no destination byte changes.
     assert_eq!(
-        response(&memory)?,
-        Response {
-            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
+        event(&memory)?,
+        Event {
             id: 1,
-            status: ResponseStatus::LengthMismatch,
-            info: ResponseInfoValues::LengthMismatch(CompletionInfo { bytes_completed: 0 }),
+            code: EventCode::LengthMismatch,
+            info: EventInfoValues::LengthMismatch(ErrorInfo { bytes_completed: 0 }),
         }
     );
     assert_eq!(
@@ -78,29 +77,29 @@ fn list_errors_and_length_overflow_precede_payload_writes() -> TestResult {
         (
             Endpoint::scatter_gather(0x8000, 1),
             Endpoint::linear(0x1300, 0),
-            ResponseStatus::ListReadError,
+            EventCode::ListReadError,
         ),
         (
             Endpoint::linear(0x1200, 0),
             Endpoint::scatter_gather(0x8000, 1),
-            ResponseStatus::ListReadError,
+            EventCode::ListReadError,
         ),
         (
             Endpoint::scatter_gather(0x1401, 1),
             Endpoint::linear(0x1300, 0),
-            ResponseStatus::ListReadError,
+            EventCode::ListReadError,
         ),
         (
             Endpoint::scatter_gather(0x1400, 2),
             Endpoint::linear(0x1300, 0),
-            ResponseStatus::InvalidLength,
+            EventCode::InvalidLength,
         ),
         (
             Endpoint::scatter_gather(0, u64::MAX)
                 .with_start(Position::scatter_gather(u64::MAX - 1, 0))
                 .ok_or("SG position")?,
             Endpoint::linear(0x1300, 0),
-            ResponseStatus::InvalidLength,
+            EventCode::InvalidLength,
         ),
     ] {
         // Given: an unreadable/misaligned list, overflowing total, or overflowing list extent.
@@ -122,29 +121,29 @@ fn list_errors_and_length_overflow_precede_payload_writes() -> TestResult {
         submit(
             &mut device,
             &memory,
-            Command {
-                copy_length: 4,
-                sg_context: 0,
-                flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-                id: 2,
-                source,
-                destination,
-            },
+            Command::copy(
+                2,
+                pdma_model_contract::dma::CopyCommand {
+                    copy_length: 4,
+                    sg_context: 0,
+                    source,
+                    destination,
+                },
+            ),
         )?;
         // When: the real hardware pipeline runs its preflight.
         run(&mut device)?;
         // Then: a typed command failure is published without modifying payload.
         assert_eq!(
-            response(&memory)?,
-            Response {
-                flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
+            event(&memory)?,
+            Event {
                 id: 2,
-                status: expected,
+                code: expected,
                 info: match expected {
-                    ResponseStatus::InvalidLength =>
-                        ResponseInfoValues::InvalidLength(CompletionInfo { bytes_completed: 0 }),
-                    ResponseStatus::ListReadError =>
-                        ResponseInfoValues::ListReadError(CompletionInfo { bytes_completed: 0 }),
+                    EventCode::InvalidLength =>
+                        EventInfoValues::InvalidLength(ErrorInfo { bytes_completed: 0 }),
+                    EventCode::ListReadError =>
+                        EventInfoValues::ListReadError(ErrorInfo { bytes_completed: 0 }),
                     _ => return Err("unexpected test status".into()),
                 },
             }
@@ -199,33 +198,33 @@ fn payload_fault_reports_written_prefix_without_rollback() -> TestResult {
         submit(
             &mut device,
             &memory,
-            Command {
-                copy_length: 8,
-                sg_context: 0,
-                flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-                id: 3,
-                source,
-                destination,
-            },
+            Command::copy(
+                3,
+                pdma_model_contract::dma::CopyCommand {
+                    copy_length: 8,
+                    sg_context: 0,
+                    source,
+                    destination,
+                },
+            ),
         )?;
         // When: the second payload access fails.
         run(&mut device)?;
         // Then: completed bytes report only the successful write and the untouched suffix remains.
         let status = if read_fault {
-            ResponseStatus::ReadError
+            EventCode::ReadError
         } else {
-            ResponseStatus::WriteError
+            EventCode::WriteError
         };
         assert_eq!(
-            response(&memory)?,
-            Response {
-                flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
+            event(&memory)?,
+            Event {
                 id: 3,
-                status,
+                code: status,
                 info: if read_fault {
-                    ResponseInfoValues::ReadError(CompletionInfo { bytes_completed: 3 })
+                    EventInfoValues::ReadError(ErrorInfo { bytes_completed: 3 })
                 } else {
-                    ResponseInfoValues::WriteError(CompletionInfo { bytes_completed: 3 })
+                    EventInfoValues::WriteError(ErrorInfo { bytes_completed: 3 })
                 },
             }
         );
@@ -245,27 +244,20 @@ fn zero_length_does_not_access_lists_or_payload() -> TestResult {
     submit(
         &mut device,
         &memory,
-        Command {
-            copy_length: 0,
-            sg_context: 0,
-            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-            id: 4,
-            source: Endpoint::scatter_gather(0x8000, 2),
-            destination: Endpoint::scatter_gather(u64::MAX, 0),
-        },
+        Command::copy(
+            4,
+            pdma_model_contract::dma::CopyCommand {
+                copy_length: 0,
+                sg_context: 0,
+                source: Endpoint::scatter_gather(0x8000, 2),
+                destination: Endpoint::scatter_gather(u64::MAX, 0),
+            },
+        ),
     )?;
     // When: hardware accepts the empty copy range.
     run(&mut device)?;
-    // Then: one successful response reports zero completed bytes.
-    assert_eq!(
-        response(&memory)?,
-        Response {
-            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-            id: 4,
-            status: ResponseStatus::Success,
-            info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 0 }),
-        }
-    );
-    assert!(device.irq());
+    // Then: the empty command retires without payload access or an event.
+    support::assert_no_event(&mut device)?;
+    assert!(!device.irq());
     Ok(())
 }

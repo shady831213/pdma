@@ -1,12 +1,12 @@
 use crate::SelectedResources;
 use crate::channel::Accepted;
-use crate::{CommandRequest, CommandSnapshot, Dma, Error, FetchedCommand, Flow};
+use crate::{CommandAdmission, CommandRequest, CommandSnapshot, Dma, Error, FetchedCommand, Flow};
 use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::{BoundMemory, MemoryAccess};
 use pdma_model_contract::dma::{ContextId, DmaAccess};
 use pdma_model_contract::ring::Ring;
 
-/// Accepts a fresh task request and transfers its identity into execution dataflow.
+/// Accepts fresh or resumed work and transfers its descriptor into execution dataflow.
 #[derive(Debug, Default)]
 pub struct Fetch;
 
@@ -32,9 +32,9 @@ impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Fetch {
                 current.map(|_| None),
             ))));
         }
-        let (work, snapshot) = match request {
-            CommandRequest::Fetch(snapshot) => (snapshot.work, Some(snapshot)),
-            CommandRequest::Resume(task) => (task.work, None),
+        let work = match request {
+            CommandRequest::Fetch(snapshot) => snapshot.work,
+            CommandRequest::Resume(task) => task.work,
         };
         let Some(channel) = dma.channels.get_mut(work.channel.index()) else {
             return Ok(StepOutcome::Complete(Ok(Flow::new(
@@ -49,9 +49,23 @@ impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Fetch {
         if matches!(request, CommandRequest::Resume(_)) {
             dma.active = Some(work);
         }
-        let value = snapshot.map_or(Ok(None), |snapshot| {
-            fetch(&mut dma.execution_context().select(work)?, snapshot)
-        });
+        let value = match request {
+            CommandRequest::Fetch(snapshot) => dma
+                .execution_context()
+                .select(work)
+                .and_then(|mut selected| fetch(&mut selected, snapshot)),
+            CommandRequest::Resume(_) => channel
+                .accepted_command()
+                .copied()
+                .ok_or(Error::Reset)
+                .map(|command| {
+                    Some(FetchedCommand {
+                        work,
+                        command,
+                        admission: CommandAdmission::Resume,
+                    })
+                }),
+        };
         Ok(StepOutcome::Complete(Ok(Flow::new(Some(work), value))))
     }
 }
@@ -64,14 +78,12 @@ fn fetch<M: MemoryAccess<SB>, SB>(
         return Err(Error::Routing);
     }
     let work = snapshot.work;
-    let aborting = context.abort_context.is_some();
     let channel = context.channel(work)?;
     if !channel.enabled()
         || channel.work.is_some()
         || channel.command.pointers().consumer != snapshot.consumer
         || channel.command.entry(snapshot.consumer).ok() != Some(snapshot.address)
         || channel.command.pointers().is_empty()
-        || (!aborting && channel.response.pointers().pending() >= channel.response.capacity())
         || context.active.is_some()
     {
         return Ok(None);
@@ -97,11 +109,6 @@ fn fetch<M: MemoryAccess<SB>, SB>(
                 context.changed();
                 return Ok(None);
             }
-            if context.selected.response.pointers().pending()
-                >= context.selected.response.capacity()
-            {
-                return Ok(None);
-            }
             if let Err(fatal) = context.selected.command.consume() {
                 context.selected.latch(fatal);
                 context.changed();
@@ -111,13 +118,17 @@ fn fetch<M: MemoryAccess<SB>, SB>(
                 command,
                 unread: None,
                 payload: None,
-                completion: None,
                 progress: None,
+                fill_completed: 0,
             });
             *context.active = Some(work);
             context.generation = work.generation;
             context.changed();
-            Ok(Some(FetchedCommand { work, command }))
+            Ok(Some(FetchedCommand {
+                work,
+                command,
+                admission: CommandAdmission::Fresh,
+            }))
         }
         Ok(None) => Ok(None),
         Err(fatal) => {

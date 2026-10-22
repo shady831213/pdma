@@ -5,7 +5,7 @@ pub mod support;
 
 use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::dma::{ChannelBlock, CommandRegisters, Endpoint, ResponseRegisters};
+use pdma_model_contract::dma::{ChannelBlock, CommandRegisters, Endpoint, EventRegisters};
 use pdma_model_dma::COPY_CHUNK_BYTES;
 use support::{TestResult, command, read_word, setup, submit};
 
@@ -14,16 +14,25 @@ fn command_continuation_preserves_descriptor_and_backpressure_between_chunks() -
     // Given: a command spanning three chunks and a later queued successor.
     const LENGTH: usize = COPY_CHUNK_BYTES * 2 + 88;
     let (mut device, memory) = setup(0x1100, 2)?;
-    let descriptor = pdma_model_contract::dma::Command {
-        copy_length: u64::try_from(LENGTH)?,
-        source: Endpoint::linear(0x1400, 0),
-        destination: Endpoint::linear(0x1800, 0),
-        ..command()
+    let descriptor = {
+        let original = command();
+        let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload else {
+            return Err("copy fixture required".into());
+        };
+        pdma_model_contract::dma::Command::copy(
+            original.id,
+            pdma_model_contract::dma::CopyCommand {
+                copy_length: u64::try_from(LENGTH)?,
+                source: Endpoint::linear(0x1400, 0),
+                destination: Endpoint::linear(0x1800, 0),
+                ..copy
+            },
+        )
     };
     memory.write(0x1400.into(), MemoryAlignment::ONE, &[0x5a; LENGTH])?;
     submit(&mut device, &memory, descriptor)?;
     let cmd = ChannelBlock::ALIGNMENT + ChannelBlock::COMMAND.offset();
-    let resp = ChannelBlock::ALIGNMENT + ChannelBlock::RESPONSE.offset();
+    let event = ChannelBlock::ALIGNMENT + ChannelBlock::EVENT.offset();
     let mut service = device.hardware();
     let mut operation = Operation::new(());
     // When: one command invocation reaches each observable committed chunk boundary.
@@ -52,7 +61,7 @@ fn command_continuation_preserves_descriptor_and_backpressure_between_chunks() -
             1
         );
         assert_eq!(
-            read_word(&mut device, resp + ResponseRegisters::PRODUCER.offset())?,
+            read_word(&mut device, event + EventRegisters::PRODUCER.offset())?,
             0
         );
         memory.write(0x1000.into(), MemoryAlignment::ONE, &command().to_bytes()?)?;
@@ -73,8 +82,8 @@ fn command_continuation_preserves_descriptor_and_backpressure_between_chunks() -
         1
     );
     assert_eq!(
-        read_word(&mut device, resp + ResponseRegisters::PRODUCER.offset())?,
-        1
+        read_word(&mut device, event + EventRegisters::PRODUCER.offset())?,
+        0
     );
     Ok(())
 }

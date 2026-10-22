@@ -36,7 +36,7 @@ fn substituted_progress_cannot_select_a_different_channel_than_its_flow_owner() 
         fetched,
     )?;
     let mut saved: Option<CopyProgress> = None;
-    let other_owner = different.map(|progress| saved = Some(progress));
+    let other_owner = different.map(|progress| saved = Some(progress)).finish();
     let progress = saved.ok_or("validated progress")?;
     let substituted: Flow<CopyProgress> = original_flow.map(|_| progress);
     // When: a custom transform substitutes the other channel's genuine progress value.
@@ -54,11 +54,11 @@ fn substituted_progress_cannot_select_a_different_channel_than_its_flow_owner() 
             .progress
             .is_none()
     );
-    let mut failed = Some(output.finish());
+    let mut failed = Some(vec![(0, output.finish())]);
     assert_eq!(
         Retire.step(&mut owner, &mut failed)?,
         StepOutcome::Complete(Err(Error::Routing))
     );
-    finish(&mut Retire, &mut other, other_owner)?;
+    finish(&mut Retire, &mut other, vec![(0, other_owner)])?;
     Ok(())
 }

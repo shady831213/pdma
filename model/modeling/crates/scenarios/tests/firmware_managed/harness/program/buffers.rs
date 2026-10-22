@@ -4,7 +4,7 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
 use pdma_model_contract::control::{ControlQueue, ControlRequest, ControlResponse};
-use pdma_model_contract::dma::{ChannelId, Command, CompletionFlagsValues, Endpoint, Response};
+use pdma_model_contract::dma::{ChannelId, Command, Endpoint, Event};
 use pdma_model_host::{
     Channel, ChannelConfig, Management, ManagementConfig, ManagementRings, RingConfig, Rings,
 };
@@ -17,6 +17,8 @@ pub(super) struct Transfer {
     command: Command,
     destination: MemoryAddress,
     length: usize,
+    completion: pdma_model_software::dma::CompletionWord,
+    memory: SharedMemoryAccess,
 }
 
 impl Transfer {
@@ -30,8 +32,8 @@ impl Transfer {
             MemoryAlignment::try_new(u64::try_from(Command::RECORD_ALIGNMENT)?)?,
         )?;
         let response = ports.allocator.allocate(
-            u64::try_from(2 * Response::RECORD_SIZE)?,
-            MemoryAlignment::try_new(u64::try_from(Response::RECORD_ALIGNMENT)?)?,
+            u64::try_from(2 * Event::RECORD_SIZE)?,
+            MemoryAlignment::try_new(u64::try_from(Event::RECORD_ALIGNMENT)?)?,
         )?;
         let length = u64::try_from(payload.len())?;
         let source = ports.allocator.allocate(length, MemoryAlignment::ONE)?;
@@ -40,6 +42,10 @@ impl Transfer {
         ports
             .memory
             .write(destination, MemoryAlignment::ONE, &vec![0; payload.len()])?;
+        let fence = ports.allocator.allocate(8, MemoryAlignment::try_new(8)?)?;
+        ports
+            .memory
+            .write(fence, MemoryAlignment::ONE, &0_u64.to_le_bytes())?;
         let driver = Channel::setup_at(
             ports.bus.clone(),
             ports.memory.clone(),
@@ -47,7 +53,7 @@ impl Transfer {
                 id: channel,
                 rings: Rings {
                     command: RingConfig::new(command.raw(), 2)?,
-                    response: RingConfig::new(response.raw(), 2)?,
+                    event: RingConfig::new(response.raw(), 2)?,
                 },
             },
             ports.bus.addresses().dma,
@@ -56,22 +62,36 @@ impl Transfer {
         driver.set_irq_enabled(false).await?;
         Ok(Self {
             driver,
-            command: Command {
-                copy_length: length,
-                sg_context: 0,
-                id: 0,
-                source: Endpoint::linear(source.raw(), 0),
-                destination: Endpoint::linear(destination.raw(), 0),
-                flags: CompletionFlagsValues::default(),
-            },
+            command: Command::copy(
+                0,
+                pdma_model_contract::dma::CopyCommand {
+                    copy_length: length,
+                    sg_context: 0,
+                    source: Endpoint::linear(source.raw(), 0),
+                    destination: Endpoint::linear(destination.raw(), 0),
+                },
+            ),
             destination,
             length: payload.len(),
+            memory: ports.memory.clone(),
+            completion: pdma_model_software::dma::CompletionWord(
+                pdma_model_contract::dma::WordWrite {
+                    target: pdma_model_contract::dma::WordTarget {
+                        address: fence.raw(),
+                        context: 0,
+                        width: pdma_model_contract::dma::WordTargetWidth::Bits64,
+                    },
+                    value: 0,
+                },
+            ),
         })
     }
 
     pub(super) async fn start(&mut self, id: u64) -> TestResult {
         self.command.id = id;
+        self.completion.0.value = id;
         self.driver.submit(self.command).await?;
+        self.driver.submit(self.completion.command(id)).await?;
         Ok(())
     }
 
@@ -93,13 +113,26 @@ impl Transfer {
         }
     }
 
-    pub(super) async fn completed(&mut self) -> TestResult<Response> {
+    pub(super) async fn completed(&mut self) -> TestResult<u64> {
         loop {
-            if let Some(response) = self.driver.response().await? {
-                return Ok(response);
+            if let Some(value) = self.try_completed().await? {
+                return Ok(value);
             }
             tokio::task::yield_now().await;
         }
+    }
+
+    pub(super) async fn try_completed(&mut self) -> TestResult<Option<u64>> {
+        if let Some(event) = self.driver.event().await? {
+            return Err(format!("DMA error: {event:?}").into());
+        }
+        if self.driver.fatal().await? != pdma_model_contract::dma::ChannelFatalCode::None {
+            return Err("DMA fatal".into());
+        }
+        Ok(self
+            .completion
+            .is_complete(&self.memory)?
+            .then_some(self.completion.0.value))
     }
 }
 

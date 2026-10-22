@@ -3,9 +3,9 @@
 /// Shared hardware fixtures.
 pub mod support;
 
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
-use pdma_model_contract::dma::{Endpoint, Position, Response, ResponseStatus, Segment};
+use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
+use pdma_model_contract::dma::{Endpoint, Event, EventCode, Position, Segment};
+use pdma_model_contract::dma::{ErrorInfo, EventInfoValues};
 use support::{TestResult, command, run, setup, submit};
 
 #[test]
@@ -15,8 +15,8 @@ fn selected_ranges_skip_unused_sg_prefix_and_clip_last_segment() -> TestResult {
     memory.write(0x1200.into(), MemoryAlignment::ONE, b"abcdefgh")?;
     memory.write(0x1300.into(), MemoryAlignment::ONE, b"--------")?;
     let mut request = command();
-    request.destination = Endpoint::linear(0x1300, 2);
-    request.copy_length = 4;
+    crate::support::copy_mut(&mut request)?.destination = Endpoint::linear(0x1300, 2);
+    crate::support::copy_mut(&mut request)?.copy_length = 4;
     memory.add_regions(&[hardware_interface_runtime::MemoryRegion::try_new(
         0x3000.into(),
         32,
@@ -40,8 +40,8 @@ fn selected_ranges_skip_unused_sg_prefix_and_clip_last_segment() -> TestResult {
         }
         .to_bytes()?,
     )?;
-    request.source = Endpoint::scatter_gather(0x2ff0, 3);
-    request.source = request
+    crate::support::copy_mut(&mut request)?.source = Endpoint::scatter_gather(0x2ff0, 3);
+    crate::support::copy_mut(&mut request)?.source = crate::support::copy(&request)?
         .source
         .with_start(Position::scatter_gather(1, 1))
         .ok_or("position mode mismatch")?;
@@ -53,43 +53,32 @@ fn selected_ranges_skip_unused_sg_prefix_and_clip_last_segment() -> TestResult {
         memory.read_typed::<[u8; 8]>(0x1300.into(), MemoryAlignment::ONE)?,
         *b"--bcde--"
     );
-    let raw = memory.read_typed::<pdma_model_contract::dma::ResponseRaw>(
-        MemoryAddress::new(0x1100),
-        MemoryAlignment::ONE,
-    )?;
-    let response = Response::from_bytes(raw.as_ref())?;
-    assert_eq!(
-        (response.status, response.bytes_completed()),
-        (ResponseStatus::Success, 4)
-    );
+    support::assert_no_event(&mut dma)?;
     Ok(())
 }
 
 #[test]
 fn invalid_selected_positions_and_ranges_fail_before_payload_writes() -> TestResult {
     for (source, expected) in [
-        (Endpoint::linear(u64::MAX, 1), ResponseStatus::InvalidLength),
-        (
-            Endpoint::linear(u64::MAX - 2, 0),
-            ResponseStatus::InvalidLength,
-        ),
+        (Endpoint::linear(u64::MAX, 1), EventCode::InvalidLength),
+        (Endpoint::linear(u64::MAX - 2, 0), EventCode::InvalidLength),
         (
             Endpoint::scatter_gather(0x1400, 1)
                 .with_start(Position::scatter_gather(0, 5))
                 .ok_or("SG position")?,
-            ResponseStatus::InvalidLength,
+            EventCode::InvalidLength,
         ),
         (
             Endpoint::scatter_gather(0x1400, 1)
                 .with_start(Position::scatter_gather(2, 0))
                 .ok_or("SG position")?,
-            ResponseStatus::LengthMismatch,
+            EventCode::LengthMismatch,
         ),
         (
             Endpoint::scatter_gather(0x1400, 1)
                 .with_start(Position::scatter_gather(0, 3))
                 .ok_or("SG position")?,
-            ResponseStatus::LengthMismatch,
+            EventCode::LengthMismatch,
         ),
     ] {
         // Given: an invalid start or a selected range shorter than the requested copy.
@@ -105,28 +94,25 @@ fn invalid_selected_positions_and_ranges_fail_before_payload_writes() -> TestRes
         )?;
         memory.write(0x1300.into(), MemoryAlignment::ONE, b"keep")?;
         let mut request = command();
-        request.source = source;
+        crate::support::copy_mut(&mut request)?.source = source;
         // When: range preflight runs through the real pipeline.
         submit(&mut dma, &memory, request)?;
         run(&mut dma)?;
         // Then: a typed stopping result reports no committed bytes and the destination is intact.
-        let raw = memory.read_typed::<pdma_model_contract::dma::ResponseRaw>(
+        let raw = memory.read_typed::<pdma_model_contract::dma::EventRaw>(
             0x1100.into(),
             MemoryAlignment::ONE,
         )?;
         assert_eq!(
-            Response::from_bytes(raw.as_ref())?,
-            Response {
+            Event::from_bytes(raw.as_ref())?,
+            Event {
                 id: 7,
-                status: expected,
+                code: expected,
                 info: match expected {
-                    ResponseStatus::InvalidLength =>
-                        ResponseInfoValues::InvalidLength(CompletionInfo::ZERO),
-                    ResponseStatus::LengthMismatch =>
-                        ResponseInfoValues::LengthMismatch(CompletionInfo::ZERO),
+                    EventCode::InvalidLength => EventInfoValues::InvalidLength(ErrorInfo::ZERO),
+                    EventCode::LengthMismatch => EventInfoValues::LengthMismatch(ErrorInfo::ZERO),
                     _ => return Err("unexpected range-test status".into()),
                 },
-                ..Response::ZERO
             }
         );
         assert_eq!(
@@ -166,8 +152,8 @@ fn segment_end_start_skips_empty_entries_without_reading_unused_suffix() -> Test
     }
     memory.write(0x1200.into(), MemoryAlignment::ONE, b"abcde")?;
     let mut request = command();
-    request.copy_length = 3;
-    request.source = Endpoint::scatter_gather(0x1400, u64::MAX)
+    crate::support::copy_mut(&mut request)?.copy_length = 3;
+    crate::support::copy_mut(&mut request)?.source = Endpoint::scatter_gather(0x1400, u64::MAX)
         .with_start(Position::scatter_gather(0, 3))
         .ok_or("SG position")?;
     // When: only the requested three bytes are copied.
@@ -178,15 +164,6 @@ fn segment_end_start_skips_empty_entries_without_reading_unused_suffix() -> Test
         memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
         [b'a', b'b', b'c', 0]
     );
-    let raw = memory
-        .read_typed::<pdma_model_contract::dma::ResponseRaw>(0x1100.into(), MemoryAlignment::ONE)?;
-    assert_eq!(
-        Response::from_bytes(raw.as_ref())?,
-        Response {
-            id: 7,
-            info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 3 }),
-            ..Response::ZERO
-        }
-    );
+    support::assert_no_event(&mut dma)?;
     Ok(())
 }

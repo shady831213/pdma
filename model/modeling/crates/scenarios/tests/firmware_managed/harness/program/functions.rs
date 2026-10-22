@@ -1,7 +1,7 @@
 //! PF lifecycle management and VF data-path software.
 use super::{Handler, HostVector, Ports, TestResult, buffers, transfer};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::dma::{ChannelId, Response};
+use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::firmware;
 use pdma_model_software::control::InterruptEvent;
@@ -13,7 +13,7 @@ pub mod reset;
 /// Software-observed completion, copied bytes and ISR count.
 pub struct Outcome {
     pub(crate) channel: ChannelId,
-    pub(crate) response: Response,
+    pub(crate) completion: u64,
     pub(crate) bytes: Vec<u8>,
     pub(crate) interrupts: usize,
 }
@@ -74,7 +74,7 @@ pub(in crate::harness) async fn main(
 ) -> TestResult<Outcome> {
     let channel = grant.channel.await?;
     let memory = ports.memory.clone();
-    let (response, destination, deliveries) = transfer::run(ports, payload, channel).await?;
+    let (completion, destination, deliveries) = transfer::run(ports, payload, channel).await?;
     let mut bytes = vec![0; payload.len()];
     memory.read(destination, MemoryAlignment::ONE, &mut bytes)?;
     grant
@@ -83,7 +83,7 @@ pub(in crate::harness) async fn main(
         .map_err(|()| "PF stopped before release")?;
     Ok(Outcome {
         channel,
-        response,
+        completion,
         bytes,
         interrupts: deliveries.load(std::sync::atomic::Ordering::SeqCst),
     })

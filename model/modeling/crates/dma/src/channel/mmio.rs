@@ -1,7 +1,9 @@
 use super::Channel;
 use crate::Error;
 use hardware_interface_schema::{RegisterAccessError, register_dispatch};
-use pdma_model_contract::dma::{FaultStatusValues, ResetValues, ResumeValues};
+use pdma_model_contract::dma::{
+    ChannelIrqCauseValues, FaultStatusValues, ResetValues, ResumeValues, TrapAckValues,
+};
 use pdma_model_contract::ring::Ring;
 
 impl Channel {
@@ -12,7 +14,7 @@ impl Channel {
     ) -> Result<(), RegisterAccessError<Error>> {
         let result = register_dispatch!(
             self.command.read(address, out),
-            self.response.read(address, out),
+            self.event.read(address, out),
             self.registers
                 .read(address, out)
                 .map_err(RegisterAccessError::widen),
@@ -33,7 +35,7 @@ impl Channel {
         register_dispatch!(
             self.command
                 .write(address, bytes, self.configured || maintenance, resetting),
-            self.response
+            self.event
                 .write(address, bytes, self.configured || maintenance, resetting),
             self.write_control(address, bytes, maintenance),
         )?;
@@ -49,7 +51,6 @@ impl Channel {
     ) -> Result<(), RegisterAccessError<Error>> {
         let resetting = self.resetting();
         let command = &self.command;
-        let response = &self.response;
         let locked = self.configured;
         let configured = &mut self.configured;
         self.registers.write_with(
@@ -71,9 +72,6 @@ impl Channel {
                     command
                         .validate_geometry()
                         .map_err(|_| Error::Configuration)?;
-                    response
-                        .validate_geometry()
-                        .map_err(|_| Error::Configuration)?;
                 }
                 Ok(())
             },
@@ -82,6 +80,10 @@ impl Channel {
                     next.fault_status = FaultStatusValues::new(0);
                 }
                 next.resume = ResumeValues::new(0);
+                if next.trap_ack.request() {
+                    next.irq_cause = ChannelIrqCauseValues::new(next.irq_cause.raw() & !2);
+                }
+                next.trap_ack = TrapAckValues::new(0);
                 if next.enable.raw() != 0 {
                     *configured = true;
                 }

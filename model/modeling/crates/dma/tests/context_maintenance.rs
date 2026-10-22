@@ -9,7 +9,7 @@ use pdma_model_contract::dma::{ChannelId, CommandRegisters, ContextId};
 use support::{TestResult, command, setup, submit};
 
 #[test]
-fn abort_discards_unstarted_work_without_response_space() -> TestResult {
+fn abort_discards_unstarted_work_without_event_publication() -> TestResult {
     // Given
     let (mut dma, memory) = setup(0x1100, 1)?;
     submit(&mut dma, &memory, command())?;
@@ -19,8 +19,10 @@ fn abort_discards_unstarted_work_without_response_space() -> TestResult {
         let _ = operation.step(&mut pipeline, &mut dma)?;
     }
     let mut discarded = command();
-    discarded.source.context = 7;
-    discarded.destination.context = 7;
+    crate::support::copy_mut(&mut discarded)?.source.context = 7;
+    crate::support::copy_mut(&mut discarded)?
+        .destination
+        .context = 7;
     memory.write(
         MemoryAddress::new(0x1000),
         MemoryAlignment::ONE,
@@ -47,11 +49,11 @@ fn abort_discards_unstarted_work_without_response_space() -> TestResult {
 }
 
 #[test]
-fn abort_waits_for_accepted_command_and_preserves_its_normal_response() -> TestResult {
+fn abort_waits_for_accepted_command_and_preserves_its_completed_payload() -> TestResult {
     // Given
     let (mut dma, memory) = setup(0x1100, 2)?;
     let mut input = command();
-    input.source.context = 7;
+    crate::support::copy_mut(&mut input)?.source.context = 7;
     memory.write(
         MemoryAddress::new(0x1200),
         MemoryAlignment::ONE,
@@ -80,16 +82,7 @@ fn abort_waits_for_accepted_command_and_preserves_its_normal_response() -> TestR
     let mut bytes = [0; 4];
     memory.read(MemoryAddress::new(0x1300), MemoryAlignment::ONE, &mut bytes)?;
     assert_eq!(bytes, [1, 2, 3, 4]);
-    let mut response = [0; pdma_model_contract::dma::Response::RECORD_SIZE];
-    memory.read(
-        MemoryAddress::new(0x1100),
-        MemoryAlignment::ONE,
-        &mut response,
-    )?;
-    assert_eq!(
-        pdma_model_contract::dma::Response::from_bytes(&response)?.id,
-        input.id
-    );
+    support::assert_no_event(&mut dma)?;
     Ok(())
 }
 
@@ -119,7 +112,7 @@ fn reset_interrupts_drain_but_waits_for_resident_cleanup() -> TestResult {
         // Given: a fetched command is resident in a pending context Drain.
         let (mut dma, memory) = setup(0x1100, 2)?;
         let mut input = command();
-        input.source.context = 7;
+        crate::support::copy_mut(&mut input)?.source.context = 7;
         submit(&mut dma, &memory, input)?;
         let id = ChannelId::new(0);
         let consumer = id.register_offset(1).ok_or("layout")? + CommandRegisters::CONSUMER.offset();
@@ -175,7 +168,7 @@ fn failed_drain_returns_channel_and_releases_reset_interlock() -> TestResult {
     // Given
     let (mut dma, memory) = setup(0x1100, 2)?;
     let mut input = command();
-    input.source = pdma_model_contract::dma::Endpoint {
+    crate::support::copy_mut(&mut input)?.source = pdma_model_contract::dma::Endpoint {
         context: 7,
         ..pdma_model_contract::dma::Endpoint::linear(0x9000, 0)
     };

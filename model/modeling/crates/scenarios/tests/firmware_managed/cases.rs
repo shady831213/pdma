@@ -1,8 +1,6 @@
 use crate::harness::runtime::AccessError;
 use crate::harness::{self, Input, TestResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::dma::{CompletionFlagsValues, Response, ResponseStatus};
-use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use std::sync::Arc;
 
 mod contexts;
@@ -30,7 +28,7 @@ async fn relocated_platform_runs_the_same_host_and_firmware_programs() -> TestRe
         .read(outcome.destination, MemoryAlignment::ONE, &mut copied)?;
     // Then: boot, grant, IRQ-driven copy and release all use the supplied addresses.
     assert_eq!(copied, payload);
-    assert_eq!(outcome.response.status, ResponseStatus::Success);
+    assert_eq!(outcome.completion, 37);
     assert_eq!(outcome.released, 0);
     assert_eq!(outcome.dma_interrupts, 1);
     Ok(())
@@ -53,17 +51,7 @@ async fn firmware_opens_access_for_the_same_host_program_and_real_irq_copy() -> 
     for rejected in outcome.after {
         assert_eq!(rejected, Err(AccessError::Denied));
     }
-    assert_eq!(
-        outcome.response,
-        Response {
-            id: 37,
-            status: ResponseStatus::Success,
-            flags: CompletionFlagsValues::default(),
-            info: ResponseInfoValues::Success(CompletionInfo {
-                bytes_completed: u64::try_from(payload.len())?
-            }),
-        }
-    );
+    assert_eq!(outcome.completion, 37);
     let mut copied = vec![0; payload.len()];
     report
         .storage

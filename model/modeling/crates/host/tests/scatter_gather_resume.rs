@@ -1,12 +1,11 @@
 //! Cancellation preserves committed SG chunks and independent endpoint cursors.
 
-use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
+use hardware_interface_pipeline::{AsyncExecutor, Operation};
 use hardware_interface_runtime::{
-    InterruptSource, MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
+    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::dma::{Command, Endpoint, Response, ResponseStatus, Segment};
-use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
+use pdma_model_contract::dma::{Command, CopyCommand, Endpoint, Event, Segment};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::{error::Error, sync::Arc};
@@ -54,12 +53,12 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
     let allocator =
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
     let command_alignment = MemoryAlignment::try_new(u64::try_from(Command::RECORD_ALIGNMENT)?)?;
-    let response_alignment = MemoryAlignment::try_new(u64::try_from(Response::RECORD_ALIGNMENT)?)?;
+    let event_alignment = MemoryAlignment::try_new(u64::try_from(Event::RECORD_ALIGNMENT)?)?;
     let command = allocator.allocate(u64::try_from(Command::RECORD_SIZE)?, command_alignment)?;
-    let response = allocator.allocate(u64::try_from(Response::RECORD_SIZE)?, response_alignment)?;
+    let event = allocator.allocate(u64::try_from(Event::RECORD_SIZE)?, event_alignment)?;
     let rings = Rings {
         command: RingConfig::new(command.raw(), 1)?,
-        response: RingConfig::new(response.raw(), 1)?,
+        event: RingConfig::new(event.raw(), 1)?,
     };
     let (source, [source_first, _]) = scatter_gather(&allocator, [b"abc", b"defgh"])?;
     let (destination, [destination_first, destination_second]) =
@@ -79,17 +78,18 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
             },
         ))
         .await?;
-    cpu.run_main(channel.submit(Command {
-        copy_length: 8,
-        sg_context: 0,
-        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-        id: 31,
-        source,
-        destination,
-    }))
+    cpu.run_main(channel.submit(Command::copy(
+        31,
+        CopyCommand {
+            copy_length: 8,
+            sg_context: 0,
+            source,
+            destination,
+        },
+    )))
     .await?;
     let executor = AsyncExecutor::new(model.clone());
-    let mut operation = HardwareDriver::new();
+    let mut operation = Operation::new(());
 
     // When: cancellation follows the first two-byte write and the same operation resumes.
     let first_chunk_committed = tokio::select! {
@@ -107,24 +107,20 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
             }
             Ok(false)
         } => observed?,
-        result = executor.drive(&mut hardware, &mut operation) => {
+        result = executor.run(&mut hardware, &mut operation) => {
             return Err(format!("hardware terminated: {result:?}").into());
         },
     };
     assert!(first_chunk_committed);
     assert!(!operation.is_complete());
-    assert_eq!(cpu.run_main(channel.response()).await?, None);
+    assert_eq!(cpu.run_main(channel.event()).await?, None);
     // Test-only mutation detects replay of a committed chunk; SG descriptors stay stable.
     memory.write(destination_first, MemoryAlignment::ONE, b"ZZ")?;
     memory.write(source_first, MemoryAlignment::ONE, b"XX")?;
-    tokio::select! {
-        ready = model.wait_ready() => ready?,
-        result = executor.drive(&mut hardware, &mut operation) => {
-            return Err(format!("hardware terminated: {result:?}").into());
-        },
-    }
+    assert!(executor.run(&mut hardware, &mut operation).await.is_ok());
+    assert!(operation.is_complete());
 
-    // Then: only the remaining stream is copied, with one completion and one notification.
+    // Then: only the remaining stream is copied, without replay or an error event.
     let mut first = [0; 2];
     let mut remaining = [0; 6];
     memory.read(destination_first, MemoryAlignment::ONE, &mut first)?;
@@ -133,20 +129,7 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
         [first.as_slice(), remaining.as_slice()].concat(),
         b"ZZcdefgh"
     );
-    assert!(model.irq());
-    assert_eq!(
-        cpu.run_main(channel.response()).await?,
-        Some(Response {
-            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-            id: 31,
-            status: ResponseStatus::Success,
-            info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 8 }),
-        })
-    );
-    assert_eq!(cpu.run_main(channel.response()).await?, None);
-    assert!(model.irq());
-    assert!(model.clone().claim(()).await?.is_some());
-    assert!(model.clone().claim(()).await?.is_none());
+    assert_eq!(cpu.run_main(channel.event()).await?, None);
     assert!(!model.irq());
     Ok(())
 }

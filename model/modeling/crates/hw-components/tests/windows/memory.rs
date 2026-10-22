@@ -13,6 +13,60 @@ const BASE: usize = 0x10_0000;
 const ADDRESS: MemoryAddress = MemoryAddress::new(0x1000);
 const CHANNEL: ChannelId = ChannelId::new(0);
 
+#[test]
+fn atomic_forwarding_preserves_backend_failures_and_unsupported() {
+    use hardware_interface_runtime::{AtomicAccessError, AtomicOperation, AtomicWriteOrder};
+    // Given: a channel backed by real memory, plus a backend without atomic support.
+    let spaces = Spaces::new().unwrap();
+    let windows = ChannelWindows::new(1, 0, u32::try_from(BASE).unwrap()).unwrap();
+    let backing = spaces.0.first().unwrap();
+    let port = windows.memory(backing).map_sideband(|_, _| ());
+    let bad = MemoryAddress::new(0x1001);
+    // When: an aligned atomic executes, then misaligned and unsupported requests are issued.
+    let changed = port.atomic32_with_sideband(
+        &CHANNEL,
+        ADDRESS,
+        AtomicOperation::Store {
+            value: 7,
+            order: AtomicWriteOrder::Release,
+        },
+    );
+    let failed = port.atomic64_with_sideband(
+        &CHANNEL,
+        bad,
+        AtomicOperation::Store {
+            value: 9,
+            order: AtomicWriteOrder::Release,
+        },
+    );
+    let unsupported = windows.memory(&spaces).atomic32_with_sideband(
+        &CHANNEL,
+        ADDRESS,
+        AtomicOperation::Store {
+            value: 9,
+            order: AtomicWriteOrder::Release,
+        },
+    );
+    // Then: downstream details and capability rejection survive, with no failed-call mutation.
+    assert_eq!(changed, Ok(u32::from_le_bytes([1; 4])));
+    assert_eq!(
+        failed,
+        Err(AtomicAccessError::Access(MemoryError::Downstream(
+            MemoryAccessError::Misaligned {
+                address: bad,
+                alignment: MemoryAlignment::try_new(8).unwrap()
+            }
+        )))
+    );
+    assert_eq!(unsupported, Err(AtomicAccessError::Unsupported));
+    assert_eq!(
+        backing
+            .read_typed::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)
+            .unwrap(),
+        7_u64.to_le_bytes()
+    );
+}
+
 struct Spaces([SharedMemory; 2]);
 
 impl Spaces {
@@ -142,6 +196,53 @@ fn later_requests_observe_reassigned_owner_without_cached_identity() -> TestResu
         .read_typed_with_sideband::<[u8; 4]>(&CHANNEL, ADDRESS, MemoryAlignment::ONE)?;
     // Then: subsequent requests use the new register value.
     assert_eq!(bytes, [2; 4]);
+    Ok(())
+}
+
+#[test]
+fn atomic_requests_observe_reassigned_owner_without_cached_identity() -> TestResult {
+    use hardware_interface_runtime::{AtomicOperation, AtomicWriteOrder};
+    // Given: a closed channel and a platform mapper observing its authorized owner.
+    let spaces = Spaces::new()?;
+    let backing = spaces.0.first().ok_or("missing backing")?;
+    let owners = std::cell::RefCell::new(Vec::new());
+    let mut windows = ChannelWindows::new(1, 0, u32::try_from(BASE)?)?;
+    let map = |_, owner| owners.borrow_mut().push(owner);
+    let first = windows
+        .memory(backing)
+        .map_sideband(map)
+        .atomic32_with_sideband(
+            &CHANNEL,
+            ADDRESS,
+            AtomicOperation::Store {
+                value: 7,
+                order: AtomicWriteOrder::Release,
+            },
+        )?;
+    // When: firmware reassigns the channel before a subsequent atomic access.
+    windows.management_write(BASE + WindowControl::OWNER.offset(), &1_u32.to_le_bytes())?;
+    let second = windows
+        .memory(backing)
+        .map_sideband(map)
+        .atomic64_with_sideband(
+            &CHANNEL,
+            ADDRESS,
+            AtomicOperation::Store {
+                value: 9,
+                order: AtomicWriteOrder::Release,
+            },
+        )?;
+    // Then: each access maps the current register owner and performs its real atomic effect.
+    assert_eq!(first, u32::from_le_bytes([1; 4]));
+    assert_eq!(second, 7);
+    assert_eq!(
+        *owners.borrow(),
+        vec![FunctionId::new(0), FunctionId::new(1)]
+    );
+    assert_eq!(
+        backing.read_typed::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)?,
+        9_u64.to_le_bytes()
+    );
     Ok(())
 }
 

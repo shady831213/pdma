@@ -5,10 +5,10 @@ use crate::{
 use hardware_interface_pipeline::{Operation, RunError, StepOutcome, Then};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, ResponseRegisters,
+    ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, EventRegisters,
 };
 use pdma_model_dma::{
-    Completion, Dma, Error, Flow, Payload, PrepareChunk, Publish, ReadCopy, Retire, WriteCopy,
+    Completion, Dma, Error, Flow, Payload, PrepareChunk, ReadCopy, Retire, WriteCopy,
 };
 
 fn payload(device: &mut Dma<SharedMemory>) -> TestResult<Flow<Payload>> {
@@ -34,12 +34,12 @@ enum Retained {
 
 #[test]
 fn reset_waits_for_retained_data_to_reach_retirement_without_old_effects() -> TestResult {
-    for publish in [false, true] {
-        // Given: actual payload or response owns an unfinished hardware transfer.
+    for completed in [false, true] {
+        // Given: actual payload or completion owns an unfinished hardware transfer.
         let (mut device, memory) = setup(0x1100, 2)?;
         submit(&mut device, &memory, command())?;
         let bytes = payload(&mut device)?;
-        let retained = if publish {
+        let retained = if completed {
             let StepOutcome::Complete(Ok(completion)) = Operation::new(bytes)
                 .step(&mut WriteCopy::default(), &mut device.execution_context())?
             else {
@@ -62,20 +62,14 @@ fn reset_waits_for_retained_data_to_reach_retirement_without_old_effects() -> Te
                 };
                 flow.finish()
             }
-            Retained::Completion(completion) => {
-                let StepOutcome::Complete(Ok(flow)) = Operation::new(completion).step(
-                    &mut Publish::new(ChannelId::new(0)),
-                    &mut device.execution_context(),
-                )?
-                else {
-                    return Err("publish did not observe reset".into());
-                };
-                flow
-            }
+            Retained::Completion(completion) => completion,
         };
-        assert_eq!(stopped.status(), Err(Error::Reset));
+        assert_eq!(
+            stopped.lifecycle(&mut device.execution_context()),
+            Err(Error::Reset)
+        );
         assert_eq!(read_word(&mut device, RESET)?, 1);
-        let result = Operation::new(stopped).step(&mut Retire, &mut device)?;
+        let result = Operation::new(vec![(0, stopped)]).step(&mut Retire, &mut device)?;
         // Then: only explicit retirement acknowledges reset; neither stopped path writes bytes.
         assert_eq!(result, StepOutcome::Complete(Err(Error::Reset)));
         assert_eq!(read_word(&mut device, RESET)?, 0);
@@ -96,7 +90,7 @@ fn stale_payload_is_rejected_before_effects_and_recovers_after_reset() -> TestRe
     let finished = payload(&mut device)?.map(|bytes| {
         old_payload = Some(bytes);
     });
-    let mut old = Operation::new(finished);
+    let mut old = Operation::new(vec![(0, finished.finish())]);
     assert_eq!(
         old.step(&mut Retire, &mut device)?,
         StepOutcome::Complete(Ok(()))
@@ -136,7 +130,7 @@ fn stale_payload_is_rejected_before_effects_and_recovers_after_reset() -> TestRe
     device.write(RESET, &1_u32.to_le_bytes())?;
     assert_eq!(read_word(&mut device, RESET)?, 1);
     assert_eq!(
-        Operation::new(rejected.finish()).step(&mut Retire, &mut device)?,
+        Operation::new(vec![(0, rejected.finish())]).step(&mut Retire, &mut device)?,
         StepOutcome::Complete(Err(Error::Reset))
     );
     assert_eq!(read_word(&mut device, RESET)?, 0);
@@ -148,12 +142,7 @@ fn stale_payload_is_rejected_before_effects_and_recovers_after_reset() -> TestRe
         memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
         [1, 2, 3, 4]
     );
-    let raw: pdma_model_contract::dma::ResponseRaw =
-        memory.read_typed(0x1100.into(), MemoryAlignment::ONE)?;
-    assert_eq!(
-        pdma_model_contract::dma::Response::from_bytes(raw.as_ref())?.id,
-        descriptor.id
-    );
+    crate::support::assert_no_event(&mut device)?;
     Ok(())
 }
 
@@ -162,7 +151,7 @@ fn completed_old_retirement_cannot_affect_a_newer_accepted_command() -> TestResu
     // Given: an exhausted old operation and a separately accepted current command.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let mut old = Operation::new(payload(&mut device)?.finish());
+    let mut old = Operation::new(vec![(0, payload(&mut device)?.finish())]);
     assert_eq!(
         old.step(&mut Retire, &mut device)?,
         StepOutcome::Complete(Ok(()))
@@ -178,7 +167,7 @@ fn completed_old_retirement_cannot_affect_a_newer_accepted_command() -> TestResu
     let input = crate::support::accept(&mut device, ChannelId::new(0))?;
     // When: the old retirement is stepped while the current command remains resident.
     assert_eq!(old.step(&mut Retire, &mut device), Err(RunError::Exhausted));
-    let mut pipeline = crate::support::chunk_pipeline(&device);
+    let mut pipeline = crate::support::chunk_pipeline();
     let mut output = None;
     {
         let mut context = device.execution_context();
@@ -191,7 +180,7 @@ fn completed_old_retirement_cannot_affect_a_newer_accepted_command() -> TestResu
         }
     }
     assert_eq!(
-        Operation::new(output.ok_or("current command completion")?)
+        Operation::new(vec![(0, output.ok_or("current command completion")?)])
             .step(&mut Retire, &mut device)?,
         StepOutcome::Complete(Ok(()))
     );
@@ -200,12 +189,7 @@ fn completed_old_retirement_cannot_affect_a_newer_accepted_command() -> TestResu
         memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
         [1, 2, 3, 4]
     );
-    let raw: pdma_model_contract::dma::ResponseRaw =
-        memory.read_typed(0x1100.into(), MemoryAlignment::ONE)?;
-    assert_eq!(
-        pdma_model_contract::dma::Response::from_bytes(raw.as_ref())?.id,
-        descriptor.id
-    );
+    crate::support::assert_no_event(&mut device)?;
     Ok(())
 }
 
@@ -217,7 +201,7 @@ fn reconfigure(device: &mut Dma<SharedMemory>) -> TestResult {
             0x1000_u64,
         ),
         (
-            ChannelBlock::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
+            ChannelBlock::EVENT.offset() + EventRegisters::BASE.offset(),
             0x1100,
         ),
     ] {
@@ -229,7 +213,7 @@ fn reconfigure(device: &mut Dma<SharedMemory>) -> TestResult {
             2_u32,
         ),
         (
-            ChannelBlock::RESPONSE.offset() + ResponseRegisters::CAPACITY.offset(),
+            ChannelBlock::EVENT.offset() + EventRegisters::CAPACITY.offset(),
             2,
         ),
         (

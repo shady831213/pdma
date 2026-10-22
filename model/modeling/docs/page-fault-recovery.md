@@ -17,7 +17,7 @@ For pageable virtual-address copies, a backend may explicitly return
 its physical channel. The platform MMU/backend reports fault identity, address and
 requested access independently; authorized software repairs the mapping and resumes
 that channel through its work MMIO. PDMA publishes no intermediate fault response,
-DMA interrupt or firmware event. The eventual normal response completes the original
+DMA interrupt or firmware event. Eventual successful execution completes the original
 command with its original ID and total committed length.
 
 A transparent recoverable access port is a different boundary. The existing
@@ -84,7 +84,7 @@ or is safely cancelled. Other channels may run while it is parked.
 The platform fault report must identify the address space, failing address and
 requested access, and support correlation with the suspended channel/incarnation.
 A failed access may span a boundary, so its faulting address can differ from the
-access start. FAULT_STATUS contains only a faulted bit; DMA responses carry no fault record.
+access start. FAULT_STATUS contains only a faulted bit; DMA error events carry no fault record.
 Hardware channel/context routing still owns binding checks. PASID, page-table
 formats and page sizes remain outside DMA.
 
@@ -109,9 +109,9 @@ multiple channels may share one context, and one channel may use several context
 
 ### PF-D05: suspension is neither completion nor a stopping error
 
-No response slot, IOC/non-empty cause, response_error, channel fatal or PF event
+No event slot, Trap/non-empty cause, command-error stop, channel fatal or PF event
 is published merely because payload work parks. Accepted task/context references
-remain live. Metadata and response-publication failures retain their existing
+remain live. Metadata and event-publication failures retain their existing
 stopping/fatal handling. Repeated faults set faulted again and require another
 explicit repair/resume; there is no automatic DMA retry loop.
 
@@ -144,7 +144,7 @@ Both ranges pass before payload access; zero length touches no list or payload.
 Typed endpoint positions and matching-variant `with_start` remain general range
 selection helpers, independent of fault recovery.
 
-**HW-PF-02 (progress and final response).** Retain the original command, both
+**HW-PF-02 (progress and terminal completion).** Retain the original command, both
 current SG/Linear cursors, committed prefix, current copy phase and successful read
 scratch in the Channel hardware object while parked. The next hardware action and
 the results of completed transforms are explicit state. A write fault resumes Write
@@ -152,18 +152,17 @@ using the already transformed bytes, not Read or Transform. Cursors alone are
 insufficient when a transform has side effects or is not idempotent. Do not store
 the Rust composition's invocation state as a substitute for hardware state; retry
 only the failed access after authorized resume.
-Response is 24 bytes: id/status/flags/info at 0/8/12/16. The info contains u64
-bytes_completed. Status values 0..5 retain their existing success/stopping-error
-meanings; former PageFault status 6 is invalid. PageFaultInfo, fault access and
-continuation-position response fields are removed. A final success reports the
-original copy_length; a later ordinary error reports the original command's
-committed prefix. Completion uses normal publication/notification rules.
+Success retires without a per-command record; software observes an explicit later
+Fence/Trap according to [copy-engine.md](copy-engine.md). A subsequent stopping
+error publishes the original command's committed prefix in a 24-byte Event.
+Error-event codes are defined by the current contract; none denotes PageFault.
+There are no fault-access or continuation-position fields in Event.
 
 **HW-PF-03 (channel lifecycle).** A parked channel accepts no successor command.
 Parking releases shared execution capacity without retiring accepted ownership;
 terminal completion or cancellation cleanup releases it. Drain/Abort account for
 all parked references as well as currently executing work. Reset guards precede
-every old-work access. Metadata and response faults do not use the resume protocol.
+every old-work access. Metadata and event/completion faults do not use the resume protocol.
 
 **HW-PF-04 (fault/resume MMIO).** `ChannelRegisters.fault_status` uses the read-only
 four-byte `FaultStatus` schema with boolean `faulted` at bit 0.
@@ -268,7 +267,7 @@ true MMU or PCIe integration follows from suspension.
 
 These are required scenarios, not a report that tests have passed:
 
-- Wire/header consumers: 24-byte final response, statuses 0..5 only, and
+- Wire/header consumers: 24-byte errors-only Event, no PageFault record, and
   four-byte read-only FAULT_STATUS/write-only RESUME with boolean bit 0 and
   identical physical placement in role views.
 - Linear/SG/mixed copies: read/write and interior-address faults, no intermediate

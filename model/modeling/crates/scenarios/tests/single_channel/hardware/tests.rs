@@ -51,7 +51,7 @@ async fn assembled_hardware_remains_running_after_a_copy() -> TestResult {
     let cancellation = workers.join_next().await;
     // Then: copy completion leaves hardware alive, and teardown joins its cancellation.
     let (outcome, summary) = result?;
-    assert!(outcome?.response.is_some());
+    assert!(outcome?.completed);
     assert_eq!(summary.deliveries(), 1);
     assert!(
         premature.is_none(),

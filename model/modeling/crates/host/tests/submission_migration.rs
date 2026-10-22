@@ -4,7 +4,7 @@ use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::dma::{Command, CommandRegisters, Endpoint, Response};
+use pdma_model_contract::dma::{Command, CommandRegisters, Endpoint, Event};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::{
@@ -49,11 +49,11 @@ async fn suspended_submission_completes_on_another_cpu() -> Result<(), Box<dyn s
                 .raw(),
             1,
         )?,
-        response: RingConfig::new(
+        event: RingConfig::new(
             allocator
                 .allocate(
-                    u64::try_from(Response::RECORD_SIZE)?,
-                    MemoryAlignment::try_new(u64::try_from(Response::RECORD_ALIGNMENT)?)?,
+                    u64::try_from(Event::RECORD_SIZE)?,
+                    MemoryAlignment::try_new(u64::try_from(Event::RECORD_ALIGNMENT)?)?,
                 )?
                 .raw(),
             1,
@@ -82,14 +82,15 @@ async fn suspended_submission_completes_on_another_cpu() -> Result<(), Box<dyn s
         ))
         .await?;
     delay.store(true, Ordering::SeqCst);
-    let submission = channel.submit(Command {
-        copy_length: 0,
-        sg_context: 0,
-        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-        id: 1,
-        source: Endpoint::linear(0, 0),
-        destination: Endpoint::linear(0, 0),
-    });
+    let submission = channel.submit(Command::copy(
+        1,
+        pdma_model_contract::dma::CopyCommand {
+            source: Endpoint::linear(0, 0),
+            destination: Endpoint::linear(0, 0),
+            copy_length: 0,
+            sg_context: 0,
+        },
+    ));
     tokio::pin!(submission);
     owner
         .run_main(async {

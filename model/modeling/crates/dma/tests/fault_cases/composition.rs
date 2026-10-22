@@ -46,10 +46,7 @@ fn transformed_resume(replace_service: bool) -> TestResult {
         PrepareChunk::default(),
         Then::new(ReadCopy::default(), InvertPayload),
     );
-    let pipeline = Then::new(
-        pdma_model_dma::CommandExecution::new(Then::new(chunk, WriteCopy::default())),
-        Then::new(pdma_model_dma::CompletionInput, device.responses()),
-    );
+    let pipeline = pdma_model_dma::CommandExecution::new(Then::new(chunk, WriteCopy::default()));
     let mut engine = device.hardware_with(pipeline);
     let mut operation = Operation::new(());
     for _ in 0..256 {
@@ -84,10 +81,10 @@ fn transformed_resume(replace_service: bool) -> TestResult {
             PrepareChunk::default(),
             Then::new(ReadCopy::default(), InvertPayload),
         );
-        engine = device.hardware_with(Then::new(
-            pdma_model_dma::CommandExecution::new(Then::new(chunk, WriteCopy::default())),
-            Then::new(pdma_model_dma::CompletionInput, device.responses()),
-        ));
+        engine = device.hardware_with(pdma_model_dma::CommandExecution::new(Then::new(
+            chunk,
+            WriteCopy::default(),
+        )));
         device.memory.memory.write(
             0x1000.into(),
             MemoryAlignment::ONE,
@@ -102,9 +99,6 @@ fn transformed_resume(replace_service: bool) -> TestResult {
     for _ in 0..256 {
         if let StepOutcome::Complete(result) = operation.step(&mut engine, &mut device)? {
             result?;
-            operation = Operation::new(());
-        }
-        if read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())? == 1 {
             break;
         }
     }
@@ -116,10 +110,9 @@ fn transformed_resume(replace_service: bool) -> TestResult {
             .read_typed::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
         b"cdefgh".map(|byte| !byte)
     );
-    assert_eq!(response(&device)?.bytes_completed(), command.copy_length);
     assert_eq!(
-        read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
-        1
+        read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
+        0
     );
     Ok(())
 }
@@ -155,10 +148,7 @@ fn standalone_range_validation_cannot_consume_parked_work() -> TestResult {
     assert_eq!(fault_status(&mut device)?, 1);
     device.memory.missing.set(None);
     resume(&mut device, 1)?;
-    device.until(|dma| Ok(read_word(dma, RESP + ResponseRegisters::PRODUCER.offset())? == 1))?;
-    assert_eq!(
-        (response(&device)?.id, response(&device)?.bytes_completed()),
-        (command.id, command.copy_length)
-    );
+    completed(&mut device, command.id)?;
+
     Ok(())
 }

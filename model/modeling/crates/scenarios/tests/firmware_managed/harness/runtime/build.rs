@@ -1,3 +1,4 @@
+mod host;
 use super::*;
 use pdma_model_contract::memory::{FunctionId, MemoryIdentity};
 
@@ -67,6 +68,25 @@ where
         )
     }
 
+    pub(crate) fn with_dma_config(
+        memory: M,
+        config: pdma_model_dma::DmaConfig,
+    ) -> Result<(Self, Host<M>), BuildError> {
+        let firmware = pdma_model_firmware::Configuration {
+            addresses: platform::ADDRESSES,
+            function_count: 1,
+        };
+        let (system, mut hosts) = Self::assemble_spaces(
+            memory::FunctionSpaces::new(vec![memory]).map_err(BuildError::Platform)?,
+            config.channels,
+            (firmware, None, config.capabilities),
+        )?;
+        let host = hosts
+            .pop()
+            .ok_or(BuildError::Platform(PlatformConfigError::FunctionCount))?;
+        Ok((system, host))
+    }
+
     fn assemble(
         spaces: impl Iterator<Item = M>,
         channel_count: usize,
@@ -76,7 +96,11 @@ where
         Self::assemble_spaces(
             memory::FunctionSpaces::new(spaces.collect()).map_err(BuildError::Platform)?,
             channel_count,
-            (config, None),
+            (
+                config,
+                None,
+                pdma_model_contract::dma::CapabilitiesValues::default(),
+            ),
         )
     }
 
@@ -106,14 +130,38 @@ where
                 bind,
             },
             channel_count,
-            (config, Some(context.capacity)),
+            (
+                config,
+                Some(context.capacity),
+                pdma_model_contract::dma::CapabilitiesValues::default(),
+            ),
         )
+    }
+
+    fn configured_dma(
+        memory: RoutedMemory<M>,
+        channels: usize,
+        capabilities: pdma_model_contract::dma::CapabilitiesValues,
+    ) -> Result<Dma<RoutedMemory<M>, DmaAccess>, BuildError> {
+        Dma::with_config_and_sideband(
+            memory,
+            pdma_model_dma::DmaConfig {
+                channels,
+                capabilities,
+            },
+            |access| access,
+        )
+        .map_err(BuildError::Dma)
     }
 
     fn assemble_spaces(
         spaces: memory::FunctionSpaces<M>,
         channel_count: usize,
-        (config, capacity): (pdma_model_firmware::Configuration, Option<usize>),
+        (config, capacity, capabilities): (
+            pdma_model_firmware::Configuration,
+            Option<usize>,
+            pdma_model_contract::dma::CapabilitiesValues,
+        ),
     ) -> Result<(Self, Vec<Host<M>>), BuildError> {
         let (addresses, function_count) = (config.addresses, config.function_count);
         platform::validate_functions(config, channel_count, capacity)?;
@@ -137,8 +185,7 @@ where
             )
             .map_err(BuildError::Platform)?,
         };
-        let dma =
-            Dma::with_sideband(routed, channel_count, |access| access).map_err(BuildError::Dma)?;
+        let dma = Self::configured_dma(routed, channel_count, capabilities)?;
         let hardware = Box::new(dma.hardware());
         let invalid = || BuildError::Platform(PlatformConfigError::AddressSpace);
         let firmware =
@@ -214,18 +261,5 @@ where
             },
             hosts,
         ))
-    }
-}
-
-impl<M> Host<M> {
-    fn new(shared: Arc<Shared<M>>, function: FunctionId, source: HostInterrupts) -> Self {
-        Self {
-            bus: HostBus {
-                addresses: shared.addresses,
-                shared,
-                function,
-            },
-            runtime: InterruptRuntime::new(Arc::new(SoftwareCpu::new()), source),
-        }
     }
 }

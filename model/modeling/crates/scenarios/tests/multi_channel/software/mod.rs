@@ -7,7 +7,7 @@ use hardware_interface_runtime::{
     InterruptHandler, InterruptRegistration, MemoryAddress, RegisterAccess, SharedMemoryAccess,
     SharedMemoryAllocator,
 };
-use pdma_model_contract::dma::{ChannelId, DmaRegisters, Response};
+use pdma_model_contract::dma::{ChannelId, DmaRegisters};
 use pdma_model_host::{Channel, runtime::Irq};
 use std::{convert::Infallible, error::Error};
 use tokio::sync::mpsc;
@@ -31,7 +31,7 @@ pub(super) struct CopyResult {
 }
 
 pub(super) struct Outcome {
-    pub(super) responses: Vec<(ChannelId, Response)>,
+    pub(super) completions: Vec<(ChannelId, u64)>,
     pub(super) original: Vec<CopyResult>,
     pub(super) fresh: MemoryAddress,
     pub(super) channel_counts: [u32; 2],
@@ -74,26 +74,7 @@ where
         .is_err();
     let (notice, mut notifications) = mpsc::channel(16);
     ports.interrupts.register((), Handler(notice))?;
-    let mut buffers = Vec::new();
-    let mut channels = Vec::new();
-    for index in 0..usize::try_from(initial_count)? {
-        let allocation = Buffers::allocate(&ports.allocator, index)?;
-        let mut channel =
-            Channel::setup(ports.bus.clone(), ports.memory.clone(), allocation.config).await?;
-        channel
-            .submit(allocation.command(10 + u64::try_from(index)?, false)?)
-            .await?;
-        match scenario {
-            Scenario::ResponseBackpressure => {
-                if index == 0 {
-                    channel.submit(allocation.command(19, true)?).await?;
-                }
-            }
-            Scenario::CopyInFlight | Scenario::QueuedChannel | Scenario::WholeDevice => {}
-        }
-        buffers.push(allocation);
-        channels.push(channel);
-    }
+    let (mut buffers, mut channels) = configure(&ports, scenario, initial_count).await?;
     let blocked_cursors = reset::wait_boundary(&ports, &buffers, scenario).await?;
     let mut original = Vec::new();
     for buffer in &buffers {
@@ -107,11 +88,11 @@ where
     }
     let reset_index = match scenario {
         Scenario::QueuedChannel => 1,
-        Scenario::CopyInFlight | Scenario::ResponseBackpressure | Scenario::WholeDevice => 0,
+        Scenario::CopyInFlight | Scenario::SuccessWithoutEvents | Scenario::WholeDevice => 0,
     };
     let selected = channels.remove(reset_index);
     match scenario {
-        Scenario::CopyInFlight | Scenario::QueuedChannel | Scenario::ResponseBackpressure => {
+        Scenario::CopyInFlight | Scenario::QueuedChannel | Scenario::SuccessWithoutEvents => {
             selected.reset().await?;
         }
         Scenario::WholeDevice => {
@@ -120,34 +101,97 @@ where
         }
     }
     let final_count = read_word(&ports.bus, count_offset).await?;
-    let fresh = Buffers::allocate(&ports.allocator, reset_index)?;
+    let mut fresh = Buffers::allocate(&ports.allocator, reset_index)?;
     let mut replacement =
         Channel::setup(ports.bus.clone(), ports.memory.clone(), fresh.config).await?;
     replacement.submit(fresh.command(20, false)?).await?;
+    fresh.fence.0.value = 20;
+    replacement.submit(fresh.fence.command(120)).await?;
+    replacement
+        .submit(pdma_model_contract::dma::Command::trap(220))
+        .await?;
     channels.insert(reset_index, replacement);
+    let fresh_destination = fresh.destination;
+    if matches!(scenario, Scenario::WholeDevice) {
+        buffers.clear();
+        buffers.push(fresh);
+    } else {
+        *buffers.get_mut(reset_index).ok_or("reset buffer missing")? = fresh;
+    }
     let expected = match scenario {
-        Scenario::CopyInFlight | Scenario::QueuedChannel | Scenario::ResponseBackpressure => 3,
+        Scenario::CopyInFlight | Scenario::QueuedChannel | Scenario::SuccessWithoutEvents => 3,
         Scenario::WholeDevice => 1,
     };
-    let mut responses = Vec::new();
-    while responses.len() < expected {
+    let mut completions = Vec::new();
+    while completions.len() < expected {
         notifications
             .recv()
             .await
             .ok_or("interrupt channel closed")?;
         for (index, channel) in channels.iter_mut().enumerate() {
             let id = ChannelId::new(index);
-            while let Some(response) = channel.response().await? {
-                responses.push((id, response));
+            if let Some(event) = channel.event().await? {
+                return Err(format!("DMA error: {event:?}").into());
+            }
+            if channel.fatal().await? != pdma_model_contract::dma::ChannelFatalCode::None {
+                return Err("DMA fatal".into());
+            }
+            channel.acknowledge_trap().await?;
+            let buffer = buffers.get(index).ok_or("missing completion storage")?;
+            if !completions.iter().any(|(done, _)| *done == id)
+                && buffer.fence.is_complete(&ports.memory)?
+            {
+                completions.push((id, buffer.fence.0.value));
             }
         }
     }
     Ok(Outcome {
-        responses,
+        completions,
         original,
-        fresh: fresh.destination,
+        fresh: fresh_destination,
         channel_counts: [initial_count, final_count],
         discovery_write_rejected,
         blocked_cursors,
     })
+}
+
+async fn configure<B>(
+    ports: &Ports<'_, B>,
+    scenario: Scenario,
+    initial_count: u32,
+) -> TestResult<(Vec<Buffers>, Vec<Channel<B, SharedMemoryAccess>>)>
+where
+    B: RegisterAccess + Clone + Send + Sync,
+    B::Error: Error + Send + Sync + 'static,
+{
+    let mut buffers = Vec::new();
+    let mut channels = Vec::new();
+    for index in 0..usize::try_from(initial_count)? {
+        let mut allocation = Buffers::allocate(&ports.allocator, index)?;
+        let mut channel =
+            Channel::setup(ports.bus.clone(), ports.memory.clone(), allocation.config).await?;
+        channel
+            .submit(allocation.command(10 + u64::try_from(index)?, false)?)
+            .await?;
+        match scenario {
+            Scenario::SuccessWithoutEvents => {
+                if index == 0 {
+                    channel.submit(allocation.command(19, true)?).await?;
+                }
+            }
+            Scenario::CopyInFlight | Scenario::QueuedChannel | Scenario::WholeDevice => {}
+        }
+        allocation.fence.0.value = 10 + u64::try_from(index)?;
+        channel
+            .submit(allocation.fence.command(100 + u64::try_from(index)?))
+            .await?;
+        channel
+            .submit(pdma_model_contract::dma::Command::trap(
+                200 + u64::try_from(index)?,
+            ))
+            .await?;
+        buffers.push(allocation);
+        channels.push(channel);
+    }
+    Ok((buffers, channels))
 }

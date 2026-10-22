@@ -4,21 +4,34 @@
 pub mod support;
 
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelRegisters, DmaControl, DmaRegisters, ResponseRegisters,
+    ChannelBlock, ChannelRegisters, Command, CopyCommand, DmaControl, DmaRegisters, Endpoint,
+    EventRegisters,
 };
 use pdma_model_dma::Error;
-use support::{TestResult, command, read_word, run, setup, submit};
+use support::{TestResult, read_word, run, setup, submit};
 
 const CONTROL: usize =
     pdma_model_contract::dma::ChannelBlock::ALIGNMENT + ChannelBlock::CONTROL.offset();
-const RESPONSE: usize =
-    pdma_model_contract::dma::ChannelBlock::ALIGNMENT + ChannelBlock::RESPONSE.offset();
+const EVENT: usize =
+    pdma_model_contract::dma::ChannelBlock::ALIGNMENT + ChannelBlock::EVENT.offset();
 
 #[test]
 fn rejected_root_access_preserves_channels_and_pending_irq() -> TestResult {
-    // Given: an enabled channel with an unread completion and pending notification.
+    // Given: an enabled channel with an unread error event and pending notification.
     let (mut device, memory) = setup(0x1100, 2)?;
-    submit(&mut device, &memory, command())?;
+    submit(
+        &mut device,
+        &memory,
+        Command::copy(
+            1,
+            CopyCommand {
+                source: Endpoint::linear(0, 0),
+                destination: Endpoint::linear(0x1300, 0),
+                copy_length: 4,
+                sg_context: 0,
+            },
+        ),
+    )?;
     run(&mut device)?;
     let reset = (pdma_model_contract::dma::DmaDiscovery::EXTENT
         + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
@@ -42,7 +55,7 @@ fn rejected_root_access_preserves_channels_and_pending_irq() -> TestResult {
             1
         );
         assert_eq!(
-            read_word(&mut device, RESPONSE + ResponseRegisters::PRODUCER.offset())?,
+            read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
             1
         );
         assert!(device.irq());
@@ -52,9 +65,9 @@ fn rejected_root_access_preserves_channels_and_pending_irq() -> TestResult {
 
 #[test]
 fn rejected_reads_preserve_destination_and_pending_notification() -> TestResult {
-    // Given: a pending completion notification and a sentinel destination.
+    // Given: a pending Trap notification and a sentinel destination.
     let (mut device, memory) = setup(0x1100, 2)?;
-    submit(&mut device, &memory, command())?;
+    submit(&mut device, &memory, Command::trap(1))?;
     run(&mut device)?;
     for (offset, width, expected) in [
         (
@@ -64,8 +77,8 @@ fn rejected_reads_preserve_destination_and_pending_notification() -> TestResult 
             1,
             Error::Width,
         ),
-        (RESPONSE + ResponseRegisters::BASE.offset(), 4, Error::Width),
-        (RESPONSE + 1, 4, Error::Unmapped),
+        (EVENT + EventRegisters::BASE.offset(), 4, Error::Width),
+        (EVENT + 1, 4, Error::Unmapped),
         (usize::MAX, 4, Error::Unmapped),
         (CONTROL + ChannelRegisters::ENABLE.offset(), 0, Error::Width),
     ] {
@@ -81,28 +94,26 @@ fn rejected_reads_preserve_destination_and_pending_notification() -> TestResult 
 }
 
 #[test]
-fn rejected_consumption_preserves_ioc_and_consumer() -> TestResult {
-    // Given: one unconsumed IOC completion and its delivered notification.
+fn rejected_consumption_preserves_trap_and_consumer() -> TestResult {
+    // Given: one sticky Trap cause and its delivered notification.
     let (mut device, memory) = setup(0x1100, 2)?;
-    let mut input = command();
-    input.flags.ioc = true;
-    submit(&mut device, &memory, input)?;
+    submit(&mut device, &memory, Command::trap(1))?;
     run(&mut device)?;
     assert!(device.take_interrupt());
-    // When: software attempts to consume beyond the produced response.
+    // When: software attempts to consume beyond the empty event ring.
     let result = device.write(
-        RESPONSE + ResponseRegisters::CONSUMER.offset(),
+        EVENT + EventRegisters::CONSUMER.offset(),
         &2_u32.to_le_bytes(),
     );
-    // Then: rejection does not clear the outstanding IOC or publish a cursor.
+    // Then: rejection does not clear the sticky Trap or publish a cursor.
     assert_eq!(result, Err(Error::Cursor));
     assert_eq!(
-        read_word(&mut device, RESPONSE + ResponseRegisters::CONSUMER.offset())?,
+        read_word(&mut device, EVENT + EventRegisters::CONSUMER.offset())?,
         0
     );
     assert_eq!(
         read_word(&mut device, CONTROL + ChannelRegisters::IRQ_CAUSE.offset())?,
-        3
+        2
     );
     assert!(!device.irq());
     Ok(())

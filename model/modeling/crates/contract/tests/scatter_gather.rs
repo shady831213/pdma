@@ -1,17 +1,17 @@
 //! Scatter/gather endpoint wire behavior.
 
 use hardware_interface_schema::SchemaCodecError;
-use pdma_model_contract::dma::{Command, Endpoint, EndpointMode, Response, Segment};
+use pdma_model_contract::dma::{Command, Endpoint, EndpointMode, Event, Segment};
 
 #[test]
 fn independent_endpoints_and_progress_have_full_width_wire_storage() {
     // Given: the wire schemas used for one scatter/gather transfer.
     let command = Command::SPEC;
-    let response = Response::SPEC;
+    let response = Event::SPEC;
     // When: their generated wire extents are inspected.
     let sizes = (command.size(), response.size());
     // Then: two tagged endpoints and 64-bit completion progress fit in the records.
-    assert_eq!(sizes, (104, 24));
+    assert_eq!(sizes, (112, 24));
 }
 
 #[test]

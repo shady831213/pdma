@@ -2,7 +2,7 @@ use crate::channel::CopyState;
 use crate::{COPY_CHUNK_BYTES, Error, ExecutionContext, Work};
 use hardware_interface_pipeline::{StepOutcome, StepResult};
 use hardware_interface_runtime::MemoryAddress;
-use pdma_model_contract::dma::{ChannelId, Command, ContextId, Response};
+use pdma_model_contract::dma::{ChannelId, Command, ContextId};
 use std::convert::Infallible;
 
 /// Execution data retaining identity through bubbles and domain stops until retirement.
@@ -38,8 +38,16 @@ impl<T> Flow<T> {
         Flow::new(self.work, Err(error))
     }
     /// Completes a custom tail while retaining any preceding domain stop.
-    pub fn finish(self) -> Flow<()> {
-        self.map(|_| ())
+    pub fn finish(self) -> Flow<Completion> {
+        let work = self.work;
+        Flow::new(
+            work,
+            self.value.and_then(|value| {
+                value
+                    .map(|_| work.map(|work| Completion { work }).ok_or(Error::Routing))
+                    .transpose()
+            }),
+        )
     }
     /// Reports the retained domain outcome without releasing ownership.
     pub const fn status(&self) -> Result<(), Error> {
@@ -98,19 +106,33 @@ pub struct CommandSnapshot {
     pub(crate) address: u64,
 }
 
-/// Accepted descriptor transferred into range validation.
+/// Whether an accepted descriptor needs initial validation or resumes retained work.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CommandAdmission {
+    /// Newly consumed from the command ring.
+    Fresh,
+    /// Already accepted, with channel-owned progress retained.
+    Resume,
+}
+
+/// Accepted descriptor transferred into opcode dispatch.
 #[derive(Debug)]
 pub struct FetchedCommand {
     pub(crate) work: Work,
     pub(crate) command: Command,
+    pub(crate) admission: CommandAdmission,
 }
 
 impl FetchedCommand {
+    /// Whether execution is fresh or resumes retained hardware state.
+    pub const fn admission(&self) -> CommandAdmission {
+        self.admission
+    }
     /// The accepted immutable descriptor.
     pub const fn command(&self) -> &Command {
         &self.command
     }
-    /// Its response-ring owner.
+    /// Its event-ring owner.
     pub const fn channel(&self) -> ChannelId {
         self.work.channel()
     }
@@ -203,19 +225,14 @@ impl Payload {
     }
 }
 
-/// Response value and generation-bound response destination.
+/// Terminal command success bound to its accepted owner.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Completion {
     pub(crate) work: Work,
-    pub(crate) response: Response,
 }
 
 impl Completion {
-    /// Response produced by command execution.
-    pub const fn response(&self) -> &Response {
-        &self.response
-    }
-    /// Destination response-ring owner.
+    /// Channel whose command completed successfully.
     pub const fn channel(&self) -> ChannelId {
         self.work.channel()
     }

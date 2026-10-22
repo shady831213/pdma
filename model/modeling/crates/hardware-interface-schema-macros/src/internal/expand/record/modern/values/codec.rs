@@ -11,6 +11,7 @@ pub(super) fn expand(
     quote! {
         #[doc = "Owned typed raw bytes for the generated record."]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        #[repr(transparent)]
         #visibility struct #raw([u8; #marker::RECORD_SIZE]);
         impl #raw {
             #[doc = "All-zero unvalidated raw bytes."]

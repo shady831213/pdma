@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
-description = "Software ring operations and minimal model assembly"
+description = "Host management client and direct DMA runtime assembly"
 
 [dependencies]
 pdma-model-software = { path = "../software" }

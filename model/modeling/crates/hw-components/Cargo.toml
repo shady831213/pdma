@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
-description = "Concrete PDMA management access-window hardware"
+description = "PDMA access windows, contexts and management interface hardware"
 
 [dependencies]
 hardware-interface-runtime = { path = "../hardware-interface-runtime", default-features = false }

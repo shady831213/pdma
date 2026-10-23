@@ -151,10 +151,10 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Sync> Service<'_, B, M> {
         (monitor, events): (&Monitor<'_, B>, Option<&mut Events<'_, B, M>>),
     ) -> Result<(), Error<B::Error, M::Error>> {
         monitor.observe().await?;
-        if let Some(events) = events {
-            if let Some(event) = monitor.take_event() {
-                events.publish(event).await?;
-            }
+        if let Some(events) = events
+            && let Some(event) = monitor.take_event()
+        {
+            events.publish(event).await?;
         }
         Ok(())
     }

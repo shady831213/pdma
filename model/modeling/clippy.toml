@@ -5,4 +5,4 @@ allow-dbg-in-tests = true
 allow-print-in-tests = true
 too-many-arguments-threshold = 6
 too-many-lines-threshold = 100
-msrv = "1.85"
+msrv = "1.88"

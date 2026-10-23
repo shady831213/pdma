@@ -19,7 +19,7 @@ enum Boundary {
 }
 
 impl Boundary {
-    fn reached(self, memory: &Observed) -> bool {
+    const fn reached(self, memory: &Observed) -> bool {
         match self {
             Self::SourceList => memory.source_list_reads.get() == 1,
             Self::DestinationList => memory.destination_list_reads.get() == 1,

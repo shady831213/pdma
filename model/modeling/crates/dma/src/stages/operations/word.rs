@@ -13,7 +13,7 @@ pub(super) fn geometry(
         WordTargetWidth::Bits32 => 4,
         WordTargetWidth::Bits64 => 8,
     };
-    if target.address % width != 0 || target.address.checked_add(width).is_none() {
+    if !target.address.is_multiple_of(width) || target.address.checked_add(width).is_none() {
         return Err(Failure::Stop(EventCode::InvalidOperation));
     }
     Ok((

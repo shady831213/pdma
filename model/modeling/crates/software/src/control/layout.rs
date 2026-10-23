@@ -43,7 +43,7 @@ impl ControlQueueLayout {
         let alignment =
             u64::try_from(ControlQueue::RECORD_ALIGNMENT).map_err(|_| RingError::Geometry)?;
         let size = u64::try_from(ControlQueue::RECORD_SIZE).map_err(|_| RingError::Geometry)?;
-        if base.raw() % alignment != 0 || base.raw().checked_add(size).is_none() {
+        if !base.raw().is_multiple_of(alignment) || base.raw().checked_add(size).is_none() {
             return Err(RingError::Geometry);
         }
         Ok(Self {

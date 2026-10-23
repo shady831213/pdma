@@ -16,9 +16,9 @@ resolver = "3"
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 license = "MIT OR Apache-2.0"
-repository = "https://example.invalid/pdma"
+repository = "https://github.com/shady831213/pdma"
 publish = false
 
 [workspace.lints.rust]

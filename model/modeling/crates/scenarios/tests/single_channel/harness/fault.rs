@@ -84,15 +84,15 @@ impl<B: RegisterAccess + Send + Sync> RegisterAccess for FaultBus<B> {
 
     async fn write(&self, offset: u32, request: &[u8]) -> Result<(), Self::Error> {
         self.bus.write(offset, request).await?;
-        if Some(offset) == self.base_register {
-            if let Ok(bytes) = <[u8; 8]>::try_from(request) {
-                *self
-                    .memory
-                    .address
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner) =
-                    Some(MemoryAddress::new(u64::from_le_bytes(bytes)));
-            }
+        if Some(offset) == self.base_register
+            && let Ok(bytes) = <[u8; 8]>::try_from(request)
+        {
+            *self
+                .memory
+                .address
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                Some(MemoryAddress::new(u64::from_le_bytes(bytes)));
         }
         Ok(())
     }

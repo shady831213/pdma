@@ -47,7 +47,7 @@ fn validate_stride<I: Copy, F: Copy + Eq + fmt::Debug>(
         .registers()
         .iter()
         .fold(1, |widest, register| widest.max(register.width()));
-    if bank.stride() % alignment != 0 {
+    if !bank.stride().is_multiple_of(alignment) {
         return Err(RegisterMapError::BankStrideMisaligned {
             root: map.name(),
             path,

@@ -90,7 +90,7 @@ impl<L: RegisterShape> RegisterBank<L> {
             return Err(RegisterBankError::ZeroCount);
         }
         let alignment = child.alignment();
-        if alignment == 0 || !alignment.is_power_of_two() || base % alignment != 0 {
+        if alignment == 0 || !alignment.is_power_of_two() || !base.is_multiple_of(alignment) {
             return Err(RegisterBankError::Alignment);
         }
         let stride = crate::checked_align_up(child.extent(), alignment)

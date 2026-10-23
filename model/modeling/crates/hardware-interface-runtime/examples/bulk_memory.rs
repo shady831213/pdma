@@ -23,11 +23,11 @@ impl<A> RecordingMemoryAccess<A> {
         }
     }
 
-    fn read_calls(&self) -> u64 {
+    const fn read_calls(&self) -> u64 {
         self.read_calls.get()
     }
 
-    fn write_calls(&self) -> u64 {
+    const fn write_calls(&self) -> u64 {
         self.write_calls.get()
     }
 }

@@ -79,7 +79,7 @@ impl Resources {
         })
     }
 
-    pub(super) fn channel_count(&self) -> usize {
+    pub(super) const fn channel_count(&self) -> usize {
         self.channels.len()
     }
 

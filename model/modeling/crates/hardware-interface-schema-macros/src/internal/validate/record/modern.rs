@@ -5,13 +5,13 @@ use crate::internal::validate::enumeration::enum_variants;
 
 pub(in crate::internal) fn check(decl: &ModernRecordDecl) -> syn::Result<()> {
     super::validate_endian(decl.endian.to_string().as_str(), decl.endian.span())?;
-    if let Some((alignment, span)) = decl.alignment {
-        if alignment == 0 || !alignment.is_power_of_two() {
-            return Err(syn::Error::new(
-                span,
-                "record alignment must be a nonzero power of two",
-            ));
-        }
+    if let Some((alignment, span)) = decl.alignment
+        && (alignment == 0 || !alignment.is_power_of_two())
+    {
+        return Err(syn::Error::new(
+            span,
+            "record alignment must be a nonzero power of two",
+        ));
     }
     let mut names = HashSet::new();
     for field in &decl.fields {

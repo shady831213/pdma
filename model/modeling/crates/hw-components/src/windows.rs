@@ -27,7 +27,7 @@ pub struct ChannelWindows {
 
 impl ChannelWindows {
     #[doc = "Returns the immutable number of channel ownership windows."]
-    pub fn channel_count(&self) -> usize {
+    pub const fn channel_count(&self) -> usize {
         self.windows.len()
     }
     /// Binds transactions to their platform-supplied requester identity.

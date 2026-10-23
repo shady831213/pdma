@@ -22,7 +22,7 @@ impl ChannelWindow {
         let end = base
             .checked_add(ChannelWindowBlock::EXTENT)
             .ok_or(WindowConfigError::AddressUnrepresentable)?;
-        if range.start > range.end || base % ChannelWindowBlock::ALIGNMENT != 0 {
+        if range.start > range.end || !base.is_multiple_of(ChannelWindowBlock::ALIGNMENT) {
             return Err(WindowConfigError::AddressUnrepresentable);
         }
         if range.start < end && base < range.end {

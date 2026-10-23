@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
-description = "System scenarios for the minimal PDMA channel"
+description = "Direct and firmware-managed PDMA system scenarios"
 
 [dev-dependencies]
 pdma-model-software = { path = "../software" }

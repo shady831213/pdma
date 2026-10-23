@@ -50,7 +50,7 @@ impl MemoryAccess for FlatMemory {
         let end = address
             .checked_add(length)
             .ok_or(MemoryAccessError::AddressOverflow { address, length })?;
-        if address.raw() % alignment.raw() != 0 {
+        if !address.raw().is_multiple_of(alignment.raw()) {
             return Err(MemoryAccessError::Misaligned { address, alignment });
         }
         if address.raw() > 512 || (address.raw() == 512 && length != 0) {

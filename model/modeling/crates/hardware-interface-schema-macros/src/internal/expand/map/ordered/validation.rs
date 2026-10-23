@@ -18,26 +18,25 @@ pub(super) fn validate(decl: &OrderedMapDecl) -> syn::Result<()> {
         }
     }
     for placement in &decl.placements {
-        if let Some(parameter) = &placement.count_parameter {
-            if !parameters.contains(&parameter.to_string()) {
-                return Err(syn::Error::new(
-                    parameter.span(),
-                    "bank count must name a declared map parameter",
-                ));
-            }
+        if let Some(parameter) = &placement.count_parameter
+            && !parameters.contains(&parameter.to_string())
+        {
+            return Err(syn::Error::new(
+                parameter.span(),
+                "bank count must name a declared map parameter",
+            ));
         }
         for argument in placement.arguments.iter().flatten() {
-            if let syn::Expr::Path(path) = argument {
-                if !path
+            if let syn::Expr::Path(path) = argument
+                && !path
                     .path
                     .get_ident()
                     .is_some_and(|name| parameters.contains(&name.to_string()))
-                {
-                    return Err(syn::Error::new_spanned(
-                        argument,
-                        "child argument must name a declared map parameter",
-                    ));
-                }
+            {
+                return Err(syn::Error::new_spanned(
+                    argument,
+                    "child argument must name a declared map parameter",
+                ));
             }
         }
         if !symbols.insert(placement.symbol.to_string()) {

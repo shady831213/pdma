@@ -65,10 +65,10 @@ pub(super) fn from_usize(scalar: ScalarType, value: &TokenStream) -> TokenStream
 
 pub(super) fn record_size_path(path: &syn::Path) -> syn::Path {
     let mut output = path.clone();
-    if let Some(last) = output.segments.last_mut() {
-        if last.ident == "record_size" {
-            last.ident = format_ident!("RECORD_SIZE");
-        }
+    if let Some(last) = output.segments.last_mut()
+        && last.ident == "record_size"
+    {
+        last.ident = format_ident!("RECORD_SIZE");
     }
     output
 }

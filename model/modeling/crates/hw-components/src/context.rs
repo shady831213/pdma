@@ -41,7 +41,7 @@ impl ContextTable {
         let count_word = u32::try_from(count).map_err(|_| ContextConfigError::InvalidCapacity)?;
         let layout = ContextTableRegisters::for_channels(count, channel_count)
             .map_err(ContextConfigError::Layout)?;
-        if base % layout.alignment() != 0 {
+        if !base.is_multiple_of(layout.alignment()) {
             return Err(ContextConfigError::Layout(RegisterBankError::Alignment));
         }
         let end = base

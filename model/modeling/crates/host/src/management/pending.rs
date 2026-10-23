@@ -53,7 +53,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         self.publish().await
     }
 
-    pub(super) fn require_idle(&self) -> Result<(), Error<B::Error, M::Error>> {
+    pub(super) const fn require_idle(&self) -> Result<(), Error<B::Error, M::Error>> {
         if !self.outstanding.is_empty() {
             return Err(Error::ManagementBusy);
         }

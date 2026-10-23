@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
-description = "Minimal staged single-channel DMA hardware"
+description = "Multi-channel DMA hardware with a shared staged execution engine"
 
 [dependencies]
 pdma-model-contract = { path = "../contract" }

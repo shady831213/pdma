@@ -83,6 +83,7 @@ registers provide no episode or stale-request check. Shared software offers
 [pageable-copy recovery](../docs/page-fault-recovery.md) for ordering and lifetime.
 
 Shared wire records: Segment is 16 bytes, Endpoint 40, Command 112, Event 24,
+TimestampCommand 16 (64-bit target address and 32-bit context; command kind 8),
 ControlRequest 32 and ControlResponse 24, ContextAttributes 8, ControlRingState 24,
 ControlEvent 8 (alignment four), and ControlQueue 72. Enum bitfield constants are
 unshifted values. Endpoints select Linear (zero) or ScatterGather (one). Their

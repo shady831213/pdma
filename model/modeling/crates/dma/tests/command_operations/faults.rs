@@ -9,6 +9,7 @@ use pdma_model_contract::dma::{
 use pdma_model_dma::{Dma, DmaConfig, MemoryFailure};
 use std::{cell::Cell, rc::Rc};
 mod recovery;
+mod timestamp;
 
 struct FaultMemory {
     memory: SharedMemory,
@@ -86,7 +87,14 @@ impl FaultMemory {
 }
 
 fn rig(address: u64) -> Result<Rig<FaultMemory>, Box<dyn std::error::Error>> {
-    let initial = Rig::new(1, 3)?;
+    rig_channels(address, 1)
+}
+
+fn rig_channels(
+    address: u64,
+    channels: usize,
+) -> Result<Rig<FaultMemory>, Box<dyn std::error::Error>> {
+    let initial = Rig::new(channels, 3)?;
     let memory = initial.memory;
     let backing = FaultMemory {
         memory: memory.clone(),
@@ -98,12 +106,12 @@ fn rig(address: u64) -> Result<Rig<FaultMemory>, Box<dyn std::error::Error>> {
         Dma::with_config(
             backing,
             DmaConfig {
-                channels: 1,
+                channels,
                 capabilities: CapabilitiesValues::new(3),
             },
         )?,
         memory,
-        1,
+        channels,
     )
 }
 
@@ -178,8 +186,8 @@ fn reset_after_atomic_effect_retires_without_repeating_or_undoing() -> TestResul
 }
 
 #[test]
-fn fence_fault_is_stopping_write_error_without_resume() -> TestResult {
-    // Given: completion storage violates the non-faulting Fence obligation.
+fn fence_fault_resumes_publication_before_successors() -> TestResult {
+    // Given: completion storage faults before the Fence can publish.
     let mut rig = rig(0x9000)?;
     rig.submit(
         0,
@@ -196,17 +204,29 @@ fn fence_fault_is_stopping_write_error_without_resume() -> TestResult {
     )?;
     // When: the Fence write faults.
     rig.drive()?;
-    // Then: an error event stops the channel instead of parking or executing successors.
-    assert_eq!(rig.register(0, EVENT_PRODUCER)?, 1);
-    assert_eq!(rig.register(0, CAUSE)? & 4, 4);
+    // Then: the channel parks without an event or successor effects, then resumes in order.
+    assert_eq!(rig.register(0, EVENT_PRODUCER)?, 0);
+    assert_eq!(rig.register(0, CAUSE)? & 4, 0);
     assert_eq!(
         rig.register(
             0,
             ChannelBlock::CONTROL.offset() + ChannelRegisters::FAULT_STATUS.offset()
         )?,
-        0
+        1
     );
     assert_eq!(rig.word(0x8000)?, 0);
+    assert_eq!(rig.word(0x9000)?, 0);
+    rig.dma.memory.fault.set(false);
+    rig.dma.write(
+        rig.bases.first().ok_or("missing channel")?
+            + ChannelBlock::CONTROL.offset()
+            + ChannelRegisters::RESUME.offset(),
+        &1_u32.to_le_bytes(),
+    )?;
+    rig.drive()?;
+    assert_eq!(rig.word(0x9000)?, 0xfeed);
+    assert_eq!(rig.word(0x8000)?, 9);
+    assert_eq!(rig.register(0, EVENT_PRODUCER)?, 0);
     Ok(())
 }
 

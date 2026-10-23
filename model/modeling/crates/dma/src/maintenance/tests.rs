@@ -82,6 +82,7 @@ fn parked_peer() -> Result<(Dma<()>, pdma_model_contract::dma::Command), Box<dyn
     let peer = dma.channels.get_mut(1).ok_or("channel")?;
     peer.work = Some(crate::channel::Accepted {
         fill_completed: 0,
+        timestamp: None,
         command,
         unread: None,
         payload: None,

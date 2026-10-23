@@ -42,8 +42,9 @@ backing and delivers notifications; it owns no command execution or semaphore po
 | SEM Wait | Atomically consume one permit when the count is positive; otherwise wait without modification. |
 | Fence | Complete prior operations in its specified scope, then publish a software-selected memory value. |
 | Trap | Request a channel notification; no success event is appended. |
+| Timestamp | Sample the external platform timer once and write its 64-bit value to an authorized target. |
 
-Timestamp remains a roadmap candidate, not an implemented or fully specified command.
+Timestamp units and progression are platform-defined, not DMA clock cycles.
 No generic instruction branching, indirect command buffer, batch container, GPU
 page-table operation, cache-maintenance command or AQL compatibility is introduced.
 
@@ -71,7 +72,8 @@ pass the failed command. No event-space check gates otherwise successful command
 backpressure. Hardware retains channel fatal status and requests its independent
 notification without relying on that ring. There is no implicit publication retry
 loop. Hardware must not overwrite an unread entry or advance producer on a failed
-write. Fence publication failures also require a reliable diagnostic/fatal exit.
+write. Permanent Fence/Timestamp publication errors use this same diagnostic/fatal exit;
+repairable target PageFaults instead retain the command for owner resume.
 
 **HOST-CE-3.** Consuming an event does not clear the channel stop, acknowledge reset,
 prove retirement, or permit memory reuse. Recovery follows channel reset and the
@@ -163,19 +165,76 @@ cache/interconnect ordering. Ordinary reads/writes are sufficient if the platfor
 provides these guarantees; native RMW instructions are not required for Wait/Fence.
 The synchronous model checks functional order, not cache propagation or AXI timing.
 
-**HOST-CE-4.** Fence storage must be non-faulting until completion or acknowledged
-cancellation. A failed Fence write, including a repairable translation failure,
-is a stopping `WriteError`, not a suspended success publication. Copy payload,
-Write, Fill, Wait, Atomic and SEM target PageFault instead retain the command and
-require owner RESUME. Their committed effects must not replay. Command and SG
-metadata and event publication retain their fatal/stopping policies.
+**HOST-CE-4.** Software retains target storage and context bindings until completion
+or acknowledged cancellation. Copy payload, Write, Fill, Wait, Atomic, SEM, Fence
+and Timestamp target PageFaults retain the command and require owner RESUME. A
+failed access reported as repairable must not have committed effects; earlier
+successful accesses do not replay. A parked Fence still blocks successors and
+must preserve its release ordering when it finally publishes. Permanent write
+failures become stopping `WriteError`. Command and SG metadata and event publication
+retain their fatal/stopping policies; this change does not make them pageable.
+
+## Timestamp and external time
+
+**HW-CE-14.** Timestamp carries a destination address and context, with fixed
+eight-byte alignment and a little-endian `u64` result. Invalid alignment or range
+overflow is `InvalidOperation` before sampling or memory access. The timer is
+sampled when the command reaches execution, not when submitted or fetched. Prior
+same-channel commands must finish before that point. Timestamp is not a cross-channel
+barrier or a substitute for Fence release semantics. Software can submit
+`Timestamp(start) -> Copy -> Timestamp(end) -> Fence -> optional Trap` and observe
+the Fence before reading the samples under the platform visibility contract.
+
+**HW-CE-15.** One accepted command retains its first sample, including zero, until
+retirement. A target PageFault suspends the channel without a DMA event/IRQ and
+releases the shared grant. Resume retries only the write with that sample, even
+after repeated faults. It does not recapture time. Reset/Abort cancels retained
+samples under the same rules as other target writes, without publishing a success.
+Context Drain observes parked Timestamp/Fence references and reports ChannelStopped;
+it cannot authorize early unbinding. Other channels remain eligible.
+
+**PLAT-CE-5.** The assembler connects a read-only `dma::Timer` input via
+`Dma::with_timer`. This is a direct sample, not an MMIO/register protocol; no timer
+registers or CPU time calls are added to DMA. Without a source, Timestamp reports
+stopping `Unsupported`. The platform owns units, frequency, epoch and source
+lifetime. Sampling is side-effect-free. Channel and DMA reset do not reset the
+external source. Counter rollover uses modulo 2^64; software measuring intervals
+must keep an unambiguous elapsed range and must not assume synchronization between
+different platform clocks. Frequency discovery/conversion is platform-owned, not
+a new PDMA command or register interface.
+
+**MODEL-CE-2.** The managed scenario harness owns an external wrapping tick counter
+advanced once per top-level hardware interaction, including idle steps. DMA merely
+samples it. Tests can inject controlled values and advance time independently.
+No wall-clock dependence, background timer task, cycle-accurate timing or inference
+of real RTL latency is implied by these model units.
+
+### Decision and evidence, 2026-10-23
+
+ROCr emits GET_GLOBAL_TIMESTAMP before and after copy work, then separately publishes
+completion and notification. Its SharedSignal owns 64-bit timestamp storage;
+GPU clock conversion belongs to the runtime/platform. These support the separation
+of sampling, storage and completion, not a claim that PDMA reproduces an AMD clock
+or every generation's ordering rules. Sources: [SDMA command submission](https://github.com/ROCm/ROCR-Runtime/blob/master/src/core/runtime/amd_blit_sdma.cpp),
+[timestamp storage](https://github.com/ROCm/ROCR-Runtime/blob/master/src/core/inc/signal.h),
+[clock conversion](https://github.com/ROCm/ROCR-Runtime/blob/master/src/core/runtime/amd_gpu_agent.cpp).
+
+No sufficient opcode-specific evidence was found for how SDMA retries a failed
+Timestamp write or retains its sampled value. PDMA therefore specifies its own
+explicit retained-sample behavior. The former non-faulting Fence requirement was
+an unnecessary PDMA special case, not a demonstrated SDMA constraint: page repair
+uses the independent platform fault path, so it need not depend on successful
+Fence publication. Uniform target-fault recovery preserves both ordering and the
+existing software lifetime obligations. External timer simulation may use ticks;
+the earlier warning against treating step counts as physical time still applies.
 
 ## Wire records, reporting and discovery
 
 `Command` is a 112-byte, 8-byte-aligned tagged record: ID at 0, kind at 8 and
-payload at 16. Copy/Write/Fill/Wait/Atomic/Semaphore/Fence/Trap are kinds 0..7.
+payload at 16. Copy/Write/Fill/Wait/Atomic/Semaphore/Fence/Trap/Timestamp are kinds 0..8.
 Copy retains its independent endpoint/SG positions; scalar commands carry their
-own context selector. Trap has no payload. Generated schemas and headers define
+own context selector. Timestamp's 16-byte payload contains address at byte 0 and
+context at byte 8, with trailing reserved zero padding. Trap has no payload. Generated schemas and headers define
 the nested widths, reserved zero padding and enum encodings.
 
 `Event` is a 24-byte, 8-byte-aligned error record: ID at 0, code at 8, error info
@@ -213,7 +272,8 @@ not a claim that every SDMA generation hides every returned value.
 
 ## Verification status
 
-Executable coverage added on 2026-10-22 (paths below are relative to `crates`):
+Executable coverage added on 2026-10-22 and extended on 2026-10-23
+(paths below are relative to `crates`):
 
 | Contract | Executable evidence |
 | --- | --- |
@@ -226,6 +286,9 @@ Executable coverage added on 2026-10-22 (paths below are relative to `crates`):
 | Trap mask/ACK, pending delivery and notification ownership | `dma/tests/{interrupts,interrupt_identity,mmio}.rs` |
 | Authorized Function/PASID atomics and source tags | `hw-components/tests/{windows/memory,platform_tags/authorization}.rs`, `scenarios/tests/firmware_managed/harness/runtime/tests/atomic_memory.rs` |
 | Actual direct/managed software completion and reset while waiting | `scenarios/tests/firmware_managed/harness/runtime/tests/copy_engine.rs`, direct single/multi-channel scenarios and Host cancellation tests |
+| Timestamp wire/C encoding, repeated write faults and retained zero sample | `contract/tests/timestamp.rs`, `contract/tests/header_c/copy_engine.rs`, `dma/tests/command_operations/faults/timestamp.rs` |
+| Timestamp peer progress, context maintenance and reset cancellation | `dma/tests/command_operations/faults/timestamp/lifecycle.rs` |
+| Platform timer and Host-observed Timestamp/Copy/Fence across managed reset | `scenarios/tests/firmware_managed/harness/runtime/tests/copy_engine/timestamp.rs` |
 
 These checks exercise functional memory, register, queue, interrupt and lifecycle
 behavior. They do not certify physical exclusive-monitor protocols, coherence,

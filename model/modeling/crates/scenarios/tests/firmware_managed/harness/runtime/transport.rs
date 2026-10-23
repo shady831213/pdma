@@ -2,7 +2,26 @@ use super::{Driver, Hardware, RoutedMemory, Shared};
 use hardware_interface_pipeline::{AsyncInteractionBackend, StepResult};
 use pdma_model_contract::dma::DmaAccess;
 use pdma_model_dma::Dma;
-use std::convert::Infallible;
+use std::{
+    convert::Infallible,
+    sync::atomic::{AtomicU64, Ordering},
+};
+
+/// Harness time advances per root hardware interaction, not per read or child stage.
+#[derive(Debug, Default)]
+pub(super) struct SimulationTimer(AtomicU64);
+
+impl pdma_model_dma::Timer for SimulationTimer {
+    fn sample(&self) -> u64 {
+        self.0.load(Ordering::Relaxed)
+    }
+}
+
+impl SimulationTimer {
+    fn advance(&self) {
+        self.0.fetch_add(1, Ordering::Relaxed);
+    }
+}
 
 impl<M> Shared<M> {
     pub(super) async fn access<T>(&self, access: impl FnOnce(&mut Hardware<M>) -> T) -> T {
@@ -71,6 +90,7 @@ impl<M: Send> AsyncInteractionBackend<Dma<RoutedMemory<M>, DmaAccess>> for Drive
         F: FnOnce(&mut Dma<RoutedMemory<M>, DmaAccess>) -> StepResult<O, E> + Send,
     {
         let mut hardware = self.0.hardware.lock().await;
+        self.0.timer.advance();
         let outcome = interaction(&mut hardware.dma);
         self.0.deliver(&mut hardware);
         drop(hardware);

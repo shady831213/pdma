@@ -1,4 +1,5 @@
 mod program;
+mod timestamp;
 
 use super::{Managed, client, control::rings};
 use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};

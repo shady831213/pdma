@@ -29,9 +29,9 @@ fn scalar_commands_have_identical_strict_c_wire_encoding() -> TestResult {
     assert_success("strict scalar C compilation", &compiled);
     // When: the C program encodes every scalar family using generated accessors.
     let output = Command::new(binary).output()?;
-    // Then: all seven records match independent byte layouts, including reserved bytes.
+    // Then: all eight records match independent byte layouts, including reserved bytes.
     assert_success("scalar C consumer", &output);
-    let layouts: [&[(usize, u8)]; 7] = [
+    let layouts: [&[(usize, u8)]; 8] = [
         &[
             (16, 0x38),
             (17, 0x12),
@@ -80,6 +80,7 @@ fn scalar_commands_have_identical_strict_c_wire_encoding() -> TestResult {
             (33, 0x56),
         ],
         &[],
+        &[(16, 0x38), (17, 0x12), (24, 9)],
     ];
     let mut expected = Vec::new();
     for (index, fields) in layouts.into_iter().enumerate() {

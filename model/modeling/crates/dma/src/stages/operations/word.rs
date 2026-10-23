@@ -2,7 +2,8 @@ use super::{Failure, Progress, access_failure};
 use crate::{MemoryFailure, SelectedResources};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
-    EventCode, WaitCommand, WaitCommandComparison, WordTarget, WordTargetWidth, WordWrite,
+    EventCode, TimestampCommand, WaitCommand, WaitCommandComparison, WordTarget, WordTargetWidth,
+    WordWrite,
 };
 
 pub(super) fn geometry(
@@ -25,7 +26,6 @@ pub(super) fn geometry(
 pub(super) fn write<M: MemoryAccess<SB>, SB>(
     context: &SelectedResources<'_, M, SB>,
     write: WordWrite,
-    fence: bool,
 ) -> Result<Progress, Failure>
 where
     M::Error: Into<MemoryFailure>,
@@ -41,14 +41,31 @@ where
                 .get(..width)
                 .ok_or(Failure::Stop(EventCode::InvalidOperation))?,
         )
-        .map_err(|error| {
-            if fence {
-                Failure::Stop(EventCode::WriteError)
-            } else {
-                access_failure(error, EventCode::WriteError)
-            }
-        })?;
+        .map_err(|error| access_failure(error, EventCode::WriteError))?;
     Ok(Progress::Done)
+}
+
+pub(super) fn timestamp<M: MemoryAccess<SB>, SB>(
+    context: &mut SelectedResources<'_, M, SB>,
+    command: TimestampCommand,
+) -> Result<Progress, Failure>
+where
+    M::Error: Into<MemoryFailure>,
+{
+    let target = WordTarget {
+        address: command.address,
+        context: command.context,
+        width: WordTargetWidth::Bits64,
+    };
+    geometry(target)?;
+    let timer = context.timer.ok_or(Failure::Stop(EventCode::Unsupported))?;
+    let accepted = context
+        .selected
+        .work
+        .as_mut()
+        .ok_or(Failure::Stop(EventCode::InvalidOperation))?;
+    let value = *accepted.timestamp.get_or_insert_with(|| timer.sample());
+    write(context, WordWrite { target, value })
 }
 
 pub(super) fn wait<M: MemoryAccess<SB>, SB>(

@@ -1,5 +1,7 @@
 use super::endpoint::Endpoint;
-use super::operations::{AtomicCommand, FillCommand, SemaphoreCommand, WaitCommand, WordWrite};
+use super::operations::{
+    AtomicCommand, FillCommand, SemaphoreCommand, TimestampCommand, WaitCommand, WordWrite,
+};
 use hardware_interface_schema::record_schema;
 
 record_schema! {
@@ -34,15 +36,23 @@ record_schema! {
             id: u64,
             #[short_description = "Operation selected by the payload tag"]
             #[description = "Operation selected by the payload tag."]
-            kind: enum(u32) { variants: { Copy = 0, Write = 1, Fill = 2, Wait = 3, Atomic = 4, Semaphore = 5, Fence = 6, Trap = 7 } },
+            kind: enum(u32) { variants: { Copy = 0, Write = 1, Fill = 2, Wait = 3, Atomic = 4, Semaphore = 5, Fence = 6, Trap = 7, Timestamp = 8 } },
             #[short_description = "Only the selected operation payload is meaningful; inactive bytes are zero"]
             #[description = "Only the selected operation payload is meaningful; inactive bytes are zero."]
-            payload: union { tag: self.kind, cases: { Copy(CopyCommand), Write(WordWrite), Fill(FillCommand), Wait(WaitCommand), Atomic(AtomicCommand), Semaphore(SemaphoreCommand), Fence(WordWrite), Trap(TrapCommand) } },
+            payload: union { tag: self.kind, cases: { Copy(CopyCommand), Write(WordWrite), Fill(FillCommand), Wait(WaitCommand), Atomic(AtomicCommand), Semaphore(SemaphoreCommand), Fence(WordWrite), Trap(TrapCommand), Timestamp(TimestampCommand) } },
         },
     }
 }
 
 impl Command {
+    #[doc = "Constructs an external timer sampling command."]
+    pub const fn timestamp(id: u64, payload: TimestampCommand) -> Self {
+        Self {
+            id,
+            kind: CommandKind::Timestamp,
+            payload: CommandPayloadValues::Timestamp(payload),
+        }
+    }
     #[doc = "Constructs a Copy command."]
     pub const fn copy(id: u64, payload: CopyCommand) -> Self {
         Self {

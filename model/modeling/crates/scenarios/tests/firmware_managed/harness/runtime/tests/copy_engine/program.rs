@@ -1,4 +1,5 @@
 mod commands;
+pub(super) mod timestamp;
 pub(super) mod waiting;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAlignment, RegisterAccess, SharedMemoryAllocator,

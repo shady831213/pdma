@@ -125,7 +125,7 @@ fn malformed_nested_tags_are_rejected_at_the_wire_boundary() {
         (4, 32, 4),
         (4, 36, 7),
         (5, 32, 2),
-        (8, 8, 8),
+        (9, 8, 9),
     ];
     for (kind, offset, value) in mutations {
         let mut bytes = [0_u8; 112];

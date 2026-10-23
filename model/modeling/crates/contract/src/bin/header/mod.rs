@@ -7,7 +7,7 @@ use pdma_model_contract::control::{
 };
 use pdma_model_contract::dma::{
     AtomicCommand, Command, CopyCommand, DmaRegisters, Endpoint, ErrorInfo, Event, FillCommand,
-    Segment, SemaphoreCommand, WaitCommand, WordTarget, WordWrite,
+    Segment, SemaphoreCommand, TimestampCommand, WaitCommand, WordTarget, WordWrite,
 };
 use pdma_model_contract::hw_components::context::ContextTableRegisters;
 use pdma_model_contract::hw_components::control::ControlRegisters;
@@ -45,6 +45,7 @@ pub fn generate_with_contexts(count: usize, contexts: usize) -> Result<HeaderSet
         ("waitcommand", WaitCommand::SPEC.resolve()?),
         ("atomiccommand", AtomicCommand::SPEC.resolve()?),
         ("semaphorecommand", SemaphoreCommand::SPEC.resolve()?),
+        ("timestampcommand", TimestampCommand::SPEC.resolve()?),
         ("event", Event::SPEC.resolve()?),
         ("errorinfo", ErrorInfo::SPEC.resolve()?),
         ("contextattributes", ContextAttributes::SPEC.resolve()?),

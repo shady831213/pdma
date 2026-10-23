@@ -15,6 +15,7 @@ pub(crate) struct SelectedResources<'a, M, S = ()> {
     pub(crate) abort_context: Option<ContextId>,
     pub(crate) maintenance: &'a mut Option<crate::Maintenance>,
     pub(crate) capabilities: pdma_model_contract::dma::CapabilitiesValues,
+    pub(crate) timer: Option<&'a dyn crate::Timer>,
 }
 
 impl<M, S> Dma<M, S> {
@@ -28,6 +29,7 @@ impl<M, S> Dma<M, S> {
             active: &mut self.active,
             maintenance: &mut self.maintenance,
             capabilities: self.discovery.values.capabilities,
+            timer: self.timer.as_deref(),
         }
     }
 }
@@ -42,6 +44,7 @@ pub struct ExecutionContext<'a, M, S = ()> {
     active: &'a mut Option<Work>,
     maintenance: &'a mut Option<crate::Maintenance>,
     capabilities: pdma_model_contract::dma::CapabilitiesValues,
+    timer: Option<&'a dyn crate::Timer>,
 }
 
 impl<M, S> ExecutionContext<'_, M, S> {
@@ -93,6 +96,7 @@ impl<M, S> ExecutionContext<'_, M, S> {
             abort_context,
             maintenance: self.maintenance,
             capabilities: self.capabilities,
+            timer: self.timer,
         })
     }
 }

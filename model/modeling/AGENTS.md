@@ -9,7 +9,7 @@ removed from master after backing up the complete source snapshot:
 `51707fe1d38e261a188e1d0ac14243c0caf58127`.
 
 The replacement implements instance-configured channels with command and error-event rings,
-Copy/Write/Fill/Wait/Atomic/Semaphore/Fence/Trap, error/reset boundaries, and event/Trap IRQ delivery. See README.md
+Copy/Write/Fill/Wait/Atomic/Semaphore/Fence/Trap/Timestamp, error/reset boundaries, and event/Trap IRQ delivery. See README.md
 and the `crates/scenarios/tests/{single_channel,multi_channel}/main.rs` system tests. Old interfaces, numeric register
 layouts, and ABI compatibility are not requirements for this model.
 
@@ -182,7 +182,7 @@ type exports or place hardware bootstrap/doorbell registers among software messa
 Firmware can consume DMA and peripheral contracts without owning those interfaces.
 
 - The replacement models statically configured channels, command/error-event rings,
-  Copy/Write/Fill/Wait/Atomic/Semaphore/Fence/Trap and channel/device error/reset boundaries.
+  Copy/Write/Fill/Wait/Atomic/Semaphore/Fence/Trap/Timestamp and channel/device error/reset boundaries.
   Success writes no Event. Fence publishes completion storage; Trap has an independent
   sticky IRQ cause and write-one request acknowledgement. Event-non-empty and Trap masks
   never replay; error/fatal notifications bypass those masks and obey irq_enable.
@@ -190,7 +190,12 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   Atomic has no old-value output. Semaphore counts reject Signal overflow before mutation.
   False Wait/Semaphore Wait yields the grant without a fault bit or RESUME obligation;
   same-channel successors remain blocked, peers run, Drain waits and Abort may cancel it.
-  Fence storage must be non-faulting; any failed write is a stopping WriteError.
+  Fence and Timestamp target PageFaults use the ordinary retained write recovery;
+  permanent failures remain stopping WriteError. Timestamp retains one sample per
+  accepted command, including zero, and never resamples on resume. Timer is a
+  read-only external input, attached by the assembler with Dma::with_timer; absent
+  input reports Unsupported. Its concrete counter lives in the harness, not DMA or
+  the generic runtime. Harness ticks are not RTL cycle or performance predictions.
   See docs/copy-engine.md for width, ordering and lifetime obligations.
   Do not implement further slices without a user request.
 - The constructor fixes the channel count for each instance; software only reads it.

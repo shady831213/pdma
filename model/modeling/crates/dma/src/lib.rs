@@ -18,7 +18,7 @@ mod tests;
 mod work;
 
 pub use arbitration::RoundRobin;
-pub use build::{BuildError, DmaConfig};
+pub use build::{BuildError, DmaConfig, Timer};
 pub use channel::{COPY_CHUNK_BYTES, Channel, CommandRing, EventRing};
 pub use error::{ChannelFatal, Error};
 pub use execution_context::ExecutionContext;
@@ -77,6 +77,9 @@ const fn references(command: &Command) -> [Option<ContextId>; 3] {
         CommandPayloadValues::Fill(fill) => {
             return [Some(ContextId::new(fill.context)), None, None];
         }
+        CommandPayloadValues::Timestamp(timestamp) => {
+            return [Some(ContextId::new(timestamp.context)), None, None];
+        }
         CommandPayloadValues::Trap(_) => return [None, None, None],
     };
     let sg = match (copy.source.mode, copy.destination.mode) {
@@ -105,6 +108,7 @@ pub struct Dma<M, S = ()> {
     interrupt: bool,
     active: Option<Work>,
     maintenance: Option<Maintenance>,
+    timer: Option<std::sync::Arc<dyn Timer>>,
 }
 
 impl<M, S> Dma<M, S> {

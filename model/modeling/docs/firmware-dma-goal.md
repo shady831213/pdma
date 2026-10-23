@@ -1,7 +1,7 @@
 # Firmware-managed DMA roadmap
 
 Recorded: 2026-09-15.
-Updated: 2026-10-22.
+Updated: 2026-10-23.
 Status: the architecture MVP, Function-scoped channel management, context selection
 and maintenance, and managed fatal/event recovery are implemented. Actual PCIe/IOMMU
 integration and Function-level reset remain unimplemented. Payload-only retained
@@ -267,7 +267,7 @@ All code paths in this table are relative to `model/modeling/crates` unless pref
 `docs/`. These are design gaps and deliberate differences, not newly discovered
 regressions in the restored Copy contract.
 
-#### Agreed next feature set, not yet implemented
+#### Agreed copy-engine feature set and implementation status
 
 Decision, 2026-10-21, following the command and completion review. Preserve existing
 Linear/independent-SG Copy and add the command families below. This records the
@@ -277,7 +277,8 @@ withdrawn Signal/Wait ABI.
 Implementation started on 2026-10-22 under explicit user approval. The
 [copy-engine specification chapter](copy-engine.md) now fixes the first-slice
 wire/operation details; its verification section records completed acceptance.
-The heading above dates the original decision rather than current implementation.
+Timestamp was approved on 2026-10-23 with an external timer input and retained
+sample on target PageFault; Fence now uses the same target-fault recovery as Write.
 
 | Command | Agreed purpose and boundary |
 | --- | --- |
@@ -288,7 +289,7 @@ The heading above dates the original decision rather than current implementation
 | SEM | Counting semaphore: Signal atomically increments; Wait atomically consumes one permit only when the count is positive, otherwise waits without modifying it. Do not implement it as separate condition Wait and unconditional decrement commands. |
 | Fence | Complete prior operations in the specified ordering scope before writing a software-selected completion value to memory. It is an ordered writeback, not an ordinary Write or an atomic shared-counter update. |
 | Trap | Explicit notification independent of success-record publication. It does not itself certify prior memory completion; use Fence before Trap when that guarantee is required. |
-| Timestamp (candidate) | Write a platform-provided timestamp for observation. Clock source, representation and ordering remain to be agreed; model step count must not masquerade as hardware time. |
+| Timestamp | Write one 64-bit external timer sample to an authorized target. The harness owns a simulated tick counter; DMA samples directly. Units are platform-defined, not physical RTL cycles. Retain the original sample through target faults and resume only its writeback. |
 
 Software can express `Copy -> Fill -> Copy -> Fence -> optional Trap`. It owns
 completion storage and chooses notification/batch boundaries; hardware needs no
@@ -372,14 +373,16 @@ semaphore block, but also contains unresolved multi-ring questions. It is not a
 complete specification of every SDMA generation or mailbox mode. Our counting SEM
 is an explicit PDMA choice; no dedicated central semaphore block is required. [S10]
 
-#### Specification refinements and acceptance before implementation
+#### Specification refinements and acceptance
 
 No further architectural fork blocks this direction. Before assigning wire fields,
 record exact operation/width/alignment rules; Wait comparisons and wrap behavior;
 SEM overflow and ordering; Atomic returned-data placement; Fence ordering and
 visibility scope; access context/lifetime and fault classification for each new
 command; event diagnostics and IRQ acknowledgment; and reset/abort completion-value
-reuse rules. Timestamp remains a candidate until its platform time contract is set.
+reuse rules. These decisions and the 2026-10-23 Timestamp/Fence correction are
+now recorded in the copy-engine specification; its verification matrix identifies
+executable coverage rather than leaving these interfaces as open design questions.
 Trace these obligations into the normative spec and generated Host/Firmware ABI,
 without presenting planned behavior as already implemented.
 
@@ -664,7 +667,8 @@ and speculative collections of policy generics.
   deferred; see the low-priority TBD below. PF events and firmware-mediated DMA/event
   recovery are implemented in [fatal and events](fatal-events.md).
 - Synchronization follows the agreed command families and Fence/Trap/error-event
-  protocol above; detailed field semantics and wire format remain to be specified.
+  protocol above; field semantics, wire format and Timestamp's external clock
+  boundary are specified in `copy-engine.md`.
   Logical-channel scheduling and oversubscription remain
   separate deferred work. Retained physical-channel suspension and owner resume
   remain specified in the page-fault chapter.

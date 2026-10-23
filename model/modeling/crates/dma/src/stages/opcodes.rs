@@ -8,7 +8,8 @@ use crate::{
 use hardware_interface_pipeline::{Dispatch, FanOut, Route, Stage, StepOutcome, StepResult, Then};
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::dma::{
-    AtomicCommand, CommandPayloadValues, FillCommand, SemaphoreCommand, TrapCommand, WaitCommand,
+    AtomicCommand, CommandPayloadValues, FillCommand, SemaphoreCommand, TimestampCommand,
+    TrapCommand, WaitCommand,
 };
 use std::convert::Infallible;
 
@@ -24,6 +25,7 @@ pub(super) enum Branch<S> {
     Semaphore(Execute<SemaphoreCommand>),
     Fence(Execute<operand::Fence>),
     Trap(Execute<TrapCommand>),
+    Timestamp(Execute<TimestampCommand>),
     Empty,
 }
 
@@ -56,6 +58,7 @@ where
             Self::Semaphore(stage) => stage.step(context, input),
             Self::Fence(stage) => stage.step(context, input),
             Self::Trap(stage) => stage.step(context, input),
+            Self::Timestamp(stage) => stage.step(context, input),
             Self::Empty => Ok(input.take().map_or(StepOutcome::InProgress, |flow| {
                 StepOutcome::Complete(Ok(flow.finish()))
             })),
@@ -77,7 +80,8 @@ impl Route<Flow<FetchedCommand>, Infallible> for Select {
             Some(CommandPayloadValues::Semaphore(_)) => 5,
             Some(CommandPayloadValues::Fence(_)) => 6,
             Some(CommandPayloadValues::Trap(_)) => 7,
-            None => 8,
+            Some(CommandPayloadValues::Timestamp(_)) => 8,
+            None => 9,
         })
     }
 }
@@ -109,6 +113,7 @@ pub(super) fn branches<S>(copy: S) -> Branches<S> {
             Branch::Semaphore(Execute::default()),
             Branch::Fence(Execute::default()),
             Branch::Trap(Execute::default()),
+            Branch::Timestamp(Execute::default()),
             Branch::Empty,
         ],
     )

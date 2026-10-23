@@ -32,8 +32,9 @@ NOT be described as supported hostile-software isolation.
 | Destination payload | Descriptor-level `dst_context` | Command submitter |
 | Write, Wait, Atomic, SEM and Fence word | Command's `WordTarget.context` | Command submitter |
 | Fill destination | `FillCommand.context` | Command submitter |
+| Timestamp destination | `TimestampCommand.context` | Command submitter |
 
-Trap has no memory selector. Scalar/Fill selectors participate in accepted-task
+Trap has no memory selector. Scalar/Fill/Timestamp selectors participate in accepted-task
 lifetime accounting exactly as Copy's used selectors do. A Fence naming the
 context being aborted may itself be discarded, so software must not await it as
 proof of Abort completion; the maintenance result provides that collective proof.

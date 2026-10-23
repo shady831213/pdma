@@ -40,7 +40,8 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for CheckRanges
                     | pdma_model_contract::dma::CommandPayloadValues::Atomic(_)
                     | pdma_model_contract::dma::CommandPayloadValues::Semaphore(_)
                     | pdma_model_contract::dma::CommandPayloadValues::Fence(_)
-                    | pdma_model_contract::dma::CommandPayloadValues::Trap(_) => {
+                    | pdma_model_contract::dma::CommandPayloadValues::Trap(_)
+                    | pdma_model_contract::dma::CommandPayloadValues::Timestamp(_) => {
                         Err(crate::Error::Routing)
                     }
                 })

@@ -21,7 +21,7 @@ PCIe, IOMMU translation, caches and an actual interconnect are integration scope
 | [Contexts](context-contract.md) | Context bindings, maintenance frontiers, lifetime and non-faulting migration-copy obligations |
 | [Pageable copy](page-fault-recovery.md) | Selected ranges, retained suspension, owner write-one resume and repair/lifetime obligations |
 | [Fatal and events](fatal-events.md) | System fatal handling, PF events and managed recovery |
-| [Copy engine](copy-engine.md) | Commands, dependency waits, atomics, Fence/Trap completion and channel error events |
+| [Copy engine](copy-engine.md) | Commands, dependency waits, atomics, external Timestamp sampling, Fence/Trap completion and channel error events |
 
 The fatal/event chapter describes the managed recovery extension. Its verification
 section records implementation coverage. Other
@@ -32,6 +32,9 @@ requirements. Removed specifications on the backup branch are not authoritative.
 The copy-engine chapter replaces mandatory DMA success responses and IOC with
 software-selected Fence/Trap boundaries and an errors-only channel event ring.
 PF management responses and events remain independent protocols.
+Fence and Timestamp target faults follow ordinary retained command recovery;
+Timestamp retains its original sampled value through repeated faults. The external
+timer is platform-owned, and harness ticks are not RTL cycle timing.
 
 The agreed [non-faulting migration-copy usage](context-contract.md#non-faulting-page-migration-copy)
 uses existing copy behavior with explicit software/platform preconditions. It is

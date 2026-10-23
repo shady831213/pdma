@@ -10,17 +10,18 @@ _Static_assert(C_FILLCOMMAND_SIZE == 32, "fill payload");
 _Static_assert(C_WAITCOMMAND_SIZE == 32, "wait payload");
 _Static_assert(C_ATOMICCOMMAND_SIZE == 40, "atomic has no result destination");
 _Static_assert(C_SEMAPHORECOMMAND_SIZE == 24, "semaphore payload");
+_Static_assert(C_TIMESTAMPCOMMAND_SIZE == 16, "timestamp payload");
 _Static_assert(C_EVENT_C_CODE_C_QUUNSUPPORTED == 6, "unsupported event");
 _Static_assert(C_EVENT_C_CODE_C_QUINVALIDQUOPERATION == 7, "invalid operation event");
 _Static_assert(C_EVENT_C_CODE_C_QUARITHMETICQUOVERFLOW == 8, "overflow event");
 
 int main(void) {
-    for (uint32_t kind = 1; kind <= 7; ++kind) {
+    for (uint32_t kind = 1; kind <= 8; ++kind) {
         uint8_t command[C_COMMAND_SIZE] = {0};
         uint8_t *payload = command + C_COMMAND_RECORD_C_PAYLOAD_OFFSET;
         C_COMMAND_STORE_C_ID(command, UINT64_C(42));
         C_COMMAND_STORE_C_KIND(command, kind);
-        if (kind != C_COMMAND_C_KIND_C_QUFILL && kind != C_COMMAND_C_KIND_C_QUTRAP) {
+        if (kind != C_COMMAND_C_KIND_C_QUFILL && kind != C_COMMAND_C_KIND_C_QUTRAP && kind != C_COMMAND_C_KIND_C_QUTIMESTAMP) {
             C_WORDTARGET_STORE_C_ADDRESS(payload, UINT64_C(0x1238));
             C_WORDTARGET_STORE_C_CONTEXT(payload, UINT32_C(9));
             C_WORDTARGET_STORE_C_WIDTH(payload, C_WORDTARGET_C_WIDTH_C_QUBITS64);
@@ -51,6 +52,10 @@ int main(void) {
             C_SEMAPHORECOMMAND_STORE_C_OPERATION(payload, C_SEMAPHORECOMMAND_C_OPERATION_C_QUWAIT);
             break;
         case C_COMMAND_C_KIND_C_QUTRAP:
+            break;
+        case C_COMMAND_C_KIND_C_QUTIMESTAMP:
+            C_TIMESTAMPCOMMAND_STORE_C_ADDRESS(payload, UINT64_C(0x1238));
+            C_TIMESTAMPCOMMAND_STORE_C_CONTEXT(payload, UINT32_C(9));
             break;
         default:
             return 1;

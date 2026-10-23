@@ -87,8 +87,8 @@ The generated header under `model/modeling/include` describes the current contra
 
 The current implementation has an instance-configured channel count with independent reset,
 command/error-event rings and one shared DMA execution pipeline. Copy retains independently
-selected linear/scatter-gather endpoints. Write, Fill, Wait, Atomic, Semaphore, Fence
-and Trap share the same accepted ownership and reset boundaries. Successful commands
+selected linear/scatter-gather endpoints. Write, Fill, Wait, Atomic, Semaphore, Fence,
+Trap and Timestamp share the same accepted ownership and reset boundaries. Successful commands
 produce no event; software observes Fence storage and explicit Trap notifications.
 Atomic32/64 capabilities are immutable instance configuration, defaulting off in
 ordinary constructors. Atomic has no old-value destination. Ordinary false Wait and
@@ -108,8 +108,11 @@ sideband mapping; MemoryIdentity stays address-space-only. Tags must retain thei
 association through outstanding reports/handlers. Software must coordinate
 reset, release and reallocation and retire old fault handling before reuse; hardware
 does not correlate late or duplicate requests with fault episodes. Error-only Event
-records have no Success or IOC fields. Fence storage must be non-faulting; a failed
-Fence write stops with WriteError. See `model/modeling/docs/copy-engine.md` and
+records have no Success or IOC fields. Fence and Timestamp target PageFaults park
+like ordinary command writes; permanent failures stop with WriteError. Timestamp
+samples an injected external timer once and retains that value through write faults.
+The harness owns time progression; neither sampling nor DMA reset advances/resets it.
+See `model/modeling/docs/copy-engine.md` and
 `model/modeling/docs/page-fault-recovery.md`. No true MMU, PCIe integration,
 oversubscription or global barrier semantics are added. Do not expand that scope or
 recreate the old API surface to satisfy historical tests.

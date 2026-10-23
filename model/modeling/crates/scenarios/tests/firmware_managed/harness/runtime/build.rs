@@ -2,40 +2,15 @@ mod host;
 use super::*;
 use pdma_model_contract::memory::{FunctionId, MemoryIdentity};
 
+type TimedDma<M> = (
+    Dma<RoutedMemory<M>, DmaAccess>,
+    Arc<transport::SimulationTimer>,
+);
+
 impl<M: Clone + MemoryAccess> Managed<M>
 where
     M::Error: Into<pdma_model_dma::MemoryFailure>,
 {
-    /// Assembles one channel and one Host without starting actors.
-    pub fn new(memory: M) -> Result<(Self, Host<M>), BuildError> {
-        Self::with_channels(memory, 1)
-    }
-
-    /// Selects the channel count for the single-Host platform.
-    pub fn with_channels(memory: M, channel_count: usize) -> Result<(Self, Host<M>), BuildError> {
-        Self::with_addresses(memory, channel_count, platform::ADDRESSES)
-    }
-
-    /// Places the single-Host platform at caller-selected register bases.
-    pub fn with_addresses(
-        memory: M,
-        channel_count: usize,
-        addresses: ManagementAddresses,
-    ) -> Result<(Self, Host<M>), BuildError> {
-        let (system, mut hosts) = Self::assemble(
-            std::iter::once(memory),
-            channel_count,
-            pdma_model_firmware::Configuration {
-                addresses,
-                function_count: 1,
-            },
-        )?;
-        let host = hosts
-            .pop()
-            .ok_or(BuildError::Platform(PlatformConfigError::FunctionCount))?;
-        Ok((system, host))
-    }
-
     /// Assembles independent Host capabilities over one shared DMA and firmware.
     pub fn with_functions(
         memory: M,
@@ -66,25 +41,6 @@ where
                 function_count,
             },
         )
-    }
-
-    pub(crate) fn with_dma_config(
-        memory: M,
-        config: pdma_model_dma::DmaConfig,
-    ) -> Result<(Self, Host<M>), BuildError> {
-        let firmware = pdma_model_firmware::Configuration {
-            addresses: platform::ADDRESSES,
-            function_count: 1,
-        };
-        let (system, mut hosts) = Self::assemble_spaces(
-            memory::FunctionSpaces::new(vec![memory]).map_err(BuildError::Platform)?,
-            config.channels,
-            (firmware, None, config.capabilities),
-        )?;
-        let host = hosts
-            .pop()
-            .ok_or(BuildError::Platform(PlatformConfigError::FunctionCount))?;
-        Ok((system, host))
     }
 
     fn assemble(
@@ -142,8 +98,9 @@ where
         memory: RoutedMemory<M>,
         channels: usize,
         capabilities: pdma_model_contract::dma::CapabilitiesValues,
-    ) -> Result<Dma<RoutedMemory<M>, DmaAccess>, BuildError> {
-        Dma::with_config_and_sideband(
+    ) -> Result<TimedDma<M>, BuildError> {
+        let timer = Arc::new(transport::SimulationTimer::default());
+        let dma = Dma::with_config_and_sideband(
             memory,
             pdma_model_dma::DmaConfig {
                 channels,
@@ -151,7 +108,9 @@ where
             },
             |access| access,
         )
-        .map_err(BuildError::Dma)
+        .map_err(BuildError::Dma)?
+        .with_timer(timer.clone());
+        Ok((dma, timer))
     }
 
     fn assemble_spaces(
@@ -185,7 +144,7 @@ where
             )
             .map_err(BuildError::Platform)?,
         };
-        let dma = Self::configured_dma(routed, channel_count, capabilities)?;
+        let (dma, timer) = Self::configured_dma(routed, channel_count, capabilities)?;
         let hardware = Box::new(dma.hardware());
         let invalid = || BuildError::Platform(PlatformConfigError::AddressSpace);
         let firmware =
@@ -244,6 +203,7 @@ where
             to_firmware,
             to_host,
             to_events,
+            timer,
         });
         let hosts = sources
             .into_iter()

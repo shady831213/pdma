@@ -6,6 +6,13 @@ use pdma_model_contract::dma::{
 };
 use std::{collections::TryReserveError, fmt};
 
+/// Read-only external hardware timer input; the platform owns units and progression.
+/// Sampling must not advance the timer. Channel and DMA reset do not reset this source.
+pub trait Timer: fmt::Debug + Send + Sync {
+    /// Samples the current wrapping 64-bit counter without changing it.
+    fn sample(&self) -> u64;
+}
+
 /// Immutable instance sizing and supported atomic widths.
 #[derive(Clone, Copy, Debug)]
 pub struct DmaConfig {
@@ -46,6 +53,14 @@ impl<M> Dma<M> {
 }
 
 impl<M, S> Dma<M, S> {
+    /// Connects the platform timer during assembly, before driving hardware.
+    /// Without a connected timer, Timestamp commands report Unsupported.
+    #[must_use]
+    pub fn with_timer(mut self, timer: std::sync::Arc<dyn Timer>) -> Self {
+        self.timer = Some(timer);
+        self
+    }
+
     /// Tags each memory interaction with metadata derived from its channel.
     pub fn with_sideband(
         memory: M,
@@ -92,6 +107,7 @@ impl<M, S> Dma<M, S> {
             interrupt: false,
             active: None,
             maintenance: None,
+            timer: None,
         })
     }
 }

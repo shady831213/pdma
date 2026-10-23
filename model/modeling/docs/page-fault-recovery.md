@@ -5,6 +5,12 @@ Status: approved payload-only contract, superseding terminal PageFault responses
 and software resubmission. This is not a released ABI or a cycle/bus specification.
 The [system specification](spec.md) indexes this chapter.
 
+The [copy-engine extension](copy-engine.md#word-operations-and-visibility) also applies
+this target-fault mechanism to Write/Fill/Wait/Atomic/Semaphore/Fence/Timestamp.
+Fence no longer requires non-faulting target storage. Timestamp retains its original
+sample across write faults; resetting or aborting the command discards the sample.
+These extensions do not change command/SG metadata or Event-ring failure policies.
+
 ## Two copy uses and two recovery boundaries
 
 Prepared page migration uses ordinary copy under the

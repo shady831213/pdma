@@ -401,10 +401,17 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   Unsupported widths stop before mutation. Semaphore Signal uses release, rejects overflow
   before modification and increments one permit; Wait acquires and consumes only a positive
   count. A bounded CAS mismatch or zero permit count yields for later arbitration.
-- Fence writes software-provided non-faulting completion storage with release scope over
+- Fence writes software-provided completion storage with release scope over
   prior accesses in its channel, including across contexts. It does not drain peers.
-  Failed Fence writes stop with WriteError instead of parking. Trap requests notification
+  Target PageFault parks for owner resume; permanent write errors stop with WriteError.
+  Trap requests notification
   independently of error reporting. Success never creates an Event.
+- Timestamp writes a fixed 64-bit external timer sample to an eight-byte-aligned address
+  in its selected context. Dma::with_timer connects a read-only platform source; absent
+  input reports Unsupported. The managed harness owns a counter advanced per root step,
+  not by sampling. Channel/DMA reset does not reset that source. Target faults retain
+  the original sample for retry; software uses a later Fence/Trap to observe completion.
+  Simulation ticks do not predict physical RTL latency or require timer MMIO.
 - Full command ring is a host submission error. Event capacity does not gate command
   admission or successful execution. A stopping error latches stop before event I/O;
   full or invalid event storage is fatal without retry or backpressure.

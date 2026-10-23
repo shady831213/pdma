@@ -163,6 +163,7 @@ pub(crate) struct Accepted {
     pub(crate) payload: Option<Box<crate::Payload>>,
     pub(crate) progress: Option<CopyState>,
     pub(crate) fill_completed: u64,
+    pub(crate) timestamp: Option<u64>,
 }
 
 /// Retained traversal of one command's two byte streams.

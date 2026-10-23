@@ -2,7 +2,7 @@ use super::{Failure, Progress, atomic, fill, word};
 use crate::{Error, MemoryFailure, SelectedResources};
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::dma::{
-    AtomicCommand, FillCommand, SemaphoreCommand, TrapCommand, WaitCommand,
+    AtomicCommand, FillCommand, SemaphoreCommand, TimestampCommand, TrapCommand, WaitCommand,
 };
 use pdma_model_contract::dma::{CommandPayloadValues, WordWrite};
 
@@ -33,7 +33,7 @@ impl Operand for Write {
     where
         M::Error: Into<MemoryFailure>,
     {
-        word::write(context, self.0, false)
+        word::write(context, self.0)
     }
 }
 
@@ -126,7 +126,25 @@ impl Operand for Fence {
     where
         M::Error: Into<MemoryFailure>,
     {
-        word::write(context, self.0, true)
+        word::write(context, self.0)
+    }
+}
+
+impl Operand for TimestampCommand {
+    fn project(payload: CommandPayloadValues) -> Result<Self, Error> {
+        let CommandPayloadValues::Timestamp(operand) = payload else {
+            return Err(Error::Routing);
+        };
+        Ok(operand)
+    }
+    fn execute<M: MemoryAccess<SB>, SB>(
+        self,
+        context: &mut SelectedResources<'_, M, SB>,
+    ) -> Result<Progress, Failure>
+    where
+        M::Error: Into<MemoryFailure>,
+    {
+        word::timestamp(context, self)
     }
 }
 

@@ -120,6 +120,7 @@ fn fetch<M: MemoryAccess<SB>, SB>(
                 payload: None,
                 progress: None,
                 fill_completed: 0,
+                timestamp: None,
             });
             *context.active = Some(work);
             context.generation = work.generation;

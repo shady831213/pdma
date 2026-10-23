@@ -10,6 +10,22 @@ pub use atomic::{
 use hardware_interface_schema::record_schema;
 
 record_schema! {
+    #[short_description = "External timer sample destination"]
+    #[description = "Writes one little-endian 64-bit external timer sample. A target PageFault retains the original sample until resume or cancellation; units and timer progression belong to the platform."]
+    pub record TimestampCommand {
+        alignment: 8, endian: Little,
+        fields: {
+            #[short_description = "Eight-byte-aligned destination address"]
+            #[description = "Eight-byte-aligned destination address for one 64-bit timer sample."]
+            address: u64,
+            #[short_description = "Destination address-space selector"]
+            #[description = "Destination context, authorized through the ordinary DMA memory path and retained through command retirement."]
+            context: u32,
+        },
+    }
+}
+
+record_schema! {
     #[short_description = "Shared scalar target"]
     #[description = "Shared scalar target."]
     pub record WordTarget {

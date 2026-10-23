@@ -231,6 +231,7 @@ static inline void C_COMMAND_STORE_C_ID(uint8_t bytes[C_COMMAND_SIZE], uint64_t 
 #define C_COMMAND_C_KIND_C_QUSEMAPHORE UINT64_C(5)
 #define C_COMMAND_C_KIND_C_QUFENCE UINT64_C(6)
 #define C_COMMAND_C_KIND_C_QUTRAP UINT64_C(7)
+#define C_COMMAND_C_KIND_C_QUTIMESTAMP UINT64_C(8)
 #define C_COMMAND_C_KIND_OFFSET UINT64_C(8)
 #define C_COMMAND_C_KIND_WIDTH UINT64_C(4)
 #define C_COMMAND_C_KIND_ENDIAN C_COMMAND_ENDIAN_LITTLE
@@ -1193,6 +1194,53 @@ static inline void C_SEMAPHORECOMMAND_STORE_C_OPERATION(uint8_t bytes[C_SEMAPHOR
 }
 #define C_SEMAPHORECOMMAND_RECORD_C_TARGET_OFFSET UINT64_C(0)
 #define C_SEMAPHORECOMMAND_RECORD_C_TARGET_SIZE UINT64_C(16)
+
+/*
+ * External timer sample destination
+ * Writes one little-endian 64-bit external timer sample. A target PageFault retains the original sample until resume or cancellation; units and timer progression belong to the platform.
+ */
+#define C_TIMESTAMPCOMMAND_SIZE UINT64_C(16)
+#define C_TIMESTAMPCOMMAND_ALIGNMENT UINT64_C(8)
+#define C_TIMESTAMPCOMMAND_ENDIAN_LITTLE UINT32_C(0)
+#define C_TIMESTAMPCOMMAND_ENDIAN_BIG UINT32_C(1)
+
+/*
+ * Eight-byte-aligned destination address
+ * Eight-byte-aligned destination address for one 64-bit timer sample.
+ */
+#define C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET UINT64_C(0)
+#define C_TIMESTAMPCOMMAND_C_ADDRESS_WIDTH UINT64_C(8)
+#define C_TIMESTAMPCOMMAND_C_ADDRESS_ENDIAN C_TIMESTAMPCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_TIMESTAMPCOMMAND_LOAD_C_ADDRESS(const uint8_t bytes[C_TIMESTAMPCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET] | ((uint64_t)bytes[C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_TIMESTAMPCOMMAND_STORE_C_ADDRESS(uint8_t bytes[C_TIMESTAMPCOMMAND_SIZE], uint64_t value) {
+    bytes[C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Destination address-space selector
+ * Destination context, authorized through the ordinary DMA memory path and retained through command retirement.
+ */
+#define C_TIMESTAMPCOMMAND_C_CONTEXT_OFFSET UINT64_C(8)
+#define C_TIMESTAMPCOMMAND_C_CONTEXT_WIDTH UINT64_C(4)
+#define C_TIMESTAMPCOMMAND_C_CONTEXT_ENDIAN C_TIMESTAMPCOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_TIMESTAMPCOMMAND_LOAD_C_CONTEXT(const uint8_t bytes[C_TIMESTAMPCOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_TIMESTAMPCOMMAND_C_CONTEXT_OFFSET] | ((uint32_t)bytes[C_TIMESTAMPCOMMAND_C_CONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_TIMESTAMPCOMMAND_C_CONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_TIMESTAMPCOMMAND_C_CONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_TIMESTAMPCOMMAND_STORE_C_CONTEXT(uint8_t bytes[C_TIMESTAMPCOMMAND_SIZE], uint32_t value) {
+    bytes[C_TIMESTAMPCOMMAND_C_CONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_TIMESTAMPCOMMAND_C_CONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_TIMESTAMPCOMMAND_C_CONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_TIMESTAMPCOMMAND_C_CONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
 
 /*
  * Error-only event

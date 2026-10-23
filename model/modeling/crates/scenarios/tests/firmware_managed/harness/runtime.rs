@@ -51,6 +51,7 @@ struct Shared<M> {
     to_firmware: InterruptEmitter,
     to_host: InterruptEmitter,
     to_events: InterruptEmitter,
+    timer: Arc<transport::SimulationTimer>,
 }
 
 #[derive(Debug)]

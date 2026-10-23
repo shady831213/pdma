@@ -195,7 +195,8 @@ pub fn copy(command: &Command) -> TestResult<&pdma_model_contract::dma::CopyComm
         | CommandPayloadValues::Atomic(_)
         | CommandPayloadValues::Semaphore(_)
         | CommandPayloadValues::Fence(_)
-        | CommandPayloadValues::Trap(_) => Err("Copy fixture required".into()),
+        | CommandPayloadValues::Trap(_)
+        | CommandPayloadValues::Timestamp(_) => Err("Copy fixture required".into()),
     }
 }
 
@@ -210,6 +211,7 @@ pub fn copy_mut(command: &mut Command) -> TestResult<&mut pdma_model_contract::d
         | CommandPayloadValues::Atomic(_)
         | CommandPayloadValues::Semaphore(_)
         | CommandPayloadValues::Fence(_)
-        | CommandPayloadValues::Trap(_) => Err("Copy fixture required".into()),
+        | CommandPayloadValues::Trap(_)
+        | CommandPayloadValues::Timestamp(_) => Err("Copy fixture required".into()),
     }
 }

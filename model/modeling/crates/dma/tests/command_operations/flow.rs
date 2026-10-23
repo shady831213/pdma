@@ -1,5 +1,7 @@
 use super::support::{CAUSE, EVENT_PRODUCER, Rig, TestResult, fence, target};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use pdma_model_contract::dma::ChannelInterrupts;
+use pdma_model_contract::dma::ChannelRecovery;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelRegisters, Command, FillCommand, FillCommandWidth, WaitCommand,
     WaitCommandComparison, WordWrite,
@@ -74,7 +76,9 @@ fn false_wait_yields_to_peer_and_blocks_own_fence() -> TestResult {
     assert_eq!(
         rig.register(
             0,
-            ChannelBlock::CONTROL.offset() + ChannelRegisters::FAULT_STATUS.offset()
+            ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::RECOVERY.offset()
+                + ChannelRecovery::FAULT_STATUS.offset()
         )?,
         0
     );
@@ -110,7 +114,8 @@ fn trap_ack_preserves_pending_notification() -> TestResult {
     rig.dma.write(
         rig.bases.first().ok_or("missing channel")?
             + ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::TRAP_ACK.offset(),
+            + ChannelRegisters::IRQ.offset()
+            + ChannelInterrupts::TRAP_ACK.offset(),
         &1_u32.to_le_bytes(),
     )?;
     // Then: acknowledgement clears the cause but leaves the emitted notification.
@@ -158,7 +163,9 @@ fn abort_cancels_wait_without_fault_resume() -> TestResult {
     assert_eq!(
         rig.register(
             0,
-            ChannelBlock::CONTROL.offset() + ChannelRegisters::FAULT_STATUS.offset()
+            ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::RECOVERY.offset()
+                + ChannelRecovery::FAULT_STATUS.offset()
         )?,
         0
     );

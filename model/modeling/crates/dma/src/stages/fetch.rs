@@ -92,7 +92,7 @@ fn fetch<M: MemoryAccess<SB>, SB>(
         context.memory,
         (context.sideband)(DmaAccess {
             channel: work.channel,
-            context: ContextId::new(context.selected.registers.values.ring_context.raw()),
+            context: ContextId::new(context.selected.registers.values.config.ring_context.raw()),
         }),
     );
     match context.selected.command.peek(&memory) {

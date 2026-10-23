@@ -4,6 +4,7 @@ use crate::{
 };
 use hardware_interface_pipeline::{Operation, RunError, StepOutcome, Then};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
+use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, EventRegisters,
 };
@@ -217,7 +218,9 @@ fn reconfigure(device: &mut Dma<SharedMemory>) -> TestResult {
             2,
         ),
         (
-            ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+            ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::CONFIG.offset()
+                + ChannelConfiguration::ENABLE.offset(),
             1,
         ),
     ] {

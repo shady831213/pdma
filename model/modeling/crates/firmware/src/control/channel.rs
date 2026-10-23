@@ -4,6 +4,7 @@ use hardware_interface_schema::Decode;
 use pdma_model_contract::control::{
     ControlQueue, ControlRequest, ControlResponse, ControlRingState, ControlRingStateRaw,
 };
+use pdma_model_contract::hw_components::control::ControlConfiguration;
 use pdma_model_contract::hw_components::control::ControlNotificationRegisters;
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_contract::ring::{Ring, RingError, RingPointers};
@@ -26,12 +27,23 @@ impl<'a, B: RegisterAccess + Sync, M: MemoryAccess + Sync> Channel<'a, B, M> {
         memory: &'a M,
         base: u32,
     ) -> Result<Option<Self>, Error<B::Error, M::Error>> {
-        if read_word(bus, base, ControlRegisters::ENABLE.offset()).await? == 0 {
+        if read_word(
+            bus,
+            base,
+            ControlRegisters::CONFIG.offset() + ControlConfiguration::ENABLE.offset(),
+        )
+        .await?
+            == 0
+        {
             return Ok(None);
         }
         let mut bytes = [0; 8];
         bus.read(
-            address(base, ControlRegisters::BOOTSTRAP.offset()).map_err(Error::Ring)?,
+            address(
+                base,
+                ControlRegisters::CONFIG.offset() + ControlConfiguration::BOOTSTRAP.offset(),
+            )
+            .map_err(Error::Ring)?,
             &mut bytes,
         )
         .await

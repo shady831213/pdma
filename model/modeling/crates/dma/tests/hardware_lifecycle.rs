@@ -35,7 +35,8 @@ mod hardware_lifecycle {
         let mut driver = HardwareDriver::new();
         let causes = ChannelBlock::ALIGNMENT
             + ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::IRQ_CAUSE.offset();
+            + ChannelRegisters::IRQ.offset()
+            + pdma_model_contract::dma::ChannelInterrupts::CAUSE.offset();
         // When: the data graph publishes while its finite invocation remains unfinished.
         for _ in 0..128 {
             assert!(matches!(
@@ -218,7 +219,9 @@ mod hardware_lifecycle {
                         2,
                     ),
                     (
-                        base + ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+                        base + ChannelBlock::CONTROL.offset()
+                            + ChannelRegisters::CONFIG.offset()
+                            + pdma_model_contract::dma::ChannelConfiguration::ENABLE.offset(),
                         1,
                     ),
                 ] {

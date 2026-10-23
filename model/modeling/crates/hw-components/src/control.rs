@@ -29,7 +29,7 @@ impl ControlChannel {
     pub fn memory_identity(&self) -> Result<MemoryIdentity, InvalidContextAttributes> {
         Ok(MemoryIdentity {
             function: self.manager,
-            attributes: self.registers.values.attributes.attributes()?,
+            attributes: self.registers.values.config.attributes.attributes()?,
         })
     }
     /// Creates disabled control registers at the supplied MMIO address.
@@ -131,15 +131,16 @@ impl ControlChannel {
                 if !owned {
                     return Err(ControlError::Permission);
                 }
-                if old.enable.enabled()
-                    && (old.bootstrap != next.bootstrap
-                        || old.attributes != next.attributes
-                        || !next.enable.enabled())
+                if old.config.enable.enabled()
+                    && (old.config.bootstrap != next.config.bootstrap
+                        || old.config.attributes != next.config.attributes
+                        || !next.config.enable.enabled())
                 {
                     return Err(ControlError::ConfigurationLocked);
                 }
-                if next.enable.enabled() {
-                    next.attributes
+                if next.config.enable.enabled() {
+                    next.config
+                        .attributes
                         .attributes()
                         .map_err(|_| ControlError::InvalidAttributes)?;
                 }

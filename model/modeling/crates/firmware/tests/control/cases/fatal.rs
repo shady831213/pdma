@@ -4,13 +4,15 @@ use pdma_model_contract::control::{
     ControlEvent, ControlEventKind, ControlQueue, ControlRingState,
 };
 use pdma_model_contract::dma::{DmaControl, DmaDiscovery};
+use pdma_model_contract::hw_components::control::ControlConfiguration;
 
 #[tokio::test]
 async fn startup_fatal_is_reported_once_after_host_attaches() -> TestResult {
     use pdma_model_contract::hw_components::control::ControlRegisters;
     // Given: hardware failed before PF enabled its control rings.
     let (bus, memory) = fixture()?;
-    let enable = register(ControlRegisters::ENABLE.offset())?;
+    let enable =
+        register(ControlRegisters::CONFIG.offset() + ControlConfiguration::ENABLE.offset())?;
     bus.registers
         .lock()
         .unwrap()

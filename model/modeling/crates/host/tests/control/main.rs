@@ -7,6 +7,7 @@ use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
 };
+use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::{
     ChannelIrqMaskValues, ChannelRegisters, Command, DmaControl, DmaFatalCode, Endpoint, Event,
 };
@@ -102,7 +103,8 @@ async fn software_explicitly_enables_device_and_channel_interrupts()
     for offset in [
         (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
             + pdma_model_contract::dma::ChannelBlock::CONTROL.offset())
-            + ChannelRegisters::IRQ_ENABLE.offset(),
+            + ChannelRegisters::IRQ.offset()
+            + ChannelInterrupts::ENABLE.offset(),
         (pdma_model_contract::dma::DmaDiscovery::EXTENT
             + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
             + DmaControl::IRQ_ENABLE.offset(),

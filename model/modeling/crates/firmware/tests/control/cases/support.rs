@@ -1,3 +1,4 @@
+use pdma_model_contract::hw_components::control::ControlConfiguration;
 pub(super) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 use hardware_interface_runtime::{
     CpuAccessError, InterruptEmitter, InterruptRuntime, MemoryAccess, MemoryAddress,
@@ -123,14 +124,14 @@ pub(super) fn fixture() -> TestResult<(Bus, SharedMemory)> {
         .lock()
         .map_err(|error| io::Error::other(error.to_string()))?
         .insert(
-            register(ControlRegisters::ENABLE.offset())?,
+            register(ControlRegisters::CONFIG.offset() + ControlConfiguration::ENABLE.offset())?,
             1_u32.to_le_bytes().to_vec(),
         );
     bus.registers
         .lock()
         .map_err(|error| io::Error::other(error.to_string()))?
         .insert(
-            register(ControlRegisters::BOOTSTRAP.offset())?,
+            register(ControlRegisters::CONFIG.offset() + ControlConfiguration::BOOTSTRAP.offset())?,
             QUEUE.to_le_bytes().to_vec(),
         );
     let memory = SharedMemory::new();

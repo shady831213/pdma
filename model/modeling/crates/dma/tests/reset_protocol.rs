@@ -1,5 +1,6 @@
 //! Reset request, retirement and completion boundaries.
 
+use pdma_model_contract::dma::ChannelConfiguration;
 /// Shared raw-bus fixtures.
 pub mod support;
 
@@ -138,7 +139,10 @@ fn idle_reset_completes_without_a_hardware_step() -> TestResult {
     // Then: cleanup is already complete and configuration can be written again.
     assert_eq!(read_word(&mut device, RESET)?, 0);
     assert_eq!(
-        read_word(&mut device, CHANNEL + ChannelRegisters::ENABLE.offset())?,
+        read_word(
+            &mut device,
+            CHANNEL + ChannelRegisters::CONFIG.offset() + ChannelConfiguration::ENABLE.offset()
+        )?,
         0
     );
     device.write(
@@ -169,7 +173,7 @@ fn reset_stays_busy_until_the_accepted_invocation_retires() -> TestResult {
     // When: software attempts reconfiguration before the resident invocation retires.
     assert_eq!(
         device.write(
-            CHANNEL + ChannelRegisters::ENABLE.offset(),
+            CHANNEL + ChannelRegisters::CONFIG.offset() + ChannelConfiguration::ENABLE.offset(),
             &1_u32.to_le_bytes()
         ),
         Err(Error::ResetInProgress)

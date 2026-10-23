@@ -26,7 +26,8 @@ async fn ring_context_setter_selects_the_requested_channel()
     for (index, expected) in [(0, 0), (1, 37)] {
         let offset = ChannelId::new(index).register_offset(2).ok_or("channel")?
             + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-            + pdma_model_contract::dma::ChannelRegisters::RING_CONTEXT.offset();
+            + pdma_model_contract::dma::ChannelRegisters::CONFIG.offset()
+            + pdma_model_contract::dma::ChannelConfiguration::RING_CONTEXT.offset();
         let mut bytes = [0; 4];
         bus.read(u32::try_from(offset)?, &mut bytes).await?;
         assert_eq!(u32::from_le_bytes(bytes), expected);

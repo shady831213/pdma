@@ -3,6 +3,7 @@ use hardware_interface_pipeline::{Operation, StepOutcome, Then};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
+use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, ChannelRegisters, EventRegisters};
 use pdma_model_dma::{
     CheckRanges, Completion, Dma, Error, Fetch, Flow, PrepareChunk, ReadCopy, Retire, WriteCopy,
@@ -72,7 +73,8 @@ fn reset_between_shared_execution_and_retirement_rejects_stale_output() -> TestR
             device.write(
                 ChannelId::new(0).register_offset(2).ok_or("offset")?
                     + ChannelBlock::CONTROL.offset()
-                    + ChannelRegisters::ENABLE.offset(),
+                    + ChannelRegisters::CONFIG.offset()
+                    + ChannelConfiguration::ENABLE.offset(),
                 &0_u32.to_le_bytes(),
             )?;
         }

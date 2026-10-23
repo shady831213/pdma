@@ -62,8 +62,9 @@ header specifically describes the managed Host view.
 Reset remains a write-one/request, read-busy handshake. Retain memory until hardware
 clears busy after old work drains. Managed Host uses ResetChannel/ReleaseChannel
 requests instead of writing administrative registers. Platform-pending notifications
-survive reset. The control map is 36 bytes: bootstrap at zero, enable at eight,
-address-space attributes at 12 and request doorbell at 20. The firmware-owned
+survive reset. The control map is 36 bytes: its configuration block contains
+bootstrap at zero, address-space attributes at eight and enable at 16. The request
+doorbell remains at 20. The firmware-owned
 notification block starts at 24, containing response doorbell at 24, event doorbell
 at 28 and event error at 32. Response and event remain independent notifications.
 Enabling locks both bootstrap and address-space attributes. The latter select
@@ -71,6 +72,9 @@ Default or PASID independently of the data context table; no table slot is reser
 There is one PF control block, not a per-Function bank. Static Host metadata describes
 its PF permissions; hardware rejects every VF access. No control stride is exported.
 
+Channel data groups configuration at offset 44 (enable and ring context), recovery
+at 52 (fatal, fault status and resume), and interrupts at 64 (enable, cause, mask
+and Trap ACK). Both ring maps and the 4 KiB channel stride are unchanged.
 Channel data includes read-only 32-bit FAULT_STATUS (`FaultStatus.faulted`, bit 0)
 and write-only 32-bit RESUME (`Resume.request`, bit 0). A write-one request clears
 faulted and permits retained work to become eligible; it does not enable the
@@ -122,8 +126,10 @@ response state at byte 24 and event state at byte 48; each ring stores base/capa
 at bytes 0/8/12/16. ControlRequest stores ID/opcode/target Function/channel/context
 at bytes 0/8/12/16/20 and creation attributes at byte 24.
 
-The firmware context map has capacity, one aligned 64-bit maintenance request
-(context ID in bits 0..31, Drain/Abort action in bits 32..33), and a retained result.
+The firmware context map starts with a 16-byte management block: capacity at 0,
+result at 4 and one aligned 64-bit maintenance request at 8
+(context ID in bits 0..31, Drain/Abort action in bits 32..33).
+The 16-byte context entries begin at offset 16.
 Hardware never clears entry validity on completion; firmware owns that write.
 After the entry bank, the final `failed` bank contains one 32-bit bitmap word per
 32 hardware channels. Increasing channel count grows this tail without moving

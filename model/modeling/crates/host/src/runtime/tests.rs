@@ -1,4 +1,6 @@
 use super::Model;
+use pdma_model_contract::dma::ChannelConfiguration;
+use pdma_model_contract::dma::ChannelInterrupts;
 mod cooperative;
 mod notifications;
 use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
@@ -9,7 +11,8 @@ use pdma_model_dma::{ChannelFatal, Dma, Error};
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 const IRQ_ENABLE: usize = (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
     + pdma_model_contract::dma::ChannelBlock::CONTROL.offset())
-    + ChannelRegisters::IRQ_ENABLE.offset();
+    + ChannelRegisters::IRQ.offset()
+    + ChannelInterrupts::ENABLE.offset();
 
 #[tokio::test]
 async fn write_preserves_register_value() -> TestResult {
@@ -91,7 +94,8 @@ async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestRe
                 + EventRegisters::CAPACITY.offset(),
             (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::dma::ChannelBlock::CONTROL.offset())
-                + ChannelRegisters::ENABLE.offset(),
+                + ChannelRegisters::CONFIG.offset()
+                + ChannelConfiguration::ENABLE.offset(),
             (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::dma::ChannelBlock::COMMAND.offset())
                 + CommandRegisters::PRODUCER.offset(),

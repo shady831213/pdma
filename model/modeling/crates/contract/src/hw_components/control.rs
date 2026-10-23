@@ -43,17 +43,29 @@ register_map! {
 }
 
 register_map! {
+    #[short_description = "Control channel configuration"]
+    #[description = "PF publishes bootstrap and independent control-memory attributes by enabling the control channel. All configuration freezes after activation."]
+    pub map ControlConfiguration {
+        alignment: 8,
+        placements: [
+            #[description = "Host-owned address of the memory-resident ControlQueue. Both domains may read it. Changes are locked after activation; address zero has no special hardware meaning."]
+            pub bootstrap: Address,
+            #[description = "PF programs Default/PASID attributes before enable. Frozen with bootstrap after enable and independent of every context table slot."]
+            pub attributes: ContextAttributeRegisters,
+            #[description = "Host writes one after initializing queue memory. Both domains may read activation. Disabling and bootstrap changes are forbidden after activation; there is no live reset register."]
+            pub enable: Switch,
+        ],
+    }
+}
+
+register_map! {
     #[short_description = "Independent firmware control channel"]
     #[description = "Always-on bootstrap and software notification registers outside DMA work windows. Hardware performs no memory operations, ring validation or channel allocation."]
     pub map ControlRegisters {
         alignment: 8,
         placements: [
-            #[description = "Host-owned address of the memory-resident ControlQueue. Both domains may read it. Changes are locked after activation; address zero has no special hardware meaning."]
-            pub bootstrap: Address,
-            #[description = "Host writes one after initializing queue memory. Both domains may read activation. Disabling and bootstrap changes are forbidden after activation; there is no live reset register."]
-            pub enable: Switch,
-            #[description = "PF programs Default/PASID attributes before enable. Frozen with bootstrap after enable and independent of every context table slot."]
-            pub attributes: ContextAttributeRegisters,
+            #[description = "PF-owned bootstrap, address-space attributes and publication enable, frozen together after activation."]
+            pub config: ControlConfiguration,
             #[description = "Host-only notification to firmware after publishing requests or freeing response space."]
             pub request: Doorbell,
             #[description = "Firmware-to-PF response and event reporting, independent of request admission."]

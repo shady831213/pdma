@@ -6,6 +6,7 @@ use platform::ADDRESSES;
 use hardware_interface_runtime::{
     InterruptRuntime, RegisterAccess, SharedMemory, SoftwareCpu, pending_interrupt,
 };
+use pdma_model_contract::hw_components::control::{ControlConfiguration, ControlRegisters};
 use pdma_model_software::control::{ControlIrq, ControlIsr};
 use std::{
     future::Future,
@@ -23,10 +24,15 @@ struct DisabledBus(AtomicUsize);
 impl RegisterAccess for &DisabledBus {
     type Error = io::Error;
     async fn read(&self, address: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+        let enable = ADDRESSES.control
+            + u32::try_from(
+                ControlRegisters::CONFIG.offset() + ControlConfiguration::ENABLE.offset(),
+            )
+            .map_err(io::Error::other)?;
         bytes.fill(0);
         if address == 0 {
             bytes.copy_from_slice(&1_u32.to_le_bytes());
-        } else if address == ADDRESSES.control + 8 {
+        } else if address == enable {
             self.0.fetch_add(1, Ordering::SeqCst);
         }
         Ok(())

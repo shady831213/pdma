@@ -134,8 +134,10 @@ before acknowledging cleanup. Bindings remain valid on failure.
 
 ## Normative requirements and wire details
 
-**HW-PF-01 (range acceptance).** Command remains 104 bytes: id/source/destination/
-copy_length/flags/sg_context at 0/8/48/88/96/100. Each 40-byte endpoint has
+**HW-PF-01 (range acceptance).** Command occupies 112 bytes: ID at 0, operation kind
+at 8 and the operation payload at 16. The 96-byte Copy payload places source,
+destination, copy length and SG context at relative offsets 0/40/80/88.
+Each 40-byte endpoint has
 mode/context at 0/4 and geometry at 8: Linear has base/offset; SG has
 table/count/index/offset. All records are little-endian, eight-byte aligned;
 unused storage encodes zero. Generated schemas are the wire-layout authority.
@@ -168,11 +170,13 @@ There are no fault-access or continuation-position fields in Event.
 Parking releases shared execution capacity without retiring accepted ownership;
 terminal completion or cancellation cleanup releases it. Drain/Abort account for
 all parked references as well as currently executing work. Reset guards precede
-every old-work access. Metadata and event/completion faults do not use the resume protocol.
+every old-work access. Command/SG metadata and event-ring faults do not use the
+resume protocol. Fence and Timestamp target faults use retained command recovery,
+as specified in [Copy engine](copy-engine.md).
 
-**HW-PF-04 (fault/resume MMIO).** `ChannelRegisters.fault_status` uses the read-only
+**HW-PF-04 (fault/resume MMIO).** `ChannelRegisters.recovery.fault_status` uses the read-only
 four-byte `FaultStatus` schema with boolean `faulted` at bit 0.
-`ChannelRegisters.resume` uses the write-only four-byte `Resume` schema with boolean
+`ChannelRegisters.recovery.resume` uses the write-only four-byte `Resume` schema with boolean
 `request` at bit 0. A payload PageFault sets faulted. Writing request=1 clears the
 currently exposed faulted bit and permits scheduling under ordinary channel checks;
 it neither enables the channel, clears stopping/fatal errors nor completes a task.

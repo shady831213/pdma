@@ -45,15 +45,15 @@ fn register_offsets_are_aligned_when_maps_are_nested() -> Result<(), Box<dyn std
                 ("event.capacity", 32),
                 ("event.producer", 36),
                 ("event.consumer", 40),
-                ("control.enable", 44),
-                ("control.irq_enable", 48),
-                ("control.fatal", 52),
-                ("control.irq_cause", 56),
-                ("control.irq_mask", 60),
-                ("control.ring_context", 64),
-                ("control.fault_status", 68),
-                ("control.resume", 72),
-                ("control.trap_ack", 76),
+                ("control.config.enable", 44),
+                ("control.config.ring_context", 48),
+                ("control.recovery.fatal", 52),
+                ("control.recovery.fault_status", 56),
+                ("control.recovery.resume", 60),
+                ("control.irq.enable", 64),
+                ("control.irq.cause", 68),
+                ("control.irq.mask", 72),
+                ("control.irq.trap_ack", 76),
             ]
             .map(|(name, offset)| {
                 (
@@ -118,13 +118,13 @@ fn channel_control_metadata_defines_software_access() -> Result<(), Box<dyn std:
         metadata,
         [
             (0, Access::ReadWrite, 1, ResetKind::Zero, 0),
-            (4, Access::ReadWrite, 1, ResetKind::Zero, 0),
+            (4, Access::ReadWrite, 0xffff_ffff, ResetKind::Zero, 0),
             (8, Access::ReadOnly, 0, ResetKind::Zero, 0),
             (12, Access::ReadOnly, 0, ResetKind::Zero, 0),
-            (16, Access::ReadWrite, 3, ResetKind::Zero, 0),
-            (20, Access::ReadWrite, 0xffff_ffff, ResetKind::Zero, 0),
+            (16, Access::WriteOnly, 1, ResetKind::Zero, 0),
+            (20, Access::ReadWrite, 1, ResetKind::Zero, 0),
             (24, Access::ReadOnly, 0, ResetKind::Zero, 0),
-            (28, Access::WriteOnly, 1, ResetKind::Zero, 0),
+            (28, Access::ReadWrite, 3, ResetKind::Zero, 0),
             (32, Access::WriteOnly, 1, ResetKind::Zero, 0),
         ]
     );

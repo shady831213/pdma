@@ -61,14 +61,15 @@ impl Channel {
                     return Err(Error::ResetInProgress);
                 }
                 if maintenance
-                    && (old.enable != next.enable || old.ring_context != next.ring_context)
+                    && (old.config.enable != next.config.enable
+                        || old.config.ring_context != next.config.ring_context)
                 {
                     return Err(Error::MaintenanceInProgress);
                 }
-                if locked && old.ring_context != next.ring_context {
+                if locked && old.config.ring_context != next.config.ring_context {
                     return Err(Error::ConfigurationLocked);
                 }
-                if next.enable.raw() != 0 {
+                if next.config.enable.raw() != 0 {
                     command
                         .validate_geometry()
                         .map_err(|_| Error::Configuration)?;
@@ -76,15 +77,15 @@ impl Channel {
                 Ok(())
             },
             |_, next| {
-                if next.resume.request() {
-                    next.fault_status = FaultStatusValues::new(0);
+                if next.recovery.resume.request() {
+                    next.recovery.fault_status = FaultStatusValues::new(0);
                 }
-                next.resume = ResumeValues::new(0);
-                if next.trap_ack.request() {
-                    next.irq_cause = ChannelIrqCauseValues::new(next.irq_cause.raw() & !2);
+                next.recovery.resume = ResumeValues::new(0);
+                if next.irq.trap_ack.request() {
+                    next.irq.cause = ChannelIrqCauseValues::new(next.irq.cause.raw() & !2);
                 }
-                next.trap_ack = TrapAckValues::new(0);
-                if next.enable.raw() != 0 {
+                next.irq.trap_ack = TrapAckValues::new(0);
+                if next.config.enable.raw() != 0 {
                     *configured = true;
                 }
             },

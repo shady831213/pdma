@@ -1,5 +1,7 @@
 //! Hardware control operations do not require a memory backend.
 
+use pdma_model_contract::dma::ChannelInterrupts;
+use pdma_model_contract::dma::ChannelRecovery;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, DmaAdmin, DmaControl, DmaDiscovery,
 };
@@ -22,8 +24,8 @@ fn reset_and_irq_control_require_no_memory_backend() -> Result<(), Box<dyn std::
         + ChannelBlock::CONTROL.offset();
     for offset in [
         DmaDiscovery::EXTENT + DmaAdmin::CONTROL.offset() + DmaControl::FATAL.offset(),
-        channel + ChannelRegisters::FATAL.offset(),
-        channel + ChannelRegisters::IRQ_CAUSE.offset(),
+        channel + ChannelRegisters::RECOVERY.offset() + ChannelRecovery::FATAL.offset(),
+        channel + ChannelRegisters::IRQ.offset() + ChannelInterrupts::CAUSE.offset(),
     ] {
         device.read(offset, &mut bytes)?;
         assert_eq!(u32::from_le_bytes(bytes), 0);

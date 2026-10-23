@@ -464,7 +464,7 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   Only device reset clears it; channel reset does not.
   Ordinary memory-backend diagnostics are not automatically promoted to device fatal.
 
-`ChannelRegisters.fatal` uses the dedicated `ChannelFatal` register schema. Its
+`ChannelRegisters.recovery.fatal` uses the dedicated `ChannelFatal` register schema. Its
 `code` field is `ChannelFatalCode::{None, CommandRead, EventWrite, EventFull, EventConfiguration}`
 with wire values 0 through 4. Host `Channel::fatal()` returns this enum and rejects unknown
 encodings. Hardware updates the generated field directly; enum values and their

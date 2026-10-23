@@ -93,7 +93,9 @@ impl<M, S> Dma<M, S> {
                 .channels
                 .get(id.index())
                 .ok_or(MaintenanceError::InvalidChannel(id))?;
-            if channel.configured && channel.registers.values.ring_context.raw() == context.raw() {
+            if channel.configured
+                && channel.registers.values.config.ring_context.raw() == context.raw()
+            {
                 return Err(MaintenanceError::RingBound(id));
             }
             let pointers = channel.command.pointers();

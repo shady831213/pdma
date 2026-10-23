@@ -1,5 +1,6 @@
 //! Fatal admission and configuration containment through the public bus.
 
+use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, DmaControl, DmaDiscovery,
 };
@@ -78,7 +79,10 @@ fn fatal_rejects_new_channel_configuration_without_losing_status_or_reset()
     // Given: a configured notification source followed by a global hardware fault.
     let mut dma = Dma::new((), 2)?;
     let base = ChannelId::new(0).register_offset(2).ok_or("channel")?;
-    let enabled = base + ChannelBlock::CONTROL.offset() + ChannelRegisters::IRQ_ENABLE.offset();
+    let enabled = base
+        + ChannelBlock::CONTROL.offset()
+        + ChannelRegisters::IRQ.offset()
+        + ChannelInterrupts::ENABLE.offset();
     dma.write(enabled, &1_u32.to_le_bytes())?;
     dma.signal_fatal();
     // When: another software transaction attempts to change data-plane configuration.

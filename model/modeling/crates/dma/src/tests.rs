@@ -1,5 +1,6 @@
 use crate::{Dma, Error};
 use hardware_interface_schema::{RegisterAccessError, register_dispatch};
+use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, DmaControl, DmaRegisters,
 };
@@ -95,7 +96,9 @@ fn collection_indexes_channels_and_preserves_terminal_errors()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: each channel has a distinct IRQ-enable state.
     let mut device = Dma::new((), 3)?;
-    let offset = ChannelBlock::CONTROL.offset() + ChannelRegisters::IRQ_ENABLE.offset();
+    let offset = ChannelBlock::CONTROL.offset()
+        + ChannelRegisters::IRQ.offset()
+        + ChannelInterrupts::ENABLE.offset();
     let selected = ChannelId::new(2).register_offset(3).ok_or("offset")? + offset;
     device.write(selected, &1_u32.to_le_bytes())?;
     // When: accesses are dispatched through the repeated window.

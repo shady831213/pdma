@@ -10,10 +10,10 @@ fn reset_fault_decodes_to_none() -> Result<(), Box<dyn std::error::Error>> {
     // Given: reset channel registers.
     let registers = ChannelRegistersValues::default();
     // When: software interprets the fatal field.
-    let code = registers.fatal.code()?;
+    let code = registers.recovery.fatal.code()?;
     // Then: the reset encoding denotes no fatal.
     assert_eq!(code, ChannelFatalCode::None);
-    assert_eq!(registers.fatal.raw(), 0);
+    assert_eq!(registers.recovery.fatal.raw(), 0);
     Ok(())
 }
 

@@ -1,6 +1,7 @@
 use super::{TestResult, add, fence, rig, target};
 use crate::command_operations::support::{CAUSE, EVENT_PRODUCER};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use pdma_model_contract::dma::ChannelRecovery;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelRegisters, Command, CommandRegisters, DmaAdmin, DmaDiscovery, FillCommand,
     FillCommandWidth, SemaphoreCommand, SemaphoreCommandOperation, WaitCommand,
@@ -45,7 +46,9 @@ fn scalar_faults_retain_commands_until_resume() -> TestResult {
         assert_eq!(
             rig.register(
                 0,
-                ChannelBlock::CONTROL.offset() + ChannelRegisters::FAULT_STATUS.offset()
+                ChannelBlock::CONTROL.offset()
+                    + ChannelRegisters::RECOVERY.offset()
+                    + ChannelRecovery::FAULT_STATUS.offset()
             )?,
             1
         );
@@ -53,7 +56,8 @@ fn scalar_faults_retain_commands_until_resume() -> TestResult {
         rig.dma.write(
             rig.bases.first().ok_or("missing channel")?
                 + ChannelBlock::CONTROL.offset()
-                + ChannelRegisters::RESUME.offset(),
+                + ChannelRegisters::RECOVERY.offset()
+                + ChannelRecovery::RESUME.offset(),
             &1_u32.to_le_bytes(),
         )?;
         rig.drive()?;
@@ -94,7 +98,8 @@ fn fill_fault_retains_committed_prefix() -> TestResult {
     rig.dma.write(
         rig.bases.first().ok_or("missing channel")?
             + ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::RESUME.offset(),
+            + ChannelRegisters::RECOVERY.offset()
+            + ChannelRecovery::RESUME.offset(),
         &1_u32.to_le_bytes(),
     )?;
     rig.drive()?;

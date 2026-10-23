@@ -1,5 +1,6 @@
 //! Hardware reset boundaries, including retained execution state.
 
+use pdma_model_contract::dma::ChannelConfiguration;
 /// Shared raw-bus fixtures.
 pub mod support;
 
@@ -192,7 +193,8 @@ fn reset_after_committed_chunk_discards_remaining_copy_after_reconfiguration() -
         device.write(
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-                + ChannelRegisters::ENABLE.offset(),
+                + ChannelRegisters::CONFIG.offset()
+                + ChannelConfiguration::ENABLE.offset(),
             &1_u32.to_le_bytes(),
         )?;
         // Then: the prefix survives, the suffix is untouched, and new work can complete.

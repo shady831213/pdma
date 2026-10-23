@@ -1,4 +1,6 @@
 //! Error publication belongs to the channel at the producing interaction.
+use pdma_model_contract::dma::ChannelInterrupts;
+use pdma_model_contract::dma::ChannelRecovery;
 #[doc = "Shared memory and MMIO fixtures."]
 pub mod support;
 
@@ -36,7 +38,8 @@ fn read_failure_publishes_before_any_downstream_stage_runs() -> TestResult {
         ChannelBlock::ALIGNMENT + ChannelBlock::EVENT.offset() + EventRegisters::PRODUCER.offset();
     let causes = ChannelBlock::ALIGNMENT
         + ChannelBlock::CONTROL.offset()
-        + ChannelRegisters::IRQ_CAUSE.offset();
+        + ChannelRegisters::IRQ.offset()
+        + ChannelInterrupts::CAUSE.offset();
     // Then: the owner has already published exactly one real event and notified software.
     assert_eq!(read_word(&mut dma, producer)?, 1);
     assert_eq!(read_word(&mut dma, causes)?, 5);
@@ -83,13 +86,16 @@ fn failing_read_reports_fatal_storage_failure_without_a_publisher() -> TestResul
     assert!(finished);
     let control = ChannelBlock::ALIGNMENT + ChannelBlock::CONTROL.offset();
     assert_eq!(
-        read_word(&mut dma, control + ChannelRegisters::IRQ_CAUSE.offset())?,
+        read_word(
+            &mut dma,
+            control + ChannelRegisters::IRQ.offset() + ChannelInterrupts::CAUSE.offset()
+        )?,
         12
     );
     assert_eq!(
         pdma_model_contract::dma::ChannelFatalValues::new(read_word(
             &mut dma,
-            control + ChannelRegisters::FATAL.offset()
+            control + ChannelRegisters::RECOVERY.offset() + ChannelRecovery::FATAL.offset()
         )?)
         .code(),
         Ok(pdma_model_contract::dma::ChannelFatalCode::EventWrite)

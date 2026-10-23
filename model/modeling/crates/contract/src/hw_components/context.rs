@@ -79,12 +79,12 @@ register_map! {
             #[short_description = "Context table capacity"]
             #[description = "Read-only instance-configured number of context entries, not the number of free entries. Valid indices are zero through capacity minus one."]
             pub capacity: ReadWord,
-            #[short_description = "Maintenance request"]
-            #[description = "Firmware submits one context ID and Drain or Abort action in an atomic 64-bit transaction. Reads return zero after acceptance; use result to observe completion."]
-            pub request: ContextRequest,
             #[short_description = "Maintenance result"]
             #[description = "Read-only status of the latest accepted non-Idle request. Success establishes cleanup but leaves valid unchanged. On Failed, read the tail bitmap for all detected failing channels in the operation scope."]
             pub result: ContextResult,
+            #[short_description = "Maintenance request"]
+            #[description = "Firmware submits one context ID and Drain or Abort action in an atomic 64-bit transaction. Reads return zero after acceptance; use result to observe completion."]
+            pub request: ContextRequest,
         ],
     }
 }

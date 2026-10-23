@@ -1,5 +1,7 @@
 //! Raw bus, copy publication and channel-fault behavior.
 
+use pdma_model_contract::dma::ChannelInterrupts;
+use pdma_model_contract::dma::ChannelRecovery;
 /// Shared raw-bus test fixtures.
 pub mod support;
 
@@ -53,7 +55,8 @@ fn event_write_fault_is_reported_without_event_memory() -> TestResult {
             &mut device,
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-                + ChannelRegisters::FATAL.offset()
+                + ChannelRegisters::RECOVERY.offset()
+                + ChannelRecovery::FATAL.offset()
         )?,
         ChannelFatal::EventWrite.code().raw()
     );
@@ -69,7 +72,8 @@ fn event_write_fault_is_reported_without_event_memory() -> TestResult {
     device.write(
         pdma_model_contract::dma::ChannelBlock::ALIGNMENT
             + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::IRQ_ENABLE.offset(),
+            + ChannelRegisters::IRQ.offset()
+            + ChannelInterrupts::ENABLE.offset(),
         &0_u32.to_le_bytes(),
     )?;
     assert!(device.take_interrupt());
@@ -116,7 +120,8 @@ fn source_access_failure_reports_a_stopping_event() -> TestResult {
             &mut device,
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-                + ChannelRegisters::FATAL.offset()
+                + ChannelRegisters::RECOVERY.offset()
+                + ChannelRecovery::FATAL.offset()
         )?,
         0
     );
@@ -160,7 +165,8 @@ fn successive_successes_reuse_command_slots_without_event_consumption() -> TestR
             &mut device,
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-                + ChannelRegisters::FATAL.offset()
+                + ChannelRegisters::RECOVERY.offset()
+                + ChannelRecovery::FATAL.offset()
         )?,
         0
     );

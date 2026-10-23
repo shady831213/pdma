@@ -1,5 +1,6 @@
 use super::support::{CAUSE, EVENT_PRODUCER, Rig, TestResult, fence, target};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelRegisters, Command, WaitCommand, WaitCommandComparison,
 };
@@ -10,7 +11,8 @@ fn unmask_does_not_replay_trap_but_a_later_trap_emits() -> TestResult {
     let mut rig = Rig::new(1, 0)?;
     let mask = rig.bases.first().ok_or("missing channel")?
         + ChannelBlock::CONTROL.offset()
-        + ChannelRegisters::IRQ_MASK.offset();
+        + ChannelRegisters::IRQ.offset()
+        + ChannelInterrupts::MASK.offset();
     rig.dma.write(mask, &2_u32.to_le_bytes())?;
     rig.submit(
         0,

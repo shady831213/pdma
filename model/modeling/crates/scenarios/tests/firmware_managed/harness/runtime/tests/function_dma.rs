@@ -132,7 +132,8 @@ fn another_functions_mapping_cannot_satisfy_a_dma_access() -> TestResult {
                 let mut fault = [0; 4];
                 dma.read(
                     base + ChannelBlock::CONTROL.offset()
-                        + pdma_model_contract::dma::ChannelRegisters::FATAL.offset(),
+                        + pdma_model_contract::dma::ChannelRegisters::RECOVERY.offset()
+                        + pdma_model_contract::dma::ChannelRecovery::FATAL.offset(),
                     &mut fault,
                 )?;
                 assert_ne!(u32::from_le_bytes(fault), 0, "{path:?}");

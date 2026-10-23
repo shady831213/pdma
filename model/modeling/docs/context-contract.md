@@ -9,7 +9,8 @@ subsequent RTL. Related behavior is described by [Function isolation](function-i
 Implementation scope, 2026-09-23: the first iteration selects Default or PASID
 address spaces. Context attributes are a named schema record, extensible separately
 from descriptor selectors. Source/destination and SG selectors are 32-bit IDs in
-the Command layout, now 104 bytes after explicit range selection support.
+the Copy payload. The current operation-tagged Command occupies 112 bytes;
+its Copy payload occupies 96 bytes.
 Table capacity is instance configuration.
 Device-memory targeting, address translation and base/limit permission windows
 are outside this iteration. The obligations below are the implementation and
@@ -340,7 +341,11 @@ preserve this distinction when the external transport is implemented.
 
 ### Context management register contract
 
-`capacity` reports the instance's total number of context entries, not free slots.
+The management header occupies 16 bytes: `capacity` at offset 0, `result` at 4
+and `request` at 8. `capacity` reports the instance's total number of context entries,
+not free slots. The complete context-entry bank follows at offset 16, with a
+16-byte stride. These addresses derive from the schema and do not require
+16-byte MMIO accesses.
 The aligned 64-bit `request` register carries the 32-bit context ID in bits 0..31
 and the action in bits 32..33 (Idle=0, Drain=1, Abort=2; 3 is invalid). Submit these
 together in one eight-byte MMIO write. Partial writes, invalid actions and writes

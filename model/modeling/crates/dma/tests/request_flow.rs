@@ -4,6 +4,7 @@ use hardware_interface_pipeline::{Arbitration, Operation, Stage, StepOutcome, St
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
+use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Endpoint, EventRegisters,
 };
@@ -104,7 +105,9 @@ fn fixture() -> TestResult<Dma<ObservedMemory>> {
                 2,
             ),
             (
-                ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+                ChannelBlock::CONTROL.offset()
+                    + ChannelRegisters::CONFIG.offset()
+                    + ChannelConfiguration::ENABLE.offset(),
                 1,
             ),
             (

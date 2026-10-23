@@ -79,7 +79,7 @@ impl<M, SB> Dma<M, SB> {
             || !channel.enabled()
             || channel.resetting()
             || channel.halted()
-            || channel.registers.values.fault_status.faulted()
+            || channel.registers.values.recovery.fault_status.faulted()
         {
             return Ok(None);
         }

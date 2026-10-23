@@ -1,5 +1,6 @@
 use super::*;
 use hardware_interface_pipeline::StepOutcome;
+use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::ChannelId;
 
 pub(super) fn pair() -> TestResult<(Dma<Paged>, usize, Command)> {
@@ -42,7 +43,7 @@ pub(super) fn pair() -> TestResult<(Dma<Paged>, usize, Command)> {
         )?;
         for offset in [
             event + EventRegisters::CAPACITY.offset(),
-            control + ChannelRegisters::ENABLE.offset(),
+            control + ChannelRegisters::CONFIG.offset() + ChannelConfiguration::ENABLE.offset(),
         ] {
             device.write(offset, &1_u32.to_le_bytes())?;
         }
@@ -136,7 +137,10 @@ fn parked_reset_finishes_while_an_accepted_peer_is_disabled() -> TestResult {
     // Given: one parked task and an accepted peer that is disabled before payload access.
     let (mut device, peer_event, _) = pair()?;
     let peer = ChannelId::new(1).register_offset(2).ok_or("peer")?;
-    let enable = peer + ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset();
+    let enable = peer
+        + ChannelBlock::CONTROL.offset()
+        + ChannelRegisters::CONFIG.offset()
+        + ChannelConfiguration::ENABLE.offset();
     let reset = ChannelId::new(0).admin_offset(2).ok_or("reset")?;
     let mut pipeline = device.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();

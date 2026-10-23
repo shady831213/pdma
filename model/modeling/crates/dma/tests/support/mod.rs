@@ -2,7 +2,9 @@ use hardware_interface_pipeline::{Operation, StepOutcome, Then};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
+use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::ChannelId;
+use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::{
     ChannelRegisters, Command, CommandRegisters, Endpoint, EventRegisters,
 };
@@ -104,13 +106,15 @@ pub fn configure<M: MemoryAccess>(
         (
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-                + ChannelRegisters::IRQ_ENABLE.offset(),
+                + ChannelRegisters::IRQ.offset()
+                + ChannelInterrupts::ENABLE.offset(),
             1,
         ),
         (
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-                + ChannelRegisters::ENABLE.offset(),
+                + ChannelRegisters::CONFIG.offset()
+                + ChannelConfiguration::ENABLE.offset(),
             1,
         ),
     ] {

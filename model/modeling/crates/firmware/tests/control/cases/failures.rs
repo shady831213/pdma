@@ -17,8 +17,12 @@ async fn misaligned_bootstrap_descriptor_is_rejected() -> TestResult {
         .write(MemoryAddress::new(QUEUE + 1), MemoryAlignment::ONE, &bytes)
         .unwrap();
     bus.registers.lock().unwrap().insert(
-        register(pdma_model_contract::hw_components::control::ControlRegisters::BOOTSTRAP.offset())
-            .unwrap(),
+        register(
+            pdma_model_contract::hw_components::control::ControlRegisters::CONFIG.offset()
+                + pdma_model_contract::hw_components::control::ControlConfiguration::BOOTSTRAP
+                    .offset(),
+        )
+        .unwrap(),
         (QUEUE + 1).to_le_bytes().to_vec(),
     );
     let mut program = std::pin::pin!(run(&bus, memory));

@@ -5,6 +5,7 @@ use hardware_interface_runtime::{
     SoftwareCpu,
 };
 use hardware_interface_schema::RegisterCodecError;
+use pdma_model_contract::dma::ChannelRecovery;
 use pdma_model_contract::dma::ChannelRegisters;
 use pdma_model_dma::Dma;
 use pdma_model_host::{
@@ -23,7 +24,8 @@ impl RegisterAccess for CorruptFaultBus {
             == Some(
                 (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
                     + pdma_model_contract::dma::ChannelBlock::CONTROL.offset())
-                    + ChannelRegisters::FATAL.offset(),
+                    + ChannelRegisters::RECOVERY.offset()
+                    + ChannelRecovery::FATAL.offset(),
             )
         {
             response.copy_from_slice(&255_u32.to_le_bytes());

@@ -1,6 +1,7 @@
 use super::{Grant, Handler, HostVector, Ports, TestResult};
 use crate::harness::{program::buffers, runtime::AccessError};
 use hardware_interface_runtime::RegisterAccess;
+use pdma_model_contract::dma::ChannelRecovery;
 use pdma_model_contract::{
     control::ControlResponseStatus,
     dma::{ChannelRegisters, ContextId},
@@ -52,7 +53,8 @@ pub(in crate::harness) async fn run<M: Send>(
         + u32::try_from(
             channel.register_offset(1).ok_or("channel address")?
                 + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-                + ChannelRegisters::RESUME.offset(),
+                + ChannelRegisters::RECOVERY.offset()
+                + ChannelRecovery::RESUME.offset(),
         )?;
     let foreign_resume = ports.bus.write(resume, &1_u32.to_le_bytes()).await;
     lifecycle

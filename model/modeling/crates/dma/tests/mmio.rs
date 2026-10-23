@@ -1,5 +1,7 @@
 //! MMIO rejection and side-effect boundaries.
 
+use pdma_model_contract::dma::ChannelConfiguration;
+use pdma_model_contract::dma::ChannelInterrupts;
 /// Shared raw-bus fixtures.
 pub mod support;
 
@@ -51,7 +53,10 @@ fn rejected_root_access_preserves_channels_and_pending_irq() -> TestResult {
         // Then: no fallback performs a write or reset on any channel.
         assert_eq!(result, Err(expected));
         assert_eq!(
-            read_word(&mut device, CONTROL + ChannelRegisters::ENABLE.offset())?,
+            read_word(
+                &mut device,
+                CONTROL + ChannelRegisters::CONFIG.offset() + ChannelConfiguration::ENABLE.offset()
+            )?,
             1
         );
         assert_eq!(
@@ -80,7 +85,11 @@ fn rejected_reads_preserve_destination_and_pending_notification() -> TestResult 
         (EVENT + EventRegisters::BASE.offset(), 4, Error::Width),
         (EVENT + 1, 4, Error::Unmapped),
         (usize::MAX, 4, Error::Unmapped),
-        (CONTROL + ChannelRegisters::ENABLE.offset(), 0, Error::Width),
+        (
+            CONTROL + ChannelRegisters::CONFIG.offset() + ChannelConfiguration::ENABLE.offset(),
+            0,
+            Error::Width,
+        ),
     ] {
         let mut destination = [0xa5; 4];
         // When: the bus rejects the read.
@@ -112,7 +121,10 @@ fn rejected_consumption_preserves_trap_and_consumer() -> TestResult {
         0
     );
     assert_eq!(
-        read_word(&mut device, CONTROL + ChannelRegisters::IRQ_CAUSE.offset())?,
+        read_word(
+            &mut device,
+            CONTROL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::CAUSE.offset()
+        )?,
         2
     );
     assert!(!device.irq());

@@ -4,6 +4,8 @@ use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
+use pdma_model_contract::dma::ChannelConfiguration;
+use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, ContextId, Endpoint,
     EventRegisters, Segment,
@@ -100,8 +102,8 @@ fn retired_copy_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
     for offset in [
         base + CommandRegisters::CAPACITY.offset(),
         events + EventRegisters::CAPACITY.offset(),
-        control + ChannelRegisters::IRQ_ENABLE.offset(),
-        control + ChannelRegisters::ENABLE.offset(),
+        control + ChannelRegisters::IRQ.offset() + ChannelInterrupts::ENABLE.offset(),
+        control + ChannelRegisters::CONFIG.offset() + ChannelConfiguration::ENABLE.offset(),
     ] {
         dma.write(offset, &1_u32.to_le_bytes())?;
     }

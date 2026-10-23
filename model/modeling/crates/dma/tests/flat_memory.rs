@@ -1,5 +1,7 @@
 //! DMA integration with an independently owned flat byte store.
 
+use pdma_model_contract::dma::ChannelConfiguration;
+use pdma_model_contract::dma::ChannelInterrupts;
 /// Shared raw-bus fixtures and single-command assembly.
 pub mod support;
 
@@ -164,10 +166,12 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
             + EventRegisters::CAPACITY.offset(),
         pdma_model_contract::dma::ChannelBlock::ALIGNMENT
             + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::IRQ_ENABLE.offset(),
+            + ChannelRegisters::IRQ.offset()
+            + ChannelInterrupts::ENABLE.offset(),
         pdma_model_contract::dma::ChannelBlock::ALIGNMENT
             + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::ENABLE.offset(),
+            + ChannelRegisters::CONFIG.offset()
+            + ChannelConfiguration::ENABLE.offset(),
         pdma_model_contract::dma::ChannelBlock::ALIGNMENT
             + pdma_model_contract::dma::ChannelBlock::COMMAND.offset()
             + CommandRegisters::PRODUCER.offset(),

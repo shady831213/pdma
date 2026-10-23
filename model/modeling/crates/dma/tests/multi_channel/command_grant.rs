@@ -1,6 +1,7 @@
 use super::support::{TestResult, completion, configure, submit, word};
 use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{MemoryAlignment, MemoryRegion, SharedMemory};
+use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, EventRegisters,
 };
@@ -56,7 +57,10 @@ fn reselect_before_fetch(reset: bool) -> TestResult {
             )
         } else {
             (
-                first + ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+                first
+                    + ChannelBlock::CONTROL.offset()
+                    + ChannelRegisters::CONFIG.offset()
+                    + ChannelConfiguration::ENABLE.offset(),
                 0,
             )
         };

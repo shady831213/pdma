@@ -6,7 +6,7 @@
 /*
  * Instance-sized firmware-only context table and maintenance aperture. No context slot is reserved for control bootstrap.
  */
-#define C_FCTX_SIZE UINT64_C(72)
+#define C_FCTX_SIZE UINT64_C(68)
 #define C_FCTX_ACCESS_READ_ONLY UINT32_C(0)
 #define C_FCTX_ACCESS_READ_WRITE UINT32_C(1)
 #define C_FCTX_ACCESS_WRITE_ONLY UINT32_C(2)
@@ -59,6 +59,27 @@
 #define C_FCTX_C_QUCQUAQUPQUAQUCQUIQUTQUY_WRITABLE_MASK UINT64_C(0)
 
 /*
+ * Maintenance result
+ * Read-only status of the latest accepted non-Idle request. Success establishes cleanup but leaves valid unchanged. On Failed, read the tail bitmap for all detected failing channels in the operation scope.
+ */
+/*
+ * state
+ * Idle before the first request; Pending while draining; Success only at the cleanup boundary. InvalidContext rejects an absent entry; Busy rejects a conflicting operation or live ring binding; Failed requires recovery, with channel details in the tail bitmap.
+ */
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUIDLE UINT64_C(0)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUPENDING UINT64_C(1)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUSUCCESS UINT64_C(2)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUINVALIDQUCONTEXT UINT64_C(3)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUBUSY UINT64_C(4)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUFAILED UINT64_C(5)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_OFFSET UINT64_C(4)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_WIDTH UINT64_C(4)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_ACCESS C_FCTX_ACCESS_READ_ONLY
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_RESET_KIND C_FCTX_RESET_ZERO
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_RESET_VALUE UINT64_C(0)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_WRITABLE_MASK UINT64_C(0)
+
+/*
  * Maintenance request
  * Firmware submits one context ID and Drain or Abort action in an atomic 64-bit transaction. Reads return zero after acceptance; use result to observe completion.
  */
@@ -81,31 +102,10 @@
 #define C_FCTX_C_QURQUEQUQQUUQUEQUSQUT_WRITABLE_MASK UINT64_C(17179869183)
 
 /*
- * Maintenance result
- * Read-only status of the latest accepted non-Idle request. Success establishes cleanup but leaves valid unchanged. On Failed, read the tail bitmap for all detected failing channels in the operation scope.
- */
-/*
- * state
- * Idle before the first request; Pending while draining; Success only at the cleanup boundary. InvalidContext rejects an absent entry; Busy rejects a conflicting operation or live ring binding; Failed requires recovery, with channel details in the tail bitmap.
- */
-#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUIDLE UINT64_C(0)
-#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUPENDING UINT64_C(1)
-#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUSUCCESS UINT64_C(2)
-#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUINVALIDQUCONTEXT UINT64_C(3)
-#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUBUSY UINT64_C(4)
-#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUFAILED UINT64_C(5)
-#define C_FCTX_C_QURQUEQUSQUUQULQUT_OFFSET UINT64_C(16)
-#define C_FCTX_C_QURQUEQUSQUUQULQUT_WIDTH UINT64_C(4)
-#define C_FCTX_C_QURQUEQUSQUUQULQUT_ACCESS C_FCTX_ACCESS_READ_ONLY
-#define C_FCTX_C_QURQUEQUSQUUQULQUT_RESET_KIND C_FCTX_RESET_ZERO
-#define C_FCTX_C_QURQUEQUSQUUQULQUT_RESET_VALUE UINT64_C(0)
-#define C_FCTX_C_QURQUEQUSQUUQULQUT_WRITABLE_MASK UINT64_C(0)
-
-/*
  * Read/write word
  * Function identity authorized to reference this context through its channels.
  */
-#define C_FCTX_C_QUOQUWQUNQUEQUR__1_OFFSET UINT64_C(20)
+#define C_FCTX_C_QUOQUWQUNQUEQUR__1_OFFSET UINT64_C(16)
 #define C_FCTX_C_QUOQUWQUNQUEQUR__1_WIDTH UINT64_C(4)
 #define C_FCTX_C_QUOQUWQUNQUEQUR__1_ACCESS C_FCTX_ACCESS_READ_WRITE
 #define C_FCTX_C_QUOQUWQUNQUEQUR__1_RESET_KIND C_FCTX_RESET_ZERO
@@ -116,7 +116,7 @@
  * Read/write word
  * Address-space mode encoded by ContextAttributes: Default is distinct from PASID zero.
  */
-#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__1_OFFSET UINT64_C(24)
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__1_OFFSET UINT64_C(20)
 #define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__1_WIDTH UINT64_C(4)
 #define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__1_ACCESS C_FCTX_ACCESS_READ_WRITE
 #define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__1_RESET_KIND C_FCTX_RESET_ZERO
@@ -127,7 +127,7 @@
  * Read/write word
  * Twenty-bit PASID when PASID mode is selected; must be zero in Default mode.
  */
-#define C_FCTX_C_QUPQUAQUSQUIQUD__1_OFFSET UINT64_C(28)
+#define C_FCTX_C_QUPQUAQUSQUIQUD__1_OFFSET UINT64_C(24)
 #define C_FCTX_C_QUPQUAQUSQUIQUD__1_WIDTH UINT64_C(4)
 #define C_FCTX_C_QUPQUAQUSQUIQUD__1_ACCESS C_FCTX_ACCESS_READ_WRITE
 #define C_FCTX_C_QUPQUAQUSQUIQUD__1_RESET_KIND C_FCTX_RESET_ZERO
@@ -143,7 +143,7 @@
  * Enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
-#define C_FCTX_C_QUVQUAQULQUIQUD__1_OFFSET UINT64_C(32)
+#define C_FCTX_C_QUVQUAQULQUIQUD__1_OFFSET UINT64_C(28)
 #define C_FCTX_C_QUVQUAQULQUIQUD__1_WIDTH UINT64_C(4)
 #define C_FCTX_C_QUVQUAQULQUIQUD__1_ACCESS C_FCTX_ACCESS_READ_WRITE
 #define C_FCTX_C_QUVQUAQULQUIQUD__1_RESET_KIND C_FCTX_RESET_ZERO
@@ -154,7 +154,7 @@
  * Read/write word
  * Function identity authorized to reference this context through its channels.
  */
-#define C_FCTX_C_QUOQUWQUNQUEQUR__2_OFFSET UINT64_C(36)
+#define C_FCTX_C_QUOQUWQUNQUEQUR__2_OFFSET UINT64_C(32)
 #define C_FCTX_C_QUOQUWQUNQUEQUR__2_WIDTH UINT64_C(4)
 #define C_FCTX_C_QUOQUWQUNQUEQUR__2_ACCESS C_FCTX_ACCESS_READ_WRITE
 #define C_FCTX_C_QUOQUWQUNQUEQUR__2_RESET_KIND C_FCTX_RESET_ZERO
@@ -165,7 +165,7 @@
  * Read/write word
  * Address-space mode encoded by ContextAttributes: Default is distinct from PASID zero.
  */
-#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__2_OFFSET UINT64_C(40)
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__2_OFFSET UINT64_C(36)
 #define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__2_WIDTH UINT64_C(4)
 #define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__2_ACCESS C_FCTX_ACCESS_READ_WRITE
 #define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__2_RESET_KIND C_FCTX_RESET_ZERO
@@ -176,7 +176,7 @@
  * Read/write word
  * Twenty-bit PASID when PASID mode is selected; must be zero in Default mode.
  */
-#define C_FCTX_C_QUPQUAQUSQUIQUD__2_OFFSET UINT64_C(44)
+#define C_FCTX_C_QUPQUAQUSQUIQUD__2_OFFSET UINT64_C(40)
 #define C_FCTX_C_QUPQUAQUSQUIQUD__2_WIDTH UINT64_C(4)
 #define C_FCTX_C_QUPQUAQUSQUIQUD__2_ACCESS C_FCTX_ACCESS_READ_WRITE
 #define C_FCTX_C_QUPQUAQUSQUIQUD__2_RESET_KIND C_FCTX_RESET_ZERO
@@ -192,7 +192,7 @@
  * Enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
-#define C_FCTX_C_QUVQUAQULQUIQUD__2_OFFSET UINT64_C(48)
+#define C_FCTX_C_QUVQUAQULQUIQUD__2_OFFSET UINT64_C(44)
 #define C_FCTX_C_QUVQUAQULQUIQUD__2_WIDTH UINT64_C(4)
 #define C_FCTX_C_QUVQUAQULQUIQUD__2_ACCESS C_FCTX_ACCESS_READ_WRITE
 #define C_FCTX_C_QUVQUAQULQUIQUD__2_RESET_KIND C_FCTX_RESET_ZERO
@@ -203,7 +203,7 @@
  * Read/write word
  * Function identity authorized to reference this context through its channels.
  */
-#define C_FCTX_C_QUOQUWQUNQUEQUR__3_OFFSET UINT64_C(52)
+#define C_FCTX_C_QUOQUWQUNQUEQUR__3_OFFSET UINT64_C(48)
 #define C_FCTX_C_QUOQUWQUNQUEQUR__3_WIDTH UINT64_C(4)
 #define C_FCTX_C_QUOQUWQUNQUEQUR__3_ACCESS C_FCTX_ACCESS_READ_WRITE
 #define C_FCTX_C_QUOQUWQUNQUEQUR__3_RESET_KIND C_FCTX_RESET_ZERO
@@ -214,7 +214,7 @@
  * Read/write word
  * Address-space mode encoded by ContextAttributes: Default is distinct from PASID zero.
  */
-#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__3_OFFSET UINT64_C(56)
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__3_OFFSET UINT64_C(52)
 #define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__3_WIDTH UINT64_C(4)
 #define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__3_ACCESS C_FCTX_ACCESS_READ_WRITE
 #define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__3_RESET_KIND C_FCTX_RESET_ZERO
@@ -225,7 +225,7 @@
  * Read/write word
  * Twenty-bit PASID when PASID mode is selected; must be zero in Default mode.
  */
-#define C_FCTX_C_QUPQUAQUSQUIQUD__3_OFFSET UINT64_C(60)
+#define C_FCTX_C_QUPQUAQUSQUIQUD__3_OFFSET UINT64_C(56)
 #define C_FCTX_C_QUPQUAQUSQUIQUD__3_WIDTH UINT64_C(4)
 #define C_FCTX_C_QUPQUAQUSQUIQUD__3_ACCESS C_FCTX_ACCESS_READ_WRITE
 #define C_FCTX_C_QUPQUAQUSQUIQUD__3_RESET_KIND C_FCTX_RESET_ZERO
@@ -241,7 +241,7 @@
  * Enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
-#define C_FCTX_C_QUVQUAQULQUIQUD__3_OFFSET UINT64_C(64)
+#define C_FCTX_C_QUVQUAQULQUIQUD__3_OFFSET UINT64_C(60)
 #define C_FCTX_C_QUVQUAQULQUIQUD__3_WIDTH UINT64_C(4)
 #define C_FCTX_C_QUVQUAQULQUIQUD__3_ACCESS C_FCTX_ACCESS_READ_WRITE
 #define C_FCTX_C_QUVQUAQULQUIQUD__3_RESET_KIND C_FCTX_RESET_ZERO
@@ -252,7 +252,7 @@
  * Read-only word
  * All detected failed channels in this word at the maintenance failure boundary. Frozen with the result until the next accepted non-Idle request; software cannot clear it.
  */
-#define C_FCTX_C_QUBQUIQUTQUS_OFFSET UINT64_C(68)
+#define C_FCTX_C_QUBQUIQUTQUS_OFFSET UINT64_C(64)
 #define C_FCTX_C_QUBQUIQUTQUS_WIDTH UINT64_C(4)
 #define C_FCTX_C_QUBQUIQUTQUS_ACCESS C_FCTX_ACCESS_READ_ONLY
 #define C_FCTX_C_QUBQUIQUTQUS_RESET_KIND C_FCTX_RESET_ZERO
@@ -260,12 +260,12 @@
 #define C_FCTX_C_QUBQUIQUTQUS_WRITABLE_MASK UINT64_C(0)
 
 #define C_FCTX_C_ENTRIES_INDEX UINT64_C(0)
-#define C_FCTX_C_ENTRIES_BASE UINT64_C(20)
+#define C_FCTX_C_ENTRIES_BASE UINT64_C(16)
 #define C_FCTX_C_ENTRIES_COUNT UINT64_C(3)
 #define C_FCTX_C_ENTRIES_STRIDE UINT64_C(16)
 
 #define C_FCTX_C_FAILED_INDEX UINT64_C(1)
-#define C_FCTX_C_FAILED_BASE UINT64_C(68)
+#define C_FCTX_C_FAILED_BASE UINT64_C(64)
 #define C_FCTX_C_FAILED_COUNT UINT64_C(1)
 #define C_FCTX_C_FAILED_STRIDE UINT64_C(4)
 
@@ -331,6 +331,21 @@
  * Processing enable, interrupt causes and sticky channel fatal. Trap notifications do not use event storage.
  */
 /*
+ * DmaRegisters.channels[0].control.config
+ * Channel configuration
+ * Processing enable and locked ring context.
+ */
+/*
+ * DmaRegisters.channels[0].control.recovery
+ * Channel failure and resume
+ * Sticky fatal status and payload fault recovery.
+ */
+/*
+ * DmaRegisters.channels[0].control.irq
+ * Channel interrupt controls
+ * Notification enable, causes, masks and Trap acknowledgment.
+ */
+/*
  * DmaRegisters.channels[1]
  * Independent channel data interfaces
  * Page-aligned complete channel blocks containing rings, configuration, fatal failures and notifications. Unused bytes are reserved to their owning block.
@@ -351,6 +366,21 @@
  * Processing enable, interrupt causes and sticky channel fatal. Trap notifications do not use event storage.
  */
 /*
+ * DmaRegisters.channels[1].control.config
+ * Channel configuration
+ * Processing enable and locked ring context.
+ */
+/*
+ * DmaRegisters.channels[1].control.recovery
+ * Channel failure and resume
+ * Sticky fatal status and payload fault recovery.
+ */
+/*
+ * DmaRegisters.channels[1].control.irq
+ * Channel interrupt controls
+ * Notification enable, causes, masks and Trap acknowledgment.
+ */
+/*
  * DmaRegisters.channels[2]
  * Independent channel data interfaces
  * Page-aligned complete channel blocks containing rings, configuration, fatal failures and notifications. Unused bytes are reserved to their owning block.
@@ -369,6 +399,21 @@
  * DmaRegisters.channels[2].control
  * Channel management interface
  * Processing enable, interrupt causes and sticky channel fatal. Trap notifications do not use event storage.
+ */
+/*
+ * DmaRegisters.channels[2].control.config
+ * Channel configuration
+ * Processing enable and locked ring context.
+ */
+/*
+ * DmaRegisters.channels[2].control.recovery
+ * Channel failure and resume
+ * Sticky fatal status and payload fault recovery.
+ */
+/*
+ * DmaRegisters.channels[2].control.irq
+ * Channel interrupt controls
+ * Notification enable, causes, masks and Trap acknowledgment.
  */
 
 /*
@@ -412,12 +457,12 @@
  * Enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_OFFSET UINT64_C(8)
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_WIDTH UINT64_C(4)
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_ACCESS C_FDMA_ACCESS_READ_WRITE
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_WRITABLE_MASK UINT64_C(1)
+#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE_OFFSET UINT64_C(8)
+#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE_ACCESS C_FDMA_ACCESS_READ_WRITE
+#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE_WRITABLE_MASK UINT64_C(1)
 
 /*
  * Dma fatal cause; read-only and sticky until device reset
@@ -606,20 +651,15 @@
 #define C_FDMA_C_QUEQUNQUAQUBQULQUE__1_WRITABLE_MASK UINT64_C(1)
 
 /*
- * Channel interrupt enable
- * One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+ * Context shared by command and event ring accesses
+ * Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
  */
-/*
- * enabled
- * Enabled
- * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
- */
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_OFFSET UINT64_C(4144)
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_WIDTH UINT64_C(4)
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_ACCESS C_FDMA_ACCESS_READ_WRITE
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_WRITABLE_MASK UINT64_C(1)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_OFFSET UINT64_C(4144)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_WIDTH UINT64_C(4)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_ACCESS C_FDMA_ACCESS_READ_WRITE
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_WRITABLE_MASK UINT64_C(4294967295)
 
 /*
  * Sticky channel fatal
@@ -668,6 +708,54 @@
 #define C_FDMA_C_QUFQUAQUTQUAQUL__2_WRITABLE_MASK UINT64_C(0)
 
 /*
+ * Payload fault status
+ * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
+ */
+/*
+ * faulted
+ * A payload page fault awaits software repair and an explicit resume request
+ * A payload page fault awaits software repair and an explicit resume request.
+ */
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_OFFSET UINT64_C(4152)
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_ACCESS C_FDMA_ACCESS_READ_ONLY
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Resume suspended command
+ * Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
+ */
+/*
+ * request
+ * Write one to clear faulted after mapping repair; reserved bits must be zero
+ * Write one to clear faulted after mapping repair; reserved bits must be zero.
+ */
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__1_OFFSET UINT64_C(4156)
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__1_WIDTH UINT64_C(4)
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__1_ACCESS C_FDMA_ACCESS_WRITE_ONLY
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__1_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__1_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__1_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Channel interrupt enable
+ * One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+ */
+/*
+ * enabled
+ * Enabled
+ * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
+ */
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__2_OFFSET UINT64_C(4160)
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__2_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__2_ACCESS C_FDMA_ACCESS_READ_WRITE
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__2_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__2_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__2_WRITABLE_MASK UINT64_C(1)
+
+/*
  * Event non-empty, Trap, event error and channel fatal causes, visible even while masked
  * Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
  */
@@ -691,12 +779,12 @@
  * The channel fatal register contains a fatal error
  * The channel fatal register contains a fatal error.
  */
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_OFFSET UINT64_C(4152)
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_WIDTH UINT64_C(4)
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_ACCESS C_FDMA_ACCESS_READ_ONLY
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_WRITABLE_MASK UINT64_C(0)
+#define C_FDMA_C_QUCQUAQUUQUSQUE__1_OFFSET UINT64_C(4164)
+#define C_FDMA_C_QUCQUAQUUQUSQUE__1_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUCQUAQUUQUSQUE__1_ACCESS C_FDMA_ACCESS_READ_ONLY
+#define C_FDMA_C_QUCQUAQUUQUSQUE__1_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUCQUAQUUQUSQUE__1_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUCQUAQUUQUSQUE__1_WRITABLE_MASK UINT64_C(0)
 
 /*
  * Independent non-empty and Trap notification masks
@@ -712,55 +800,12 @@
  * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
  * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
  */
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_OFFSET UINT64_C(4156)
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_WIDTH UINT64_C(4)
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_ACCESS C_FDMA_ACCESS_READ_WRITE
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_WRITABLE_MASK UINT64_C(3)
-
-/*
- * Context shared by command and event ring accesses
- * Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
- */
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_OFFSET UINT64_C(4160)
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_WIDTH UINT64_C(4)
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_ACCESS C_FDMA_ACCESS_READ_WRITE
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_WRITABLE_MASK UINT64_C(4294967295)
-
-/*
- * Payload fault status
- * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
- */
-/*
- * faulted
- * A payload page fault awaits software repair and an explicit resume request
- * A payload page fault awaits software repair and an explicit resume request.
- */
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_OFFSET UINT64_C(4164)
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_WIDTH UINT64_C(4)
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_ACCESS C_FDMA_ACCESS_READ_ONLY
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_WRITABLE_MASK UINT64_C(0)
-
-/*
- * Resume suspended command
- * Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
- */
-/*
- * request
- * Write one to clear faulted after mapping repair; reserved bits must be zero
- * Write one to clear faulted after mapping repair; reserved bits must be zero.
- */
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__1_OFFSET UINT64_C(4168)
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__1_WIDTH UINT64_C(4)
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__1_ACCESS C_FDMA_ACCESS_WRITE_ONLY
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__1_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__1_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__1_WRITABLE_MASK UINT64_C(1)
+#define C_FDMA_C_QUMQUAQUSQUK__1_OFFSET UINT64_C(4168)
+#define C_FDMA_C_QUMQUAQUSQUK__1_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUMQUAQUSQUK__1_ACCESS C_FDMA_ACCESS_READ_WRITE
+#define C_FDMA_C_QUMQUAQUSQUK__1_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUMQUAQUSQUK__1_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUMQUAQUSQUK__1_WRITABLE_MASK UINT64_C(3)
 
 /*
  * Write one to clear sticky Trap cause without retracting platform notifications
@@ -875,28 +920,23 @@
  * Enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
-#define C_FDMA_C_QUEQUNQUAQUBQULQUE__2_OFFSET UINT64_C(8236)
-#define C_FDMA_C_QUEQUNQUAQUBQULQUE__2_WIDTH UINT64_C(4)
-#define C_FDMA_C_QUEQUNQUAQUBQULQUE__2_ACCESS C_FDMA_ACCESS_READ_WRITE
-#define C_FDMA_C_QUEQUNQUAQUBQULQUE__2_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QUEQUNQUAQUBQULQUE__2_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QUEQUNQUAQUBQULQUE__2_WRITABLE_MASK UINT64_C(1)
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__3_OFFSET UINT64_C(8236)
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__3_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__3_ACCESS C_FDMA_ACCESS_READ_WRITE
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__3_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__3_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__3_WRITABLE_MASK UINT64_C(1)
 
 /*
- * Channel interrupt enable
- * One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+ * Context shared by command and event ring accesses
+ * Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
  */
-/*
- * enabled
- * Enabled
- * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
- */
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__3_OFFSET UINT64_C(8240)
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__3_WIDTH UINT64_C(4)
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__3_ACCESS C_FDMA_ACCESS_READ_WRITE
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__3_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__3_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__3_WRITABLE_MASK UINT64_C(1)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_OFFSET UINT64_C(8240)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_WIDTH UINT64_C(4)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_ACCESS C_FDMA_ACCESS_READ_WRITE
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_WRITABLE_MASK UINT64_C(4294967295)
 
 /*
  * Sticky channel fatal
@@ -945,6 +985,54 @@
 #define C_FDMA_C_QUFQUAQUTQUAQUL__3_WRITABLE_MASK UINT64_C(0)
 
 /*
+ * Payload fault status
+ * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
+ */
+/*
+ * faulted
+ * A payload page fault awaits software repair and an explicit resume request
+ * A payload page fault awaits software repair and an explicit resume request.
+ */
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_OFFSET UINT64_C(8248)
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_ACCESS C_FDMA_ACCESS_READ_ONLY
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Resume suspended command
+ * Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
+ */
+/*
+ * request
+ * Write one to clear faulted after mapping repair; reserved bits must be zero
+ * Write one to clear faulted after mapping repair; reserved bits must be zero.
+ */
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__2_OFFSET UINT64_C(8252)
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__2_WIDTH UINT64_C(4)
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__2_ACCESS C_FDMA_ACCESS_WRITE_ONLY
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__2_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__2_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__2_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Channel interrupt enable
+ * One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+ */
+/*
+ * enabled
+ * Enabled
+ * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
+ */
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__4_OFFSET UINT64_C(8256)
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__4_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__4_ACCESS C_FDMA_ACCESS_READ_WRITE
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__4_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__4_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__4_WRITABLE_MASK UINT64_C(1)
+
+/*
  * Event non-empty, Trap, event error and channel fatal causes, visible even while masked
  * Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
  */
@@ -968,12 +1056,12 @@
  * The channel fatal register contains a fatal error
  * The channel fatal register contains a fatal error.
  */
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_OFFSET UINT64_C(8248)
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_WIDTH UINT64_C(4)
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_ACCESS C_FDMA_ACCESS_READ_ONLY
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_WRITABLE_MASK UINT64_C(0)
+#define C_FDMA_C_QUCQUAQUUQUSQUE__2_OFFSET UINT64_C(8260)
+#define C_FDMA_C_QUCQUAQUUQUSQUE__2_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUCQUAQUUQUSQUE__2_ACCESS C_FDMA_ACCESS_READ_ONLY
+#define C_FDMA_C_QUCQUAQUUQUSQUE__2_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUCQUAQUUQUSQUE__2_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUCQUAQUUQUSQUE__2_WRITABLE_MASK UINT64_C(0)
 
 /*
  * Independent non-empty and Trap notification masks
@@ -989,55 +1077,12 @@
  * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
  * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
  */
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_OFFSET UINT64_C(8252)
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_WIDTH UINT64_C(4)
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_ACCESS C_FDMA_ACCESS_READ_WRITE
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_WRITABLE_MASK UINT64_C(3)
-
-/*
- * Context shared by command and event ring accesses
- * Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
- */
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_OFFSET UINT64_C(8256)
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_WIDTH UINT64_C(4)
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_ACCESS C_FDMA_ACCESS_READ_WRITE
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_WRITABLE_MASK UINT64_C(4294967295)
-
-/*
- * Payload fault status
- * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
- */
-/*
- * faulted
- * A payload page fault awaits software repair and an explicit resume request
- * A payload page fault awaits software repair and an explicit resume request.
- */
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_OFFSET UINT64_C(8260)
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_WIDTH UINT64_C(4)
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_ACCESS C_FDMA_ACCESS_READ_ONLY
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_WRITABLE_MASK UINT64_C(0)
-
-/*
- * Resume suspended command
- * Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
- */
-/*
- * request
- * Write one to clear faulted after mapping repair; reserved bits must be zero
- * Write one to clear faulted after mapping repair; reserved bits must be zero.
- */
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__2_OFFSET UINT64_C(8264)
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__2_WIDTH UINT64_C(4)
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__2_ACCESS C_FDMA_ACCESS_WRITE_ONLY
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__2_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__2_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__2_WRITABLE_MASK UINT64_C(1)
+#define C_FDMA_C_QUMQUAQUSQUK__2_OFFSET UINT64_C(8264)
+#define C_FDMA_C_QUMQUAQUSQUK__2_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUMQUAQUSQUK__2_ACCESS C_FDMA_ACCESS_READ_WRITE
+#define C_FDMA_C_QUMQUAQUSQUK__2_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUMQUAQUSQUK__2_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUMQUAQUSQUK__2_WRITABLE_MASK UINT64_C(3)
 
 /*
  * Write one to clear sticky Trap cause without retracting platform notifications
@@ -1152,28 +1197,23 @@
  * Enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
-#define C_FDMA_C_QUEQUNQUAQUBQULQUE__3_OFFSET UINT64_C(12332)
-#define C_FDMA_C_QUEQUNQUAQUBQULQUE__3_WIDTH UINT64_C(4)
-#define C_FDMA_C_QUEQUNQUAQUBQULQUE__3_ACCESS C_FDMA_ACCESS_READ_WRITE
-#define C_FDMA_C_QUEQUNQUAQUBQULQUE__3_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QUEQUNQUAQUBQULQUE__3_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QUEQUNQUAQUBQULQUE__3_WRITABLE_MASK UINT64_C(1)
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__5_OFFSET UINT64_C(12332)
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__5_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__5_ACCESS C_FDMA_ACCESS_READ_WRITE
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__5_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__5_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__5_WRITABLE_MASK UINT64_C(1)
 
 /*
- * Channel interrupt enable
- * One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+ * Context shared by command and event ring accesses
+ * Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
  */
-/*
- * enabled
- * Enabled
- * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
- */
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__4_OFFSET UINT64_C(12336)
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__4_WIDTH UINT64_C(4)
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__4_ACCESS C_FDMA_ACCESS_READ_WRITE
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__4_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__4_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__4_WRITABLE_MASK UINT64_C(1)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_OFFSET UINT64_C(12336)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_WIDTH UINT64_C(4)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_ACCESS C_FDMA_ACCESS_READ_WRITE
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_WRITABLE_MASK UINT64_C(4294967295)
 
 /*
  * Sticky channel fatal
@@ -1222,6 +1262,54 @@
 #define C_FDMA_C_QUFQUAQUTQUAQUL__4_WRITABLE_MASK UINT64_C(0)
 
 /*
+ * Payload fault status
+ * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
+ */
+/*
+ * faulted
+ * A payload page fault awaits software repair and an explicit resume request
+ * A payload page fault awaits software repair and an explicit resume request.
+ */
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_OFFSET UINT64_C(12344)
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_ACCESS C_FDMA_ACCESS_READ_ONLY
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Resume suspended command
+ * Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
+ */
+/*
+ * request
+ * Write one to clear faulted after mapping repair; reserved bits must be zero
+ * Write one to clear faulted after mapping repair; reserved bits must be zero.
+ */
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__3_OFFSET UINT64_C(12348)
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__3_WIDTH UINT64_C(4)
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__3_ACCESS C_FDMA_ACCESS_WRITE_ONLY
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__3_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__3_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QURQUEQUSQUUQUMQUE__3_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Channel interrupt enable
+ * One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+ */
+/*
+ * enabled
+ * Enabled
+ * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
+ */
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__6_OFFSET UINT64_C(12352)
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__6_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__6_ACCESS C_FDMA_ACCESS_READ_WRITE
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__6_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__6_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUEQUNQUAQUBQULQUE__6_WRITABLE_MASK UINT64_C(1)
+
+/*
  * Event non-empty, Trap, event error and channel fatal causes, visible even while masked
  * Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
  */
@@ -1245,12 +1333,12 @@
  * The channel fatal register contains a fatal error
  * The channel fatal register contains a fatal error.
  */
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_OFFSET UINT64_C(12344)
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_WIDTH UINT64_C(4)
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_ACCESS C_FDMA_ACCESS_READ_ONLY
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_WRITABLE_MASK UINT64_C(0)
+#define C_FDMA_C_QUCQUAQUUQUSQUE__3_OFFSET UINT64_C(12356)
+#define C_FDMA_C_QUCQUAQUUQUSQUE__3_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUCQUAQUUQUSQUE__3_ACCESS C_FDMA_ACCESS_READ_ONLY
+#define C_FDMA_C_QUCQUAQUUQUSQUE__3_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUCQUAQUUQUSQUE__3_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUCQUAQUUQUSQUE__3_WRITABLE_MASK UINT64_C(0)
 
 /*
  * Independent non-empty and Trap notification masks
@@ -1266,55 +1354,12 @@
  * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
  * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
  */
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_OFFSET UINT64_C(12348)
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_WIDTH UINT64_C(4)
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_ACCESS C_FDMA_ACCESS_READ_WRITE
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_WRITABLE_MASK UINT64_C(3)
-
-/*
- * Context shared by command and event ring accesses
- * Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
- */
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_OFFSET UINT64_C(12352)
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_WIDTH UINT64_C(4)
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_ACCESS C_FDMA_ACCESS_READ_WRITE
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_WRITABLE_MASK UINT64_C(4294967295)
-
-/*
- * Payload fault status
- * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
- */
-/*
- * faulted
- * A payload page fault awaits software repair and an explicit resume request
- * A payload page fault awaits software repair and an explicit resume request.
- */
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_OFFSET UINT64_C(12356)
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_WIDTH UINT64_C(4)
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_ACCESS C_FDMA_ACCESS_READ_ONLY
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_WRITABLE_MASK UINT64_C(0)
-
-/*
- * Resume suspended command
- * Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
- */
-/*
- * request
- * Write one to clear faulted after mapping repair; reserved bits must be zero
- * Write one to clear faulted after mapping repair; reserved bits must be zero.
- */
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__3_OFFSET UINT64_C(12360)
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__3_WIDTH UINT64_C(4)
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__3_ACCESS C_FDMA_ACCESS_WRITE_ONLY
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__3_RESET_KIND C_FDMA_RESET_ZERO
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__3_RESET_VALUE UINT64_C(0)
-#define C_FDMA_C_QURQUEQUSQUUQUMQUE__3_WRITABLE_MASK UINT64_C(1)
+#define C_FDMA_C_QUMQUAQUSQUK__3_OFFSET UINT64_C(12360)
+#define C_FDMA_C_QUMQUAQUSQUK__3_WIDTH UINT64_C(4)
+#define C_FDMA_C_QUMQUAQUSQUK__3_ACCESS C_FDMA_ACCESS_READ_WRITE
+#define C_FDMA_C_QUMQUAQUSQUK__3_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QUMQUAQUSQUK__3_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QUMQUAQUSQUK__3_WRITABLE_MASK UINT64_C(3)
 
 /*
  * Write one to clear sticky Trap cause without retracting platform notifications
@@ -1390,7 +1435,12 @@
 #define C_FCTL_RESET_ZERO UINT32_C(1)
 #define C_FCTL_RESET_POST_RESET UINT32_C(2)
 /*
- * ControlRegisters.attributes
+ * ControlRegisters.config
+ * Control channel configuration
+ * PF-owned bootstrap, address-space attributes and publication enable, frozen together after activation.
+ */
+/*
+ * ControlRegisters.config.attributes
  * PF programs Default/PASID attributes before enable. Frozen with bootstrap after enable and independent of every context table slot.
  */
 /*
@@ -1411,26 +1461,10 @@
 #define C_FCTL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_WRITABLE_MASK UINT64_C(0)
 
 /*
- * Enable control
- * Host writes one after initializing queue memory. Both domains may read activation. Disabling and bootstrap changes are forbidden after activation; there is no live reset register.
- */
-/*
- * enabled
- * Enabled
- * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
- */
-#define C_FCTL_C_QUEQUNQUAQUBQULQUE_OFFSET UINT64_C(8)
-#define C_FCTL_C_QUEQUNQUAQUBQULQUE_WIDTH UINT64_C(4)
-#define C_FCTL_C_QUEQUNQUAQUBQULQUE_ACCESS C_FCTL_ACCESS_READ_ONLY
-#define C_FCTL_C_QUEQUNQUAQUBQULQUE_RESET_KIND C_FCTL_RESET_ZERO
-#define C_FCTL_C_QUEQUNQUAQUBQULQUE_RESET_VALUE UINT64_C(0)
-#define C_FCTL_C_QUEQUNQUAQUBQULQUE_WRITABLE_MASK UINT64_C(0)
-
-/*
  * Read/write word
  * Address-space mode encoded by ContextAttributes: Default is distinct from PASID zero.
  */
-#define C_FCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_OFFSET UINT64_C(12)
+#define C_FCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_OFFSET UINT64_C(8)
 #define C_FCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_WIDTH UINT64_C(4)
 #define C_FCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_ACCESS C_FCTL_ACCESS_READ_ONLY
 #define C_FCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_RESET_KIND C_FCTL_RESET_ZERO
@@ -1441,12 +1475,28 @@
  * Read/write word
  * Twenty-bit PASID when PASID mode is selected; must be zero in Default mode.
  */
-#define C_FCTL_C_QUPQUAQUSQUIQUD_OFFSET UINT64_C(16)
+#define C_FCTL_C_QUPQUAQUSQUIQUD_OFFSET UINT64_C(12)
 #define C_FCTL_C_QUPQUAQUSQUIQUD_WIDTH UINT64_C(4)
 #define C_FCTL_C_QUPQUAQUSQUIQUD_ACCESS C_FCTL_ACCESS_READ_ONLY
 #define C_FCTL_C_QUPQUAQUSQUIQUD_RESET_KIND C_FCTL_RESET_ZERO
 #define C_FCTL_C_QUPQUAQUSQUIQUD_RESET_VALUE UINT64_C(0)
 #define C_FCTL_C_QUPQUAQUSQUIQUD_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Enable control
+ * Host writes one after initializing queue memory. Both domains may read activation. Disabling and bootstrap changes are forbidden after activation; there is no live reset register.
+ */
+/*
+ * enabled
+ * Enabled
+ * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
+ */
+#define C_FCTL_C_QUEQUNQUAQUBQULQUE_OFFSET UINT64_C(16)
+#define C_FCTL_C_QUEQUNQUAQUBQULQUE_WIDTH UINT64_C(4)
+#define C_FCTL_C_QUEQUNQUAQUBQULQUE_ACCESS C_FCTL_ACCESS_READ_ONLY
+#define C_FCTL_C_QUEQUNQUAQUBQULQUE_RESET_KIND C_FCTL_RESET_ZERO
+#define C_FCTL_C_QUEQUNQUAQUBQULQUE_RESET_VALUE UINT64_C(0)
+#define C_FCTL_C_QUEQUNQUAQUBQULQUE_WRITABLE_MASK UINT64_C(0)
 
 /*
  * Coalescing notification doorbell

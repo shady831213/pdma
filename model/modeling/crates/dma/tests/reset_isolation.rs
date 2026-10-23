@@ -1,4 +1,5 @@
 //! Reset isolation while an opaque execution stage retains command state.
+use pdma_model_contract::dma::ChannelConfiguration;
 /// Shared raw-bus fixtures.
 pub mod support;
 
@@ -66,7 +67,9 @@ fn unrelated_idle_reset_completes_without_stepping_stalled_pipeline() -> TestRes
             2,
         ),
         (
-            base + ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+            base + ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::CONFIG.offset()
+                + ChannelConfiguration::ENABLE.offset(),
             1,
         ),
     ] {

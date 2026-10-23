@@ -132,7 +132,8 @@ async fn reset_case(release: bool) {
             let address = u32::try_from(
                 id.register_offset(1).unwrap()
                     + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-                    + pdma_model_contract::dma::ChannelRegisters::ENABLE.offset(),
+                    + pdma_model_contract::dma::ChannelRegisters::CONFIG.offset()
+                    + pdma_model_contract::dma::ChannelConfiguration::ENABLE.offset(),
             )
             .unwrap();
             let mut enabled = [0xff; 4];

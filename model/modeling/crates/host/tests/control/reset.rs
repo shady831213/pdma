@@ -2,6 +2,8 @@ use super::{
     AsyncExecutor, Channel, ChannelConfig, ChannelRegisters, Command, DmaControl, DmaFatalCode,
     Endpoint, Model, RegisterAccess, SoftwareCpu, fixture,
 };
+use pdma_model_contract::dma::ChannelConfiguration;
+use pdma_model_contract::dma::ChannelInterrupts;
 
 #[tokio::test]
 async fn reset_operations_can_run_on_another_cpu() -> Result<(), Box<dyn std::error::Error>> {
@@ -38,7 +40,8 @@ async fn reset_operations_can_run_on_another_cpu() -> Result<(), Box<dyn std::er
                 u32::try_from(
                     pdma_model_contract::dma::ChannelBlock::ALIGNMENT
                         + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-                        + ChannelRegisters::ENABLE.offset(),
+                        + ChannelRegisters::CONFIG.offset()
+                        + ChannelConfiguration::ENABLE.offset(),
                 )?,
                 &mut enable,
             )
@@ -151,10 +154,12 @@ async fn device_reset_leaves_disabled_hardware_for_fresh_setup()
     for offset in [
         (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
             + pdma_model_contract::dma::ChannelBlock::CONTROL.offset())
-            + ChannelRegisters::ENABLE.offset(),
+            + ChannelRegisters::CONFIG.offset()
+            + ChannelConfiguration::ENABLE.offset(),
         (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
             + pdma_model_contract::dma::ChannelBlock::CONTROL.offset())
-            + ChannelRegisters::IRQ_ENABLE.offset(),
+            + ChannelRegisters::IRQ.offset()
+            + ChannelInterrupts::ENABLE.offset(),
         (pdma_model_contract::dma::DmaDiscovery::EXTENT
             + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
             + DmaControl::IRQ_ENABLE.offset(),

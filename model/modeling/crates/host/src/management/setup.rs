@@ -3,7 +3,10 @@ use crate::Error;
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, RegisterAccess};
 use hardware_interface_schema::Encode;
 use pdma_model_contract::control::{ControlQueue, ControlRingState};
-use pdma_model_contract::hw_components::control::ControlRegisters;
+use pdma_model_contract::hw_components::{
+    context::ContextAttributeRegisters,
+    control::{ControlConfiguration, ControlRegisters},
+};
 use pdma_model_contract::ring::Ring;
 use pdma_model_software::{control::ControlQueueLayout, ring::SoftRing};
 
@@ -74,7 +77,9 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             capacity: usize::try_from(rings.command.capacity()).map_err(|_| Error::Geometry)?,
             next_id: 1,
         };
-        if client.read(ControlRegisters::ENABLE.offset()).await? != 0 {
+        let configuration = ControlRegisters::CONFIG.offset();
+        let enable = configuration + ControlConfiguration::ENABLE.offset();
+        if client.read(enable).await? != 0 {
             return Err(Error::ManagementBusy);
         }
         let state = ControlQueue {
@@ -108,31 +113,26 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
                 &state.encode().map_err(Error::Codec)?,
             )
             .map_err(Error::Memory)?;
-        let attribute_base = ControlRegisters::ATTRIBUTES.offset();
+        let attribute_base = configuration + ControlConfiguration::ATTRIBUTES.offset();
         client
             .write(
-                attribute_base
-                    + pdma_model_contract::hw_components::context::ContextAttributeRegisters::ADDRESS_SPACE.offset(),
+                attribute_base + ContextAttributeRegisters::ADDRESS_SPACE.offset(),
                 &attributes.address_space.raw().to_le_bytes(),
             )
             .await?;
         client
             .write(
-                attribute_base
-                    + pdma_model_contract::hw_components::context::ContextAttributeRegisters::PASID
-                        .offset(),
+                attribute_base + ContextAttributeRegisters::PASID.offset(),
                 &attributes.pasid.to_le_bytes(),
             )
             .await?;
         client
             .write(
-                ControlRegisters::BOOTSTRAP.offset(),
+                configuration + ControlConfiguration::BOOTSTRAP.offset(),
                 &rings.state.raw().to_le_bytes(),
             )
             .await?;
-        client
-            .write(ControlRegisters::ENABLE.offset(), &1_u32.to_le_bytes())
-            .await?;
+        client.write(enable, &1_u32.to_le_bytes()).await?;
         client.kick().await?;
         Ok(client)
     }

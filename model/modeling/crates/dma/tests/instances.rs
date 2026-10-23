@@ -4,6 +4,7 @@ use hardware_interface_pipeline::{HardwareDriver, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
 };
+use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, EventRegisters,
 };
@@ -84,7 +85,9 @@ fn idle_or_fatal_devices_keep_driving_without_memory_or_queue_effects()
                         2,
                     ),
                     (
-                        ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+                        ChannelBlock::CONTROL.offset()
+                            + ChannelRegisters::CONFIG.offset()
+                            + ChannelConfiguration::ENABLE.offset(),
                         1,
                     ),
                     (

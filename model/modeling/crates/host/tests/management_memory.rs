@@ -1,4 +1,5 @@
 //! Management bootstrap publishes shared state before its first doorbell.
+use pdma_model_contract::hw_components::control::ControlConfiguration;
 const CONTROL_CHANNEL_BASE: u32 = 0x3000;
 
 use hardware_interface_runtime::{
@@ -29,7 +30,10 @@ impl RegisterAccess for &Bus {
         assert_eq!(
             address,
             CONTROL_CHANNEL_BASE
-                + u32::try_from(ControlRegisters::ENABLE.offset()).map_err(io::Error::other)?
+                + u32::try_from(
+                    ControlRegisters::CONFIG.offset() + ControlConfiguration::ENABLE.offset()
+                )
+                .map_err(io::Error::other)?
         );
         bytes.copy_from_slice(&u32::from(self.enabled).to_le_bytes());
         Ok(())
@@ -108,12 +112,12 @@ async fn descriptor_is_in_memory_before_bootstrap_enable_and_request_doorbell() 
     assert_eq!(
         *bus.writes.lock().unwrap(),
         [
-            ControlRegisters::ATTRIBUTES.offset()
+            ControlRegisters::CONFIG.offset() + ControlConfiguration::ATTRIBUTES.offset()
                 + pdma_model_contract::hw_components::context::ContextAttributeRegisters::ADDRESS_SPACE.offset(),
-            ControlRegisters::ATTRIBUTES.offset()
+            ControlRegisters::CONFIG.offset() + ControlConfiguration::ATTRIBUTES.offset()
                 + pdma_model_contract::hw_components::context::ContextAttributeRegisters::PASID.offset(),
-            ControlRegisters::BOOTSTRAP.offset(),
-            ControlRegisters::ENABLE.offset(),
+            ControlRegisters::CONFIG.offset() + ControlConfiguration::BOOTSTRAP.offset(),
+            ControlRegisters::CONFIG.offset() + ControlConfiguration::ENABLE.offset(),
             ControlRegisters::REQUEST.offset()
         ]
         .map(|offset| CONTROL_CHANNEL_BASE + u32::try_from(offset).unwrap())

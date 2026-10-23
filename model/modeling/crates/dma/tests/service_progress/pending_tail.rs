@@ -3,6 +3,7 @@ use crate::{
     support::{TestResult, command, read_word, setup, submit},
 };
 use hardware_interface_pipeline::{Stage, StepOutcome, Then};
+use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelRegisters, CommandRegisters, Endpoint, EventRegisters,
 };
@@ -201,7 +202,9 @@ fn reconfigure<M>(device: &mut pdma_model_dma::Dma<M>) -> TestResult {
             2,
         ),
         (
-            base + ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+            base + ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::CONFIG.offset()
+                + ChannelConfiguration::ENABLE.offset(),
             1,
         ),
     ] {

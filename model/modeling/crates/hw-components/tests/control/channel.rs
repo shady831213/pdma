@@ -1,13 +1,19 @@
 //! Bootstrap ownership and independent control-doorbell boundary tests.
 
 use hardware_interface_schema::RegisterAccessError;
+use pdma_model_contract::hw_components::control::{
+    ControlConfiguration, ControlNotificationRegisters, ControlRegisters,
+};
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_hw_components::control::{ControlChannel, ControlError};
 
 const BASE: usize = 0x100;
-const ENABLE: usize = BASE + 8;
-const REQUEST: usize = BASE + 20;
-const RESPONSE: usize = BASE + 24;
+const ENABLE: usize =
+    BASE + ControlRegisters::CONFIG.offset() + ControlConfiguration::ENABLE.offset();
+const REQUEST: usize = BASE + ControlRegisters::REQUEST.offset();
+const RESPONSE: usize = BASE
+    + ControlRegisters::NOTIFICATION.offset()
+    + ControlNotificationRegisters::RESPONSE.offset();
 
 #[test]
 fn bootstrap_and_enable_are_visible_to_both_domains() {

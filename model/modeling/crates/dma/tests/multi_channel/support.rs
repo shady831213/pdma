@@ -1,5 +1,7 @@
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use pdma_model_contract::dma::ChannelConfiguration;
+use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Endpoint, EventRegisters,
 };
@@ -61,11 +63,15 @@ pub fn configure<M>(device: &mut Dma<M>, index: usize) -> TestResult {
             2,
         ),
         (
-            ChannelBlock::CONTROL.offset() + ChannelRegisters::IRQ_ENABLE.offset(),
+            ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::IRQ.offset()
+                + ChannelInterrupts::ENABLE.offset(),
             1,
         ),
         (
-            ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+            ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::CONFIG.offset()
+                + ChannelConfiguration::ENABLE.offset(),
             1,
         ),
     ] {

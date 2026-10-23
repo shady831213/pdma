@@ -3,6 +3,7 @@ use super::{
     RegisterAccess, SoftwareCpu, fixture,
 };
 use hardware_interface_runtime::{CpuAccessError, CpuContextError};
+use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::{ChannelBlock, ChannelId};
 use pdma_model_host::DmaError;
 
@@ -39,7 +40,8 @@ async fn control_operations_can_run_on_another_cpu() -> Result<(), Box<dyn std::
             u32::try_from(
                 ChannelBlock::ALIGNMENT
                     + ChannelBlock::CONTROL.offset()
-                    + ChannelRegisters::IRQ_MASK.offset(),
+                    + ChannelRegisters::IRQ.offset()
+                    + ChannelInterrupts::MASK.offset(),
             )?,
             &mut mask,
         )
@@ -82,7 +84,8 @@ async fn cpu_specific_bus_still_enforces_its_own_context() -> Result<(), Box<dyn
             u32::try_from(
                 ChannelBlock::ALIGNMENT
                     + ChannelBlock::CONTROL.offset()
-                    + ChannelRegisters::IRQ_MASK.offset(),
+                    + ChannelRegisters::IRQ.offset()
+                    + ChannelInterrupts::MASK.offset(),
             )?,
             &mut mask,
         )

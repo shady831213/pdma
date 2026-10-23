@@ -1,5 +1,7 @@
 use crate::Dma;
 use hardware_interface_pipeline::StepOutcome;
+use pdma_model_contract::dma::ChannelConfiguration;
+use pdma_model_contract::dma::ChannelInterrupts;
 
 use hardware_interface_pipeline::Operation;
 use hardware_interface_runtime::{
@@ -70,11 +72,15 @@ pub(super) fn queued_copy(event_base: u64, fail_read: bool) -> TestResult<Dma<Sh
             2,
         ),
         (
-            ChannelBlock::CONTROL.offset() + ChannelRegisters::IRQ_ENABLE.offset(),
+            ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::IRQ.offset()
+                + ChannelInterrupts::ENABLE.offset(),
             1,
         ),
         (
-            ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+            ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::CONFIG.offset()
+                + ChannelConfiguration::ENABLE.offset(),
             1,
         ),
         (
@@ -106,7 +112,8 @@ fn publication_refreshes_stored_causes_without_irq_stage_or_mmio_read() -> TestR
         dma.write(
             ChannelBlock::ALIGNMENT
                 + ChannelBlock::CONTROL.offset()
-                + ChannelRegisters::IRQ_MASK.offset(),
+                + ChannelRegisters::IRQ.offset()
+                + ChannelInterrupts::MASK.offset(),
             &mask.to_le_bytes(),
         )?;
         // When
@@ -114,7 +121,7 @@ fn publication_refreshes_stored_causes_without_irq_stage_or_mmio_read() -> TestR
         // Then
         let channel = dma.channels.first().ok_or("channel")?;
         assert_eq!(channel.event.pointers().producer, 1);
-        assert_eq!(channel.registers.values.irq_cause.raw(), 5);
+        assert_eq!(channel.registers.values.irq.cause.raw(), 5);
         let bytes = dma
             .memory
             .read_typed::<pdma_model_contract::dma::EventRaw>(
@@ -142,10 +149,10 @@ fn fatal_refreshes_stored_cause_without_irq_stage_or_mmio_read() -> TestResult {
     run_data_path(&mut dma)?;
     // Then
     let channel = dma.channels.first().ok_or("channel")?;
-    assert_eq!(channel.registers.values.irq_cause.raw(), 12);
+    assert_eq!(channel.registers.values.irq.cause.raw(), 12);
     assert_eq!(channel.event.pointers().producer, 0);
     assert_eq!(
-        channel.registers.values.fatal.code(),
+        channel.registers.values.recovery.fatal.code(),
         Ok(pdma_model_contract::dma::ChannelFatalCode::EventWrite)
     );
     assert!(dma.take_interrupt());
@@ -165,7 +172,8 @@ fn consuming_event_clears_occupancy_but_retains_error_stop() -> TestResult {
             .ok_or("channel")?
             .registers
             .values
-            .irq_cause
+            .irq
+            .cause
             .raw(),
         5
     );
@@ -179,7 +187,8 @@ fn consuming_event_clears_occupancy_but_retains_error_stop() -> TestResult {
             .ok_or("channel")?
             .registers
             .values
-            .irq_cause
+            .irq
+            .cause
             .raw(),
         4
     );
@@ -211,7 +220,7 @@ fn successful_copy_does_not_require_event_capacity() -> TestResult {
     let channel = dma.channels.first().ok_or("channel")?;
     assert_eq!(channel.event.pointers().producer, 2);
     assert_eq!(
-        channel.registers.values.fatal.code(),
+        channel.registers.values.recovery.fatal.code(),
         Ok(pdma_model_contract::dma::ChannelFatalCode::None)
     );
     assert!(channel.resident.is_none());
@@ -240,9 +249,9 @@ fn full_or_corrupt_event_ring_fails_error_publication_without_backpressure() -> 
         run_data_path(&mut dma)?;
         // Then
         let channel = dma.channels.first().ok_or("channel")?;
-        assert_eq!(channel.registers.values.fatal.code(), Ok(expected));
+        assert_eq!(channel.registers.values.recovery.fatal.code(), Ok(expected));
         assert_eq!(channel.event.pointers().producer, producer);
-        assert!(channel.registers.values.irq_cause.error());
+        assert!(channel.registers.values.irq.cause.error());
         assert!(channel.resident.is_none());
         assert!(dma.take_interrupt());
     }

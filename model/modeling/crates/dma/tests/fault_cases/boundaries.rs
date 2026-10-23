@@ -1,4 +1,6 @@
 use super::*;
+use pdma_model_contract::dma::ChannelInterrupts;
+use pdma_model_contract::dma::ChannelRecovery;
 
 #[test]
 fn linear_fault_is_silent_under_every_notification_mask() -> TestResult {
@@ -29,7 +31,7 @@ fn linear_fault_is_silent_under_every_notification_mask() -> TestResult {
                     )
                 };
                 device.write(
-                    CTRL + ChannelRegisters::IRQ_MASK.offset(),
+                    CTRL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::MASK.offset(),
                     &mask.to_le_bytes(),
                 )?;
                 device
@@ -49,7 +51,10 @@ fn linear_fault_is_silent_under_every_notification_mask() -> TestResult {
                 assert_eq!(&bytes[256..], &[0; 256]);
                 assert!(!device.take_interrupt());
                 assert_eq!(
-                    read_word(&mut device, CTRL + ChannelRegisters::IRQ_CAUSE.offset())?,
+                    read_word(
+                        &mut device,
+                        CTRL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::CAUSE.offset()
+                    )?,
                     0
                 );
                 assert_eq!(
@@ -71,7 +76,10 @@ fn linear_fault_is_silent_under_every_notification_mask() -> TestResult {
                 }
                 assert_eq!(device.take_interrupt(), trap && mask & 2 == 0);
                 assert_eq!(
-                    read_word(&mut device, CTRL + ChannelRegisters::IRQ_CAUSE.offset())?,
+                    read_word(
+                        &mut device,
+                        CTRL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::CAUSE.offset()
+                    )?,
                     if trap { 2 } else { 0 }
                 );
             }
@@ -102,7 +110,10 @@ fn metadata_and_event_faults_keep_stopping_and_fatal_boundaries() -> TestResult 
             0
         };
         assert_eq!(
-            read_word(&mut device, CTRL + ChannelRegisters::FATAL.offset())?,
+            read_word(
+                &mut device,
+                CTRL + ChannelRegisters::RECOVERY.offset() + ChannelRecovery::FATAL.offset()
+            )?,
             expected_fault
         );
         if address == 0x1400 {
@@ -110,7 +121,10 @@ fn metadata_and_event_faults_keep_stopping_and_fatal_boundaries() -> TestResult 
             assert_eq!(event.code, EventCode::ListReadError);
             assert_eq!(event.bytes_completed(), 0);
             assert_eq!(
-                read_word(&mut device, CTRL + ChannelRegisters::IRQ_CAUSE.offset())?,
+                read_word(
+                    &mut device,
+                    CTRL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::CAUSE.offset()
+                )?,
                 5
             );
         } else {

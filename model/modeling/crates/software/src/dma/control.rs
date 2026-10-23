@@ -3,6 +3,8 @@ use super::{
     registers::{read_word, write},
 };
 use hardware_interface_runtime::RegisterAccess;
+use pdma_model_contract::dma::ChannelInterrupts;
+use pdma_model_contract::dma::ChannelRecovery;
 use pdma_model_contract::dma::{
     ChannelAdmin, ChannelFatalCode, ChannelFatalValues, ChannelId, ChannelIrqCauseValues,
     ChannelIrqMaskValues, ChannelRegisters, DmaAdmin, DmaControl, DmaDiscovery, DmaFatalCode,
@@ -87,7 +89,12 @@ impl ChannelControl {
         bus: &B,
     ) -> Result<bool, Error<B::Error>> {
         let raw = self
-            .channel_read_word(bus, CHANNEL + ChannelRegisters::FAULT_STATUS.offset())
+            .channel_read_word(
+                bus,
+                CHANNEL
+                    + ChannelRegisters::RECOVERY.offset()
+                    + ChannelRecovery::FAULT_STATUS.offset(),
+            )
             .await?;
         Ok(FaultStatusValues::new(raw).faulted())
     }
@@ -97,7 +104,7 @@ impl ChannelControl {
     pub async fn resume<B: RegisterAccess + Sync>(&self, bus: &B) -> Result<(), Error<B::Error>> {
         self.channel_write(
             bus,
-            CHANNEL + ChannelRegisters::RESUME.offset(),
+            CHANNEL + ChannelRegisters::RECOVERY.offset() + ChannelRecovery::RESUME.offset(),
             &1_u32.to_le_bytes(),
         )
         .await
@@ -109,7 +116,10 @@ impl ChannelControl {
         bus: &B,
     ) -> Result<ChannelFatalCode, Error<B::Error>> {
         let raw = self
-            .channel_read_word(bus, CHANNEL + ChannelRegisters::FATAL.offset())
+            .channel_read_word(
+                bus,
+                CHANNEL + ChannelRegisters::RECOVERY.offset() + ChannelRecovery::FATAL.offset(),
+            )
             .await?;
         ChannelFatalValues::new(raw)
             .code()
@@ -126,7 +136,7 @@ impl ChannelControl {
     ) -> Result<(), Error<B::Error>> {
         self.channel_write(
             bus,
-            CHANNEL + ChannelRegisters::IRQ_ENABLE.offset(),
+            CHANNEL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::ENABLE.offset(),
             &u32::from(enabled).to_le_bytes(),
         )
         .await
@@ -142,7 +152,7 @@ impl ChannelControl {
     ) -> Result<(), Error<B::Error>> {
         self.channel_write(
             bus,
-            CHANNEL + ChannelRegisters::IRQ_MASK.offset(),
+            CHANNEL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::MASK.offset(),
             &mask.raw().to_le_bytes(),
         )
         .await
@@ -153,9 +163,12 @@ impl ChannelControl {
         &self,
         bus: &B,
     ) -> Result<ChannelIrqCauseValues, Error<B::Error>> {
-        self.channel_read_word(bus, CHANNEL + ChannelRegisters::IRQ_CAUSE.offset())
-            .await
-            .map(ChannelIrqCauseValues::new)
+        self.channel_read_word(
+            bus,
+            CHANNEL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::CAUSE.offset(),
+        )
+        .await
+        .map(ChannelIrqCauseValues::new)
     }
 
     /// Acknowledges Trap without retracting a platform-pending notification.
@@ -165,7 +178,7 @@ impl ChannelControl {
     ) -> Result<(), Error<B::Error>> {
         self.channel_write(
             bus,
-            CHANNEL + ChannelRegisters::TRAP_ACK.offset(),
+            CHANNEL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::TRAP_ACK.offset(),
             &1_u32.to_le_bytes(),
         )
         .await

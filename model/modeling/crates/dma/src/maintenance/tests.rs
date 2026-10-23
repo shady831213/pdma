@@ -9,7 +9,7 @@ fn peer_reset_does_not_interrupt_an_unrelated_drain() -> TestResult {
     // Given: channel zero has an outstanding frontier, outside channel one's reset scope.
     let mut dma = Dma::new((), 2)?;
     let channel = dma.channels.first_mut().ok_or("channel")?;
-    channel.registers.values.enable = SwitchValues::new(1);
+    channel.registers.values.config.enable = SwitchValues::new(1);
     channel.command.registers.values.producer = WordValues::new(1);
     let target = ContextId::new(7);
     dma.drain_context(target, &[ChannelId::new(0)])?;
@@ -27,7 +27,7 @@ fn duplicate_channel_frontiers_complete_when_the_owner_consumes_the_snapshot() -
     // Given: the same channel appears twice in a captured producer frontier.
     let mut dma = Dma::new((), 1)?;
     let channel = dma.channels.first_mut().ok_or("channel")?;
-    channel.registers.values.enable = SwitchValues::new(1);
+    channel.registers.values.config.enable = SwitchValues::new(1);
     channel.command.registers.values.capacity = WordValues::new(2);
     channel.command.registers.values.producer = WordValues::new(1);
     let id = ChannelId::new(0);
@@ -57,7 +57,7 @@ fn abort_preserves_parked_matching_work_outside_its_channel_scope() -> TestResul
     assert_eq!(dma.context_status(ContextId::new(7)), Ok(true));
     let peer = dma.channels.get(1).ok_or("channel")?;
     assert_eq!(peer.accepted_command(), Some(&command));
-    assert!(peer.registers.values.fault_status.faulted());
+    assert!(peer.registers.values.recovery.fault_status.faulted());
     Ok(())
 }
 
@@ -99,7 +99,8 @@ fn abort_retires_resumed_work_before_it_is_regranted() -> TestResult {
     let base = ChannelId::new(1).register_offset(2).ok_or("layout")?;
     dma.write(
         base + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-            + pdma_model_contract::dma::ChannelRegisters::RESUME.offset(),
+            + pdma_model_contract::dma::ChannelRegisters::RECOVERY.offset()
+            + pdma_model_contract::dma::ChannelRecovery::RESUME.offset(),
         &1_u32.to_le_bytes(),
     )?;
     // When: Abort targets the resumed command before its next grant.
@@ -121,7 +122,7 @@ fn pending_maintenance_collects_simultaneous_failures_and_freezes_them() -> Test
     // Given: three channels with outstanding frontiers for one context.
     let mut dma = Dma::new((), 3)?;
     for channel in &mut dma.channels {
-        channel.registers.values.enable = SwitchValues::new(1);
+        channel.registers.values.config.enable = SwitchValues::new(1);
         channel.command.registers.values.producer = WordValues::new(1);
     }
     let context = ContextId::new(7);
@@ -159,7 +160,7 @@ fn wrapping_frontiers_are_fixed_and_passed_frontiers_stay_passed() -> TestResult
     // Given
     let mut dma = Dma::new((), 2)?;
     for channel in &mut dma.channels {
-        channel.registers.values.enable = SwitchValues::new(1);
+        channel.registers.values.config.enable = SwitchValues::new(1);
         channel.command.registers.values.capacity = WordValues::new(4);
         channel.command.registers.values.producer = WordValues::new(1);
     }
@@ -217,7 +218,7 @@ fn new_queue_incarnation_cannot_satisfy_an_old_frontier() -> TestResult {
     // Given
     let mut dma = Dma::new((), 1)?;
     let channel = dma.channels.first_mut().ok_or("channel")?;
-    channel.registers.values.enable = SwitchValues::new(1);
+    channel.registers.values.config.enable = SwitchValues::new(1);
     channel.command.registers.values.producer = WordValues::new(1);
     dma.drain_context(ContextId::new(7), &[ChannelId::new(0)])?;
     // When

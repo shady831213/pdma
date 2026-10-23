@@ -3,6 +3,7 @@ use hardware_interface_pipeline::{HardwareDriver, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
+use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Endpoint, Event,
     EventRegisters,
@@ -116,7 +117,8 @@ pub(super) fn publish(
     dma.write(
         id.register_offset(2).ok_or("channel")?
             + ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::ENABLE.offset(),
+            + ChannelRegisters::CONFIG.offset()
+            + ChannelConfiguration::ENABLE.offset(),
         &1_u32.to_le_bytes(),
     )?;
     dma.write(

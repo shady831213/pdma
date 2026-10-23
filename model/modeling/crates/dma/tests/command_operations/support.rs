@@ -2,6 +2,8 @@ use hardware_interface_pipeline::HardwareDriver;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
+use pdma_model_contract::dma::ChannelConfiguration;
+use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::{
     CapabilitiesValues, ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters,
     EventRegisters, WordTarget, WordTargetWidth, WordWrite,
@@ -77,11 +79,15 @@ where
                     2,
                 ),
                 (
-                    ChannelBlock::CONTROL.offset() + ChannelRegisters::IRQ_ENABLE.offset(),
+                    ChannelBlock::CONTROL.offset()
+                        + ChannelRegisters::IRQ.offset()
+                        + ChannelInterrupts::ENABLE.offset(),
                     1,
                 ),
                 (
-                    ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+                    ChannelBlock::CONTROL.offset()
+                        + ChannelRegisters::CONFIG.offset()
+                        + ChannelConfiguration::ENABLE.offset(),
                     1,
                 ),
             ] {
@@ -171,5 +177,6 @@ pub(super) const fn fence(address: u64) -> Command {
 
 pub(super) const EVENT_PRODUCER: usize =
     ChannelBlock::EVENT.offset() + EventRegisters::PRODUCER.offset();
-pub(super) const CAUSE: usize =
-    ChannelBlock::CONTROL.offset() + ChannelRegisters::IRQ_CAUSE.offset();
+pub(super) const CAUSE: usize = ChannelBlock::CONTROL.offset()
+    + ChannelRegisters::IRQ.offset()
+    + ChannelInterrupts::CAUSE.offset();

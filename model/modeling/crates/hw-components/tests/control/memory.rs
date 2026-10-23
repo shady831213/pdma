@@ -1,5 +1,6 @@
 use crate::support::{ADDRESS, Spaces};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
+use pdma_model_contract::hw_components::control::ControlConfiguration;
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_hw_components::control::ControlChannel;
@@ -12,14 +13,14 @@ fn control_memory_uses_fixed_manager_and_independent_pasid_without_table() {
     control
         .host_write(
             FunctionId::new(0),
-            ControlRegisters::ATTRIBUTES.offset(),
+            ControlRegisters::CONFIG.offset() + ControlConfiguration::ATTRIBUTES.offset(),
             &1_u32.to_le_bytes(),
         )
         .unwrap();
     control
         .host_write(
             FunctionId::new(0),
-            ControlRegisters::ENABLE.offset(),
+            ControlRegisters::CONFIG.offset() + ControlConfiguration::ENABLE.offset(),
             &1_u32.to_le_bytes(),
         )
         .unwrap();

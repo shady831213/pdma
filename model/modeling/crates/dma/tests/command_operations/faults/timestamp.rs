@@ -1,5 +1,6 @@
 use super::{FaultMemory, rig};
 use crate::command_operations::support::{EVENT_PRODUCER, Rig, TestResult, fence};
+use pdma_model_contract::dma::ChannelRecovery;
 use pdma_model_contract::dma::{ChannelBlock, ChannelRegisters, Command, TimestampCommand};
 use pdma_model_dma::Timer;
 use std::sync::{
@@ -31,7 +32,8 @@ fn resume(rig: &mut Rig<FaultMemory>) -> TestResult {
     rig.dma.write(
         rig.bases.first().ok_or("channel missing")?
             + ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::RESUME.offset(),
+            + ChannelRegisters::RECOVERY.offset()
+            + ChannelRecovery::RESUME.offset(),
         &1_u32.to_le_bytes(),
     )?;
     Ok(())
@@ -162,7 +164,9 @@ fn fence_access_error_still_stops_instead_of_parking() -> TestResult {
     assert_eq!(
         rig.register(
             0,
-            ChannelBlock::CONTROL.offset() + ChannelRegisters::FAULT_STATUS.offset()
+            ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::RECOVERY.offset()
+                + ChannelRecovery::FAULT_STATUS.offset()
         )?,
         0
     );

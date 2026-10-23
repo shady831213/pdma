@@ -34,7 +34,7 @@ impl<M, S> Dma<M, S> {
         let channel = self.channels.get_mut(id.index()).ok_or(Error::Unmapped)?;
         let access = DmaAccess {
             channel: id,
-            context: ContextId::new(channel.registers.values.ring_context.raw()),
+            context: ContextId::new(channel.registers.values.config.ring_context.raw()),
         };
         Ok(ChannelContext {
             channel,

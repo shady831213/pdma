@@ -3,6 +3,7 @@
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
+use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Endpoint, EventRegisters,
     Segment,
@@ -116,7 +117,9 @@ fn identical_addresses_use_independent_ring_sg_source_and_destination_spaces() -
     )?;
     let base = ChannelId::new(0).register_offset(1).ok_or("layout")?;
     dma.write(
-        base + ChannelBlock::CONTROL.offset() + ChannelRegisters::RING_CONTEXT.offset(),
+        base + ChannelBlock::CONTROL.offset()
+            + ChannelRegisters::CONFIG.offset()
+            + ChannelConfiguration::RING_CONTEXT.offset(),
         &4_u32.to_le_bytes(),
     )?;
     for (offset, value) in [
@@ -134,7 +137,9 @@ fn identical_addresses_use_independent_ring_sg_source_and_destination_spaces() -
     for offset in [
         ChannelBlock::COMMAND.offset() + CommandRegisters::CAPACITY.offset(),
         ChannelBlock::EVENT.offset() + EventRegisters::CAPACITY.offset(),
-        ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+        ChannelBlock::CONTROL.offset()
+            + ChannelRegisters::CONFIG.offset()
+            + ChannelConfiguration::ENABLE.offset(),
         ChannelBlock::COMMAND.offset() + CommandRegisters::PRODUCER.offset(),
     ] {
         dma.write(base + offset, &1_u32.to_le_bytes())?;
@@ -199,7 +204,9 @@ fn timestamp_uses_target_context_not_ring_or_default_context() -> TestResult {
         )?;
         let base = ChannelId::new(0).register_offset(1).ok_or("layout")?;
         dma.write(
-            base + ChannelBlock::CONTROL.offset() + ChannelRegisters::RING_CONTEXT.offset(),
+            base + ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::CONFIG.offset()
+                + ChannelConfiguration::RING_CONTEXT.offset(),
             &4_u32.to_le_bytes(),
         )?;
         for (offset, address) in [
@@ -217,7 +224,9 @@ fn timestamp_uses_target_context_not_ring_or_default_context() -> TestResult {
         for offset in [
             ChannelBlock::COMMAND.offset() + CommandRegisters::CAPACITY.offset(),
             ChannelBlock::EVENT.offset() + EventRegisters::CAPACITY.offset(),
-            ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+            ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::CONFIG.offset()
+                + ChannelConfiguration::ENABLE.offset(),
             ChannelBlock::COMMAND.offset() + CommandRegisters::PRODUCER.offset(),
         ] {
             dma.write(base + offset, &1_u32.to_le_bytes())?;

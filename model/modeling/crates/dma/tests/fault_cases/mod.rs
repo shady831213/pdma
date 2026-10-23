@@ -1,3 +1,4 @@
+use pdma_model_contract::dma::ChannelRecovery;
 mod boundaries;
 mod chunks;
 mod composition;
@@ -101,12 +102,15 @@ fn read_word(device: &mut Dma<Paged>, offset: usize) -> TestResult<u32> {
 }
 
 fn fault_status(device: &mut Dma<Paged>) -> TestResult<u32> {
-    read_word(device, CTRL + ChannelRegisters::FAULT_STATUS.offset())
+    read_word(
+        device,
+        CTRL + ChannelRegisters::RECOVERY.offset() + ChannelRecovery::FAULT_STATUS.offset(),
+    )
 }
 
 fn resume(device: &mut Dma<Paged>, request: u32) -> TestResult {
     device.write(
-        CTRL + ChannelRegisters::RESUME.offset(),
+        CTRL + ChannelRegisters::RECOVERY.offset() + ChannelRecovery::RESUME.offset(),
         &request.to_le_bytes(),
     )?;
     Ok(())

@@ -24,7 +24,7 @@ impl Maintenance {
                 .is_some_and(|task| references(task).contains(&Some(self.context)));
             let blocked = channel.accepted_command().is_some()
                 && !active
-                && channel.registers.values.fault_status.faulted()
+                && channel.registers.values.recovery.fault_status.faulted()
                 && (!frontier.passed || target)
                 && !(self.abort && target);
             frontier.failed |= halted

@@ -1,4 +1,5 @@
 //! Atomic selector/action submission at the hardware access boundary.
+use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, EventRegisters,
 };
@@ -93,7 +94,9 @@ fn pending_request_cannot_be_replaced_or_have_its_binding_invalidated() {
     for offset in [
         ChannelBlock::COMMAND.offset() + CommandRegisters::CAPACITY.offset(),
         ChannelBlock::EVENT.offset() + EventRegisters::CAPACITY.offset(),
-        ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+        ChannelBlock::CONTROL.offset()
+            + ChannelRegisters::CONFIG.offset()
+            + ChannelConfiguration::ENABLE.offset(),
         ChannelBlock::COMMAND.offset() + CommandRegisters::PRODUCER.offset(),
     ] {
         dma.write(base + offset, &1_u32.to_le_bytes()).unwrap();

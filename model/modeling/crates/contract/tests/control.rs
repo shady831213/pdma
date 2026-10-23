@@ -1,4 +1,5 @@
 //! Control-channel wire and register layout boundary tests.
+use pdma_model_contract::hw_components::control::ControlConfiguration;
 use pdma_model_contract::hw_components::control::ControlNotificationRegisters;
 
 use pdma_model_contract::control::{
@@ -121,8 +122,14 @@ fn reset_request_has_its_own_wire_opcode() {
 fn register_composition_has_bootstrap_enable_and_dual_doorbells() {
     // Given/When: the generated layout composes bootstrap, enable and two doorbells.
     // Then: each leaf has its independent address and expected extent.
-    assert_eq!(ControlRegisters::BOOTSTRAP.offset(), 0);
-    assert_eq!(ControlRegisters::ENABLE.offset(), 8);
+    assert_eq!(
+        ControlRegisters::CONFIG.offset() + ControlConfiguration::BOOTSTRAP.offset(),
+        0
+    );
+    assert_eq!(
+        ControlRegisters::CONFIG.offset() + ControlConfiguration::ENABLE.offset(),
+        16
+    );
     assert_eq!(ControlRegisters::REQUEST.offset(), 20);
     assert_eq!(
         ControlRegisters::NOTIFICATION.offset() + ControlNotificationRegisters::RESPONSE.offset(),

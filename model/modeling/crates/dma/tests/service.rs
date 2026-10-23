@@ -1,5 +1,6 @@
 //! Custom command compositions retain the shared lifecycle boundary.
 
+use pdma_model_contract::dma::ChannelConfiguration;
 /// Shared raw-bus fixtures.
 pub mod support;
 mod service {
@@ -89,7 +90,7 @@ fn custom_pipeline_retires_reset_work_before_accepting_new_work() -> TestResult 
     assert_eq!(read_word(&mut device, RESET)?, 1);
     assert_eq!(
         device.write(
-            CONTROL + ChannelRegisters::ENABLE.offset(),
+            CONTROL + ChannelRegisters::CONFIG.offset() + ChannelConfiguration::ENABLE.offset(),
             &1_u32.to_le_bytes()
         ),
         Err(Error::ResetInProgress)
@@ -141,7 +142,7 @@ fn custom_pipeline_retires_reset_work_before_accepting_new_work() -> TestResult 
         )?;
     }
     device.write(
-        CONTROL + ChannelRegisters::ENABLE.offset(),
+        CONTROL + ChannelRegisters::CONFIG.offset() + ChannelConfiguration::ENABLE.offset(),
         &1_u32.to_le_bytes(),
     )?;
     memory.write(

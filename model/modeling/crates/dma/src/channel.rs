@@ -53,26 +53,28 @@ impl Default for Channel {
 impl Channel {
     pub(crate) fn retire(&mut self) {
         self.work = None;
-        self.registers.values.fault_status = FaultStatusValues::new(0);
+        self.registers.values.recovery.fault_status = FaultStatusValues::new(0);
     }
     pub(crate) const fn suspend(&mut self) {
-        self.registers.values.fault_status = FaultStatusValues::new(1);
+        self.registers.values.recovery.fault_status = FaultStatusValues::new(1);
     }
 
     pub(crate) fn latch(&mut self, fatal: ChannelFatal) {
-        if self.registers.values.fatal.code() == Ok(ChannelFatalCode::None) {
-            self.registers.values.fatal = self.registers.values.fatal.with_code(fatal.code());
-            self.irq |= self.registers.values.irq_enable.raw() != 0;
+        if self.registers.values.recovery.fatal.code() == Ok(ChannelFatalCode::None) {
+            self.registers.values.recovery.fatal =
+                self.registers.values.recovery.fatal.with_code(fatal.code());
+            self.irq |= self.registers.values.irq.enable.raw() != 0;
             self.update_irq();
         }
     }
 
     pub(crate) fn update_irq(&mut self) {
-        self.registers.values.irq_cause = ChannelIrqCauseValues::new(
+        self.registers.values.irq.cause = ChannelIrqCauseValues::new(
             u32::from(!self.event.pointers().is_empty())
-                | (self.registers.values.irq_cause.raw() & 6)
-                | (u32::from(self.registers.values.fatal.code() != Ok(ChannelFatalCode::None))
-                    << 3),
+                | (self.registers.values.irq.cause.raw() & 6)
+                | (u32::from(
+                    self.registers.values.recovery.fatal.code() != Ok(ChannelFatalCode::None),
+                ) << 3),
         );
     }
 
@@ -94,7 +96,7 @@ impl Channel {
         self.stop();
         match self.event.push(memory, event) {
             Ok(()) => {
-                self.irq |= self.registers.values.irq_enable.raw() != 0;
+                self.irq |= self.registers.values.irq.enable.raw() != 0;
                 self.update_irq();
                 crate::Error::Halted
             }
@@ -106,15 +108,15 @@ impl Channel {
     }
 
     pub(crate) const fn stop(&mut self) {
-        self.registers.values.irq_cause =
-            ChannelIrqCauseValues::new(self.registers.values.irq_cause.raw() | 4);
+        self.registers.values.irq.cause =
+            ChannelIrqCauseValues::new(self.registers.values.irq.cause.raw() | 4);
     }
 
     pub(crate) fn trap(&mut self) {
-        self.registers.values.irq_cause =
-            ChannelIrqCauseValues::new(self.registers.values.irq_cause.raw() | 2);
+        self.registers.values.irq.cause =
+            ChannelIrqCauseValues::new(self.registers.values.irq.cause.raw() | 2);
         self.irq |=
-            self.registers.values.irq_enable.raw() != 0 && !self.registers.values.irq_mask.trap();
+            self.registers.values.irq.enable.raw() != 0 && !self.registers.values.irq.mask.trap();
     }
 
     pub(crate) fn request_reset(&mut self) {
@@ -140,8 +142,8 @@ impl Channel {
     }
 
     pub(crate) fn halted(&self) -> bool {
-        match self.registers.values.fatal.code() {
-            Ok(ChannelFatalCode::None) => self.registers.values.irq_cause.error(),
+        match self.registers.values.recovery.fatal.code() {
+            Ok(ChannelFatalCode::None) => self.registers.values.irq.cause.error(),
             Ok(
                 ChannelFatalCode::CommandRead
                 | ChannelFatalCode::EventWrite
@@ -152,7 +154,7 @@ impl Channel {
         }
     }
     pub(crate) const fn enabled(&self) -> bool {
-        self.registers.values.enable.raw() != 0
+        self.registers.values.config.enable.raw() != 0
     }
 }
 

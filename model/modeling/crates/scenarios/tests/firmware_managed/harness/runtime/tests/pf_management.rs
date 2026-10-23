@@ -1,5 +1,6 @@
 use super::*;
 use hardware_interface_schema::RegisterAccessError;
+use pdma_model_contract::hw_components::control::ControlConfiguration;
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_hw_components::control::ControlError;
 
@@ -18,13 +19,21 @@ async fn vf_cannot_enable_a_firmware_control_channel() {
     let denied = vf
         .bus
         .write(
-            vf.bus.addresses().control + u32::try_from(ControlRegisters::ENABLE.offset()).unwrap(),
+            vf.bus.addresses().control
+                + u32::try_from(
+                    ControlRegisters::CONFIG.offset() + ControlConfiguration::ENABLE.offset(),
+                )
+                .unwrap(),
             &1_u32.to_le_bytes(),
         )
         .await;
     pf.bus
         .write(
-            pf.bus.addresses().control + u32::try_from(ControlRegisters::ENABLE.offset()).unwrap(),
+            pf.bus.addresses().control
+                + u32::try_from(
+                    ControlRegisters::CONFIG.offset() + ControlConfiguration::ENABLE.offset(),
+                )
+                .unwrap(),
             &1_u32.to_le_bytes(),
         )
         .await

@@ -10,6 +10,7 @@ use hardware_interface_runtime::{
     MemoryAddress, RegisterAccess, SharedMemory, SharedMemoryAccess, SharedMemoryAllocator,
 };
 use pdma_model_contract::dma::ChannelId;
+use pdma_model_contract::hw_components::control::ControlConfiguration;
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_contract::hw_components::firmware::{
     FirmwareBootError, FirmwareBootState, FirmwareBootValues,
@@ -53,7 +54,11 @@ async fn control_config(bus: &HostBus<SharedMemoryAccess>) -> (u64, u32) {
         .await
         .unwrap();
     bus.read(
-        bus.addresses().control + u32::try_from(ControlRegisters::ENABLE.offset()).unwrap(),
+        bus.addresses().control
+            + u32::try_from(
+                ControlRegisters::CONFIG.offset() + ControlConfiguration::ENABLE.offset(),
+            )
+            .unwrap(),
         &mut enable,
     )
     .await

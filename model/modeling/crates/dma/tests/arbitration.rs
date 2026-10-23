@@ -1,6 +1,7 @@
 //! Candidate selection is a value policy, independent of channel hardware.
 
 use hardware_interface_pipeline::Arbitration;
+use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, EventRegisters,
 };
@@ -24,7 +25,9 @@ fn round_robin_rotates_completed_eligible_values_and_skips_idle_channels()
                 1,
             ),
             (
-                ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+                ChannelBlock::CONTROL.offset()
+                    + ChannelRegisters::CONFIG.offset()
+                    + ChannelConfiguration::ENABLE.offset(),
                 1,
             ),
             (

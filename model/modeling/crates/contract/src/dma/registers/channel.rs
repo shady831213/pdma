@@ -133,35 +133,55 @@ register_map! {
 }
 
 register_map! {
-    #[short_description = "Channel controls and fatal state"]
-    #[description = "Controls channel processing and independent event notification sources. Stopping errors require reset; recoverable payload faults retain the command until explicit resume. Ring-access fatal codes are distinct from command-level event status."]
-    pub map ChannelRegisters {
+    #[short_description = "Channel configuration"]
+    #[description = "Processing enable remains writable; ring context freezes after the first successful enable."]
+    pub map ChannelConfiguration {
         alignment: 4,
         placements: [
             #[short_description = "Channel processing enable"]
             #[description = "One permits pipeline progress and validates both ring geometries; the first successful enable locks their base addresses and capacities. Zero pauses processing without clearing cursors, retained work or errors."]
             pub enable: Switch,
-            #[short_description = "Channel interrupt enable"]
-            #[description = "One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events."]
-            pub irq_enable: Switch,
-            #[short_description = "Sticky channel fatal"]
-            #[description = "A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it."]
-            pub fatal: ChannelFatal,
-            #[short_description = "Event non-empty, Trap, event error and channel fatal causes, visible even while masked"]
-            #[description = "Event non-empty, Trap, event error and channel fatal causes, visible even while masked."]
-            pub irq_cause: ChannelIrqCause,
-            #[short_description = "Independent non-empty and Trap notification masks"]
-            #[description = "Independent non-empty and Trap notification masks. Unmask does not replay past events."]
-            pub irq_mask: ChannelIrqMask,
             #[short_description = "Context shared by command and event ring accesses"]
             #[description = "Context shared by command and event ring accesses. Locked with ring geometry until reset completes."]
             pub ring_context: Word,
+        ],
+    }
+}
+
+register_map! {
+    #[short_description = "Channel failure and resume"]
+    #[description = "Channel-owned fatal status and recoverable payload suspension. Privileged reset remains in ChannelAdmin."]
+    pub map ChannelRecovery {
+        alignment: 4,
+        placements: [
+            #[short_description = "Sticky channel fatal"]
+            #[description = "A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it."]
+            pub fatal: ChannelFatal,
             #[short_description = "Payload fault status"]
             #[description = "The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt."]
             pub fault_status: FaultStatus,
             #[short_description = "Resume suspended command"]
             #[description = "Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment."]
             pub resume: Resume,
+        ],
+    }
+}
+
+register_map! {
+    #[short_description = "Channel interrupt controls"]
+    #[description = "Independent channel notification enable, causes, masks and Trap acknowledgment."]
+    pub map ChannelInterrupts {
+        alignment: 4,
+        placements: [
+            #[short_description = "Channel interrupt enable"]
+            #[description = "One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events."]
+            pub enable: Switch,
+            #[short_description = "Event non-empty, Trap, event error and channel fatal causes, visible even while masked"]
+            #[description = "Event non-empty, Trap, event error and channel fatal causes, visible even while masked."]
+            pub cause: ChannelIrqCause,
+            #[short_description = "Independent non-empty and Trap notification masks"]
+            #[description = "Independent non-empty and Trap notification masks. Unmask does not replay past events."]
+            pub mask: ChannelIrqMask,
             #[short_description = "Write one to clear sticky Trap cause without retracting platform notifications"]
             #[description = "Write one to clear sticky Trap cause without retracting platform notifications."]
             pub trap_ack: TrapAck,
@@ -170,8 +190,24 @@ register_map! {
 }
 
 register_map! {
+    #[short_description = "Channel controls and fatal state"]
+    #[description = "Channel-owned configuration, recovery and interrupt groups. Stopping errors require reset; recoverable payload faults retain the command until explicit resume."]
+    pub map ChannelRegisters {
+        alignment: 4,
+        placements: [
+            #[description = "Processing enable and locked ring context."]
+            pub config: ChannelConfiguration,
+            #[description = "Sticky fatal status and payload fault recovery."]
+            pub recovery: ChannelRecovery,
+            #[description = "Notification enable, causes, masks and Trap acknowledgment."]
+            pub irq: ChannelInterrupts,
+        ],
+    }
+}
+
+register_map! {
     #[short_description = "PDMA channel register block"]
-    #[description = "One independent channel's command/event rings, notification controls and sticky fatal. DmaRegisters repeats this data block for every implemented channel; recovery lives in ChannelAdmin."]
+    #[description = "One independent channel's command/event rings, notification controls and sticky fatal. DmaRegisters repeats this data block for every implemented channel; privileged reset lives in ChannelAdmin."]
     pub map ChannelBlock {
         alignment: 4096,
         extent: 4096,

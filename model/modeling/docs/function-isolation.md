@@ -97,6 +97,8 @@ single-Host configuration. Both static header views retain the complete layout.
 
 `ControlRegisters` has a 36-byte extent and eight-byte alignment, at a
 platform-selected base. There is no Function control bank or exported control stride.
+Its configuration block contains bootstrap at 0, address-space attributes at 8
+and enable at 16; request and notification blocks begin at 20 and 24 respectively.
 All Host ports may know its address; hardware accepts only the configured PF.
 Firmware's Function count describes valid targets, not control endpoints.
 The independent event doorbell and firmware-owned event-error report belong to

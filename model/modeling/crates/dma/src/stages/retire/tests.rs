@@ -1,4 +1,5 @@
 use crate::{Dma, Error, PrepareChunk, ReadCopy, WriteCopy};
+use pdma_model_contract::dma::ChannelConfiguration;
 mod collection;
 mod identity;
 use hardware_interface_pipeline::{Operation, StepOutcome, Then};
@@ -50,7 +51,9 @@ fn configure_channel(dma: &mut Dma<SharedMemory>, channel: ChannelId) -> TestRes
             2,
         ),
         (
-            ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+            ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::CONFIG.offset()
+                + ChannelConfiguration::ENABLE.offset(),
             1,
         ),
         (

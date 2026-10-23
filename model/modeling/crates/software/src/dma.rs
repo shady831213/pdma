@@ -1,5 +1,6 @@
 //! PDMA channel driver and register-only control.
 
+use pdma_model_contract::dma::ChannelConfiguration;
 mod bus;
 mod completion;
 mod context;
@@ -78,7 +79,7 @@ impl<B: RegisterAccess + Send + Sync, M: Send + Sync> Channel<B, M> {
         channel
             .port
             .channel_write(
-                CHANNEL + ChannelRegisters::ENABLE.offset(),
+                CHANNEL + ChannelRegisters::CONFIG.offset() + ChannelConfiguration::ENABLE.offset(),
                 &0_u32.to_le_bytes(),
             )
             .await?;
@@ -114,7 +115,7 @@ impl<B: RegisterAccess + Send + Sync, M: Send + Sync> Channel<B, M> {
         channel
             .port
             .channel_write(
-                CHANNEL + ChannelRegisters::ENABLE.offset(),
+                CHANNEL + ChannelRegisters::CONFIG.offset() + ChannelConfiguration::ENABLE.offset(),
                 &1_u32.to_le_bytes(),
             )
             .await?;

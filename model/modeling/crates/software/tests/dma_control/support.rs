@@ -5,6 +5,7 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, RegisterAccess, SharedMemory,
     SharedMemoryAccess,
 };
+use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Endpoint, EventRegisters,
 };
@@ -36,7 +37,8 @@ impl Bus {
             dma.write(
                 ChannelId::new(0).register_offset(2).ok_or("peer")?
                     + ChannelBlock::CONTROL.offset()
-                    + ChannelRegisters::RING_CONTEXT.offset(),
+                    + ChannelRegisters::CONFIG.offset()
+                    + ChannelConfiguration::RING_CONTEXT.offset(),
                 &37_u32.to_le_bytes(),
             )?;
             dma.memory.write_typed(
@@ -69,7 +71,9 @@ impl Bus {
             for offset in [
                 ChannelBlock::COMMAND.offset() + CommandRegisters::CAPACITY.offset(),
                 ChannelBlock::EVENT.offset() + EventRegisters::CAPACITY.offset(),
-                ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+                ChannelBlock::CONTROL.offset()
+                    + ChannelRegisters::CONFIG.offset()
+                    + ChannelConfiguration::ENABLE.offset(),
                 ChannelBlock::COMMAND.offset() + CommandRegisters::PRODUCER.offset(),
             ] {
                 dma.write(base + offset, &1_u32.to_le_bytes())?;
@@ -131,7 +135,8 @@ impl Bus {
             .register_offset(2)
             .ok_or("channel")?
             + ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::RING_CONTEXT.offset();
+            + ChannelRegisters::CONFIG.offset()
+            + ChannelConfiguration::RING_CONTEXT.offset();
         let mut bytes = [0; 4];
         self.read(u32::try_from(offset)?, &mut bytes).await?;
         Ok(u32::from_le_bytes(bytes))

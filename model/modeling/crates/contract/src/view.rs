@@ -1,3 +1,4 @@
+use crate::hw_components::control::ControlConfiguration;
 use crate::hw_components::control::ControlNotificationRegisters;
 use crate::hw_components::control::ControlRegisters;
 use crate::hw_components::windows::ChannelWindowBlock;
@@ -52,14 +53,18 @@ impl RegisterView {
 
     /// Access to an exact relative control-register start; absent means hidden.
     pub const fn control_access(self, offset: usize) -> Option<Access> {
-        let attributes = offset >= ControlRegisters::ATTRIBUTES.offset()
+        let attributes = offset
+            >= ControlRegisters::CONFIG.offset() + ControlConfiguration::ATTRIBUTES.offset()
             && offset
-                < ControlRegisters::ATTRIBUTES.offset()
+                < ControlRegisters::CONFIG.offset()
+                    + ControlConfiguration::ATTRIBUTES.offset()
                     + crate::hw_components::context::ContextAttributeRegisters::EXTENT;
         match self {
             Self::Host => {
-                if offset == ControlRegisters::BOOTSTRAP.offset()
-                    || offset == ControlRegisters::ENABLE.offset()
+                if offset
+                    == ControlRegisters::CONFIG.offset() + ControlConfiguration::BOOTSTRAP.offset()
+                    || offset
+                        == ControlRegisters::CONFIG.offset() + ControlConfiguration::ENABLE.offset()
                     || attributes
                 {
                     Some(Access::ReadWrite)
@@ -75,8 +80,10 @@ impl RegisterView {
                 }
             }
             Self::Firmware => {
-                if offset == ControlRegisters::BOOTSTRAP.offset()
-                    || offset == ControlRegisters::ENABLE.offset()
+                if offset
+                    == ControlRegisters::CONFIG.offset() + ControlConfiguration::BOOTSTRAP.offset()
+                    || offset
+                        == ControlRegisters::CONFIG.offset() + ControlConfiguration::ENABLE.offset()
                     || attributes
                 {
                     Some(Access::ReadOnly)

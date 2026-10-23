@@ -1,5 +1,8 @@
 //! Adverse channel transactions and ring boundaries.
 
+use pdma_model_contract::dma::ChannelConfiguration;
+use pdma_model_contract::dma::ChannelInterrupts;
+use pdma_model_contract::dma::ChannelRecovery;
 /// Shared channel integration fixtures.
 pub mod support;
 
@@ -16,9 +19,12 @@ const EVENT: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
     + pdma_model_contract::dma::ChannelBlock::EVENT.offset();
 const CHANNEL: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
     + pdma_model_contract::dma::ChannelBlock::CONTROL.offset();
-const ENABLE: usize = CHANNEL + ChannelRegisters::ENABLE.offset();
-const IRQ_ENABLE: usize = CHANNEL + ChannelRegisters::IRQ_ENABLE.offset();
-const FAULT: usize = CHANNEL + ChannelRegisters::FATAL.offset();
+const ENABLE: usize =
+    CHANNEL + ChannelRegisters::CONFIG.offset() + ChannelConfiguration::ENABLE.offset();
+const IRQ_ENABLE: usize =
+    CHANNEL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::ENABLE.offset();
+const FAULT: usize =
+    CHANNEL + ChannelRegisters::RECOVERY.offset() + ChannelRecovery::FATAL.offset();
 const PRODUCER: usize = COMMAND + CommandRegisters::PRODUCER.offset();
 const CONSUMER: usize = EVENT + EventRegisters::CONSUMER.offset();
 const COMMAND_CONSUMER: usize = COMMAND + CommandRegisters::CONSUMER.offset();

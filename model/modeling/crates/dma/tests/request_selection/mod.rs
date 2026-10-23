@@ -1,4 +1,5 @@
 use super::*;
+use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_dma::{CheckRanges, PrepareChunk, ReadCopy};
 
 #[test]
@@ -54,7 +55,9 @@ fn stale_fetch_cannot_substitute_a_reconfigured_head() -> TestResult {
         &2_u32.to_le_bytes(),
     )?;
     device.write(
-        base + ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+        base + ChannelBlock::CONTROL.offset()
+            + ChannelRegisters::CONFIG.offset()
+            + ChannelConfiguration::ENABLE.offset(),
         &1_u32.to_le_bytes(),
     )?;
     device.write(
@@ -122,7 +125,8 @@ fn busy_read_retains_its_chunk_and_leaves_the_next_offer_untouched() -> TestResu
     let chunk = finish(&mut PrepareChunk::default(), &mut context, request)?;
     let enable = id.register_offset(2).ok_or("channel")?
         + ChannelBlock::CONTROL.offset()
-        + ChannelRegisters::ENABLE.offset();
+        + ChannelRegisters::CONFIG.offset()
+        + ChannelConfiguration::ENABLE.offset();
     device.write(enable, &0_u32.to_le_bytes())?;
     let mut read = ReadCopy::default();
     let mut input = Some(chunk);

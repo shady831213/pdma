@@ -174,7 +174,7 @@ impl<M, S> SelectedResources<'_, M, S> {
         if channel.work.is_none() {
             return Err(Error::Reset);
         }
-        Ok(channel.enabled() && !channel.registers.values.fault_status.faulted())
+        Ok(channel.enabled() && !channel.registers.values.recovery.fault_status.faulted())
     }
 
     pub(crate) fn memory_for(&self, work: Work, selector: u32) -> BoundMemory<'_, M, S> {
@@ -207,7 +207,7 @@ impl<M: hardware_interface_runtime::MemoryAccess<S>, S> SelectedResources<'_, M,
             self.memory,
             (self.sideband)(DmaAccess {
                 channel: self.id,
-                context: ContextId::new(self.selected.registers.values.ring_context.raw()),
+                context: ContextId::new(self.selected.registers.values.config.ring_context.raw()),
             }),
         );
         let error = self.selected.report(work, event, &memory);

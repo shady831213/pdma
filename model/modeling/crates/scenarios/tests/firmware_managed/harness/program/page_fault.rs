@@ -134,7 +134,8 @@ pub(in crate::harness) async fn main<M: Send>(
         + u32::try_from(
             channel.register_offset(1).ok_or("channel address")?
                 + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-                + pdma_model_contract::dma::ChannelRegisters::RESUME.offset(),
+                + pdma_model_contract::dma::ChannelRegisters::RECOVERY.offset()
+                + pdma_model_contract::dma::ChannelRecovery::RESUME.offset(),
         )?;
     outcome.closed_resume = Some(ports.bus.write(address, &1_u32.to_le_bytes()).await);
     Ok(outcome)

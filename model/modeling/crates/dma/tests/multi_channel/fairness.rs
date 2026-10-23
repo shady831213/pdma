@@ -3,6 +3,7 @@ use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
+use pdma_model_contract::dma::ChannelRecovery;
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, ChannelRegisters, EventRegisters};
 use pdma_model_dma::Dma;
 
@@ -65,7 +66,9 @@ fn stopped_or_fatal_channel_does_not_stall_peers() -> TestResult {
             assert_eq!(
                 word(
                     &mut device,
-                    base + ChannelBlock::CONTROL.offset() + ChannelRegisters::FATAL.offset()
+                    base + ChannelBlock::CONTROL.offset()
+                        + ChannelRegisters::RECOVERY.offset()
+                        + ChannelRecovery::FATAL.offset()
                 )?,
                 1
             );

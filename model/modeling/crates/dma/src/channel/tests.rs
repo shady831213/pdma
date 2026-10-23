@@ -1,6 +1,7 @@
 use super::*;
 use crate::Dma;
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
+use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::{ChannelRegisters, EventRegisters};
 use pdma_model_contract::dma::{ErrorInfo, EventInfoValues};
 use pdma_model_contract::dma::{Event, EventCode};
@@ -96,7 +97,8 @@ fn consuming_events_across_counter_wrap_tracks_remaining_occupancy()
         device.read(
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-                + ChannelRegisters::IRQ_CAUSE.offset(),
+                + ChannelRegisters::IRQ.offset()
+                + ChannelInterrupts::CAUSE.offset(),
             &mut bytes,
         )?;
         assert_eq!(u32::from_le_bytes(bytes), expected);

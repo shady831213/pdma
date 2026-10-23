@@ -1,5 +1,6 @@
 //! Channel notification sources and independent acknowledgment.
 
+use pdma_model_contract::dma::ChannelInterrupts;
 /// Shared raw-bus fixtures.
 pub mod support;
 
@@ -53,7 +54,7 @@ fn trap_obeys_only_its_own_mask() -> TestResult {
         // Given: every combination of independent notification masks.
         let (mut device, memory) = setup(0x1800, 2)?;
         device.write(
-            CONTROL + ChannelRegisters::IRQ_MASK.offset(),
+            CONTROL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::MASK.offset(),
             &mask.to_le_bytes(),
         )?;
         // When: a Trap executes without producing an error event.
@@ -63,7 +64,7 @@ fn trap_obeys_only_its_own_mask() -> TestResult {
         assert_eq!(device.take_interrupt(), mask & 2 == 0);
         let cause = ChannelIrqCauseValues::new(read_word(
             &mut device,
-            CONTROL + ChannelRegisters::IRQ_CAUSE.offset(),
+            CONTROL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::CAUSE.offset(),
         )?);
         assert!(cause.trap());
         assert!(!cause.event_non_empty());
@@ -96,7 +97,7 @@ fn successful_copy_is_silent() -> TestResult {
 fn repeated_traps_notify_and_unmask_does_not_replay() -> TestResult {
     // Given: a masked Trap whose sticky cause has not been acknowledged.
     let (mut device, memory) = setup(0x1800, 4)?;
-    let mask = CONTROL + ChannelRegisters::IRQ_MASK.offset();
+    let mask = CONTROL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::MASK.offset();
     device.write(mask, &2_u32.to_le_bytes())?;
     submit(&mut device, &memory, Command::trap(1))?;
     run(&mut device)?;
@@ -118,7 +119,7 @@ fn error_event_stops_channel_after_consumption_and_bypasses_routine_masks() -> T
     // Given: a bad command followed by a valid copy.
     let (mut device, memory) = setup(0x1800, 2)?;
     device.write(
-        CONTROL + ChannelRegisters::IRQ_MASK.offset(),
+        CONTROL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::MASK.offset(),
         &3_u32.to_le_bytes(),
     )?;
     submit(&mut device, &memory, invalid())?;
@@ -126,7 +127,7 @@ fn error_event_stops_channel_after_consumption_and_bypasses_routine_masks() -> T
     assert!(device.take_interrupt());
     let cause = ChannelIrqCauseValues::new(read_word(
         &mut device,
-        CONTROL + ChannelRegisters::IRQ_CAUSE.offset(),
+        CONTROL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::CAUSE.offset(),
     )?);
     assert!(cause.event_non_empty() && cause.error());
     // When: software consumes the error and publishes more work without reset.
@@ -142,7 +143,7 @@ fn error_event_stops_channel_after_consumption_and_bypasses_routine_masks() -> T
     );
     let cause = ChannelIrqCauseValues::new(read_word(
         &mut device,
-        CONTROL + ChannelRegisters::IRQ_CAUSE.offset(),
+        CONTROL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::CAUSE.offset(),
     )?);
     assert!(cause.error());
     assert!(!cause.event_non_empty());
@@ -173,7 +174,7 @@ fn fatal_notifies_independently_of_sticky_trap() -> TestResult {
     assert!(device.take_interrupt());
     let cause = ChannelIrqCauseValues::new(read_word(
         &mut device,
-        CONTROL + ChannelRegisters::IRQ_CAUSE.offset(),
+        CONTROL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::CAUSE.offset(),
     )?);
     assert!(cause.trap() && cause.channel_fatal());
     Ok(())
@@ -186,12 +187,12 @@ fn trap_ack_clears_cause_without_retracting_pending_notification() -> TestResult
     submit(&mut device, &memory, Command::trap(1))?;
     run(&mut device)?;
     // When: software acknowledges the sticky source before platform delivery.
-    let ack = CONTROL + ChannelRegisters::TRAP_ACK.offset();
+    let ack = CONTROL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::TRAP_ACK.offset();
     device.write(ack, &0_u32.to_le_bytes())?;
     assert!(
         ChannelIrqCauseValues::new(read_word(
             &mut device,
-            CONTROL + ChannelRegisters::IRQ_CAUSE.offset()
+            CONTROL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::CAUSE.offset()
         )?)
         .trap()
     );
@@ -200,7 +201,7 @@ fn trap_ack_clears_cause_without_retracting_pending_notification() -> TestResult
     assert!(
         !ChannelIrqCauseValues::new(read_word(
             &mut device,
-            CONTROL + ChannelRegisters::IRQ_CAUSE.offset()
+            CONTROL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::CAUSE.offset()
         )?)
         .trap()
     );

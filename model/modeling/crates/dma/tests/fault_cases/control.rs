@@ -1,5 +1,8 @@
 use super::*;
+use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::ChannelId;
+use pdma_model_contract::dma::ChannelInterrupts;
+use pdma_model_contract::dma::ChannelRecovery;
 use pdma_model_dma::Error;
 
 #[test]
@@ -10,8 +13,9 @@ fn rejected_fault_register_accesses_preserve_parked_work() -> TestResult {
     device.memory.missing.set(Some((0x1242, false)));
     submit(&mut device, command, 0)?;
     device.until(|dma| Ok(fault_status(dma)? == 1))?;
-    let status = CTRL + ChannelRegisters::FAULT_STATUS.offset();
-    let resume = CTRL + ChannelRegisters::RESUME.offset();
+    let status =
+        CTRL + ChannelRegisters::RECOVERY.offset() + ChannelRecovery::FAULT_STATUS.offset();
+    let resume = CTRL + ChannelRegisters::RECOVERY.offset() + ChannelRecovery::RESUME.offset();
     // When: software violates access permissions, width, or reserved-bit constraints.
     for (offset, bytes, expected) in [
         (status, &[0_u8; 4][..], Error::Access),
@@ -61,7 +65,7 @@ fn reset_discards_old_task_and_new_fault_requires_resume() -> TestResult {
     for offset in [
         CMD + CommandRegisters::CAPACITY.offset(),
         EVENT + EventRegisters::CAPACITY.offset(),
-        CTRL + ChannelRegisters::ENABLE.offset(),
+        CTRL + ChannelRegisters::CONFIG.offset() + ChannelConfiguration::ENABLE.offset(),
     ] {
         device.write(offset, &1_u32.to_le_bytes())?;
     }
@@ -103,7 +107,7 @@ fn resume_does_not_enable_a_disabled_channel_or_clear_device_fatal() -> TestResu
             device.signal_fatal();
         } else {
             device.write(
-                CTRL + ChannelRegisters::ENABLE.offset(),
+                CTRL + ChannelRegisters::CONFIG.offset() + ChannelConfiguration::ENABLE.offset(),
                 &0_u32.to_le_bytes(),
             )?;
         }
@@ -112,7 +116,7 @@ fn resume_does_not_enable_a_disabled_channel_or_clear_device_fatal() -> TestResu
         if fatal {
             assert_eq!(
                 device.write(
-                    CTRL + ChannelRegisters::RESUME.offset(),
+                    CTRL + ChannelRegisters::RECOVERY.offset() + ChannelRecovery::RESUME.offset(),
                     &1_u32.to_le_bytes()
                 ),
                 Err(pdma_model_dma::Error::Halted)
@@ -137,11 +141,15 @@ fn resume_does_not_enable_a_disabled_channel_or_clear_device_fatal() -> TestResu
         );
         if !fatal {
             assert_eq!(
-                read_word(&mut device, CTRL + ChannelRegisters::ENABLE.offset())?,
+                read_word(
+                    &mut device,
+                    CTRL + ChannelRegisters::CONFIG.offset()
+                        + ChannelConfiguration::ENABLE.offset()
+                )?,
                 0
             );
             device.write(
-                CTRL + ChannelRegisters::ENABLE.offset(),
+                CTRL + ChannelRegisters::CONFIG.offset() + ChannelConfiguration::ENABLE.offset(),
                 &1_u32.to_le_bytes(),
             )?;
             completed(&mut device, command.id)?;
@@ -166,7 +174,7 @@ fn resume_without_a_fault_does_not_prearm_later_faults() -> TestResult {
         submit(&mut device, command, 0)?;
         device.until(|dma| Ok(fault_status(dma)? == 1))?;
         device.write(
-            CTRL + ChannelRegisters::IRQ_MASK.offset(),
+            CTRL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::MASK.offset(),
             &0_u32.to_le_bytes(),
         )?;
         run(&mut device)?;

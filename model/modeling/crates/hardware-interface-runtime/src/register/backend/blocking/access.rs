@@ -41,7 +41,7 @@ impl BlockingObservationBackend {
             }
         };
         state.order.fault(reason);
-        state.emitter_active = false;
+        state.emitter_thread = None;
         drop(state);
         self.changed.notify_all();
     }
@@ -49,7 +49,7 @@ impl BlockingObservationBackend {
     fn apply_deferred(&self, state: &mut BlockingState) {
         if let Some(reason) = self.deferred_fault.get() {
             state.order.fault(*reason);
-            state.emitter_active = false;
+            state.emitter_thread = None;
         }
     }
 }

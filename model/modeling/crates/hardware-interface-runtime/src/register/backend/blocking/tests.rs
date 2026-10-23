@@ -5,6 +5,7 @@ use std::thread;
 
 mod cancellation;
 mod emission;
+mod reentry;
 
 fn wait_for_one_waiter(backend: &BlockingObservationBackend) {
     let state = backend.state.lock_checked().expect("backend lock");

@@ -1,6 +1,7 @@
 use crate::MutexStorage;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Condvar, MutexGuard, OnceLock};
+use std::thread::{self, ThreadId};
 
 use super::{ObservationGateError, order_error};
 use crate::register::{
@@ -13,7 +14,7 @@ mod access;
 #[derive(Debug)]
 pub(in crate::register) struct BlockingState {
     order: ObservationOrder,
-    emitter_active: bool,
+    emitter_thread: Option<ThreadId>,
     pub(in crate::register) waiting_emitters: usize,
 }
 
@@ -38,7 +39,7 @@ impl BlockingObservationBackend {
             observer,
             state: MutexStorage::new(BlockingState {
                 order: ObservationOrder::new_at(next_sequence),
-                emitter_active: false,
+                emitter_thread: None,
                 waiting_emitters: 0,
             }),
             changed: Arc::new(Condvar::new()),
@@ -100,6 +101,7 @@ impl BlockingObservationReservation {
     }
 
     /// Blocks until this exact range can emit, then completes every callback.
+    /// Recursive emission from this gate's observer faults with [`GateFault::InvalidEmission`].
     pub fn emit(
         mut self,
         observations: Vec<RegisterObservation>,
@@ -123,6 +125,11 @@ impl BlockingObservationReservation {
         state = self.wait_for_turn(state)?;
         drop(state);
         for observation in observations {
+            self.backend
+                .lock_state()?
+                .order
+                .next_emission_sequence()
+                .map_err(order_error)?;
             if catch_unwind(AssertUnwindSafe(|| {
                 self.backend.observer.observe(observation);
             }))
@@ -136,7 +143,7 @@ impl BlockingObservationReservation {
         }
         let mut state = self.backend.lock_state()?;
         state.order.advance(&mut emission).map_err(order_error)?;
-        state.emitter_active = false;
+        state.emitter_thread = None;
         drop(state);
         self.backend.changed.notify_all();
         Ok(())
@@ -148,8 +155,16 @@ impl BlockingObservationReservation {
     ) -> Result<MutexGuard<'state, BlockingState>, ObservationGateError> {
         loop {
             let next = state.order.next_emission_sequence().map_err(order_error)?;
-            if !state.emitter_active && next == self.start_sequence() {
-                state.emitter_active = true;
+            if state.emitter_thread == Some(thread::current().id()) {
+                state.order.fault(GateFault::InvalidEmission);
+                let error = order_error(state.order.fault_error());
+                state.emitter_thread = None;
+                drop(state);
+                self.backend.changed.notify_all();
+                return Err(error);
+            }
+            if state.emitter_thread.is_none() && next == self.start_sequence() {
+                state.emitter_thread = Some(thread::current().id());
                 return Ok(state);
             }
             state.waiting_emitters += 1;
@@ -157,7 +172,7 @@ impl BlockingObservationReservation {
             state = self.backend.changed.wait(state).map_err(|poisoned| {
                 let mut state = poisoned.into_inner();
                 state.order.fault(GateFault::SynchronizationPoisoned);
-                state.emitter_active = false;
+                state.emitter_thread = None;
                 let error = order_error(state.order.fault_error());
                 drop(state);
                 self.backend.changed.notify_all();

@@ -68,6 +68,11 @@ impl RegisterObservation {
 
 /// Synchronous infallible sink for committed register observations.
 ///
+/// Callbacks must not wait for later observations from the same gate, including
+/// through another thread: ordered delivery cannot advance until this call returns.
+/// A blocking gate detects same-thread recursive emission and terminally rejects it;
+/// querying the gate or reserving work for later emission is still permitted.
+///
 /// A fallible callback cannot implement this interface:
 /// ```compile_fail
 /// use hardware_interface_runtime::{RegisterObservation, RegisterObserver};

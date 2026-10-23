@@ -1,1 +1,3 @@
-model/modeling/target/
+/model/modeling/target/
+/target/
+/.omo/

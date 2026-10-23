@@ -1,4 +1,4 @@
-# Minimal multi-channel PDMA
+# PDMA functional model
 
 The [system specification](docs/spec.md) includes hardware and firmware requirements,
 Host/platform obligations, and explicit model-to-RTL verification boundaries.
@@ -9,7 +9,7 @@ firmware events and coordinates affected VFs.
 The [roadmap and SDMA gap comparison](docs/firmware-dma-goal.md#copy-engine-synchronization-reassessment)
 record the withdrawal of the first Signal/Wait implementation. The approved
 [copy-engine contract](docs/copy-engine.md) now defines Copy, Write, Fill, Wait,
-Atomic, Semaphore, Fence and Trap. Success produces no event; Fence stores completion
+Atomic, Semaphore, Fence, Trap and Timestamp. Success produces no event; Fence stores completion
 and Trap explicitly requests notification. Generic memory atomics and reset during
 context maintenance remain available. HSA is a semantic reference rather than an
 AQL compatibility target. The broader
@@ -32,6 +32,11 @@ source and destination selectors, with firmware-managed Default/PASID bindings.
 Hardware snapshots published producers for Drain/Abort and retains accepted work
 until retirement. The document records software obligations for the eventual RTL
 specification; model-local memory completion does not prove external bus drain.
+
+The Rust source requires Rust 1.88 or later (edition 2024 with let chains).
+Workspace and standalone fixture manifests declare the same minimum; Clippy uses
+that minimum when proposing API replacements. Strict generated-header tests also
+require a C11 compiler (`cc`).
 
 Run from this directory:
 
@@ -69,7 +74,7 @@ backend errors. New platform error categories need no generic runtime change.
 | --- | --- |
 | `crates/contract/src/dma.rs` | Public DMA contract facade; explicit exports from the owning modules. |
 | `crates/contract/src/dma/command.rs` | Tagged command descriptors and Copy payload. |
-| `crates/contract/src/dma/operations.rs` | Scalar, Fill, Wait and Semaphore payloads; atomic operations in its child module. |
+| `crates/contract/src/dma/operations.rs` | Scalar, Fill, Wait, Semaphore and Timestamp payloads; atomic operations in its child module. |
 | `crates/contract/src/dma/endpoint.rs` | Payload endpoint geometry, SG segments and typed positions. |
 | `crates/contract/src/dma/event.rs` | Error-only event records and committed progress. |
 | `crates/contract/src/register.rs` | Register types shared by DMA and management hardware. |

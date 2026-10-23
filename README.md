@@ -1,9 +1,12 @@
 # Programmable DMA Subsystem (PDMA)
 
 The active Rust model lives in [model/modeling](model/modeling/README.md). It
-implements instance-configured channels with command/response rings, independent
-linear/scatter-gather endpoints, one shared DMA execution pipeline, channel/device
-fault and reset handling, and empty-to-non-empty/IOC notifications.
+implements instance-configured channels with command/error-event rings, independent
+linear/scatter-gather endpoints and one shared DMA execution pipeline. Copy, Write,
+Fill, Wait, Atomic, Semaphore, Fence, Trap and Timestamp share its fault, retirement
+and reset boundaries. Successful commands produce no response record: software
+observes Fence storage and optional Trap notifications. Recoverable target page
+faults retain work for owner resume while peer channels remain eligible.
 
 Hardware behavior is deterministic and step-based. Memory backing, software CPU
 execution and interrupt delivery are supplied outside the hardware model.
@@ -14,7 +17,8 @@ execution and interrupt delivery are supplied outside the hardware model.
 - [Reset contract](model/modeling/docs/reset.md): current completion and memory-lifetime guarantees.
 - [Generated ABI header](model/modeling/include/README.md): generation and consistency checks.
 - [System scenarios](model/modeling/crates/scenarios/README.md).
-- [Next goal: firmware-managed DMA](model/modeling/docs/firmware-dma-goal.md): firmware plus DMA as the primary direction for preparing SR-IOV, PASID and Function reset support, without requiring firmware for ordinary configurations. This is not implemented functionality or a request to begin PCIe integration.
+- [System specification](model/modeling/docs/spec.md): hardware, firmware, software and platform obligations, with the model-to-RTL boundary.
+- [Roadmap and decisions](model/modeling/docs/firmware-dma-goal.md): implemented firmware-managed channels, Function/context isolation and copy-engine commands, plus deferred integration/recovery directions. Actual PCIe, IOMMU, FLR and logical-channel oversubscription remain outside the current implementation; ordinary DMA still runs without firmware.
 - [First milestone: architecture MVP](model/modeling/docs/firmware-dma-mvp.md): implemented firmware-opened Host window and IRQ-driven DMA copy, with separate hardware, firmware and runtime responsibilities. Broader PCIe features remain future work.
 
 ## Historical background and references

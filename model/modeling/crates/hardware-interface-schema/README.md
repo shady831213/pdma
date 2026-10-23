@@ -464,11 +464,11 @@ envelopes, including a scalar or another bank placed in an internal hole.
 ## PDMA consumer
 
 PDMA uses generated layouts for an instance-configured channel count, independent
-command/response rings and device/channel controls. Its current contract generates
+command/error-event rings and DMA/channel controls. Its current contract generates
 the C header; historical register counts and layouts are not compatibility targets.
 PDMA ring geometry and pointer rules belong to its contract crate; shared software
 ring algorithms belong to `pdma-model-software`. DMA, reset and IRQ behavior belong
-to the PDMA device and host.
+to the PDMA hardware and software, not this schema library.
 
 The resulting layer boundary is deliberate: this crate owns schema descriptors,
 codecs, checked views and generated-value register windows.

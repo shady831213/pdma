@@ -90,7 +90,7 @@ unshifted values. Endpoints select Linear (zero) or ScatterGather (one). Their
 context is at byte four and their mode-selected payload starts at byte eight.
 
 Command stores ID at zero, kind at eight and a 96-byte payload at sixteen. The
-eight kinds are Copy, Write, Fill, Wait, Atomic, Semaphore, Fence and Trap (0..7).
+nine kinds are Copy, Write, Fill, Wait, Atomic, Semaphore, Fence, Trap and Timestamp (0..8).
 CopyCommand stores source/destination at 0/40, length at 80 and SG context at 88.
 WordTarget stores address/context/width at 0/8/12. WordWrite adds value at 16.
 FillCommand stores address/length/pattern/context/width at 0/8/16/24/28.
@@ -98,6 +98,7 @@ WaitCommand stores target/value/comparison at 0/16/24. AtomicCommand stores
 target/order/operation/operands at 0/16/20/24; CAS operands contain compare/value
 at 0/8, and other operands contain value at zero. Atomic has no software result
 address. SemaphoreCommand stores target/operation at 0/16. Trap has no payload.
+TimestampCommand stores its fixed-width destination address/context at 0/8.
 
 Event stores ID/code/info at 0/8/16. Codes 1..8 select InvalidLength, ReadError,
 WriteError, LengthMismatch, ListReadError, Unsupported, InvalidOperation and

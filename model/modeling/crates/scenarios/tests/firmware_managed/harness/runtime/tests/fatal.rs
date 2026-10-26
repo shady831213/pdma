@@ -1,3 +1,7 @@
+use pdma_model_contract::dma::{
+    CopyCommandDestinationValues, CopyCommandSourceValues, LinearEndpoint,
+};
+
 use super::{
     client,
     control::{ring, rings},
@@ -8,7 +12,7 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::{
     control::{ControlEvent, ControlEventKind, ControlResponseStatus},
-    dma::{ChannelId, Command, Endpoint, Event},
+    dma::{ChannelId, Command, Event},
     hw_components::control::EventRingErrorCode,
     memory::FunctionId,
 };
@@ -153,15 +157,20 @@ async fn copy(
     .unwrap();
     channel.set_irq_enabled(false).await.unwrap();
     channel
-        .submit(Command::copy(
-            17,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 8,
-                sg_context: 0,
-                source: Endpoint::linear(source.raw(), 0),
-                destination: Endpoint::linear(destination.raw(), 0),
-            },
-        ))
+        .submit(Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 17,
+            copy_length: 8,
+            sg_context: 0,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: source.raw(),
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: destination.raw(),
+                offset: 0,
+            }),
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        }))
         .await
         .unwrap();
     let address = allocator

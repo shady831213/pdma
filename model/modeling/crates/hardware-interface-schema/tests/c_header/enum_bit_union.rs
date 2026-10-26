@@ -13,7 +13,7 @@ record_schema! {
                 kind: 3..=4 => enum { variants: { Small = 1, Large = 2 } },
                 priority: 5..=7,
             } },
-            payload: union { tag: self.flags.kind,
+            payload: tagged_union { tag: self.flags.kind,
                 cases: { Small { first: u16 }, Large { first: u16, second: u16 } },
             },
         },
@@ -33,7 +33,7 @@ record_schema! {
         endian: Big,
         fields: {
             header: bits(Header),
-            payload: union { tag: self.header.kind,
+            payload: tagged_union { tag: self.header.kind,
                 cases: { Small { first: u16 }, Large { first: u16, second: u16 } },
             },
         },

@@ -1,13 +1,13 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-use crate::internal::syntax::{UnionFieldDecl, UnionFieldType};
+use crate::internal::syntax::{TaggedUnionFieldDecl, TaggedUnionFieldType};
 
 use super::super::scalar;
 
 pub(super) struct Context<'a> {
     pub(super) owner: &'a syn::Ident,
-    pub(super) field: &'a UnionFieldDecl,
+    pub(super) field: &'a TaggedUnionFieldDecl,
     pub(super) relative: TokenStream,
     pub(super) quantum: &'a TokenStream,
     pub(super) facade: &'a TokenStream,
@@ -26,11 +26,11 @@ pub(super) fn decode(context: Context<'_>) -> TokenStream {
     let name = &field.name;
     let identity = format_ident!("{}_IDENTITY", name.to_string().to_ascii_uppercase());
     let decoded = match &field.ty {
-        UnionFieldType::Scalar(scalar_type) => {
+        TaggedUnionFieldType::Scalar(scalar_type) => {
             let ty = scalar::ty(*scalar_type);
             quote!(#facade::read_scalar::<#ty>(bytes, #facade::Endian::#endian))
         }
-        UnionFieldType::Bits(path) => quote!(
+        TaggedUnionFieldType::Bits(path) => quote!(
             <#path as #facade::BitsLayout>::decode_record(
                 bytes,
                 #facade::Endian::#endian,
@@ -60,10 +60,10 @@ pub(super) fn encode(context: Context<'_>) -> TokenStream {
     let identity = format_ident!("{}_IDENTITY", name.to_string().to_ascii_uppercase());
     let binding = binding(name);
     let encoded = match &field.ty {
-        UnionFieldType::Scalar(_) => {
+        TaggedUnionFieldType::Scalar(_) => {
             quote!(#facade::write_scalar(bytes, #facade::Endian::#endian, *#binding))
         }
-        UnionFieldType::Bits(path) => quote!(
+        TaggedUnionFieldType::Bits(path) => quote!(
             <#path as #facade::BitsLayout>::encode_record(
                 bytes,
                 #facade::Endian::#endian,
@@ -87,4 +87,11 @@ pub(super) fn binding(name: &syn::Ident) -> syn::Ident {
         name,
         span = proc_macro2::Span::mixed_site()
     )
+}
+
+pub(super) fn semantic_type(ty: &TaggedUnionFieldType, facade: &TokenStream) -> TokenStream {
+    match ty {
+        TaggedUnionFieldType::Scalar(scalar_type) => scalar::ty(*scalar_type),
+        TaggedUnionFieldType::Bits(path) => quote!(<#path as #facade::BitsLayout>::Value),
+    }
 }

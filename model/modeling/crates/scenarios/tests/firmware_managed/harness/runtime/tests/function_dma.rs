@@ -1,4 +1,8 @@
 //! Runtime memory isolation through the composed DMA execution stages.
+
+use pdma_model_contract::dma::{
+    CopyCommandDestinationValues, CopyCommandSourceValues, LinearEndpoint, ScatterGatherEndpoint,
+};
 mod lifecycle;
 /// Shared hardware fixtures for Function memory tests.
 mod support;
@@ -6,7 +10,7 @@ mod support;
 use hardware_interface_pipeline::HardwareDriver;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion};
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, CommandRegisters, Endpoint, EventCode, EventRegisters, Segment,
+    ChannelBlock, ChannelId, CommandRegisters, EventCode, EventRegisters, Segment,
 };
 use support::{Fixture, TestResult, advance, bytes, command, publish, response, setup};
 
@@ -41,12 +45,21 @@ fn command_lists_payload_and_response_use_the_same_channel_owner() -> TestResult
             )?;
         }
         let mut work = command(100 + u64::try_from(index)?);
-        let pdma_model_contract::dma::CommandPayloadValues::Copy(ref mut copy) = work.payload
-        else {
+        let pdma_model_contract::dma::Command::Copy(ref mut copy) = work else {
             return Err("expected Copy".into());
         };
-        copy.source = Endpoint::scatter_gather(0x1400, 1);
-        copy.destination = Endpoint::scatter_gather(0x1500, 1);
+        copy.source = CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+            list_address: 0x1400,
+            count: 1,
+            index: 0,
+            offset: 0,
+        });
+        copy.destination = CopyCommandDestinationValues::ScatterGather(ScatterGatherEndpoint {
+            list_address: 0x1500,
+            count: 1,
+            index: 0,
+            offset: 0,
+        });
         publish(&mut dma, memory, (ChannelId::new(index), work))?;
     }
     // When: the shared execution pipeline services both channels.
@@ -98,8 +111,7 @@ fn another_functions_mapping_cannot_satisfy_a_dma_access() -> TestResult {
             &[0xa5; 256],
         )?;
         let mut work = command(91);
-        let pdma_model_contract::dma::CommandPayloadValues::Copy(ref mut copy) = work.payload
-        else {
+        let pdma_model_contract::dma::Command::Copy(ref mut copy) = work else {
             return Err("expected Copy".into());
         };
         let base = ChannelId::new(0).register_offset(2).ok_or("channel")?;
@@ -108,11 +120,31 @@ fn another_functions_mapping_cannot_satisfy_a_dma_access() -> TestResult {
                 base + ChannelBlock::COMMAND.offset() + CommandRegisters::BASE.offset(),
                 &0x4000_u64.to_le_bytes(),
             )?,
-            Path::List => copy.source = Endpoint::scatter_gather(0x4000, 1),
-            Path::Read => copy.source = Endpoint::linear(0x4000, 0),
-            Path::Write => copy.destination = Endpoint::linear(0x4000, 0),
+            Path::List => {
+                copy.source = CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+                    list_address: 0x4000,
+                    count: 1,
+                    index: 0,
+                    offset: 0,
+                });
+            }
+            Path::Read => {
+                copy.source = CopyCommandSourceValues::Linear(LinearEndpoint {
+                    address: 0x4000,
+                    offset: 0,
+                });
+            }
+            Path::Write => {
+                copy.destination = CopyCommandDestinationValues::Linear(LinearEndpoint {
+                    address: 0x4000,
+                    offset: 0,
+                });
+            }
             Path::Event => {
-                copy.source = Endpoint::linear(0x4000, 0);
+                copy.source = CopyCommandSourceValues::Linear(LinearEndpoint {
+                    address: 0x4000,
+                    offset: 0,
+                });
                 dma.write(
                     base + ChannelBlock::EVENT.offset() + EventRegisters::BASE.offset(),
                     &0x4000_u64.to_le_bytes(),

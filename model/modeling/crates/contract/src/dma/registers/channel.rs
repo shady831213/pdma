@@ -9,7 +9,7 @@ register_map! {
         alignment: 8,
         placements: [
             #[short_description = "Command ring base address"]
-            #[description = "Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 112 bytes apart. The value cannot change after the channel's first successful enable until reset."]
+            #[description = "Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset."]
             pub base: Address,
             #[short_description = "Command ring capacity"]
             #[description = "Number of command slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable."]

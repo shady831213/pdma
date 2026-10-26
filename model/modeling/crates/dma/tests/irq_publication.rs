@@ -1,10 +1,14 @@
 //! Notification visibility follows complete event publication.
+
+use pdma_model_contract::dma::{
+    Command, CopyCommand, CopyCommandDestinationValues, CopyCommandSourceValues, ErrorInfo, Event,
+    EventCode, EventInfoValues, EventRegisters, LinearEndpoint,
+};
+
 /// Shared raw-bus test fixtures.
 pub mod support;
 use hardware_interface_pipeline::{Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::{Command, CopyCommand, Endpoint, Event, EventCode, EventRegisters};
-use pdma_model_contract::dma::{ErrorInfo, EventInfoValues};
 use support::{TestResult, read_word, setup, submit};
 const EVENT_PRODUCER: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
     + pdma_model_contract::dma::ChannelBlock::EVENT.offset()
@@ -17,15 +21,20 @@ fn irq_requires_published_event_on_every_step() -> TestResult {
     submit(
         &mut device,
         &memory,
-        Command::copy(
-            7,
-            CopyCommand {
-                source: Endpoint::linear(0, 0),
-                destination: Endpoint::linear(0x1300, 0),
-                copy_length: 4,
-                sg_context: 0,
-            },
-        ),
+        Command::Copy(CopyCommand {
+            id: 7,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0,
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x1300,
+                offset: 0,
+            }),
+            copy_length: 4,
+            sg_context: 0,
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        }),
     )?;
     let mut hardware = support::chunk_pipeline();
     let mut state = Some(support::accept(

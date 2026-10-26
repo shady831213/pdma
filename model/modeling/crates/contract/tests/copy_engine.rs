@@ -1,4 +1,6 @@
-#![doc = "Copy-engine wire and notification boundary assertions."]
+//! Copy-engine wire and notification boundary assertions.
+
+use pdma_model_contract::dma::{CommandHeader, FenceCommand, Opcode, TrapCommand, WriteCommand};
 
 use pdma_model_contract::dma::{
     AtomicCommand, AtomicCommandOperandsCompareExchangeValues, AtomicCommandOperandsValues,
@@ -10,13 +12,13 @@ use pdma_model_contract::dma::{
 #[test]
 fn trap_decodes_when_wire_has_empty_payload() {
     // Given: an independently formed fixed-width Trap command.
-    let mut wire = [0_u8; 112];
-    wire[0] = 42;
-    wire[8] = 7;
+    let mut wire = [0_u8; 96];
+    wire[8] = 42;
+    wire[0] = 7;
     // When: the wire crosses the typed command boundary.
     let decoded = Command::from_bytes(&wire);
     // Then: Trap is a valid command and preserves its identifier.
-    assert_eq!(decoded.map(|command| command.id), Ok(42));
+    assert_eq!(decoded.map(|command| command.id()), Ok(42));
 }
 
 #[test]
@@ -33,9 +35,15 @@ fn command_families_match_independent_wire_layouts() {
     };
     let cases = [
         (
-            Command::write(42, write),
+            Command::Write(WriteCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Write,
+                },
+                id: 42,
+                word: write,
+            }),
             vec![
-                (8, 1),
+                (0, 1),
                 (16, 0x38),
                 (17, 0x12),
                 (24, 9),
@@ -45,18 +53,19 @@ fn command_families_match_independent_wire_layouts() {
             ],
         ),
         (
-            Command::fill(
-                42,
-                FillCommand {
-                    address: 0x1238,
-                    length: 19,
-                    pattern: 0x5678,
-                    context: 9,
-                    width: FillCommandWidth::Bits32,
+            Command::Fill(FillCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Fill,
                 },
-            ),
+                id: 42,
+                address: 0x1238,
+                length: 19,
+                pattern: 0x5678,
+                context: 9,
+                width: FillCommandWidth::Bits32,
+            }),
             vec![
-                (8, 2),
+                (0, 2),
                 (16, 0x38),
                 (17, 0x12),
                 (24, 19),
@@ -67,16 +76,17 @@ fn command_families_match_independent_wire_layouts() {
             ],
         ),
         (
-            Command::wait(
-                42,
-                WaitCommand {
-                    target,
-                    value: 0x5678,
-                    comparison: WaitCommandComparison::Reached,
+            Command::Wait(WaitCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Wait,
                 },
-            ),
+                id: 42,
+                target,
+                value: 0x5678,
+                comparison: WaitCommandComparison::Reached,
+            }),
             vec![
-                (8, 3),
+                (0, 3),
                 (16, 0x38),
                 (17, 0x12),
                 (24, 9),
@@ -87,19 +97,43 @@ fn command_families_match_independent_wire_layouts() {
             ],
         ),
         (
-            Command::semaphore(
-                42,
-                SemaphoreCommand {
-                    target,
-                    operation: SemaphoreCommandOperation::Wait,
+            Command::Semaphore(SemaphoreCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Semaphore,
                 },
-            ),
-            vec![(8, 5), (16, 0x38), (17, 0x12), (24, 9), (28, 1), (32, 1)],
+                id: 42,
+                target,
+                operation: SemaphoreCommandOperation::Wait,
+            }),
+            vec![(0, 5), (16, 0x38), (17, 0x12), (24, 9), (28, 1), (32, 1)],
         ),
+    ];
+    for (command, fields) in cases {
+        assert_wire(command, &fields).unwrap();
+    }
+}
+
+#[test]
+fn completion_commands_match_independent_wire_layouts() {
+    let write = WordWrite {
+        target: WordTarget {
+            address: 0x1238,
+            context: 9,
+            width: WordTargetWidth::Bits64,
+        },
+        value: 0x5678,
+    };
+    let cases = [
         (
-            Command::fence(42, write),
+            Command::Fence(FenceCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Fence,
+                },
+                id: 42,
+                word: write,
+            }),
             vec![
-                (8, 6),
+                (0, 6),
                 (16, 0x38),
                 (17, 0x12),
                 (24, 9),
@@ -108,7 +142,15 @@ fn command_families_match_independent_wire_layouts() {
                 (33, 0x56),
             ],
         ),
-        (Command::trap(42), vec![(8, 7)]),
+        (
+            Command::Trap(TrapCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Trap,
+                },
+                id: 42,
+            }),
+            vec![(0, 7)],
+        ),
     ];
     for (command, fields) in cases {
         assert_wire(command, &fields).unwrap();
@@ -128,8 +170,8 @@ fn malformed_nested_tags_are_rejected_at_the_wire_boundary() {
         (9, 8, 9),
     ];
     for (kind, offset, value) in mutations {
-        let mut bytes = [0_u8; 112];
-        bytes[8] = kind;
+        let mut bytes = [0_u8; 96];
+        bytes[0] = kind;
         *bytes.get_mut(offset).unwrap() = value;
         // When: hardware decodes the untrusted record.
         let decoded = Command::from_bytes(&bytes);
@@ -146,22 +188,23 @@ fn compare_exchange_preserves_two_operands_without_result_storage() {
         width: WordTargetWidth::Bits64,
     };
     let (command, fields) = (
-        Command::atomic(
-            42,
-            AtomicCommand {
-                target,
-                order: AtomicCommandOrder::AcquireRelease,
-                operation: AtomicCommandOperation::CompareExchange,
-                operands: AtomicCommandOperandsValues::CompareExchange(
-                    AtomicCommandOperandsCompareExchangeValues {
-                        compare: 0x5678,
-                        value: 0x9abc,
-                    },
-                ),
+        Command::Atomic(AtomicCommand {
+            header: CommandHeader {
+                opcode: Opcode::Atomic,
             },
-        ),
+            id: 42,
+            target,
+            order: AtomicCommandOrder::AcquireRelease,
+            operation: AtomicCommandOperation::CompareExchange,
+            operands: AtomicCommandOperandsValues::CompareExchange(
+                AtomicCommandOperandsCompareExchangeValues {
+                    compare: 0x5678,
+                    value: 0x9abc,
+                },
+            ),
+        }),
         vec![
-            (8, 4),
+            (0, 4),
             (16, 0x38),
             (17, 0x12),
             (24, 9),
@@ -178,8 +221,8 @@ fn compare_exchange_preserves_two_operands_without_result_storage() {
 }
 
 fn assert_wire(command: Command, fields: &[(usize, u8)]) -> Result<(), Box<dyn std::error::Error>> {
-    let mut expected = [0_u8; 112];
-    expected[0] = 42;
+    let mut expected = [0_u8; 96];
+    expected[8] = 42;
     for &(offset, value) in fields {
         *expected.get_mut(offset).ok_or("fixture byte offset")? = value;
     }

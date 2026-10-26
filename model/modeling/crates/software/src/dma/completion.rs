@@ -1,5 +1,7 @@
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::{Command, WordTargetWidth, WordWrite};
+use pdma_model_contract::dma::{
+    Command, CommandHeader, FenceCommand, Opcode, WordTargetWidth, WordWrite,
+};
 
 /// A software-selected completion value in storage retained until retirement.
 #[derive(Clone, Copy, Debug)]
@@ -8,7 +10,13 @@ pub struct CompletionWord(pub WordWrite);
 impl CompletionWord {
     /// Builds a Fence without allocating or initializing its storage.
     pub const fn command(self, id: u64) -> Command {
-        Command::fence(id, self.0)
+        Command::Fence(FenceCommand {
+            header: CommandHeader {
+                opcode: Opcode::Fence,
+            },
+            id,
+            word: self.0,
+        })
     }
 
     /// Observes the Fence value; callers must also handle error, fatal and reset exits.

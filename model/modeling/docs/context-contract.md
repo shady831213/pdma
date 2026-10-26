@@ -9,8 +9,9 @@ subsequent RTL. Related behavior is described by [Function isolation](function-i
 Implementation scope, 2026-09-23: the first iteration selects Default or PASID
 address spaces. Context attributes are a named schema record, extensible separately
 from descriptor selectors. Source/destination and SG selectors are 32-bit IDs in
-the Copy payload. The current operation-tagged Command occupies 112 bytes;
-its Copy payload occupies 96 bytes.
+the complete Copy command. The current Command slot occupies 96 bytes, with its
+shared opcode header at zero. Copy stores SG context at 4 and source/destination
+payload contexts at 24/28. Each complete command starts at slot offset zero.
 Table capacity is instance configuration.
 Device-memory targeting, address translation and base/limit permission windows
 are outside this iteration. The obligations below are the implementation and

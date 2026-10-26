@@ -25,12 +25,11 @@ impl CopyState {
         self.bytes_completed += count;
         Ok(())
     }
-    const fn new(id: u64, command: CopyCommand, status: Result<(), EventCode>) -> Self {
+    const fn new(command: CopyCommand, status: Result<(), EventCode>) -> Self {
         Self {
-            source: Cursor::new(command.source, command.copy_length),
-            destination: Cursor::new(command.destination, command.copy_length),
+            source: Cursor::source(command),
+            destination: Cursor::destination(command),
             command,
-            id,
             remaining: command.copy_length,
             bytes_completed: 0,
             status,
@@ -42,7 +41,7 @@ impl CopyState {
     }
 
     pub(crate) const fn event_with(&self, code: EventCode) -> Event {
-        Event::stopping(self.id, code, self.bytes_completed)
+        Event::stopping(self.command.id, code, self.bytes_completed)
     }
 }
 

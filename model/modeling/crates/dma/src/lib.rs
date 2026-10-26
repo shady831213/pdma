@@ -31,8 +31,9 @@ use hardware_interface_schema::RegisterWindow;
 pub use maintenance::MaintenanceError;
 pub use memory::{ChannelContext, MemoryFailure};
 use pdma_model_contract::dma::{
-    ChannelId, Command, CommandPayloadValues, ContextId, DmaAccess, DmaControl, DmaDiscovery,
-    DmaFatalCode, DmaRegistersLayout, EndpointMode,
+    ChannelId, Command, ContextId, CopyCommandDestinationValues as Destination,
+    CopyCommandSourceValues as Source, DmaAccess, DmaControl, DmaDiscovery, DmaFatalCode,
+    DmaRegistersLayout,
 };
 pub use stages::{
     Candidate, CheckRanges, CommandExecution, CommandRequest, CopyChunk, Execution, Fetch,
@@ -60,37 +61,48 @@ struct Maintenance {
 }
 
 const fn references(command: &Command) -> [Option<ContextId>; 3] {
-    let copy = match command.payload {
-        CommandPayloadValues::Copy(copy) => copy,
-        CommandPayloadValues::Write(word) | CommandPayloadValues::Fence(word) => {
-            return [Some(ContextId::new(word.target.context)), None, None];
+    let copy = match command {
+        Command::Copy(copy) => copy,
+        Command::Write(command) => {
+            return [
+                Some(ContextId::new(command.word.target.context)),
+                None,
+                None,
+            ];
         }
-        CommandPayloadValues::Wait(wait) => {
+        Command::Fence(command) => {
+            return [
+                Some(ContextId::new(command.word.target.context)),
+                None,
+                None,
+            ];
+        }
+        Command::Wait(wait) => {
             return [Some(ContextId::new(wait.target.context)), None, None];
         }
-        CommandPayloadValues::Atomic(atomic) => {
+        Command::Atomic(atomic) => {
             return [Some(ContextId::new(atomic.target.context)), None, None];
         }
-        CommandPayloadValues::Semaphore(semaphore) => {
+        Command::Semaphore(semaphore) => {
             return [Some(ContextId::new(semaphore.target.context)), None, None];
         }
-        CommandPayloadValues::Fill(fill) => {
+        Command::Fill(fill) => {
             return [Some(ContextId::new(fill.context)), None, None];
         }
-        CommandPayloadValues::Timestamp(timestamp) => {
+        Command::Timestamp(timestamp) => {
             return [Some(ContextId::new(timestamp.context)), None, None];
         }
-        CommandPayloadValues::Trap(_) => return [None, None, None],
+        Command::Trap(_) => return [None, None, None],
     };
-    let sg = match (copy.source.mode, copy.destination.mode) {
-        (EndpointMode::Linear, EndpointMode::Linear) => None,
-        (EndpointMode::ScatterGather, _) | (_, EndpointMode::ScatterGather) => {
+    let sg = match (copy.source, copy.destination) {
+        (Source::Linear(_), Destination::Linear(_)) => None,
+        (Source::ScatterGather(_), _) | (_, Destination::ScatterGather(_)) => {
             Some(ContextId::new(copy.sg_context))
         }
     };
     [
-        Some(ContextId::new(copy.source.context)),
-        Some(ContextId::new(copy.destination.context)),
+        Some(ContextId::new(copy.source_context)),
+        Some(ContextId::new(copy.destination_context)),
         sg,
     ]
 }

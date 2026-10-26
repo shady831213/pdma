@@ -1,10 +1,14 @@
 //! Software allocation, submission and interrupt-driven Fence observation.
 
+use pdma_model_contract::dma::{
+    ChannelId, Command, CommandHeader, CopyCommandDestinationValues, CopyCommandSourceValues,
+    Event, LinearEndpoint, Opcode, TrapCommand,
+};
+
 use super::super::runtime::{AccessError, HostBus};
 use hardware_interface_runtime::{
     InterruptHandler, MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
-use pdma_model_contract::dma::{ChannelId, Command, Endpoint, Event};
 use pdma_model_host::{Channel, ChannelConfig, DmaError, RingConfig, Rings, runtime::Irq};
 use std::sync::{
     Arc,
@@ -86,15 +90,20 @@ pub(super) async fn run(
     )
     .await?;
     channel
-        .submit(Command::copy(
-            37,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: length,
-                sg_context: 0,
-                source: Endpoint::linear(source.raw(), 0),
-                destination: Endpoint::linear(destination.raw(), 0),
-            },
-        ))
+        .submit(Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 37,
+            copy_length: length,
+            sg_context: 0,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: source.raw(),
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: destination.raw(),
+                offset: 0,
+            }),
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        }))
         .await?;
     let address = ports.allocator.allocate(8, MemoryAlignment::try_new(8)?)?;
     ports
@@ -109,7 +118,14 @@ pub(super) async fn run(
         value: 37,
     });
     channel.submit(fence.command(38)).await?;
-    channel.submit(Command::trap(39)).await?;
+    channel
+        .submit(Command::Trap(TrapCommand {
+            header: CommandHeader {
+                opcode: Opcode::Trap,
+            },
+            id: 39,
+        }))
+        .await?;
     let (completed, received) = oneshot::channel();
     let deliveries = Arc::new(AtomicUsize::new(0));
     ports.interrupts.register(

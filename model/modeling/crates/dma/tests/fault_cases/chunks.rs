@@ -1,3 +1,7 @@
+use pdma_model_contract::dma::{
+    CopyCommandDestinationValues, CopyCommandSourceValues, LinearEndpoint,
+};
+
 use super::{composition::InvertPayload, *};
 use hardware_interface_pipeline::Then;
 use pdma_model_dma::{PrepareChunk, ReadCopy, WriteCopy};
@@ -15,15 +19,7 @@ fn early_write_resume_ends_old_invocation_without_repeating_read_or_transform() 
 fn chunked_transform(fault: bool) -> TestResult {
     // Given: a three-chunk command with a non-idempotent payload transform.
     let mut device = setup()?.dma;
-    let command = Command::copy(
-        crate::support::command().id,
-        pdma_model_contract::dma::CopyCommand {
-            copy_length: 600,
-            source: Endpoint::linear(0x1400, 0),
-            destination: Endpoint::linear(0x1800, 0),
-            sg_context: 0,
-        },
-    );
+    let command = long_copy();
     device
         .memory
         .memory
@@ -115,4 +111,21 @@ fn chunked_transform(fault: bool) -> TestResult {
     );
 
     Ok(())
+}
+
+const fn long_copy() -> Command {
+    Command::Copy(pdma_model_contract::dma::CopyCommand {
+        id: crate::support::command().id(),
+        copy_length: 600,
+        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: 0x1400,
+            offset: 0,
+        }),
+        destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: 0x1800,
+            offset: 0,
+        }),
+        sg_context: 0,
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    })
 }

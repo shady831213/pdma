@@ -9,7 +9,7 @@ record_schema! {
         endian: Little,
         fields: {
             flags: bits(Header),
-            payload: union { tag: self.flags.kind, cases: { First { value: u8 } } },
+            payload: tagged_union { tag: self.flags.kind, cases: { First { value: u8 } } },
         },
     }
 }

@@ -1,0 +1,5 @@
+error: expected `tag`
+ --> tests/ui/fail/tagged_union_missing_tag.rs:4:29
+  |
+4 |     payload: tagged_union { cases: { A { value: u32 } } },
+  |                             ^^^^^

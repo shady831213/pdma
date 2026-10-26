@@ -1,11 +1,14 @@
 //! Cancellation after a committed DMA write preserves retirement state.
 
+use pdma_model_contract::dma::{
+    Command, CopyCommandDestinationValues, CopyCommandSourceValues, Event, LinearEndpoint,
+};
+
 use hardware_interface_pipeline::{AsyncExecutor, Operation};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::dma::{Command, Endpoint, Event};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
@@ -55,15 +58,22 @@ async fn committed_copy_is_not_replayed_when_cancelled_before_retirement()
             },
         ))
         .await?;
-    cpu.run_main(channel.submit(Command::copy(
-        23,
-        pdma_model_contract::dma::CopyCommand {
-            source: Endpoint::linear(source.raw(), 0),
-            destination: Endpoint::linear(destination.raw(), 0),
+    cpu.run_main(
+        channel.submit(Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 23,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: source.raw(),
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: destination.raw(),
+                offset: 0,
+            }),
             copy_length: 8,
             sg_context: 0,
-        },
-    )))
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        })),
+    )
     .await?;
     let executor = AsyncExecutor::new(model.clone());
     let mut operation = Operation::new(());

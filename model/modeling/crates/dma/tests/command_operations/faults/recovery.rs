@@ -1,39 +1,43 @@
 use super::{TestResult, add, fence, rig, target};
 use crate::command_operations::support::{CAUSE, EVENT_PRODUCER};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::ChannelRecovery;
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelRegisters, Command, CommandRegisters, DmaAdmin, DmaDiscovery, FillCommand,
-    FillCommandWidth, SemaphoreCommand, SemaphoreCommandOperation, WaitCommand,
-    WaitCommandComparison, WordWrite,
+    ChannelBlock, ChannelRecovery, ChannelRegisters, Command, CommandHeader, CommandRegisters,
+    DmaAdmin, DmaDiscovery, FillCommand, FillCommandWidth, Opcode, SemaphoreCommand,
+    SemaphoreCommandOperation, WaitCommand, WaitCommandComparison, WordWrite, WriteCommand,
 };
 
 #[test]
 fn scalar_faults_retain_commands_until_resume() -> TestResult {
     // Given: each scalar family encounters a recoverable target fault.
     let commands = [
-        Command::write(
-            1,
-            WordWrite {
+        Command::Write(WriteCommand {
+            header: CommandHeader {
+                opcode: Opcode::Write,
+            },
+            id: 1,
+            word: WordWrite {
                 target: target(0x8000),
                 value: 42,
             },
-        ),
-        Command::wait(
-            2,
-            WaitCommand {
-                target: target(0x8000),
-                value: 0,
-                comparison: WaitCommandComparison::Equal,
+        }),
+        Command::Wait(WaitCommand {
+            header: CommandHeader {
+                opcode: Opcode::Wait,
             },
-        ),
-        Command::semaphore(
-            3,
-            SemaphoreCommand {
-                target: target(0x8000),
-                operation: SemaphoreCommandOperation::Signal,
+            id: 2,
+            target: target(0x8000),
+            value: 0,
+            comparison: WaitCommandComparison::Equal,
+        }),
+        Command::Semaphore(SemaphoreCommand {
+            header: CommandHeader {
+                opcode: Opcode::Semaphore,
             },
-        ),
+            id: 3,
+            target: target(0x8000),
+            operation: SemaphoreCommandOperation::Signal,
+        }),
     ];
     for (command, expected) in commands.into_iter().zip([42, 0, 1]) {
         let mut rig = rig(0x8000)?;
@@ -76,16 +80,17 @@ fn fill_fault_retains_committed_prefix() -> TestResult {
     rig.submit(
         0,
         &[
-            Command::fill(
-                1,
-                FillCommand {
-                    address: 0x8000,
-                    length: 259,
-                    pattern: 0x0403_0201,
-                    context: 0,
-                    width: FillCommandWidth::Bits32,
+            Command::Fill(FillCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Fill,
                 },
-            ),
+                id: 1,
+                address: 0x8000,
+                length: 259,
+                pattern: 0x0403_0201,
+                context: 0,
+                width: FillCommandWidth::Bits32,
+            }),
             fence(0x9000),
         ],
     )?;
@@ -144,18 +149,19 @@ fn backend_unsupported_rejects_advertised_atomic_without_effects() -> TestResult
     let operands = pdma_model_contract::dma::AtomicCommandOperandsValues::Add(
         pdma_model_contract::dma::AtomicCommandOperandsAddValues { value: 7 },
     );
-    let command = Command::atomic(
-        1,
-        pdma_model_contract::dma::AtomicCommand {
-            target: pdma_model_contract::dma::WordTarget {
-                width: pdma_model_contract::dma::WordTargetWidth::Bits32,
-                ..target(0x8000)
-            },
-            order: pdma_model_contract::dma::AtomicCommandOrder::Relaxed,
-            operation: operands.tag(),
-            operands,
+    let command = Command::Atomic(pdma_model_contract::dma::AtomicCommand {
+        header: CommandHeader {
+            opcode: Opcode::Atomic,
         },
-    );
+        id: 1,
+        target: pdma_model_contract::dma::WordTarget {
+            width: pdma_model_contract::dma::WordTargetWidth::Bits32,
+            ..target(0x8000)
+        },
+        order: pdma_model_contract::dma::AtomicCommandOrder::Relaxed,
+        operation: operands.tag(),
+        operands,
+    });
     rig.submit(0, &[command, fence(0x9000)])?;
     // When: the backend reports Unsupported before mutation.
     rig.drive()?;

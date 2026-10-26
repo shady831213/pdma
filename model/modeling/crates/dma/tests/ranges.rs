@@ -1,11 +1,15 @@
 //! Explicit endpoint ranges do not require equal backing extents.
 
+use pdma_model_contract::dma::{
+    CopyCommandDestinationValues, CopyCommandSourceValues, LinearEndpoint, ScatterGatherEndpoint,
+};
+
 /// Shared hardware fixtures.
 pub mod support;
 
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::dma::{Endpoint, Event, EventCode, Position, Segment};
 use pdma_model_contract::dma::{ErrorInfo, EventInfoValues};
+use pdma_model_contract::dma::{Event, EventCode, Segment};
 use support::{TestResult, command, run, setup, submit};
 
 #[test]
@@ -15,7 +19,11 @@ fn selected_ranges_skip_unused_sg_prefix_and_clip_last_segment() -> TestResult {
     memory.write(0x1200.into(), MemoryAlignment::ONE, b"abcdefgh")?;
     memory.write(0x1300.into(), MemoryAlignment::ONE, b"--------")?;
     let mut request = command();
-    crate::support::copy_mut(&mut request)?.destination = Endpoint::linear(0x1300, 2);
+    crate::support::copy_mut(&mut request)?.destination =
+        CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: 0x1300,
+            offset: 2,
+        });
     crate::support::copy_mut(&mut request)?.copy_length = 4;
     memory.add_regions(&[hardware_interface_runtime::MemoryRegion::try_new(
         0x3000.into(),
@@ -40,11 +48,13 @@ fn selected_ranges_skip_unused_sg_prefix_and_clip_last_segment() -> TestResult {
         }
         .to_bytes()?,
     )?;
-    crate::support::copy_mut(&mut request)?.source = Endpoint::scatter_gather(0x2ff0, 3);
-    crate::support::copy_mut(&mut request)?.source = crate::support::copy(&request)?
-        .source
-        .with_start(Position::scatter_gather(1, 1))
-        .ok_or("position mode mismatch")?;
+    crate::support::copy_mut(&mut request)?.source =
+        CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+            list_address: 0x2ff0,
+            count: 3,
+            index: 1,
+            offset: 1,
+        });
     submit(&mut dma, &memory, request)?;
     // When: the selected four-byte range is copied.
     run(&mut dma)?;
@@ -60,24 +70,45 @@ fn selected_ranges_skip_unused_sg_prefix_and_clip_last_segment() -> TestResult {
 #[test]
 fn invalid_selected_positions_and_ranges_fail_before_payload_writes() -> TestResult {
     for (source, expected) in [
-        (Endpoint::linear(u64::MAX, 1), EventCode::InvalidLength),
-        (Endpoint::linear(u64::MAX - 2, 0), EventCode::InvalidLength),
         (
-            Endpoint::scatter_gather(0x1400, 1)
-                .with_start(Position::scatter_gather(0, 5))
-                .ok_or("SG position")?,
+            CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: u64::MAX,
+                offset: 1,
+            }),
             EventCode::InvalidLength,
         ),
         (
-            Endpoint::scatter_gather(0x1400, 1)
-                .with_start(Position::scatter_gather(2, 0))
-                .ok_or("SG position")?,
+            CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: u64::MAX - 2,
+                offset: 0,
+            }),
+            EventCode::InvalidLength,
+        ),
+        (
+            CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+                list_address: 0x1400,
+                count: 1,
+                index: 0,
+                offset: 5,
+            }),
+            EventCode::InvalidLength,
+        ),
+        (
+            CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+                list_address: 0x1400,
+                count: 1,
+                index: 2,
+                offset: 0,
+            }),
             EventCode::LengthMismatch,
         ),
         (
-            Endpoint::scatter_gather(0x1400, 1)
-                .with_start(Position::scatter_gather(0, 3))
-                .ok_or("SG position")?,
+            CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+                list_address: 0x1400,
+                count: 1,
+                index: 0,
+                offset: 3,
+            }),
             EventCode::LengthMismatch,
         ),
     ] {
@@ -153,9 +184,13 @@ fn segment_end_start_skips_empty_entries_without_reading_unused_suffix() -> Test
     memory.write(0x1200.into(), MemoryAlignment::ONE, b"abcde")?;
     let mut request = command();
     crate::support::copy_mut(&mut request)?.copy_length = 3;
-    crate::support::copy_mut(&mut request)?.source = Endpoint::scatter_gather(0x1400, u64::MAX)
-        .with_start(Position::scatter_gather(0, 3))
-        .ok_or("SG position")?;
+    crate::support::copy_mut(&mut request)?.source =
+        CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+            list_address: 0x1400,
+            count: u64::MAX,
+            index: 0,
+            offset: 3,
+        });
     // When: only the requested three bytes are copied.
     submit(&mut dma, &memory, request)?;
     run(&mut dma)?;

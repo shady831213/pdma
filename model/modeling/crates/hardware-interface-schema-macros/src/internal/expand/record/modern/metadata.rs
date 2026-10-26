@@ -3,7 +3,7 @@ use quote::{format_ident, quote};
 
 use crate::internal::syntax::{ModernRecordDecl, ModernTypeDecl};
 
-use super::{layout::RecordPlan, layout::union_geometry};
+use super::{layout::RecordPlan, layout::tagged_union_geometry};
 
 mod field;
 use field::fill_field;
@@ -40,14 +40,14 @@ pub(super) fn expand(
     let fillers = metadata.fillers;
     let placements = metadata.placements;
     let word_offsets = plan.fields.iter().flat_map(|field| {
-        let Some(geometry) = union_geometry_for(field, facade) else {
+        let Some(geometry) = tagged_union_geometry_for(field, facade) else {
             return Vec::new();
         };
         let base = &field.offset_name;
         let width = &geometry.storage.width;
         (0..geometry.slots)
             .map(|index| {
-                let name = if field.scoped_union {
+                let name = if field.scoped_tagged_union {
                     format_ident!("{}_WORD{index}_OFFSET", field.decl.name.to_string().to_ascii_uppercase())
                 } else { format_ident!("WORD{index}_OFFSET") };
                 let relative = quote!((#index).saturating_mul(#width));
@@ -111,7 +111,7 @@ fn metadata_parts(
         let name = field.decl.name.to_string();
         let offset = &field.offset_name;
         let documentation = field.decl.documentation.metadata(facade);
-        if matches!(&field.decl.ty, ModernTypeDecl::Union(union) if union.cases.first().is_some_and(|case| case.record.is_some()))
+        if matches!(&field.decl.ty, ModernTypeDecl::TaggedUnion(union) if union.cases.first().is_some_and(|case| case.record.is_some()))
         {
             let ty = super::scalar::type_name(marker, &field.decl.name, "Values");
             let id_index = next_id;
@@ -189,8 +189,8 @@ fn metadata_parts(
             }
         }));
         next_id += match &field.decl.ty {
-            ModernTypeDecl::Union(union) => {
-                union_geometry(union, facade).map_or(0, |geometry| geometry.slots)
+            ModernTypeDecl::TaggedUnion(union) => {
+                tagged_union_geometry(union, facade).map_or(0, |geometry| geometry.slots)
             }
             _ => 1,
         };
@@ -202,12 +202,12 @@ fn metadata_parts(
     }
 }
 
-fn union_geometry_for(
+fn tagged_union_geometry_for(
     field: &super::layout::PlacedField<'_>,
     facade: &TokenStream,
-) -> Option<super::layout::UnionGeometry> {
-    let ModernTypeDecl::Union(union) = &field.decl.ty else {
+) -> Option<super::layout::TaggedUnionGeometry> {
+    let ModernTypeDecl::TaggedUnion(union) = &field.decl.ty else {
         return None;
     };
-    union_geometry(union, facade)
+    tagged_union_geometry(union, facade)
 }

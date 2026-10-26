@@ -1,10 +1,13 @@
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelId, ChannelRecovery, ChannelRegisters, CopyCommandDestinationValues,
+    CopyCommandSourceValues, EventRegisters, LinearEndpoint,
+};
+
 use super::support::{TestResult, completion, configure, submit, word};
 use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
-use pdma_model_contract::dma::ChannelRecovery;
-use pdma_model_contract::dma::{ChannelBlock, ChannelId, ChannelRegisters, EventRegisters};
 use pdma_model_dma::Dma;
 
 #[test]
@@ -86,15 +89,20 @@ fn stopped_or_fatal_channel_does_not_stall_peers() -> TestResult {
 }
 
 fn stop_channel(device: &mut Dma<SharedMemory>, base: usize) -> TestResult {
-    let command = pdma_model_contract::dma::Command::copy(
-        1,
-        pdma_model_contract::dma::CopyCommand {
-            copy_length: 4,
-            sg_context: 0,
-            source: pdma_model_contract::dma::Endpoint::linear(0, 0),
-            destination: pdma_model_contract::dma::Endpoint::linear(0x1400, 0),
-        },
-    );
+    let command = pdma_model_contract::dma::Command::Copy(pdma_model_contract::dma::CopyCommand {
+        id: 1,
+        copy_length: 4,
+        sg_context: 0,
+        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: 0,
+            offset: 0,
+        }),
+        destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: 0x1400,
+            offset: 0,
+        }),
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    });
     device.memory.write(
         MemoryAddress::new(0x1000),
         MemoryAlignment::ONE,

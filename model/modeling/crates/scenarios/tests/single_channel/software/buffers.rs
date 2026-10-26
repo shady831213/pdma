@@ -1,13 +1,14 @@
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAlignment, SharedMemoryAccess, SharedMemoryAllocator,
 };
-use pdma_model_contract::dma::{Endpoint, Segment};
+use pdma_model_contract::dma::Segment;
+use pdma_model_contract::dma::{CopyCommandSourceValues, LinearEndpoint, ScatterGatherEndpoint};
 use std::{error::Error, io};
 
 use super::BufferLayout;
 
 pub(super) struct Buffer {
-    pub(super) endpoint: Endpoint,
+    pub(super) endpoint: CopyCommandSourceValues,
     pub(super) segments: Vec<Segment>,
 }
 
@@ -53,7 +54,10 @@ impl Builder<'_> {
                 let segment = segments
                     .first()
                     .ok_or_else(|| io::Error::other("linear span missing"))?;
-                Endpoint::linear(segment.address, 0)
+                CopyCommandSourceValues::Linear(LinearEndpoint {
+                    address: segment.address,
+                    offset: 0,
+                })
             }
             BufferLayout::ScatterGather(_) => {
                 let width = u64::try_from(Segment::RECORD_SIZE)?;
@@ -74,7 +78,12 @@ impl Builder<'_> {
                     self.memory
                         .write(address, alignment, &segment.to_bytes()?)?;
                 }
-                Endpoint::scatter_gather(list.raw(), count)
+                CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+                    list_address: list.raw(),
+                    count,
+                    index: 0,
+                    offset: 0,
+                })
             }
         };
         Ok(Buffer { endpoint, segments })

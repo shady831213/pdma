@@ -1,3 +1,4 @@
+use pdma_model_contract::dma::{CommandHeader, Opcode, TrapCommand};
 pub(in crate::harness) mod management;
 /// Software-owned tagged recovery with two channels in one address space.
 pub mod shared_space;
@@ -8,9 +9,9 @@ use crate::harness::{
     page_fault::{FaultReport, Input, Space},
     runtime::AccessError,
 };
-use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, RegisterAccess};
+use hardware_interface_runtime::RegisterAccess;
 use pdma_model_contract::{
-    dma::{ChannelId, ContextId},
+    dma::{ChannelBlock, ChannelId, ChannelRecovery, ChannelRegisters, ContextId},
     memory::FunctionId,
 };
 use tokio::sync::{mpsc, oneshot};
@@ -38,6 +39,10 @@ pub struct Outcome {
     pub(crate) bytes: Vec<u8>,
     pub(crate) closed_resume: Option<Result<(), AccessError>>,
 }
+
+const RESUME: usize = ChannelBlock::CONTROL.offset()
+    + ChannelRegisters::RECOVERY.offset()
+    + ChannelRecovery::RESUME.offset();
 
 pub(in crate::harness) async fn main<M: Send>(
     ports: Ports<'_, M>,
@@ -70,7 +75,12 @@ pub(in crate::harness) async fn main<M: Send>(
     driver.submit(request).await?;
     driver.submit(fence.command(input.id)).await?;
     driver
-        .submit(pdma_model_contract::dma::Command::trap(input.id))
+        .submit(pdma_model_contract::dma::Command::Trap(TrapCommand {
+            header: CommandHeader {
+                opcode: Opcode::Trap,
+            },
+            id: input.id,
+        }))
         .await?;
     for _ in 0..2 {
         let report = tokio::select! {
@@ -119,11 +129,11 @@ pub(in crate::harness) async fn main<M: Send>(
     if driver.event().await?.is_some() {
         return Err("duplicate command response".into());
     }
-    outcome.bytes.resize(input.payload.len(), 0);
-    destination
-        .allocator
-        .memory_access()
-        .read(dst, MemoryAlignment::ONE, &mut outcome.bytes)?;
+    outcome.bytes = super::buffers::read(
+        &destination.allocator.memory_access(),
+        dst,
+        input.payload.len(),
+    )?;
     handler.retire();
     reports.close();
     finished
@@ -131,12 +141,7 @@ pub(in crate::harness) async fn main<M: Send>(
         .map_err(|()| "PF stopped before release")?;
     released.await?;
     let address = ports.bus.addresses().dma
-        + u32::try_from(
-            channel.register_offset(1).ok_or("channel address")?
-                + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-                + pdma_model_contract::dma::ChannelRegisters::RECOVERY.offset()
-                + pdma_model_contract::dma::ChannelRecovery::RESUME.offset(),
-        )?;
+        + u32::try_from(channel.register_offset(1).ok_or("channel address")? + RESUME)?;
     outcome.closed_resume = Some(ports.bus.write(address, &1_u32.to_le_bytes()).await);
     Ok(outcome)
 }

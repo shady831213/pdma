@@ -13,3 +13,4 @@ mod ordered_descriptions;
 mod record_tests;
 mod register_map_tests;
 mod sink_errors;
+mod untagged;

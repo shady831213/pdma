@@ -548,7 +548,7 @@
 
 /*
  * Command ring base address
- * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 112 bytes apart. The value cannot change after the channel's first successful enable until reset.
+ * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset.
  */
 #define C_FDMA_C_QUBQUAQUSQUE__1_OFFSET UINT64_C(4096)
 #define C_FDMA_C_QUBQUAQUSQUE__1_WIDTH UINT64_C(8)
@@ -825,7 +825,7 @@
 
 /*
  * Command ring base address
- * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 112 bytes apart. The value cannot change after the channel's first successful enable until reset.
+ * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset.
  */
 #define C_FDMA_C_QUBQUAQUSQUE__3_OFFSET UINT64_C(8192)
 #define C_FDMA_C_QUBQUAQUSQUE__3_WIDTH UINT64_C(8)
@@ -1102,7 +1102,7 @@
 
 /*
  * Command ring base address
- * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 112 bytes apart. The value cannot change after the channel's first successful enable until reset.
+ * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset.
  */
 #define C_FDMA_C_QUBQUAQUSQUE__5_OFFSET UINT64_C(12288)
 #define C_FDMA_C_QUBQUAQUSQUE__5_WIDTH UINT64_C(8)

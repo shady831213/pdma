@@ -1,6 +1,9 @@
+use pdma_model_contract::dma::{
+    ChannelInterrupts, ChannelRecovery, CommandHeader, CopyCommandDestinationValues,
+    CopyCommandSourceValues, LinearEndpoint, Opcode, TrapCommand,
+};
+
 use super::*;
-use pdma_model_contract::dma::ChannelInterrupts;
-use pdma_model_contract::dma::ChannelRecovery;
 
 #[test]
 fn linear_fault_is_silent_under_every_notification_mask() -> TestResult {
@@ -15,20 +18,22 @@ fn linear_fault_is_silent_under_every_notification_mask() -> TestResult {
                     .write(0x1400.into(), MemoryAlignment::ONE, &[0xa5; 600])?;
                 let command = {
                     let original = Command::ZERO;
-                    let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) =
-                        original.payload
-                    else {
+                    let pdma_model_contract::dma::Command::Copy(copy) = original else {
                         return Err("copy fixture required".into());
                     };
-                    Command::copy(
-                        9,
-                        pdma_model_contract::dma::CopyCommand {
-                            source: Endpoint::linear(0x1400, 7),
-                            destination: Endpoint::linear(0x1800, 11),
-                            copy_length: 512,
-                            ..copy
-                        },
-                    )
+                    Command::Copy(pdma_model_contract::dma::CopyCommand {
+                        id: 9,
+                        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                            address: 0x1400,
+                            offset: 7,
+                        }),
+                        destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                            address: 0x1800,
+                            offset: 11,
+                        }),
+                        copy_length: 512,
+                        ..copy
+                    })
                 };
                 device.write(
                     CTRL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::MASK.offset(),
@@ -71,7 +76,16 @@ fn linear_fault_is_silent_under_every_notification_mask() -> TestResult {
                     .read(0x180b.into(), MemoryAlignment::ONE, &mut bytes)?;
                 assert_eq!(bytes, [0xa5; 512]);
                 if trap {
-                    submit(&mut device, Command::trap(10), 1)?;
+                    submit(
+                        &mut device,
+                        Command::Trap(TrapCommand {
+                            header: CommandHeader {
+                                opcode: Opcode::Trap,
+                            },
+                            id: 10,
+                        }),
+                        1,
+                    )?;
                     run(&mut device)?;
                 }
                 assert_eq!(device.take_interrupt(), trap && mask & 2 == 0);
@@ -95,7 +109,11 @@ fn metadata_and_event_faults_keep_stopping_and_fatal_boundaries() -> TestResult 
         let mut device = setup()?;
         let mut command = streams(&device)?;
         if write {
-            crate::support::copy_mut(&mut command)?.source = Endpoint::linear(0x3000, 0);
+            crate::support::copy_mut(&mut command)?.source =
+                CopyCommandSourceValues::Linear(LinearEndpoint {
+                    address: 0x3000,
+                    offset: 0,
+                });
         }
         device.memory.missing.set(Some((address, write)));
         submit(&mut device, command, 0)?;

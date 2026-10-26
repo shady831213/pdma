@@ -1,27 +1,30 @@
-use pdma_model_contract::dma::EventInfoValues;
 use pdma_model_contract::dma::{
-    Command, CopyCommand, Endpoint, Event, EventCode, Position, Segment,
+    CopyCommandDestinationValues, CopyCommandSourceValues, LinearEndpoint, ScatterGatherEndpoint,
 };
+
+use pdma_model_contract::dma::EventInfoValues;
+use pdma_model_contract::dma::{Command, CopyCommand, Event, EventCode, Segment};
+use pdma_model_contract::dma::{CommandHeader, Opcode};
 
 /// Encodes the Rust fixtures and verifies them against independent wire bytes.
 ///
 /// # Panics
 /// Panics if the generated Rust encoding differs from the wire fixtures.
 pub fn bytes() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let mut command_bytes = [0; 112];
+    let mut command_bytes = [0; 96];
     for (index, value) in [
-        (0, 7),
-        (20, 11),
-        (25, 1),
-        (32, 7),
-        (56, 1),
-        (60, 22),
+        (8, 7),
+        (1, 2),
+        (4, 33),
+        (16, 8),
+        (24, 11),
+        (28, 22),
+        (33, 1),
+        (40, 7),
         (65, 2),
         (72, 2),
         (80, 1),
         (88, 3),
-        (96, 8),
-        (104, 33),
     ] {
         *command_bytes
             .get_mut(index)
@@ -34,23 +37,27 @@ pub fn bytes() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
             .ok_or("response fixture offset")? = value;
     }
     let segment_bytes = [0, 3, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0];
-    let command = Command::copy(
-        7,
-        CopyCommand {
-            copy_length: 8,
-            sg_context: 33,
-            source: Endpoint {
-                context: 11,
-                ..Endpoint::linear(0x100, 7)
-            },
-            destination: Endpoint {
-                context: 22,
-                ..Endpoint::scatter_gather(0x200, 2)
-                    .with_start(Position::scatter_gather(1, 3))
-                    .ok_or("SG position")?
-            },
+    let command = Command::Copy(CopyCommand {
+        header: CommandHeader {
+            opcode: Opcode::Copy,
         },
-    );
+        id: 7,
+        copy_length: 8,
+        sg_context: 33,
+        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: 0x100,
+            offset: 7,
+        }),
+        source_context: 11,
+        destination: CopyCommandDestinationValues::ScatterGather(ScatterGatherEndpoint {
+            list_address: 0x200,
+            count: 2,
+            index: 1,
+            offset: 3,
+        }),
+        destination_context: 22,
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    });
     let response = Event {
         id: 7,
         code: EventCode::WriteError,

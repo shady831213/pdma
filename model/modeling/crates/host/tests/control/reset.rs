@@ -1,9 +1,12 @@
+use pdma_model_contract::dma::{
+    ChannelConfiguration, ChannelInterrupts, CopyCommandDestinationValues, CopyCommandSourceValues,
+    LinearEndpoint,
+};
+
 use super::{
     AsyncExecutor, Channel, ChannelConfig, ChannelRegisters, Command, DmaControl, DmaFatalCode,
-    Endpoint, Model, RegisterAccess, SoftwareCpu, fixture,
+    Model, RegisterAccess, SoftwareCpu, fixture,
 };
-use pdma_model_contract::dma::ChannelConfiguration;
-use pdma_model_contract::dma::ChannelInterrupts;
 
 #[tokio::test]
 async fn reset_operations_can_run_on_another_cpu() -> Result<(), Box<dyn std::error::Error>> {
@@ -72,15 +75,20 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
                 },
             ))
             .await?;
-        let command = Command::copy(
-            9,
-            pdma_model_contract::dma::CopyCommand {
-                source: Endpoint::linear(0, 0),
-                destination: Endpoint::linear(0, 0),
-                copy_length: 1,
-                sg_context: 0,
-            },
-        );
+        let command = Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 9,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0,
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0,
+                offset: 0,
+            }),
+            copy_length: 1,
+            sg_context: 0,
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        });
         cpu.run_main(channel.submit(command)).await?;
         let producer = u32::try_from(
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT

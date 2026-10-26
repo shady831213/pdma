@@ -1,25 +1,32 @@
+use pdma_model_contract::dma::{
+    ChannelConfiguration, ChannelId, CommandHeader, CopyCommandDestinationValues,
+    CopyCommandSourceValues, FenceCommand, LinearEndpoint, Opcode,
+};
+
 use super::*;
 use hardware_interface_pipeline::StepOutcome;
-use pdma_model_contract::dma::ChannelConfiguration;
-use pdma_model_contract::dma::ChannelId;
 
 pub(super) fn pair() -> TestResult<(Dma<Paged>, usize, Command)> {
     let mut device = Dma::new(setup()?.dma.memory, 2)?;
     let first = streams(&device)?;
     let peer = {
         let original = Command::ZERO;
-        let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload else {
+        let pdma_model_contract::dma::Command::Copy(copy) = original else {
             return Err("copy fixture required".into());
         };
-        Command::copy(
-            99,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 3,
-                source: Endpoint::linear(0x1200, 0),
-                destination: Endpoint::linear(0x1600, 0),
-                ..copy
-            },
-        )
+        Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 99,
+            copy_length: 3,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0x1200,
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x1600,
+                offset: 0,
+            }),
+            ..copy
+        })
     };
     let mut peer_event = 0;
     for (index, command, command_base, event_base) in [
@@ -52,17 +59,20 @@ pub(super) fn pair() -> TestResult<(Dma<Paged>, usize, Command)> {
             MemoryAlignment::ONE,
             &command.to_bytes()?,
         )?;
-        let fence = Command::fence(
-            command.id,
-            pdma_model_contract::dma::WordWrite {
+        let fence = Command::Fence(FenceCommand {
+            header: CommandHeader {
+                opcode: Opcode::Fence,
+            },
+            id: command.id(),
+            word: pdma_model_contract::dma::WordWrite {
                 target: pdma_model_contract::dma::WordTarget {
                     address: 0x1fe0 + u64::try_from(index)? * 8,
                     context: 0,
                     width: pdma_model_contract::dma::WordTargetWidth::Bits64,
                 },
-                value: command.id,
+                value: command.id(),
             },
-        );
+        });
         device.memory.memory.write(
             (command_base + u64::try_from(Command::RECORD_SIZE)?).into(),
             MemoryAlignment::ONE,
@@ -127,7 +137,7 @@ fn peer_channel_completes_while_faulted_channel_stays_parked() -> TestResult {
                 .memory
                 .read_typed::<[u8; 8]>(0x1fe8.into(), MemoryAlignment::ONE)?
         ),
-        peer.id
+        peer.id()
     );
     Ok(())
 }

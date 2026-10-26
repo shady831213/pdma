@@ -1,11 +1,15 @@
 //! Cancellation preserves committed SG chunks and independent endpoint cursors.
 
+use pdma_model_contract::dma::{
+    Command, CopyCommand, CopyCommandDestinationValues, CopyCommandSourceValues, Event,
+    ScatterGatherEndpoint, Segment,
+};
+
 use hardware_interface_pipeline::{AsyncExecutor, Operation};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::dma::{Command, CopyCommand, Endpoint, Event, Segment};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::{error::Error, sync::Arc};
@@ -15,7 +19,7 @@ type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 fn scatter_gather(
     allocator: &SharedMemoryAllocator,
     payloads: [&[u8]; 2],
-) -> TestResult<(Endpoint, [MemoryAddress; 2])> {
+) -> TestResult<(ScatterGatherEndpoint, [MemoryAddress; 2])> {
     let [first, second] = payloads;
     let first_address = allocator.allocate(u64::try_from(first.len())?, MemoryAlignment::ONE)?;
     let second_address = allocator.allocate(u64::try_from(second.len())?, MemoryAlignment::ONE)?;
@@ -42,7 +46,12 @@ fn scatter_gather(
     let address = allocator.allocate(u64::try_from(bytes.len())?, alignment)?;
     memory.write(address, alignment, &bytes)?;
     Ok((
-        Endpoint::scatter_gather(address.raw(), u64::try_from(segments.len())?),
+        ScatterGatherEndpoint {
+            list_address: address.raw(),
+            count: u64::try_from(segments.len())?,
+            index: 0,
+            offset: 0,
+        },
         [first_address, second_address],
     ))
 }
@@ -78,15 +87,14 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
             },
         ))
         .await?;
-    cpu.run_main(channel.submit(Command::copy(
-        31,
-        CopyCommand {
-            copy_length: 8,
-            sg_context: 0,
-            source,
-            destination,
-        },
-    )))
+    cpu.run_main(channel.submit(Command::Copy(CopyCommand {
+        id: 31,
+        copy_length: 8,
+        sg_context: 0,
+        source: CopyCommandSourceValues::ScatterGather(source),
+        destination: CopyCommandDestinationValues::ScatterGather(destination),
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    })))
     .await?;
     let executor = AsyncExecutor::new(model.clone());
     let mut operation = Operation::new(());

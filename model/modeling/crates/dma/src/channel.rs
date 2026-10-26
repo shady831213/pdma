@@ -172,7 +172,6 @@ pub(crate) struct Accepted {
 #[derive(Debug)]
 pub(crate) struct CopyState {
     pub(crate) command: pdma_model_contract::dma::CopyCommand,
-    id: u64,
     source: Cursor,
     destination: Cursor,
     pub(crate) remaining: u64,
@@ -190,7 +189,6 @@ enum Side {
 #[derive(Debug)]
 pub struct RangeCheck {
     pub(crate) command: pdma_model_contract::dma::CopyCommand,
-    id: u64,
     cursor: Cursor,
     side: Side,
     remaining: u64,

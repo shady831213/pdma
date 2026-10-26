@@ -1,3 +1,8 @@
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelId, CommandRegisters, CopyCommandDestinationValues,
+    CopyCommandSourceValues, EventRegisters, LinearEndpoint,
+};
+
 mod observed;
 
 use super::support::{TestResult, completion, configure, publish_fence, submit, word};
@@ -6,7 +11,6 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use observed::Observed;
-use pdma_model_contract::dma::{ChannelBlock, ChannelId, CommandRegisters, EventRegisters};
 use pdma_model_dma::Dma;
 use std::cell::Cell;
 
@@ -198,15 +202,20 @@ fn assert_completions(device: &mut Dma<Observed>, reset_index: usize) -> TestRes
 fn replace(device: &mut Dma<Observed>, reset_index: usize) -> TestResult<u64> {
     configure(device, reset_index)?;
     let memory_base = 0x1000 + u64::try_from(reset_index)? * 0x1000;
-    let fresh = pdma_model_contract::dma::Command::copy(
-        99,
-        pdma_model_contract::dma::CopyCommand {
-            copy_length: 512,
-            sg_context: 0,
-            source: pdma_model_contract::dma::Endpoint::linear(memory_base + 0x200, 0),
-            destination: pdma_model_contract::dma::Endpoint::linear(memory_base + 0x800, 0),
-        },
-    );
+    let fresh = pdma_model_contract::dma::Command::Copy(pdma_model_contract::dma::CopyCommand {
+        id: 99,
+        copy_length: 512,
+        sg_context: 0,
+        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: memory_base + 0x200,
+            offset: 0,
+        }),
+        destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: memory_base + 0x800,
+            offset: 0,
+        }),
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    });
     device.memory.memory.write(
         MemoryAddress::new(memory_base),
         MemoryAlignment::ONE,

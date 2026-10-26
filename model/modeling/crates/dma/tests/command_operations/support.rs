@@ -2,11 +2,10 @@ use hardware_interface_pipeline::HardwareDriver;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
-use pdma_model_contract::dma::ChannelConfiguration;
-use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::{
-    CapabilitiesValues, ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters,
-    EventRegisters, WordTarget, WordTargetWidth, WordWrite,
+    CapabilitiesValues, ChannelBlock, ChannelConfiguration, ChannelId, ChannelInterrupts,
+    ChannelRegisters, Command, CommandHeader, CommandRegisters, EventRegisters, FenceCommand,
+    Opcode, WordTarget, WordTargetWidth, WordWrite,
 };
 use pdma_model_dma::{Dma, DmaConfig, Hardware};
 
@@ -166,13 +165,16 @@ pub(super) const fn target(address: u64) -> WordTarget {
 }
 
 pub(super) const fn fence(address: u64) -> Command {
-    Command::fence(
-        90,
-        WordWrite {
+    Command::Fence(FenceCommand {
+        header: CommandHeader {
+            opcode: Opcode::Fence,
+        },
+        id: 90,
+        word: WordWrite {
             target: target(address),
             value: 0xfeed,
         },
-    )
+    })
 }
 
 pub(super) const EVENT_PRODUCER: usize =

@@ -28,15 +28,16 @@ fn atomic_operations_decode_all_orders_and_widths_without_result_storage() {
                 .into_iter()
                 .enumerate()
             {
-                let mut bytes = [0_u8; 40];
-                bytes[0] = 0x80;
-                bytes[8] = 9;
-                bytes[12] = u8::try_from(width).unwrap();
-                bytes[16] = u8::try_from(order).unwrap();
-                bytes[20] = u8::try_from(op).unwrap();
-                bytes[24..32].copy_from_slice(&u64::MAX.to_le_bytes());
+                let mut bytes = [0_u8; 56];
+                bytes[0] = 4;
+                bytes[16] = 0x80;
+                bytes[24] = 9;
+                bytes[28] = u8::try_from(width).unwrap();
+                bytes[32] = u8::try_from(order).unwrap();
+                bytes[36] = u8::try_from(op).unwrap();
+                bytes[40..48].copy_from_slice(&u64::MAX.to_le_bytes());
                 if op == 6 {
-                    bytes[32] = 31;
+                    bytes[48] = 31;
                 }
                 // When: the hardware decodes an atomic payload.
                 let decoded = AtomicCommand::from_bytes(&bytes).unwrap();
@@ -82,10 +83,11 @@ fn wait_comparisons_decode_all_assigned_signed_and_unsigned_predicates() {
         WaitCommandComparison::Reached,
     ];
     for (tag, predicate) in predicates.into_iter().enumerate() {
-        let mut bytes = [0_u8; 32];
-        bytes[0] = 0x80;
-        bytes[16..24].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[24] = u8::try_from(tag).unwrap();
+        let mut bytes = [0_u8; 48];
+        bytes[0] = 3;
+        bytes[16] = 0x80;
+        bytes[32..40].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[40] = u8::try_from(tag).unwrap();
         // When: the wire decoder selects a comparison.
         let decoded = WaitCommand::from_bytes(&bytes).unwrap();
         // Then: signedness and comparison kind remain explicit in the typed payload.

@@ -1,0 +1,5 @@
+error: inline `union` is no longer supported; use `tagged_union`
+ --> tests/ui/fail/inline_union_old_keyword.rs:5:14
+  |
+5 |     payload: union { tag: self.kind, cases: { A { value: u32 } } },
+  |              ^^^^^

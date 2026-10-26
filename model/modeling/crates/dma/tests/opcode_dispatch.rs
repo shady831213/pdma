@@ -1,4 +1,11 @@
 //! Fetch preserves the accepted descriptor when resuming a yielded command.
+use pdma_model_contract::dma::{FillCommand, FillCommandWidth, WordWrite};
+use pdma_model_dma::COPY_CHUNK_BYTES;
+
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelId, Command, CommandHeader, CommandRegisters, Opcode, TrapCommand,
+    WaitCommand, WaitCommandComparison, WordTarget, WordTargetWidth, WriteCommand,
+};
 
 /// Shared raw-bus fixtures.
 pub mod support;
@@ -6,10 +13,6 @@ pub mod support;
 use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
-};
-use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, Command, CommandRegisters, WaitCommand, WaitCommandComparison,
-    WordTarget, WordTargetWidth,
 };
 use pdma_model_dma::{CommandRequest, Fetch};
 use std::{cell::Cell, rc::Rc};
@@ -68,18 +71,19 @@ fn resume_returns_original_descriptor_without_reading_replaced_ring_entry() -> T
         0x1100,
         2,
     )?;
-    let command = Command::wait(
-        41,
-        WaitCommand {
-            target: WordTarget {
-                address: 0x1200,
-                context: 0,
-                width: WordTargetWidth::Bits32,
-            },
-            value: 7,
-            comparison: WaitCommandComparison::Equal,
+    let command = Command::Wait(WaitCommand {
+        header: CommandHeader {
+            opcode: Opcode::Wait,
         },
-    );
+        id: 41,
+        target: WordTarget {
+            address: 0x1200,
+            context: 0,
+            width: WordTargetWidth::Bits32,
+        },
+        value: 7,
+        comparison: WaitCommandComparison::Equal,
+    });
     memory.write(0x1000.into(), MemoryAlignment::ONE, &command.to_bytes()?)?;
     dma.write(
         ChannelBlock::ALIGNMENT
@@ -128,26 +132,26 @@ fn resume_returns_original_descriptor_without_reading_replaced_ring_entry() -> T
 
 #[test]
 fn fill_retains_one_invocation_and_backpressures_successor_between_chunks() -> TestResult {
-    use pdma_model_contract::dma::{
-        ChannelBlock, CommandRegisters, FillCommand, FillCommandWidth, WordWrite,
-    };
-    use pdma_model_dma::COPY_CHUNK_BYTES;
     // Given: a multi-chunk Fill followed by a visible Write successor.
     const LENGTH: usize = COPY_CHUNK_BYTES * 2 + 11;
     let (mut dma, memory) = support::setup(0x1100, 2)?;
-    let command = Command::fill(
-        21,
-        FillCommand {
-            address: 0x1400,
-            length: u64::try_from(LENGTH)?,
-            pattern: 0x5a,
-            context: 0,
-            width: FillCommandWidth::Byte,
+    let command = Command::Fill(FillCommand {
+        header: CommandHeader {
+            opcode: Opcode::Fill,
         },
-    );
-    let successor = Command::write(
-        22,
-        WordWrite {
+        id: 21,
+        address: 0x1400,
+        length: u64::try_from(LENGTH)?,
+        pattern: 0x5a,
+        context: 0,
+        width: FillCommandWidth::Byte,
+    });
+    let successor = Command::Write(WriteCommand {
+        header: CommandHeader {
+            opcode: Opcode::Write,
+        },
+        id: 22,
+        word: WordWrite {
             target: WordTarget {
                 address: 0x1900,
                 context: 0,
@@ -155,7 +159,7 @@ fn fill_retains_one_invocation_and_backpressures_successor_between_chunks() -> T
             },
             value: 7,
         },
-    );
+    });
     support::submit(&mut dma, &memory, command)?;
     memory.write(
         (0x1000 + u64::try_from(Command::RECORD_SIZE)?).into(),
@@ -201,7 +205,13 @@ fn fill_retains_one_invocation_and_backpressures_successor_between_chunks() -> T
         memory.write(
             0x1000.into(),
             MemoryAlignment::ONE,
-            &Command::trap(99).to_bytes()?,
+            &Command::Trap(TrapCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Trap,
+                },
+                id: 99,
+            })
+            .to_bytes()?,
         )?;
     }
     for _ in 0..256 {

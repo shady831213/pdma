@@ -1,7 +1,11 @@
+use pdma_model_contract::dma::{
+    ChannelId, Command, CopyCommandDestinationValues, CopyCommandSourceValues, Event,
+    LinearEndpoint,
+};
+
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess, SharedMemoryAllocator,
 };
-use pdma_model_contract::dma::{ChannelId, Command, Endpoint, Event};
 use pdma_model_host::{ChannelConfig, RingConfig, Rings};
 
 use crate::TestResult;
@@ -62,15 +66,20 @@ impl Buffers {
     pub(super) fn command(&self, id: u64, second: bool) -> TestResult<Command> {
         let length = u64::try_from(self.length)?;
         let destination = self.destination.raw() + if second { length } else { 0 };
-        Ok(Command::copy(
+        Ok(Command::Copy(pdma_model_contract::dma::CopyCommand {
             id,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: length,
-                sg_context: 0,
-                source: Endpoint::linear(self.source.raw(), 0),
-                destination: Endpoint::linear(destination, 0),
-            },
-        ))
+            copy_length: length,
+            sg_context: 0,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: self.source.raw(),
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: destination,
+                offset: 0,
+            }),
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        }))
     }
 
     pub(super) fn byte_matches(

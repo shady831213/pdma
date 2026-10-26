@@ -1,13 +1,15 @@
 //! End-to-end host submission and interrupt notification behavior.
 
+use pdma_model_contract::dma::{
+    ChannelFatalCode, Command, CommandHeader, CopyCommandDestinationValues,
+    CopyCommandSourceValues, ErrorInfo, Event, EventCode, EventInfoValues, FenceCommand,
+    LinearEndpoint, Opcode, TrapCommand, WordTarget, WordTargetWidth, WordWrite,
+};
+
 use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
 use hardware_interface_runtime::{
     InterruptSource, MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
-};
-use pdma_model_contract::dma::{
-    ChannelFatalCode, Command, Endpoint, ErrorInfo, Event, EventCode, EventInfoValues, WordTarget,
-    WordTargetWidth, WordWrite,
 };
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
@@ -51,15 +53,22 @@ async fn malformed_event_is_not_consumed_before_explicit_decode_succeeds()
             },
         ))
         .await?;
-    cpu.run_main(channel.submit(Command::copy(
-        13,
-        pdma_model_contract::dma::CopyCommand {
-            source: Endpoint::linear(0, 0),
-            destination: Endpoint::linear(0, 0),
+    cpu.run_main(
+        channel.submit(Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 13,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0,
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0,
+                offset: 0,
+            }),
             copy_length: 1,
             sg_context: 0,
-        },
-    )))
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        })),
+    )
     .await?;
     until_irq(model.clone(), &mut hardware).await?;
     let expected = Event {
@@ -137,19 +146,29 @@ async fn copy_fence_then_trap_exposes_completion_and_payload()
         .await?;
 
     // When: a real async worker executes the submitted command.
-    cpu.run_main(channel.submit(Command::copy(
-        7,
-        pdma_model_contract::dma::CopyCommand {
-            source: Endpoint::linear(source.raw(), 0),
-            destination: Endpoint::linear(destination.raw(), 0),
+    cpu.run_main(
+        channel.submit(Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 7,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: source.raw(),
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: destination.raw(),
+                offset: 0,
+            }),
             copy_length: 8,
             sg_context: 0,
-        },
-    )))
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        })),
+    )
     .await?;
-    cpu.run_main(channel.submit(Command::fence(
-        8,
-        WordWrite {
+    cpu.run_main(channel.submit(Command::Fence(FenceCommand {
+        header: CommandHeader {
+            opcode: Opcode::Fence,
+        },
+        id: 8,
+        word: WordWrite {
             target: WordTarget {
                 address: completion.raw(),
                 context: 0,
@@ -157,9 +176,15 @@ async fn copy_fence_then_trap_exposes_completion_and_payload()
             },
             value: 7,
         },
-    )))
+    })))
     .await?;
-    cpu.run_main(channel.submit(Command::trap(9))).await?;
+    cpu.run_main(channel.submit(Command::Trap(TrapCommand {
+        header: CommandHeader {
+            opcode: Opcode::Trap,
+        },
+        id: 9,
+    })))
+    .await?;
     until_irq(model.clone(), &mut hardware).await?;
     model.wait_ready().await?;
     assert!(model.claim(()).await?.is_some());
@@ -179,71 +204,9 @@ async fn copy_fence_then_trap_exposes_completion_and_payload()
     Ok(())
 }
 
-#[tokio::test]
-async fn fault_interrupt_arrives_when_event_write_is_unmapped()
--> Result<(), Box<dyn std::error::Error>> {
-    // Given: the event ring points outside the injected memory backend.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
-    let alignment = MemoryAlignment::try_new(8)?;
-    let rings = Rings {
-        command: RingConfig::new(
-            allocator
-                .allocate(
-                    u64::try_from(Command::RECORD_SIZE)?,
-                    MemoryAlignment::try_new(u64::try_from(Command::RECORD_ALIGNMENT)?)?,
-                )?
-                .raw(),
-            1,
-        )?,
-        event: RingConfig::new(0x8000, 1)?,
-    };
-    let destination = allocator.allocate(8, alignment)?;
-    let memory = allocator.memory_access();
-    let device = Dma::new(memory.clone(), 1)?;
-    let mut hardware = device.hardware();
-    let mut model = Model::new(device);
-    let cpu = SoftwareCpu::new();
-    let mut channel = cpu
-        .run_main(Channel::setup(
-            model.clone(),
-            memory,
-            ChannelConfig {
-                id: pdma_model_contract::dma::ChannelId::new(0),
-                rings,
-            },
-        ))
-        .await?;
-    cpu.run_main(channel.submit(Command::copy(
-        9,
-        pdma_model_contract::dma::CopyCommand {
-            source: Endpoint::linear(0, 0),
-            destination: Endpoint::linear(destination.raw(), 0),
-            copy_length: 8,
-            sg_context: 0,
-        },
-    )))
-    .await?;
-
-    // When: event publication fails at the real memory boundary.
-    until_irq(model.clone(), &mut hardware).await?;
-
-    // Then: the notification is claimed once while the fatal remains visible through masking.
-    model.wait_ready().await?;
-    assert!(model.claim(()).await?.is_some());
-    assert_eq!(
-        cpu.run_main(channel.fatal()).await?,
-        ChannelFatalCode::EventWrite
-    );
-    assert_eq!(cpu.run_main(channel.event()).await?, None);
-    cpu.run_main(channel.set_irq_enabled(false)).await?;
-    assert!(model.claim(()).await?.is_none());
-    assert!(!model.irq());
-    assert_eq!(
-        cpu.run_main(channel.fatal()).await?,
-        ChannelFatalCode::EventWrite
-    );
-    Ok(())
+mod channel {
+    use super::*;
+    mod faults;
 }
 
 async fn until_irq(

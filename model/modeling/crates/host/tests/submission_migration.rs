@@ -1,10 +1,14 @@
 //! Submission continuity across modeled CPU changes.
 
+use pdma_model_contract::dma::{
+    Command, CommandRegisters, CopyCommandDestinationValues, CopyCommandSourceValues, Event,
+    LinearEndpoint,
+};
+
 use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::dma::{Command, CommandRegisters, Endpoint, Event};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::{
@@ -82,15 +86,20 @@ async fn suspended_submission_completes_on_another_cpu() -> Result<(), Box<dyn s
         ))
         .await?;
     delay.store(true, Ordering::SeqCst);
-    let submission = channel.submit(Command::copy(
-        1,
-        pdma_model_contract::dma::CopyCommand {
-            source: Endpoint::linear(0, 0),
-            destination: Endpoint::linear(0, 0),
-            copy_length: 0,
-            sg_context: 0,
-        },
-    ));
+    let submission = channel.submit(Command::Copy(pdma_model_contract::dma::CopyCommand {
+        id: 1,
+        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: 0,
+            offset: 0,
+        }),
+        destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: 0,
+            offset: 0,
+        }),
+        copy_length: 0,
+        sg_context: 0,
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    }));
     tokio::pin!(submission);
     owner
         .run_main(async {

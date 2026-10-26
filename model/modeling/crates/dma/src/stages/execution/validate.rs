@@ -24,26 +24,21 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for CheckRanges
             };
             let work = input.work;
             let value = input.value.and_then(|value| {
-                value.map_or(Ok(None), |fetched| match fetched.command.payload {
-                    pdma_model_contract::dma::CommandPayloadValues::Copy(copy) => {
-                        match fetched.admission {
-                            crate::CommandAdmission::Resume => Ok(None),
-                            crate::CommandAdmission::Fresh => Ok(Some((
-                                fetched.work,
-                                RangeCheck::new(fetched.command.id, copy),
-                            ))),
+                value.map_or(Ok(None), |fetched| match fetched.command {
+                    pdma_model_contract::dma::Command::Copy(copy) => match fetched.admission {
+                        crate::CommandAdmission::Resume => Ok(None),
+                        crate::CommandAdmission::Fresh => {
+                            Ok(Some((fetched.work, RangeCheck::new(copy))))
                         }
-                    }
-                    pdma_model_contract::dma::CommandPayloadValues::Write(_)
-                    | pdma_model_contract::dma::CommandPayloadValues::Fill(_)
-                    | pdma_model_contract::dma::CommandPayloadValues::Wait(_)
-                    | pdma_model_contract::dma::CommandPayloadValues::Atomic(_)
-                    | pdma_model_contract::dma::CommandPayloadValues::Semaphore(_)
-                    | pdma_model_contract::dma::CommandPayloadValues::Fence(_)
-                    | pdma_model_contract::dma::CommandPayloadValues::Trap(_)
-                    | pdma_model_contract::dma::CommandPayloadValues::Timestamp(_) => {
-                        Err(crate::Error::Routing)
-                    }
+                    },
+                    pdma_model_contract::dma::Command::Write(_)
+                    | pdma_model_contract::dma::Command::Fill(_)
+                    | pdma_model_contract::dma::Command::Wait(_)
+                    | pdma_model_contract::dma::Command::Atomic(_)
+                    | pdma_model_contract::dma::Command::Semaphore(_)
+                    | pdma_model_contract::dma::Command::Fence(_)
+                    | pdma_model_contract::dma::Command::Trap(_)
+                    | pdma_model_contract::dma::Command::Timestamp(_) => Err(crate::Error::Routing),
                 })
             });
             self.state = Some(Flow::new(work, value));

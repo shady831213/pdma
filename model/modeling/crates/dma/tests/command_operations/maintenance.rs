@@ -1,22 +1,23 @@
 use super::support::{EVENT_PRODUCER, Rig, TestResult, target};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
-    ChannelId, Command, ContextId, DmaAdmin, DmaDiscovery, WaitCommand, WaitCommandComparison,
-    WordTarget,
+    ChannelId, Command, CommandHeader, ContextId, DmaAdmin, DmaDiscovery, Opcode, WaitCommand,
+    WaitCommandComparison, WordTarget,
 };
 
 const fn wait() -> Command {
-    Command::wait(
-        1,
-        WaitCommand {
-            target: WordTarget {
-                context: 1,
-                ..target(0x8000)
-            },
-            value: 1,
-            comparison: WaitCommandComparison::Equal,
+    Command::Wait(WaitCommand {
+        header: CommandHeader {
+            opcode: Opcode::Wait,
         },
-    )
+        id: 1,
+        target: WordTarget {
+            context: 1,
+            ..target(0x8000)
+        },
+        value: 1,
+        comparison: WaitCommandComparison::Equal,
+    })
 }
 
 #[test]

@@ -1,12 +1,14 @@
 //! Validation and partial-completion errors without hidden rollback or overlap policy.
 
+use pdma_model_contract::dma::{
+    Command, CopyCommandDestinationValues, CopyCommandSourceValues, ErrorInfo, Event, EventCode,
+    EventInfoValues, EventRaw, LinearEndpoint, ScatterGatherEndpoint, Segment,
+};
+
 /// Shared hardware test fixtures.
 pub mod support;
 
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
-use pdma_model_contract::dma::{
-    Command, Endpoint, ErrorInfo, Event, EventCode, EventInfoValues, EventRaw, Position, Segment,
-};
 use support::{TestResult, run, setup, submit};
 
 fn segments(memory: &SharedMemory, entries: &[Segment]) -> TestResult {
@@ -43,15 +45,22 @@ fn insufficient_selected_range_leaves_payload_untouched() -> TestResult {
     submit(
         &mut device,
         &memory,
-        Command::copy(
-            1,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 5,
-                sg_context: 0,
-                source: Endpoint::scatter_gather(0x1400, 1),
-                destination: Endpoint::linear(0x1300, 0),
-            },
-        ),
+        Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 1,
+            copy_length: 5,
+            sg_context: 0,
+            source: CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+                list_address: 0x1400,
+                count: 1,
+                index: 0,
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x1300,
+                offset: 0,
+            }),
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        }),
     )?;
     // When: hardware validates the endpoint totals.
     run(&mut device)?;
@@ -73,35 +82,7 @@ fn insufficient_selected_range_leaves_payload_untouched() -> TestResult {
 
 #[test]
 fn list_errors_and_length_overflow_precede_payload_writes() -> TestResult {
-    for (source, destination, expected) in [
-        (
-            Endpoint::scatter_gather(0x8000, 1),
-            Endpoint::linear(0x1300, 0),
-            EventCode::ListReadError,
-        ),
-        (
-            Endpoint::linear(0x1200, 0),
-            Endpoint::scatter_gather(0x8000, 1),
-            EventCode::ListReadError,
-        ),
-        (
-            Endpoint::scatter_gather(0x1401, 1),
-            Endpoint::linear(0x1300, 0),
-            EventCode::ListReadError,
-        ),
-        (
-            Endpoint::scatter_gather(0x1400, 2),
-            Endpoint::linear(0x1300, 0),
-            EventCode::InvalidLength,
-        ),
-        (
-            Endpoint::scatter_gather(0, u64::MAX)
-                .with_start(Position::scatter_gather(u64::MAX - 1, 0))
-                .ok_or("SG position")?,
-            Endpoint::linear(0x1300, 0),
-            EventCode::InvalidLength,
-        ),
-    ] {
+    for (source, destination, expected) in failure_cases() {
         // Given: an unreadable/misaligned list, overflowing total, or overflowing list extent.
         let (mut device, memory) = setup(0x1100, 2)?;
         segments(
@@ -121,15 +102,14 @@ fn list_errors_and_length_overflow_precede_payload_writes() -> TestResult {
         submit(
             &mut device,
             &memory,
-            Command::copy(
-                2,
-                pdma_model_contract::dma::CopyCommand {
-                    copy_length: 4,
-                    sg_context: 0,
-                    source,
-                    destination,
-                },
-            ),
+            Command::Copy(pdma_model_contract::dma::CopyCommand {
+                id: 2,
+                copy_length: 4,
+                sg_context: 0,
+                source,
+                destination,
+                ..pdma_model_contract::dma::CopyCommand::ZERO
+            }),
         )?;
         // When: the real hardware pipeline runs its preflight.
         run(&mut device)?;
@@ -156,108 +136,81 @@ fn list_errors_and_length_overflow_precede_payload_writes() -> TestResult {
     Ok(())
 }
 
-#[test]
-fn payload_fault_reports_written_prefix_without_rollback() -> TestResult {
-    for read_fault in [true, false] {
-        // Given: the second segment faults after a three-byte prefix succeeds.
-        let (mut device, memory) = setup(0x1100, 2)?;
-        memory.write(
-            MemoryAddress::new(0x1200),
-            MemoryAlignment::ONE,
-            b"abcdefgh",
-        )?;
-        memory.write(
-            MemoryAddress::new(0x1300),
-            MemoryAlignment::ONE,
-            b"--------",
-        )?;
-        let first = if read_fault { 0x1200 } else { 0x1300 };
-        segments(
-            &memory,
-            &[
-                Segment {
-                    address: first,
-                    length: 3,
-                },
-                Segment {
-                    address: 0x8000,
-                    length: 5,
-                },
-            ],
-        )?;
-        let source = if read_fault {
-            Endpoint::scatter_gather(0x1400, 2)
-        } else {
-            Endpoint::linear(0x1200, 0)
-        };
-        let destination = if read_fault {
-            Endpoint::linear(0x1300, 0)
-        } else {
-            Endpoint::scatter_gather(0x1400, 2)
-        };
-        submit(
-            &mut device,
-            &memory,
-            Command::copy(
-                3,
-                pdma_model_contract::dma::CopyCommand {
-                    copy_length: 8,
-                    sg_context: 0,
-                    source,
-                    destination,
-                },
-            ),
-        )?;
-        // When: the second payload access fails.
-        run(&mut device)?;
-        // Then: completed bytes report only the successful write and the untouched suffix remains.
-        let status = if read_fault {
-            EventCode::ReadError
-        } else {
-            EventCode::WriteError
-        };
-        assert_eq!(
-            event(&memory)?,
-            Event {
-                id: 3,
-                code: status,
-                info: if read_fault {
-                    EventInfoValues::ReadError(ErrorInfo { bytes_completed: 3 })
-                } else {
-                    EventInfoValues::WriteError(ErrorInfo { bytes_completed: 3 })
-                },
-            }
-        );
-        assert_eq!(
-            &memory.read_typed::<[u8; 8]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
-            b"abc-----"
-        );
-        assert!(device.irq());
-    }
-    Ok(())
+mod scatter_gather_faults {
+    use super::*;
+    mod payload;
 }
 
-#[test]
-fn zero_length_does_not_access_lists_or_payload() -> TestResult {
-    // Given: a zero-length request with inaccessible SG tables.
-    let (mut device, memory) = setup(0x1100, 2)?;
-    submit(
-        &mut device,
-        &memory,
-        Command::copy(
-            4,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 0,
-                sg_context: 0,
-                source: Endpoint::scatter_gather(0x8000, 2),
-                destination: Endpoint::scatter_gather(u64::MAX, 0),
-            },
+const fn failure_cases() -> [(
+    CopyCommandSourceValues,
+    CopyCommandDestinationValues,
+    EventCode,
+); 5] {
+    [
+        (
+            CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+                list_address: 0x8000,
+                count: 1,
+                index: 0,
+                offset: 0,
+            }),
+            CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x1300,
+                offset: 0,
+            }),
+            EventCode::ListReadError,
         ),
-    )?;
-    // When: hardware accepts the empty copy range.
-    run(&mut device)?;
-    // Then: the empty command retires without payload access or an event.
-    support::assert_no_event(&mut device)?;
-    assert!(!device.irq());
-    Ok(())
+        (
+            CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0x1200,
+                offset: 0,
+            }),
+            CopyCommandDestinationValues::ScatterGather(ScatterGatherEndpoint {
+                list_address: 0x8000,
+                count: 1,
+                index: 0,
+                offset: 0,
+            }),
+            EventCode::ListReadError,
+        ),
+        (
+            CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+                list_address: 0x1401,
+                count: 1,
+                index: 0,
+                offset: 0,
+            }),
+            CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x1300,
+                offset: 0,
+            }),
+            EventCode::ListReadError,
+        ),
+        (
+            CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+                list_address: 0x1400,
+                count: 2,
+                index: 0,
+                offset: 0,
+            }),
+            CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x1300,
+                offset: 0,
+            }),
+            EventCode::InvalidLength,
+        ),
+        (
+            CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+                list_address: 0,
+                count: u64::MAX,
+                index: u64::MAX - 1,
+                offset: 0,
+            }),
+            CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x1300,
+                offset: 0,
+            }),
+            EventCode::InvalidLength,
+        ),
+    ]
 }

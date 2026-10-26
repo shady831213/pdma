@@ -1,8 +1,12 @@
 //! Hardware ownership boundaries and admission exclusion.
+
+use pdma_model_contract::dma::{CopyCommandSourceValues, LinearEndpoint};
+
 /// Shared raw-bus fixtures.
 pub mod support;
 
 mod hardware_lifecycle {
+    use super::{CopyCommandSourceValues, LinearEndpoint};
     mod stages;
 
     use crate::support::{TestResult, command, read_word, setup, submit};
@@ -10,7 +14,7 @@ mod hardware_lifecycle {
     use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
     use pdma_model_contract::dma::{
         ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, ContextId, DmaAdmin,
-        DmaDiscovery, Endpoint, Event, EventCode, EventRegisters,
+        DmaDiscovery, Event, EventCode, EventRegisters,
     };
     use pdma_model_dma::{CommandRequest, Fetch};
 
@@ -28,7 +32,11 @@ mod hardware_lifecycle {
         // Given: a publishing execution graph with an indefinitely stalled final stage.
         let (mut dma, memory) = setup(0x1100, 2)?;
         let mut descriptor = command();
-        crate::support::copy_mut(&mut descriptor)?.source = Endpoint::linear(0x9000, 0);
+        crate::support::copy_mut(&mut descriptor)?.source =
+            CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0x9000,
+                offset: 0,
+            });
         submit(&mut dma, &memory, descriptor)?;
         let mut hardware =
             dma.hardware_with(Then::new(crate::support::chunk_pipeline(), PendingTail));
@@ -56,50 +64,7 @@ mod hardware_lifecycle {
         Ok(())
     }
 
-    #[test]
-    fn reset_retires_an_accepted_invocation_when_its_stalled_stage_observes_reset() -> TestResult {
-        // Given: accepted work whose execution graph stalls until reset.
-        let (mut dma, memory) = setup(0x1100, 2)?;
-        submit(&mut dma, &memory, command())?;
-        let cleanup = std::rc::Rc::new(std::cell::Cell::new(0));
-        let mut hardware = dma.hardware_with(Stalled(None, std::rc::Rc::clone(&cleanup)));
-        let mut driver = HardwareDriver::new();
-        for _ in 0..64 {
-            assert!(matches!(
-                driver.step(&mut hardware, &mut dma)?,
-                StepOutcome::InProgress
-            ));
-            if cleanup.get() == 1 {
-                break;
-            }
-        }
-        assert_eq!(read_word(&mut dma, CONSUMER)?, 1);
-        assert_eq!(cleanup.get(), 1);
-        // When: reset is requested while accepted ownership remains.
-        dma.write(RESET, &1_u32.to_le_bytes())?;
-        assert_eq!(read_word(&mut dma, RESET)?, 1);
-        assert!(matches!(
-            driver.step(&mut hardware, &mut dma)?,
-            StepOutcome::InProgress
-        ));
-        assert_eq!(cleanup.get(), 2);
-        assert_eq!(read_word(&mut dma, RESET)?, 1);
-        for _ in 0..64 {
-            assert!(matches!(
-                driver.step(&mut hardware, &mut dma)?,
-                StepOutcome::InProgress
-            ));
-            if read_word(&mut dma, RESET)? == 0 {
-                break;
-            }
-        }
-        // Then: the stage's own terminal step acknowledges reset without completing data.
-        assert_eq!(read_word(&mut dma, RESET)?, 0);
-        assert_eq!(cleanup.get(), 3);
-        assert!(!driver.is_complete());
-        assert_eq!(read_word(&mut dma, PRODUCER)?, 0);
-        Ok(())
-    }
+    mod reset;
 
     #[test]
     fn stale_fetch_leaves_the_next_abort_target_for_fresh_arbitration() -> TestResult {
@@ -107,20 +72,18 @@ mod hardware_lifecycle {
         let (mut dma, memory) = setup(0x1100, 2)?;
         let target = {
             let original = command();
-            let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload
-            else {
+            let pdma_model_contract::dma::Command::Copy(copy) = original else {
                 return Err("copy fixture required".into());
             };
-            Command::copy(
-                original.id,
-                pdma_model_contract::dma::CopyCommand {
-                    source: Endpoint {
-                        context: 7,
-                        ..Endpoint::linear(0x1200, 0)
-                    },
-                    ..copy
-                },
-            )
+            Command::Copy(pdma_model_contract::dma::CopyCommand {
+                id: original.id(),
+                source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                    address: 0x1200,
+                    offset: 0,
+                }),
+                source_context: 7,
+                ..copy
+            })
         };
         submit(&mut dma, &memory, target)?;
         memory.write(
@@ -229,18 +192,17 @@ mod hardware_lifecycle {
                 }
                 let fresh = {
                     let original = command();
-                    let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) =
-                        original.payload
-                    else {
+                    let pdma_model_contract::dma::Command::Copy(copy) = original else {
                         return Err("copy fixture required".into());
                     };
-                    Command::copy(
-                        99,
-                        pdma_model_contract::dma::CopyCommand {
-                            source: Endpoint::linear(if failure { 0x9000 } else { 0x1200 }, 0),
-                            ..copy
-                        },
-                    )
+                    Command::Copy(pdma_model_contract::dma::CopyCommand {
+                        id: 99,
+                        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                            address: if failure { 0x9000 } else { 0x1200 },
+                            offset: 0,
+                        }),
+                        ..copy
+                    })
                 };
                 memory.write(0x1200.into(), MemoryAlignment::ONE, &[9; 4])?;
                 submit(&mut dma, &memory, fresh)?;
@@ -260,7 +222,7 @@ mod hardware_lifecycle {
                     let mut bytes = [0; Event::RECORD_SIZE];
                     memory.read(0x1100.into(), MemoryAlignment::ONE, &mut bytes)?;
                     let event = Event::from_bytes(&bytes)?;
-                    assert_eq!((event.id, event.code), (fresh.id, EventCode::ReadError));
+                    assert_eq!((event.id, event.code), (fresh.id(), EventCode::ReadError));
                 } else {
                     assert_eq!(
                         memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,

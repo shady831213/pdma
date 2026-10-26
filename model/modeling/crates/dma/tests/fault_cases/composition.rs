@@ -148,7 +148,7 @@ fn standalone_range_validation_cannot_consume_parked_work() -> TestResult {
     assert_eq!(fault_status(&mut device)?, 1);
     device.memory.missing.set(None);
     resume(&mut device, 1)?;
-    completed(&mut device, command.id)?;
+    completed(&mut device, command.id())?;
 
     Ok(())
 }

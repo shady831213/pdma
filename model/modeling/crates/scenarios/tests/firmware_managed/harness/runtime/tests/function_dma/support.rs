@@ -1,12 +1,13 @@
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelConfiguration, ChannelId, ChannelRegisters, Command, CommandHeader,
+    CommandRegisters, CopyCommandDestinationValues, CopyCommandSourceValues, Event, EventRegisters,
+    FenceCommand, LinearEndpoint, Opcode,
+};
+
 use crate::harness::runtime::memory::RoutedMemory;
 use hardware_interface_pipeline::{HardwareDriver, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-};
-use pdma_model_contract::dma::ChannelConfiguration;
-use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Endpoint, Event,
-    EventRegisters,
 };
 use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_dma::Dma;
@@ -107,12 +108,19 @@ pub(super) fn publish(
             context: 0,
             width: pdma_model_contract::dma::WordTargetWidth::Bits64,
         },
-        value: command.id,
+        value: command.id(),
     };
     memory.write(
         MemoryAddress::new(0x1000 + u64::try_from(Command::RECORD_SIZE)?),
         MemoryAlignment::ONE,
-        &Command::fence(command.id, fence).to_bytes()?,
+        &Command::Fence(FenceCommand {
+            header: CommandHeader {
+                opcode: Opcode::Fence,
+            },
+            id: command.id(),
+            word: fence,
+        })
+        .to_bytes()?,
     )?;
     dma.write(
         id.register_offset(2).ok_or("channel")?
@@ -170,13 +178,18 @@ pub(super) fn bytes<const N: usize>(memory: &SharedMemory, address: u64) -> Test
 
 /// Constructs the fixture's linear copy descriptor.
 pub(super) const fn command(id: u64) -> Command {
-    Command::copy(
+    Command::Copy(pdma_model_contract::dma::CopyCommand {
         id,
-        pdma_model_contract::dma::CopyCommand {
-            copy_length: 8,
-            sg_context: 0,
-            source: Endpoint::linear(0x1200, 0),
-            destination: Endpoint::linear(0x1300, 0),
-        },
-    )
+        copy_length: 8,
+        sg_context: 0,
+        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: 0x1200,
+            offset: 0,
+        }),
+        destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: 0x1300,
+            offset: 0,
+        }),
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    })
 }

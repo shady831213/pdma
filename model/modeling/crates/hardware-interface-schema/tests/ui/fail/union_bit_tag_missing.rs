@@ -5,7 +5,7 @@ record_schema! {
         endian: Little,
         fields: {
             flags: bits(u8) { fields: { enabled: 0..=0 } },
-            payload: union { tag: self.flags.kind, cases: { Item { value: u8 } } },
+            payload: tagged_union { tag: self.flags.kind, cases: { Item { value: u8 } } },
         },
     }
 }

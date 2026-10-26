@@ -1,10 +1,12 @@
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelId, Command, CommandRegisters, ContextId, CopyCommandDestinationValues,
+    CopyCommandSourceValues, EventRegisters, LinearEndpoint,
+};
+
 use super::support::{TestResult, completion, configure, submit, word};
 use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-};
-use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, Command, CommandRegisters, ContextId, Endpoint, EventRegisters,
 };
 use pdma_model_dma::Dma;
 
@@ -22,18 +24,21 @@ fn abort_during_unaccepted_arbitration_does_not_stall_peer_channels() -> TestRes
         let mut dma = Dma::new(memory.clone(), 2)?;
         configure(&mut dma, 0)?;
         configure(&mut dma, 1)?;
-        let target = Command::copy(
-            7,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 512,
-                sg_context: 0,
-                source: Endpoint {
-                    context: 7,
-                    ..Endpoint::linear(0x1200, 0)
-                },
-                destination: Endpoint::linear(0x1400, 0),
-            },
-        );
+        let target = Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 7,
+            copy_length: 512,
+            sg_context: 0,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0x1200,
+                offset: 0,
+            }),
+            source_context: 7,
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x1400,
+                offset: 0,
+            }),
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        });
         memory.write(
             MemoryAddress::new(0x1000),
             MemoryAlignment::ONE,

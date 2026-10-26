@@ -1,12 +1,13 @@
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelConfiguration, ChannelRegisters, CommandRegisters,
+    CopyCommandDestinationValues, CopyCommandSourceValues, EventRegisters, LinearEndpoint,
+};
+
 use crate::{
     PRODUCER,
     support::{TestResult, command, read_word, setup, submit},
 };
 use hardware_interface_pipeline::{Stage, StepOutcome, Then};
-use pdma_model_contract::dma::ChannelConfiguration;
-use pdma_model_contract::dma::{
-    ChannelBlock, ChannelRegisters, CommandRegisters, Endpoint, EventRegisters,
-};
 use pdma_model_dma::{COPY_CHUNK_BYTES, PrepareChunk, ReadCopy, WriteCopy};
 use std::{cell::Cell, rc::Rc};
 
@@ -88,18 +89,22 @@ fn reset_after_committed_chunk_retires_hardware_while_custom_tail_is_pending() -
     let (mut device, memory) = setup(0x1100, 2)?;
     let descriptor = {
         let original = command();
-        let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload else {
+        let pdma_model_contract::dma::Command::Copy(copy) = original else {
             return Err("copy fixture required".into());
         };
-        pdma_model_contract::dma::Command::copy(
-            original.id,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: u64::try_from(COPY_CHUNK_BYTES * 2)?,
-                source: Endpoint::linear(0x1400, 0),
-                destination: Endpoint::linear(0x1800, 0),
-                ..copy
-            },
-        )
+        pdma_model_contract::dma::Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: original.id(),
+            copy_length: u64::try_from(COPY_CHUNK_BYTES * 2)?,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0x1400,
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x1800,
+                offset: 0,
+            }),
+            ..copy
+        })
     };
     submit(&mut device, &memory, descriptor)?;
     let entered = Rc::new(Cell::new(false));

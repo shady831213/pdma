@@ -1,4 +1,4 @@
-use super::super::{layout::union_geometry, scalar};
+use super::super::{layout::tagged_union_geometry, scalar};
 use crate::internal::syntax::ModernTypeDecl;
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -57,15 +57,15 @@ pub(super) fn fill_field(
             output_index += 1;
         }),
         ModernTypeDecl::Record(_) => TokenStream::new(),
-        ModernTypeDecl::Union(union) => {
-            let Some(geometry) = union_geometry(union, facade) else {
+        ModernTypeDecl::TaggedUnion(union) => {
+            let Some(geometry) = tagged_union_geometry(union, facade) else {
                 return TokenStream::new();
             };
             let kind = &geometry.storage.kind;
             let width = &geometry.storage.width;
             let slots = (0..geometry.slots).map(|index| {
                 let slot_id = id_index + index;
-                let slot_name = if field.scoped_union { format!("{name}_word{index}") } else { format!("word{index}") };
+                let slot_name = if field.scoped_tagged_union { format!("{name}_word{index}") } else { format!("word{index}") };
                 let relative = quote!((#index).saturating_mul(#width));
                 quote!({
                     let id = match #facade::inferred_field_id(#slot_id) { ::core::option::Option::Some(id) => id, ::core::option::Option::None => 0 };

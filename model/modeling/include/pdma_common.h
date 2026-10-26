@@ -54,467 +54,672 @@ static inline void C_SEGMENT_STORE_C_LENGTH(uint8_t bytes[C_SEGMENT_SIZE], uint6
 }
 
 /*
- * DMA stream endpoint
- * An independently selected Linear or SG stream with an explicit start position. This 40-byte little-endian record is eight-byte aligned. Lists remain stable while work can use them. Hardware performs no overlap check and imposes no segment-count limit. Copy length is specified once by Command; overlap follows chunk execution order, not whole-transfer memmove semantics.
+ * Linear copy endpoint
+ * Base address and full-width byte offset in the selected payload context.
  */
-#define C_ENDPOINT_SIZE UINT64_C(40)
-#define C_ENDPOINT_ALIGNMENT UINT64_C(8)
-#define C_ENDPOINT_ENDIAN_LITTLE UINT32_C(0)
-#define C_ENDPOINT_ENDIAN_BIG UINT32_C(1)
+#define C_LINEARENDPOINT_SIZE UINT64_C(16)
+#define C_LINEARENDPOINT_ALIGNMENT UINT64_C(8)
+#define C_LINEARENDPOINT_ENDIAN_LITTLE UINT32_C(0)
+#define C_LINEARENDPOINT_ENDIAN_BIG UINT32_C(1)
 
 /*
- * Endpoint representation
- * 0: Linear base address.
- * 1: ScatterGather table address and total entry count.
- * Other wire values are invalid. Encoding derives this tag from the selected payload case.
+ * Payload base
+ * Payload base address.
  */
-#define C_ENDPOINT_C_MODE_C_QULINEAR UINT64_C(0)
-#define C_ENDPOINT_C_MODE_C_QUSCATTERQUGATHER UINT64_C(1)
-#define C_ENDPOINT_C_MODE_OFFSET UINT64_C(0)
-#define C_ENDPOINT_C_MODE_WIDTH UINT64_C(4)
-#define C_ENDPOINT_C_MODE_ENDIAN C_ENDPOINT_ENDIAN_LITTLE
-static inline uint32_t C_ENDPOINT_LOAD_C_MODE(const uint8_t bytes[C_ENDPOINT_SIZE]) {
-    return (uint32_t)((uint32_t)bytes[C_ENDPOINT_C_MODE_OFFSET] | ((uint32_t)bytes[C_ENDPOINT_C_MODE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_ENDPOINT_C_MODE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_ENDPOINT_C_MODE_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+#define C_LINEARENDPOINT_C_ADDRESS_OFFSET UINT64_C(0)
+#define C_LINEARENDPOINT_C_ADDRESS_WIDTH UINT64_C(8)
+#define C_LINEARENDPOINT_C_ADDRESS_ENDIAN C_LINEARENDPOINT_ENDIAN_LITTLE
+static inline uint64_t C_LINEARENDPOINT_LOAD_C_ADDRESS(const uint8_t bytes[C_LINEARENDPOINT_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_LINEARENDPOINT_C_ADDRESS_OFFSET] | ((uint64_t)bytes[C_LINEARENDPOINT_C_ADDRESS_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_LINEARENDPOINT_C_ADDRESS_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_LINEARENDPOINT_C_ADDRESS_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_LINEARENDPOINT_C_ADDRESS_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_LINEARENDPOINT_C_ADDRESS_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_LINEARENDPOINT_C_ADDRESS_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_LINEARENDPOINT_C_ADDRESS_OFFSET + UINT64_C(7)] << UINT32_C(56)));
 }
-static inline void C_ENDPOINT_STORE_C_MODE(uint8_t bytes[C_ENDPOINT_SIZE], uint32_t value) {
-    bytes[C_ENDPOINT_C_MODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_ENDPOINT_C_MODE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_MODE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_MODE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-}
-
-/*
- * Payload address-space context
- * Context selector for payload accesses, independent of the context used to read a scatter/gather table. Ignored by ordinary context-free hardware.
- */
-#define C_ENDPOINT_C_CONTEXT_OFFSET UINT64_C(4)
-#define C_ENDPOINT_C_CONTEXT_WIDTH UINT64_C(4)
-#define C_ENDPOINT_C_CONTEXT_ENDIAN C_ENDPOINT_ENDIAN_LITTLE
-static inline uint32_t C_ENDPOINT_LOAD_C_CONTEXT(const uint8_t bytes[C_ENDPOINT_SIZE]) {
-    return (uint32_t)((uint32_t)bytes[C_ENDPOINT_C_CONTEXT_OFFSET] | ((uint32_t)bytes[C_ENDPOINT_C_CONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_ENDPOINT_C_CONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_ENDPOINT_C_CONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
-}
-static inline void C_ENDPOINT_STORE_C_CONTEXT(uint8_t bytes[C_ENDPOINT_SIZE], uint32_t value) {
-    bytes[C_ENDPOINT_C_CONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_ENDPOINT_C_CONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_CONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_CONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+static inline void C_LINEARENDPOINT_STORE_C_ADDRESS(uint8_t bytes[C_LINEARENDPOINT_SIZE], uint64_t value) {
+    bytes[C_LINEARENDPOINT_C_ADDRESS_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_LINEARENDPOINT_C_ADDRESS_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_LINEARENDPOINT_C_ADDRESS_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_LINEARENDPOINT_C_ADDRESS_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_LINEARENDPOINT_C_ADDRESS_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_LINEARENDPOINT_C_ADDRESS_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_LINEARENDPOINT_C_ADDRESS_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_LINEARENDPOINT_C_ADDRESS_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
 }
 
 /*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
+ * Byte offset
+ * Full-width base-relative byte offset.
  */
-#define C_ENDPOINT_C_WORD0_OFFSET UINT64_C(8)
-#define C_ENDPOINT_C_WORD0_WIDTH UINT64_C(8)
-#define C_ENDPOINT_C_WORD0_ENDIAN C_ENDPOINT_ENDIAN_LITTLE
-static inline uint64_t C_ENDPOINT_LOAD_C_WORD0(const uint8_t bytes[C_ENDPOINT_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_ENDPOINT_C_WORD0_OFFSET] | ((uint64_t)bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+#define C_LINEARENDPOINT_C_OFFSET_OFFSET UINT64_C(8)
+#define C_LINEARENDPOINT_C_OFFSET_WIDTH UINT64_C(8)
+#define C_LINEARENDPOINT_C_OFFSET_ENDIAN C_LINEARENDPOINT_ENDIAN_LITTLE
+static inline uint64_t C_LINEARENDPOINT_LOAD_C_OFFSET(const uint8_t bytes[C_LINEARENDPOINT_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_LINEARENDPOINT_C_OFFSET_OFFSET] | ((uint64_t)bytes[C_LINEARENDPOINT_C_OFFSET_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_LINEARENDPOINT_C_OFFSET_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_LINEARENDPOINT_C_OFFSET_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_LINEARENDPOINT_C_OFFSET_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_LINEARENDPOINT_C_OFFSET_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_LINEARENDPOINT_C_OFFSET_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_LINEARENDPOINT_C_OFFSET_OFFSET + UINT64_C(7)] << UINT32_C(56)));
 }
-static inline void C_ENDPOINT_STORE_C_WORD0(uint8_t bytes[C_ENDPOINT_SIZE], uint64_t value) {
-    bytes[C_ENDPOINT_C_WORD0_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+static inline void C_LINEARENDPOINT_STORE_C_OFFSET(uint8_t bytes[C_LINEARENDPOINT_SIZE], uint64_t value) {
+    bytes[C_LINEARENDPOINT_C_OFFSET_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_LINEARENDPOINT_C_OFFSET_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_LINEARENDPOINT_C_OFFSET_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_LINEARENDPOINT_C_OFFSET_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_LINEARENDPOINT_C_OFFSET_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_LINEARENDPOINT_C_OFFSET_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_LINEARENDPOINT_C_OFFSET_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_LINEARENDPOINT_C_OFFSET_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
 }
 
 /*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
+ * Scatter/gather copy endpoint
+ * Original list geometry and full-width starting position. Lists remain stable until retirement.
  */
-#define C_ENDPOINT_C_WORD1_OFFSET UINT64_C(16)
-#define C_ENDPOINT_C_WORD1_WIDTH UINT64_C(8)
-#define C_ENDPOINT_C_WORD1_ENDIAN C_ENDPOINT_ENDIAN_LITTLE
-static inline uint64_t C_ENDPOINT_LOAD_C_WORD1(const uint8_t bytes[C_ENDPOINT_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_ENDPOINT_C_WORD1_OFFSET] | ((uint64_t)bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+#define C_SCATTERGATHERENDPOINT_SIZE UINT64_C(32)
+#define C_SCATTERGATHERENDPOINT_ALIGNMENT UINT64_C(8)
+#define C_SCATTERGATHERENDPOINT_ENDIAN_LITTLE UINT32_C(0)
+#define C_SCATTERGATHERENDPOINT_ENDIAN_BIG UINT32_C(1)
+
+/*
+ * Original table address
+ * Original table address in the SG context.
+ */
+#define C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_OFFSET UINT64_C(0)
+#define C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_WIDTH UINT64_C(8)
+#define C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_ENDIAN C_SCATTERGATHERENDPOINT_ENDIAN_LITTLE
+static inline uint64_t C_SCATTERGATHERENDPOINT_LOAD_C_LISTQSADDRESS(const uint8_t bytes[C_SCATTERGATHERENDPOINT_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_OFFSET] | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_OFFSET + UINT64_C(7)] << UINT32_C(56)));
 }
-static inline void C_ENDPOINT_STORE_C_WORD1(uint8_t bytes[C_ENDPOINT_SIZE], uint64_t value) {
-    bytes[C_ENDPOINT_C_WORD1_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+static inline void C_SCATTERGATHERENDPOINT_STORE_C_LISTQSADDRESS(uint8_t bytes[C_SCATTERGATHERENDPOINT_SIZE], uint64_t value) {
+    bytes[C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_LISTQSADDRESS_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
 }
 
 /*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
+ * Total entry count
+ * Full-width total entry count.
  */
-#define C_ENDPOINT_C_WORD2_OFFSET UINT64_C(24)
-#define C_ENDPOINT_C_WORD2_WIDTH UINT64_C(8)
-#define C_ENDPOINT_C_WORD2_ENDIAN C_ENDPOINT_ENDIAN_LITTLE
-static inline uint64_t C_ENDPOINT_LOAD_C_WORD2(const uint8_t bytes[C_ENDPOINT_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_ENDPOINT_C_WORD2_OFFSET] | ((uint64_t)bytes[C_ENDPOINT_C_WORD2_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD2_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD2_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD2_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD2_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD2_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD2_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+#define C_SCATTERGATHERENDPOINT_C_COUNT_OFFSET UINT64_C(8)
+#define C_SCATTERGATHERENDPOINT_C_COUNT_WIDTH UINT64_C(8)
+#define C_SCATTERGATHERENDPOINT_C_COUNT_ENDIAN C_SCATTERGATHERENDPOINT_ENDIAN_LITTLE
+static inline uint64_t C_SCATTERGATHERENDPOINT_LOAD_C_COUNT(const uint8_t bytes[C_SCATTERGATHERENDPOINT_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_COUNT_OFFSET] | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_COUNT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_COUNT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_COUNT_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_COUNT_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_COUNT_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_COUNT_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_COUNT_OFFSET + UINT64_C(7)] << UINT32_C(56)));
 }
-static inline void C_ENDPOINT_STORE_C_WORD2(uint8_t bytes[C_ENDPOINT_SIZE], uint64_t value) {
-    bytes[C_ENDPOINT_C_WORD2_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD2_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD2_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD2_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD2_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD2_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD2_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD2_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+static inline void C_SCATTERGATHERENDPOINT_STORE_C_COUNT(uint8_t bytes[C_SCATTERGATHERENDPOINT_SIZE], uint64_t value) {
+    bytes[C_SCATTERGATHERENDPOINT_C_COUNT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_COUNT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_COUNT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_COUNT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_COUNT_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_COUNT_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_COUNT_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_COUNT_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
 }
 
 /*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
+ * Starting entry
+ * Full-width original table entry index.
  */
-#define C_ENDPOINT_C_WORD3_OFFSET UINT64_C(32)
-#define C_ENDPOINT_C_WORD3_WIDTH UINT64_C(8)
-#define C_ENDPOINT_C_WORD3_ENDIAN C_ENDPOINT_ENDIAN_LITTLE
-static inline uint64_t C_ENDPOINT_LOAD_C_WORD3(const uint8_t bytes[C_ENDPOINT_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_ENDPOINT_C_WORD3_OFFSET] | ((uint64_t)bytes[C_ENDPOINT_C_WORD3_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD3_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD3_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD3_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD3_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD3_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD3_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+#define C_SCATTERGATHERENDPOINT_C_INDEX_OFFSET UINT64_C(16)
+#define C_SCATTERGATHERENDPOINT_C_INDEX_WIDTH UINT64_C(8)
+#define C_SCATTERGATHERENDPOINT_C_INDEX_ENDIAN C_SCATTERGATHERENDPOINT_ENDIAN_LITTLE
+static inline uint64_t C_SCATTERGATHERENDPOINT_LOAD_C_INDEX(const uint8_t bytes[C_SCATTERGATHERENDPOINT_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_INDEX_OFFSET] | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_INDEX_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_INDEX_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_INDEX_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_INDEX_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_INDEX_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_INDEX_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_INDEX_OFFSET + UINT64_C(7)] << UINT32_C(56)));
 }
-static inline void C_ENDPOINT_STORE_C_WORD3(uint8_t bytes[C_ENDPOINT_SIZE], uint64_t value) {
-    bytes[C_ENDPOINT_C_WORD3_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD3_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD3_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD3_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD3_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD3_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD3_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_ENDPOINT_C_WORD3_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+static inline void C_SCATTERGATHERENDPOINT_STORE_C_INDEX(uint8_t bytes[C_SCATTERGATHERENDPOINT_SIZE], uint64_t value) {
+    bytes[C_SCATTERGATHERENDPOINT_C_INDEX_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_INDEX_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_INDEX_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_INDEX_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_INDEX_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_INDEX_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_INDEX_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_INDEX_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
 }
 
 /*
- * Fixed-size copy-engine command
- * Fixed-size copy-engine command. Successful work produces no event.
+ * Entry offset
+ * Full-width entry-local byte offset.
  */
-#define C_COMMAND_SIZE UINT64_C(112)
+#define C_SCATTERGATHERENDPOINT_C_OFFSET_OFFSET UINT64_C(24)
+#define C_SCATTERGATHERENDPOINT_C_OFFSET_WIDTH UINT64_C(8)
+#define C_SCATTERGATHERENDPOINT_C_OFFSET_ENDIAN C_SCATTERGATHERENDPOINT_ENDIAN_LITTLE
+static inline uint64_t C_SCATTERGATHERENDPOINT_LOAD_C_OFFSET(const uint8_t bytes[C_SCATTERGATHERENDPOINT_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_OFFSET_OFFSET] | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_OFFSET_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_OFFSET_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_OFFSET_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_OFFSET_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_OFFSET_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_OFFSET_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_SCATTERGATHERENDPOINT_C_OFFSET_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_SCATTERGATHERENDPOINT_STORE_C_OFFSET(uint8_t bytes[C_SCATTERGATHERENDPOINT_SIZE], uint64_t value) {
+    bytes[C_SCATTERGATHERENDPOINT_C_OFFSET_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_OFFSET_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_OFFSET_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_OFFSET_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_OFFSET_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_OFFSET_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_OFFSET_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_SCATTERGATHERENDPOINT_C_OFFSET_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Shared command discriminator
+ * One byte at the start of every complete command record. The protocol selects the complete union member using this opcode.
+ */
+#define C_COMMANDHEADER_SIZE UINT64_C(1)
+#define C_COMMANDHEADER_ALIGNMENT UINT64_C(1)
+#define C_COMMANDHEADER_ENDIAN_LITTLE UINT32_C(0)
+#define C_COMMANDHEADER_ENDIAN_BIG UINT32_C(1)
+
+/*
+ * Command opcode
+ * Assigned opcodes 0 through 8; all other values are invalid.
+ */
+#define C_COMMANDHEADER_C_OPCODE_C_QUCOPY UINT64_C(0)
+#define C_COMMANDHEADER_C_OPCODE_C_QUWRITE UINT64_C(1)
+#define C_COMMANDHEADER_C_OPCODE_C_QUFILL UINT64_C(2)
+#define C_COMMANDHEADER_C_OPCODE_C_QUWAIT UINT64_C(3)
+#define C_COMMANDHEADER_C_OPCODE_C_QUATOMIC UINT64_C(4)
+#define C_COMMANDHEADER_C_OPCODE_C_QUSEMAPHORE UINT64_C(5)
+#define C_COMMANDHEADER_C_OPCODE_C_QUFENCE UINT64_C(6)
+#define C_COMMANDHEADER_C_OPCODE_C_QUTRAP UINT64_C(7)
+#define C_COMMANDHEADER_C_OPCODE_C_QUTIMESTAMP UINT64_C(8)
+#define C_COMMANDHEADER_C_OPCODE_OFFSET UINT64_C(0)
+#define C_COMMANDHEADER_C_OPCODE_WIDTH UINT64_C(1)
+#define C_COMMANDHEADER_C_OPCODE_ENDIAN C_COMMANDHEADER_ENDIAN_LITTLE
+static inline uint8_t C_COMMANDHEADER_LOAD_C_OPCODE(const uint8_t bytes[C_COMMANDHEADER_SIZE]) {
+    return (uint8_t)bytes[C_COMMANDHEADER_C_OPCODE_OFFSET];
+}
+static inline void C_COMMANDHEADER_STORE_C_OPCODE(uint8_t bytes[C_COMMANDHEADER_SIZE], uint8_t value) {
+    bytes[C_COMMANDHEADER_C_OPCODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+}
+
+/*
+ * Complete Write command
+ * Complete Write command including shared header and software identifier.
+ */
+#define C_WRITECOMMAND_SIZE UINT64_C(40)
+#define C_WRITECOMMAND_ALIGNMENT UINT64_C(8)
+#define C_WRITECOMMAND_ENDIAN_LITTLE UINT32_C(0)
+#define C_WRITECOMMAND_ENDIAN_BIG UINT32_C(1)
+/*
+ * WriteCommand.header
+ * Shared command header
+ * Opcode selecting this complete command.
+ */
+/*
+ * WriteCommand.word
+ * Word store
+ * Target and value of the word store.
+ */
+/*
+ * WriteCommand.word.target
+ * Destination word
+ * Destination word.
+ */
+
+/*
+ * Command opcode
+ * Assigned opcodes 0 through 8; all other values are invalid.
+ */
+#define C_WRITECOMMAND_C_HEADERQX2EOPCODE_C_QUCOPY UINT64_C(0)
+#define C_WRITECOMMAND_C_HEADERQX2EOPCODE_C_QUWRITE UINT64_C(1)
+#define C_WRITECOMMAND_C_HEADERQX2EOPCODE_C_QUFILL UINT64_C(2)
+#define C_WRITECOMMAND_C_HEADERQX2EOPCODE_C_QUWAIT UINT64_C(3)
+#define C_WRITECOMMAND_C_HEADERQX2EOPCODE_C_QUATOMIC UINT64_C(4)
+#define C_WRITECOMMAND_C_HEADERQX2EOPCODE_C_QUSEMAPHORE UINT64_C(5)
+#define C_WRITECOMMAND_C_HEADERQX2EOPCODE_C_QUFENCE UINT64_C(6)
+#define C_WRITECOMMAND_C_HEADERQX2EOPCODE_C_QUTRAP UINT64_C(7)
+#define C_WRITECOMMAND_C_HEADERQX2EOPCODE_C_QUTIMESTAMP UINT64_C(8)
+#define C_WRITECOMMAND_C_HEADERQX2EOPCODE_OFFSET UINT64_C(0)
+#define C_WRITECOMMAND_C_HEADERQX2EOPCODE_WIDTH UINT64_C(1)
+#define C_WRITECOMMAND_C_HEADERQX2EOPCODE_ENDIAN C_WRITECOMMAND_ENDIAN_LITTLE
+static inline uint8_t C_WRITECOMMAND_LOAD_C_HEADERQX2EOPCODE(const uint8_t bytes[C_WRITECOMMAND_SIZE]) {
+    return (uint8_t)bytes[C_WRITECOMMAND_C_HEADERQX2EOPCODE_OFFSET];
+}
+static inline void C_WRITECOMMAND_STORE_C_HEADERQX2EOPCODE(uint8_t bytes[C_WRITECOMMAND_SIZE], uint8_t value) {
+    bytes[C_WRITECOMMAND_C_HEADERQX2EOPCODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+}
+
+/*
+ * Software identifier
+ * Software identifier retained in error events.
+ */
+#define C_WRITECOMMAND_C_ID_OFFSET UINT64_C(8)
+#define C_WRITECOMMAND_C_ID_WIDTH UINT64_C(8)
+#define C_WRITECOMMAND_C_ID_ENDIAN C_WRITECOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_WRITECOMMAND_LOAD_C_ID(const uint8_t bytes[C_WRITECOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_WRITECOMMAND_C_ID_OFFSET] | ((uint64_t)bytes[C_WRITECOMMAND_C_ID_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_WRITECOMMAND_C_ID_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_WRITECOMMAND_C_ID_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_WRITECOMMAND_C_ID_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_WRITECOMMAND_C_ID_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_WRITECOMMAND_C_ID_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_WRITECOMMAND_C_ID_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_WRITECOMMAND_STORE_C_ID(uint8_t bytes[C_WRITECOMMAND_SIZE], uint64_t value) {
+    bytes[C_WRITECOMMAND_C_ID_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_ID_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_ID_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_ID_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_ID_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_ID_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_ID_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_ID_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Naturally aligned little-endian word address
+ * Naturally aligned little-endian word address.
+ */
+#define C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET UINT64_C(16)
+#define C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_WIDTH UINT64_C(8)
+#define C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_ENDIAN C_WRITECOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_WRITECOMMAND_LOAD_C_WORDQX2ETARGETQX2EADDRESS(const uint8_t bytes[C_WRITECOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET] | ((uint64_t)bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_WRITECOMMAND_STORE_C_WORDQX2ETARGETQX2EADDRESS(uint8_t bytes[C_WRITECOMMAND_SIZE], uint64_t value) {
+    bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Target address-space selector
+ * Target address-space selector.
+ */
+#define C_WRITECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET UINT64_C(24)
+#define C_WRITECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_WIDTH UINT64_C(4)
+#define C_WRITECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_ENDIAN C_WRITECOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_WRITECOMMAND_LOAD_C_WORDQX2ETARGETQX2ECONTEXT(const uint8_t bytes[C_WRITECOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET] | ((uint32_t)bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_WRITECOMMAND_STORE_C_WORDQX2ETARGETQX2ECONTEXT(uint8_t bytes[C_WRITECOMMAND_SIZE], uint32_t value) {
+    bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Word width; values and operands truncate to that width
+ * Word width; values and operands truncate to that width.
+ */
+#define C_WRITECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_C_QUBITS32 UINT64_C(0)
+#define C_WRITECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_C_QUBITS64 UINT64_C(1)
+#define C_WRITECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET UINT64_C(28)
+#define C_WRITECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_WIDTH UINT64_C(4)
+#define C_WRITECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_ENDIAN C_WRITECOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_WRITECOMMAND_LOAD_C_WORDQX2ETARGETQX2EWIDTH(const uint8_t bytes[C_WRITECOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET] | ((uint32_t)bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_WRITECOMMAND_STORE_C_WORDQX2ETARGETQX2EWIDTH(uint8_t bytes[C_WRITECOMMAND_SIZE], uint32_t value) {
+    bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Low selected-width bits to store
+ * Low selected-width bits to store.
+ */
+#define C_WRITECOMMAND_C_WORDQX2EVALUE_OFFSET UINT64_C(32)
+#define C_WRITECOMMAND_C_WORDQX2EVALUE_WIDTH UINT64_C(8)
+#define C_WRITECOMMAND_C_WORDQX2EVALUE_ENDIAN C_WRITECOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_WRITECOMMAND_LOAD_C_WORDQX2EVALUE(const uint8_t bytes[C_WRITECOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_WRITECOMMAND_C_WORDQX2EVALUE_OFFSET] | ((uint64_t)bytes[C_WRITECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_WRITECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_WRITECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_WRITECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_WRITECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_WRITECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_WRITECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_WRITECOMMAND_STORE_C_WORDQX2EVALUE(uint8_t bytes[C_WRITECOMMAND_SIZE], uint64_t value) {
+    bytes[C_WRITECOMMAND_C_WORDQX2EVALUE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_WRITECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+#define C_WRITECOMMAND_RECORD_C_HEADER_OFFSET UINT64_C(0)
+#define C_WRITECOMMAND_RECORD_C_HEADER_SIZE UINT64_C(1)
+#define C_WRITECOMMAND_RECORD_C_WORD_OFFSET UINT64_C(16)
+#define C_WRITECOMMAND_RECORD_C_WORD_SIZE UINT64_C(24)
+#define C_WRITECOMMAND_RECORD_C_WORDQX2ETARGET_OFFSET UINT64_C(16)
+#define C_WRITECOMMAND_RECORD_C_WORDQX2ETARGET_SIZE UINT64_C(16)
+
+/*
+ * Complete Fence command
+ * Complete Fence command including shared header and software identifier.
+ */
+#define C_FENCECOMMAND_SIZE UINT64_C(40)
+#define C_FENCECOMMAND_ALIGNMENT UINT64_C(8)
+#define C_FENCECOMMAND_ENDIAN_LITTLE UINT32_C(0)
+#define C_FENCECOMMAND_ENDIAN_BIG UINT32_C(1)
+/*
+ * FenceCommand.header
+ * Shared command header
+ * Opcode selecting this complete command.
+ */
+/*
+ * FenceCommand.word
+ * Word store
+ * Target and value of the word store.
+ */
+/*
+ * FenceCommand.word.target
+ * Destination word
+ * Destination word.
+ */
+
+/*
+ * Command opcode
+ * Assigned opcodes 0 through 8; all other values are invalid.
+ */
+#define C_FENCECOMMAND_C_HEADERQX2EOPCODE_C_QUCOPY UINT64_C(0)
+#define C_FENCECOMMAND_C_HEADERQX2EOPCODE_C_QUWRITE UINT64_C(1)
+#define C_FENCECOMMAND_C_HEADERQX2EOPCODE_C_QUFILL UINT64_C(2)
+#define C_FENCECOMMAND_C_HEADERQX2EOPCODE_C_QUWAIT UINT64_C(3)
+#define C_FENCECOMMAND_C_HEADERQX2EOPCODE_C_QUATOMIC UINT64_C(4)
+#define C_FENCECOMMAND_C_HEADERQX2EOPCODE_C_QUSEMAPHORE UINT64_C(5)
+#define C_FENCECOMMAND_C_HEADERQX2EOPCODE_C_QUFENCE UINT64_C(6)
+#define C_FENCECOMMAND_C_HEADERQX2EOPCODE_C_QUTRAP UINT64_C(7)
+#define C_FENCECOMMAND_C_HEADERQX2EOPCODE_C_QUTIMESTAMP UINT64_C(8)
+#define C_FENCECOMMAND_C_HEADERQX2EOPCODE_OFFSET UINT64_C(0)
+#define C_FENCECOMMAND_C_HEADERQX2EOPCODE_WIDTH UINT64_C(1)
+#define C_FENCECOMMAND_C_HEADERQX2EOPCODE_ENDIAN C_FENCECOMMAND_ENDIAN_LITTLE
+static inline uint8_t C_FENCECOMMAND_LOAD_C_HEADERQX2EOPCODE(const uint8_t bytes[C_FENCECOMMAND_SIZE]) {
+    return (uint8_t)bytes[C_FENCECOMMAND_C_HEADERQX2EOPCODE_OFFSET];
+}
+static inline void C_FENCECOMMAND_STORE_C_HEADERQX2EOPCODE(uint8_t bytes[C_FENCECOMMAND_SIZE], uint8_t value) {
+    bytes[C_FENCECOMMAND_C_HEADERQX2EOPCODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+}
+
+/*
+ * Software identifier
+ * Software identifier retained in error events.
+ */
+#define C_FENCECOMMAND_C_ID_OFFSET UINT64_C(8)
+#define C_FENCECOMMAND_C_ID_WIDTH UINT64_C(8)
+#define C_FENCECOMMAND_C_ID_ENDIAN C_FENCECOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_FENCECOMMAND_LOAD_C_ID(const uint8_t bytes[C_FENCECOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_FENCECOMMAND_C_ID_OFFSET] | ((uint64_t)bytes[C_FENCECOMMAND_C_ID_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_FENCECOMMAND_C_ID_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_FENCECOMMAND_C_ID_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_FENCECOMMAND_C_ID_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_FENCECOMMAND_C_ID_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_FENCECOMMAND_C_ID_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_FENCECOMMAND_C_ID_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_FENCECOMMAND_STORE_C_ID(uint8_t bytes[C_FENCECOMMAND_SIZE], uint64_t value) {
+    bytes[C_FENCECOMMAND_C_ID_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_ID_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_ID_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_ID_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_ID_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_ID_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_ID_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_ID_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Naturally aligned little-endian word address
+ * Naturally aligned little-endian word address.
+ */
+#define C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET UINT64_C(16)
+#define C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_WIDTH UINT64_C(8)
+#define C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_ENDIAN C_FENCECOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_FENCECOMMAND_LOAD_C_WORDQX2ETARGETQX2EADDRESS(const uint8_t bytes[C_FENCECOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET] | ((uint64_t)bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_FENCECOMMAND_STORE_C_WORDQX2ETARGETQX2EADDRESS(uint8_t bytes[C_FENCECOMMAND_SIZE], uint64_t value) {
+    bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EADDRESS_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Target address-space selector
+ * Target address-space selector.
+ */
+#define C_FENCECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET UINT64_C(24)
+#define C_FENCECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_WIDTH UINT64_C(4)
+#define C_FENCECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_ENDIAN C_FENCECOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_FENCECOMMAND_LOAD_C_WORDQX2ETARGETQX2ECONTEXT(const uint8_t bytes[C_FENCECOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET] | ((uint32_t)bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_FENCECOMMAND_STORE_C_WORDQX2ETARGETQX2ECONTEXT(uint8_t bytes[C_FENCECOMMAND_SIZE], uint32_t value) {
+    bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2ECONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Word width; values and operands truncate to that width
+ * Word width; values and operands truncate to that width.
+ */
+#define C_FENCECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_C_QUBITS32 UINT64_C(0)
+#define C_FENCECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_C_QUBITS64 UINT64_C(1)
+#define C_FENCECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET UINT64_C(28)
+#define C_FENCECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_WIDTH UINT64_C(4)
+#define C_FENCECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_ENDIAN C_FENCECOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_FENCECOMMAND_LOAD_C_WORDQX2ETARGETQX2EWIDTH(const uint8_t bytes[C_FENCECOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET] | ((uint32_t)bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_FENCECOMMAND_STORE_C_WORDQX2ETARGETQX2EWIDTH(uint8_t bytes[C_FENCECOMMAND_SIZE], uint32_t value) {
+    bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2ETARGETQX2EWIDTH_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Low selected-width bits to store
+ * Low selected-width bits to store.
+ */
+#define C_FENCECOMMAND_C_WORDQX2EVALUE_OFFSET UINT64_C(32)
+#define C_FENCECOMMAND_C_WORDQX2EVALUE_WIDTH UINT64_C(8)
+#define C_FENCECOMMAND_C_WORDQX2EVALUE_ENDIAN C_FENCECOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_FENCECOMMAND_LOAD_C_WORDQX2EVALUE(const uint8_t bytes[C_FENCECOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_FENCECOMMAND_C_WORDQX2EVALUE_OFFSET] | ((uint64_t)bytes[C_FENCECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_FENCECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_FENCECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_FENCECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_FENCECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_FENCECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_FENCECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_FENCECOMMAND_STORE_C_WORDQX2EVALUE(uint8_t bytes[C_FENCECOMMAND_SIZE], uint64_t value) {
+    bytes[C_FENCECOMMAND_C_WORDQX2EVALUE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_FENCECOMMAND_C_WORDQX2EVALUE_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+#define C_FENCECOMMAND_RECORD_C_HEADER_OFFSET UINT64_C(0)
+#define C_FENCECOMMAND_RECORD_C_HEADER_SIZE UINT64_C(1)
+#define C_FENCECOMMAND_RECORD_C_WORD_OFFSET UINT64_C(16)
+#define C_FENCECOMMAND_RECORD_C_WORD_SIZE UINT64_C(24)
+#define C_FENCECOMMAND_RECORD_C_WORDQX2ETARGET_OFFSET UINT64_C(16)
+#define C_FENCECOMMAND_RECORD_C_WORDQX2ETARGET_SIZE UINT64_C(16)
+
+/*
+ * Complete Trap command
+ * Complete Trap command including shared header and software identifier.
+ */
+#define C_TRAPCOMMAND_SIZE UINT64_C(16)
+#define C_TRAPCOMMAND_ALIGNMENT UINT64_C(8)
+#define C_TRAPCOMMAND_ENDIAN_LITTLE UINT32_C(0)
+#define C_TRAPCOMMAND_ENDIAN_BIG UINT32_C(1)
+/*
+ * TrapCommand.header
+ * Shared command header
+ * Opcode selecting this complete command.
+ */
+
+/*
+ * Command opcode
+ * Assigned opcodes 0 through 8; all other values are invalid.
+ */
+#define C_TRAPCOMMAND_C_HEADERQX2EOPCODE_C_QUCOPY UINT64_C(0)
+#define C_TRAPCOMMAND_C_HEADERQX2EOPCODE_C_QUWRITE UINT64_C(1)
+#define C_TRAPCOMMAND_C_HEADERQX2EOPCODE_C_QUFILL UINT64_C(2)
+#define C_TRAPCOMMAND_C_HEADERQX2EOPCODE_C_QUWAIT UINT64_C(3)
+#define C_TRAPCOMMAND_C_HEADERQX2EOPCODE_C_QUATOMIC UINT64_C(4)
+#define C_TRAPCOMMAND_C_HEADERQX2EOPCODE_C_QUSEMAPHORE UINT64_C(5)
+#define C_TRAPCOMMAND_C_HEADERQX2EOPCODE_C_QUFENCE UINT64_C(6)
+#define C_TRAPCOMMAND_C_HEADERQX2EOPCODE_C_QUTRAP UINT64_C(7)
+#define C_TRAPCOMMAND_C_HEADERQX2EOPCODE_C_QUTIMESTAMP UINT64_C(8)
+#define C_TRAPCOMMAND_C_HEADERQX2EOPCODE_OFFSET UINT64_C(0)
+#define C_TRAPCOMMAND_C_HEADERQX2EOPCODE_WIDTH UINT64_C(1)
+#define C_TRAPCOMMAND_C_HEADERQX2EOPCODE_ENDIAN C_TRAPCOMMAND_ENDIAN_LITTLE
+static inline uint8_t C_TRAPCOMMAND_LOAD_C_HEADERQX2EOPCODE(const uint8_t bytes[C_TRAPCOMMAND_SIZE]) {
+    return (uint8_t)bytes[C_TRAPCOMMAND_C_HEADERQX2EOPCODE_OFFSET];
+}
+static inline void C_TRAPCOMMAND_STORE_C_HEADERQX2EOPCODE(uint8_t bytes[C_TRAPCOMMAND_SIZE], uint8_t value) {
+    bytes[C_TRAPCOMMAND_C_HEADERQX2EOPCODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+}
+
+/*
+ * Software identifier
+ * Software identifier retained in error events.
+ */
+#define C_TRAPCOMMAND_C_ID_OFFSET UINT64_C(8)
+#define C_TRAPCOMMAND_C_ID_WIDTH UINT64_C(8)
+#define C_TRAPCOMMAND_C_ID_ENDIAN C_TRAPCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_TRAPCOMMAND_LOAD_C_ID(const uint8_t bytes[C_TRAPCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_TRAPCOMMAND_C_ID_OFFSET] | ((uint64_t)bytes[C_TRAPCOMMAND_C_ID_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_TRAPCOMMAND_C_ID_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_TRAPCOMMAND_C_ID_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_TRAPCOMMAND_C_ID_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_TRAPCOMMAND_C_ID_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_TRAPCOMMAND_C_ID_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_TRAPCOMMAND_C_ID_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_TRAPCOMMAND_STORE_C_ID(uint8_t bytes[C_TRAPCOMMAND_SIZE], uint64_t value) {
+    bytes[C_TRAPCOMMAND_C_ID_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_TRAPCOMMAND_C_ID_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_TRAPCOMMAND_C_ID_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_TRAPCOMMAND_C_ID_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_TRAPCOMMAND_C_ID_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_TRAPCOMMAND_C_ID_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_TRAPCOMMAND_C_ID_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_TRAPCOMMAND_C_ID_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+#define C_TRAPCOMMAND_RECORD_C_HEADER_OFFSET UINT64_C(0)
+#define C_TRAPCOMMAND_RECORD_C_HEADER_SIZE UINT64_C(1)
+
+/*
+ * Complete copy-engine command union
+ * Untagged 96-byte union of complete command records. PDMA selects a member using the shared header opcode at byte zero.
+ */
+#define C_COMMAND_SIZE UINT64_C(96)
 #define C_COMMAND_ALIGNMENT UINT64_C(8)
 #define C_COMMAND_ENDIAN_LITTLE UINT32_C(0)
 #define C_COMMAND_ENDIAN_BIG UINT32_C(1)
-/*
- * Command.payload
- * Only the selected operation payload is meaningful; inactive bytes are zero
- * Only the selected operation payload is meaningful; inactive bytes are zero.
- */
 
 /*
- * Software identifier retained in error events
- * Software identifier retained in error events.
- */
-#define C_COMMAND_C_ID_OFFSET UINT64_C(0)
-#define C_COMMAND_C_ID_WIDTH UINT64_C(8)
-#define C_COMMAND_C_ID_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COMMAND_LOAD_C_ID(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COMMAND_C_ID_OFFSET] | ((uint64_t)bytes[C_COMMAND_C_ID_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COMMAND_C_ID_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COMMAND_C_ID_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COMMAND_C_ID_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COMMAND_C_ID_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COMMAND_C_ID_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COMMAND_C_ID_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_COMMAND_STORE_C_ID(uint8_t bytes[C_COMMAND_SIZE], uint64_t value) {
-    bytes[C_COMMAND_C_ID_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_ID_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_ID_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_ID_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COMMAND_C_ID_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COMMAND_C_ID_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COMMAND_C_ID_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COMMAND_C_ID_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Operation selected by the payload tag
- * Operation selected by the payload tag.
- */
-#define C_COMMAND_C_KIND_C_QUCOPY UINT64_C(0)
-#define C_COMMAND_C_KIND_C_QUWRITE UINT64_C(1)
-#define C_COMMAND_C_KIND_C_QUFILL UINT64_C(2)
-#define C_COMMAND_C_KIND_C_QUWAIT UINT64_C(3)
-#define C_COMMAND_C_KIND_C_QUATOMIC UINT64_C(4)
-#define C_COMMAND_C_KIND_C_QUSEMAPHORE UINT64_C(5)
-#define C_COMMAND_C_KIND_C_QUFENCE UINT64_C(6)
-#define C_COMMAND_C_KIND_C_QUTRAP UINT64_C(7)
-#define C_COMMAND_C_KIND_C_QUTIMESTAMP UINT64_C(8)
-#define C_COMMAND_C_KIND_OFFSET UINT64_C(8)
-#define C_COMMAND_C_KIND_WIDTH UINT64_C(4)
-#define C_COMMAND_C_KIND_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint32_t C_COMMAND_LOAD_C_KIND(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint32_t)((uint32_t)bytes[C_COMMAND_C_KIND_OFFSET] | ((uint32_t)bytes[C_COMMAND_C_KIND_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COMMAND_C_KIND_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COMMAND_C_KIND_OFFSET + UINT64_C(3)] << UINT32_C(24)));
-}
-static inline void C_COMMAND_STORE_C_KIND(uint8_t bytes[C_COMMAND_SIZE], uint32_t value) {
-    bytes[C_COMMAND_C_KIND_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_KIND_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_KIND_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_KIND_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-}
-#define C_COMMAND_RECORD_C_PAYLOAD_OFFSET UINT64_C(16)
-#define C_COMMAND_RECORD_C_PAYLOAD_SIZE UINT64_C(96)
-
-/*
- * Independent linear or scatter/gather copy
- * Independent linear or scatter/gather copy.
+ * Complete independent-endpoint copy command
+ * A 96-byte command with independently selected linear or scatter/gather endpoints; both ranges are validated before writes.
  */
 #define C_COPYCOMMAND_SIZE UINT64_C(96)
 #define C_COPYCOMMAND_ALIGNMENT UINT64_C(8)
 #define C_COPYCOMMAND_ENDIAN_LITTLE UINT32_C(0)
 #define C_COPYCOMMAND_ENDIAN_BIG UINT32_C(1)
 /*
+ * CopyCommand.header
+ * Shared command header
+ * Copy opcode in the shared header.
+ */
+/*
  * CopyCommand.source
- * Source stream and start
- * Source stream and start.
+ * Source stream
+ * Source geometry and start; inactive bytes are zero.
  */
 /*
  * CopyCommand.destination
- * Destination stream and start
- * Destination stream and start.
+ * Destination stream
+ * Destination geometry and start; inactive bytes are zero.
  */
 
 /*
- * Endpoint representation
- * 0: Linear base address.
- * 1: ScatterGather table address and total entry count.
- * Other wire values are invalid. Encoding derives this tag from the selected payload case.
+ * Command opcode
+ * Assigned opcodes 0 through 8; all other values are invalid.
  */
-#define C_COPYCOMMAND_C_SOURCEQX2EMODE_C_QULINEAR UINT64_C(0)
-#define C_COPYCOMMAND_C_SOURCEQX2EMODE_C_QUSCATTERQUGATHER UINT64_C(1)
-#define C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET UINT64_C(0)
-#define C_COPYCOMMAND_C_SOURCEQX2EMODE_WIDTH UINT64_C(4)
-#define C_COPYCOMMAND_C_SOURCEQX2EMODE_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
-static inline uint32_t C_COPYCOMMAND_LOAD_C_SOURCEQX2EMODE(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
-    return (uint32_t)((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET] | ((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+#define C_COPYCOMMAND_C_HEADERQX2EOPCODE_C_QUCOPY UINT64_C(0)
+#define C_COPYCOMMAND_C_HEADERQX2EOPCODE_C_QUWRITE UINT64_C(1)
+#define C_COPYCOMMAND_C_HEADERQX2EOPCODE_C_QUFILL UINT64_C(2)
+#define C_COPYCOMMAND_C_HEADERQX2EOPCODE_C_QUWAIT UINT64_C(3)
+#define C_COPYCOMMAND_C_HEADERQX2EOPCODE_C_QUATOMIC UINT64_C(4)
+#define C_COPYCOMMAND_C_HEADERQX2EOPCODE_C_QUSEMAPHORE UINT64_C(5)
+#define C_COPYCOMMAND_C_HEADERQX2EOPCODE_C_QUFENCE UINT64_C(6)
+#define C_COPYCOMMAND_C_HEADERQX2EOPCODE_C_QUTRAP UINT64_C(7)
+#define C_COPYCOMMAND_C_HEADERQX2EOPCODE_C_QUTIMESTAMP UINT64_C(8)
+#define C_COPYCOMMAND_C_HEADERQX2EOPCODE_OFFSET UINT64_C(0)
+#define C_COPYCOMMAND_C_HEADERQX2EOPCODE_WIDTH UINT64_C(1)
+#define C_COPYCOMMAND_C_HEADERQX2EOPCODE_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint8_t C_COPYCOMMAND_LOAD_C_HEADERQX2EOPCODE(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint8_t)bytes[C_COPYCOMMAND_C_HEADERQX2EOPCODE_OFFSET];
 }
-static inline void C_COPYCOMMAND_STORE_C_SOURCEQX2EMODE(uint8_t bytes[C_COPYCOMMAND_SIZE], uint32_t value) {
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+static inline void C_COPYCOMMAND_STORE_C_HEADERQX2EOPCODE(uint8_t bytes[C_COPYCOMMAND_SIZE], uint8_t value) {
+    bytes[C_COPYCOMMAND_C_HEADERQX2EOPCODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
 }
 
 /*
- * Payload address-space context
- * Context selector for payload accesses, independent of the context used to read a scatter/gather table. Ignored by ordinary context-free hardware.
+ * Independent endpoint selectors
+ * Source and destination selectors; other bits are reserved zero.
  */
-#define C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET UINT64_C(4)
-#define C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_WIDTH UINT64_C(4)
-#define C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
-static inline uint32_t C_COPYCOMMAND_LOAD_C_SOURCEQX2ECONTEXT(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
-    return (uint32_t)((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET] | ((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+/*
+ * source_mode
+ * Source representation
+ * Linear zero or scatter/gather one.
+ */
+#define C_COPYCOMMAND_C_OPTIONS_C_SOURCEQSMODE_C_QULINEAR UINT64_C(0)
+#define C_COPYCOMMAND_C_OPTIONS_C_SOURCEQSMODE_C_QUSCATTERQUGATHER UINT64_C(1)
+/*
+ * destination_mode
+ * Destination representation
+ * Linear zero or scatter/gather one.
+ */
+#define C_COPYCOMMAND_C_OPTIONS_C_DESTINATIONQSMODE_C_QULINEAR UINT64_C(0)
+#define C_COPYCOMMAND_C_OPTIONS_C_DESTINATIONQSMODE_C_QUSCATTERQUGATHER UINT64_C(1)
+#define C_COPYCOMMAND_C_OPTIONS_OFFSET UINT64_C(1)
+#define C_COPYCOMMAND_C_OPTIONS_WIDTH UINT64_C(1)
+#define C_COPYCOMMAND_C_OPTIONS_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint8_t C_COPYCOMMAND_LOAD_C_OPTIONS(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint8_t)bytes[C_COPYCOMMAND_C_OPTIONS_OFFSET];
 }
-static inline void C_COPYCOMMAND_STORE_C_SOURCEQX2ECONTEXT(uint8_t bytes[C_COPYCOMMAND_SIZE], uint32_t value) {
-    bytes[C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+static inline void C_COPYCOMMAND_STORE_C_OPTIONS(uint8_t bytes[C_COPYCOMMAND_SIZE], uint8_t value) {
+    bytes[C_COPYCOMMAND_C_OPTIONS_OFFSET] = (uint8_t)(value & UINT64_C(255));
 }
 
 /*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
+ * List address space
+ * Context shared by source and destination scatter/gather tables.
  */
-#define C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET UINT64_C(8)
-#define C_COPYCOMMAND_C_SOURCEQX2EWORD0_WIDTH UINT64_C(8)
-#define C_COPYCOMMAND_C_SOURCEQX2EWORD0_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COPYCOMMAND_LOAD_C_SOURCEQX2EWORD0(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+#define C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET UINT64_C(4)
+#define C_COPYCOMMAND_C_SGQSCONTEXT_WIDTH UINT64_C(4)
+#define C_COPYCOMMAND_C_SGQSCONTEXT_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_COPYCOMMAND_LOAD_C_SGQSCONTEXT(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET] | ((uint32_t)bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
 }
-static inline void C_COPYCOMMAND_STORE_C_SOURCEQX2EWORD0(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+static inline void C_COPYCOMMAND_STORE_C_SGQSCONTEXT(uint8_t bytes[C_COPYCOMMAND_SIZE], uint32_t value) {
+    bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
 }
 
 /*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
+ * Software identifier
+ * Identifier retained in error events.
  */
-#define C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET UINT64_C(16)
-#define C_COPYCOMMAND_C_SOURCEQX2EWORD1_WIDTH UINT64_C(8)
-#define C_COPYCOMMAND_C_SOURCEQX2EWORD1_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COPYCOMMAND_LOAD_C_SOURCEQX2EWORD1(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+#define C_COPYCOMMAND_C_ID_OFFSET UINT64_C(8)
+#define C_COPYCOMMAND_C_ID_WIDTH UINT64_C(8)
+#define C_COPYCOMMAND_C_ID_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_COPYCOMMAND_LOAD_C_ID(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_ID_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_ID_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_ID_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_ID_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_ID_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_ID_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_ID_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_ID_OFFSET + UINT64_C(7)] << UINT32_C(56)));
 }
-static inline void C_COPYCOMMAND_STORE_C_SOURCEQX2EWORD1(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+static inline void C_COPYCOMMAND_STORE_C_ID(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
+    bytes[C_COPYCOMMAND_C_ID_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_ID_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_ID_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_ID_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_ID_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_ID_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_ID_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_ID_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
 }
 
 /*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
+ * Copy byte count
+ * Selected full-width byte count.
  */
-#define C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET UINT64_C(24)
-#define C_COPYCOMMAND_C_SOURCEQX2EWORD2_WIDTH UINT64_C(8)
-#define C_COPYCOMMAND_C_SOURCEQX2EWORD2_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COPYCOMMAND_LOAD_C_SOURCEQX2EWORD2(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_COPYCOMMAND_STORE_C_SOURCEQX2EWORD2(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD2_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
- */
-#define C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET UINT64_C(32)
-#define C_COPYCOMMAND_C_SOURCEQX2EWORD3_WIDTH UINT64_C(8)
-#define C_COPYCOMMAND_C_SOURCEQX2EWORD3_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COPYCOMMAND_LOAD_C_SOURCEQX2EWORD3(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_COPYCOMMAND_STORE_C_SOURCEQX2EWORD3(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SOURCEQX2EWORD3_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Endpoint representation
- * 0: Linear base address.
- * 1: ScatterGather table address and total entry count.
- * Other wire values are invalid. Encoding derives this tag from the selected payload case.
- */
-#define C_COPYCOMMAND_C_DESTINATIONQX2EMODE_C_QULINEAR UINT64_C(0)
-#define C_COPYCOMMAND_C_DESTINATIONQX2EMODE_C_QUSCATTERQUGATHER UINT64_C(1)
-#define C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET UINT64_C(40)
-#define C_COPYCOMMAND_C_DESTINATIONQX2EMODE_WIDTH UINT64_C(4)
-#define C_COPYCOMMAND_C_DESTINATIONQX2EMODE_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
-static inline uint32_t C_COPYCOMMAND_LOAD_C_DESTINATIONQX2EMODE(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
-    return (uint32_t)((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET] | ((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(3)] << UINT32_C(24)));
-}
-static inline void C_COPYCOMMAND_STORE_C_DESTINATIONQX2EMODE(uint8_t bytes[C_COPYCOMMAND_SIZE], uint32_t value) {
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-}
-
-/*
- * Payload address-space context
- * Context selector for payload accesses, independent of the context used to read a scatter/gather table. Ignored by ordinary context-free hardware.
- */
-#define C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET UINT64_C(44)
-#define C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_WIDTH UINT64_C(4)
-#define C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
-static inline uint32_t C_COPYCOMMAND_LOAD_C_DESTINATIONQX2ECONTEXT(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
-    return (uint32_t)((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET] | ((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
-}
-static inline void C_COPYCOMMAND_STORE_C_DESTINATIONQX2ECONTEXT(uint8_t bytes[C_COPYCOMMAND_SIZE], uint32_t value) {
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-}
-
-/*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
- */
-#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET UINT64_C(48)
-#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_WIDTH UINT64_C(8)
-#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COPYCOMMAND_LOAD_C_DESTINATIONQX2EWORD0(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_COPYCOMMAND_STORE_C_DESTINATIONQX2EWORD0(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
- */
-#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET UINT64_C(56)
-#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_WIDTH UINT64_C(8)
-#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COPYCOMMAND_LOAD_C_DESTINATIONQX2EWORD1(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_COPYCOMMAND_STORE_C_DESTINATIONQX2EWORD1(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
- */
-#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET UINT64_C(64)
-#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_WIDTH UINT64_C(8)
-#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COPYCOMMAND_LOAD_C_DESTINATIONQX2EWORD2(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_COPYCOMMAND_STORE_C_DESTINATIONQX2EWORD2(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD2_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Endpoint parameters
- * Linear supplies a base address. SG supplies the original table address and total count; entries before index are never read. Linear also supplies a byte offset; SG supplies start index and entry-local offset. Only the selected copy range must fit, not the whole table or the opposite endpoint's total capacity. Address and range arithmetic is checked.
- */
-#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET UINT64_C(72)
-#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_WIDTH UINT64_C(8)
-#define C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COPYCOMMAND_LOAD_C_DESTINATIONQX2EWORD3(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET] | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_COPYCOMMAND_STORE_C_DESTINATIONQX2EWORD3(uint8_t bytes[C_COPYCOMMAND_SIZE], uint64_t value) {
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_DESTINATIONQX2EWORD3_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Selected byte count; both ranges are validated before writes
- * Selected byte count; both ranges are validated before writes.
- */
-#define C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET UINT64_C(80)
+#define C_COPYCOMMAND_C_COPYQSLENGTH_OFFSET UINT64_C(16)
 #define C_COPYCOMMAND_C_COPYQSLENGTH_WIDTH UINT64_C(8)
 #define C_COPYCOMMAND_C_COPYQSLENGTH_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
 static inline uint64_t C_COPYCOMMAND_LOAD_C_COPYQSLENGTH(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
@@ -532,25 +737,44 @@ static inline void C_COPYCOMMAND_STORE_C_COPYQSLENGTH(uint8_t bytes[C_COPYCOMMAN
 }
 
 /*
- * Context shared by source and destination SG tables
- * Context shared by source and destination SG tables.
+ * Source payload context
+ * Source payload address-space selector.
  */
-#define C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET UINT64_C(88)
-#define C_COPYCOMMAND_C_SGQSCONTEXT_WIDTH UINT64_C(4)
-#define C_COPYCOMMAND_C_SGQSCONTEXT_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
-static inline uint32_t C_COPYCOMMAND_LOAD_C_SGQSCONTEXT(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
-    return (uint32_t)((uint32_t)bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET] | ((uint32_t)bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+#define C_COPYCOMMAND_C_SOURCEQSCONTEXT_OFFSET UINT64_C(24)
+#define C_COPYCOMMAND_C_SOURCEQSCONTEXT_WIDTH UINT64_C(4)
+#define C_COPYCOMMAND_C_SOURCEQSCONTEXT_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_COPYCOMMAND_LOAD_C_SOURCEQSCONTEXT(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQSCONTEXT_OFFSET] | ((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQSCONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQSCONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COPYCOMMAND_C_SOURCEQSCONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
 }
-static inline void C_COPYCOMMAND_STORE_C_SGQSCONTEXT(uint8_t bytes[C_COPYCOMMAND_SIZE], uint32_t value) {
-    bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COPYCOMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+static inline void C_COPYCOMMAND_STORE_C_SOURCEQSCONTEXT(uint8_t bytes[C_COPYCOMMAND_SIZE], uint32_t value) {
+    bytes[C_COPYCOMMAND_C_SOURCEQSCONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQSCONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQSCONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_SOURCEQSCONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
 }
-#define C_COPYCOMMAND_RECORD_C_SOURCE_OFFSET UINT64_C(0)
-#define C_COPYCOMMAND_RECORD_C_SOURCE_SIZE UINT64_C(40)
-#define C_COPYCOMMAND_RECORD_C_DESTINATION_OFFSET UINT64_C(40)
-#define C_COPYCOMMAND_RECORD_C_DESTINATION_SIZE UINT64_C(40)
+
+/*
+ * Destination payload context
+ * Destination payload address-space selector.
+ */
+#define C_COPYCOMMAND_C_DESTINATIONQSCONTEXT_OFFSET UINT64_C(28)
+#define C_COPYCOMMAND_C_DESTINATIONQSCONTEXT_WIDTH UINT64_C(4)
+#define C_COPYCOMMAND_C_DESTINATIONQSCONTEXT_ENDIAN C_COPYCOMMAND_ENDIAN_LITTLE
+static inline uint32_t C_COPYCOMMAND_LOAD_C_DESTINATIONQSCONTEXT(const uint8_t bytes[C_COPYCOMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQSCONTEXT_OFFSET] | ((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQSCONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQSCONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COPYCOMMAND_C_DESTINATIONQSCONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_COPYCOMMAND_STORE_C_DESTINATIONQSCONTEXT(uint8_t bytes[C_COPYCOMMAND_SIZE], uint32_t value) {
+    bytes[C_COPYCOMMAND_C_DESTINATIONQSCONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQSCONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQSCONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COPYCOMMAND_C_DESTINATIONQSCONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+#define C_COPYCOMMAND_RECORD_C_HEADER_OFFSET UINT64_C(0)
+#define C_COPYCOMMAND_RECORD_C_HEADER_SIZE UINT64_C(1)
+#define C_COPYCOMMAND_RECORD_C_SOURCE_OFFSET UINT64_C(32)
+#define C_COPYCOMMAND_RECORD_C_SOURCE_SIZE UINT64_C(32)
+#define C_COPYCOMMAND_RECORD_C_DESTINATION_OFFSET UINT64_C(64)
+#define C_COPYCOMMAND_RECORD_C_DESTINATION_SIZE UINT64_C(32)
 
 /*
  * Shared scalar target
@@ -716,16 +940,65 @@ static inline void C_WORDWRITE_STORE_C_VALUE(uint8_t bytes[C_WORDWRITE_SIZE], ui
  * Repeated pattern fill with arbitrary byte length
  * Repeated pattern fill with arbitrary byte length.
  */
-#define C_FILLCOMMAND_SIZE UINT64_C(32)
+#define C_FILLCOMMAND_SIZE UINT64_C(48)
 #define C_FILLCOMMAND_ALIGNMENT UINT64_C(8)
 #define C_FILLCOMMAND_ENDIAN_LITTLE UINT32_C(0)
 #define C_FILLCOMMAND_ENDIAN_BIG UINT32_C(1)
+/*
+ * FillCommand.header
+ * Shared command header
+ * Opcode selecting this complete command.
+ */
+
+/*
+ * Command opcode
+ * Assigned opcodes 0 through 8; all other values are invalid.
+ */
+#define C_FILLCOMMAND_C_HEADERQX2EOPCODE_C_QUCOPY UINT64_C(0)
+#define C_FILLCOMMAND_C_HEADERQX2EOPCODE_C_QUWRITE UINT64_C(1)
+#define C_FILLCOMMAND_C_HEADERQX2EOPCODE_C_QUFILL UINT64_C(2)
+#define C_FILLCOMMAND_C_HEADERQX2EOPCODE_C_QUWAIT UINT64_C(3)
+#define C_FILLCOMMAND_C_HEADERQX2EOPCODE_C_QUATOMIC UINT64_C(4)
+#define C_FILLCOMMAND_C_HEADERQX2EOPCODE_C_QUSEMAPHORE UINT64_C(5)
+#define C_FILLCOMMAND_C_HEADERQX2EOPCODE_C_QUFENCE UINT64_C(6)
+#define C_FILLCOMMAND_C_HEADERQX2EOPCODE_C_QUTRAP UINT64_C(7)
+#define C_FILLCOMMAND_C_HEADERQX2EOPCODE_C_QUTIMESTAMP UINT64_C(8)
+#define C_FILLCOMMAND_C_HEADERQX2EOPCODE_OFFSET UINT64_C(0)
+#define C_FILLCOMMAND_C_HEADERQX2EOPCODE_WIDTH UINT64_C(1)
+#define C_FILLCOMMAND_C_HEADERQX2EOPCODE_ENDIAN C_FILLCOMMAND_ENDIAN_LITTLE
+static inline uint8_t C_FILLCOMMAND_LOAD_C_HEADERQX2EOPCODE(const uint8_t bytes[C_FILLCOMMAND_SIZE]) {
+    return (uint8_t)bytes[C_FILLCOMMAND_C_HEADERQX2EOPCODE_OFFSET];
+}
+static inline void C_FILLCOMMAND_STORE_C_HEADERQX2EOPCODE(uint8_t bytes[C_FILLCOMMAND_SIZE], uint8_t value) {
+    bytes[C_FILLCOMMAND_C_HEADERQX2EOPCODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+}
+
+/*
+ * Software identifier
+ * Software identifier retained in error events.
+ */
+#define C_FILLCOMMAND_C_ID_OFFSET UINT64_C(8)
+#define C_FILLCOMMAND_C_ID_WIDTH UINT64_C(8)
+#define C_FILLCOMMAND_C_ID_ENDIAN C_FILLCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_FILLCOMMAND_LOAD_C_ID(const uint8_t bytes[C_FILLCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_FILLCOMMAND_C_ID_OFFSET] | ((uint64_t)bytes[C_FILLCOMMAND_C_ID_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_FILLCOMMAND_C_ID_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_FILLCOMMAND_C_ID_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_FILLCOMMAND_C_ID_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_FILLCOMMAND_C_ID_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_FILLCOMMAND_C_ID_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_FILLCOMMAND_C_ID_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_FILLCOMMAND_STORE_C_ID(uint8_t bytes[C_FILLCOMMAND_SIZE], uint64_t value) {
+    bytes[C_FILLCOMMAND_C_ID_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_FILLCOMMAND_C_ID_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_FILLCOMMAND_C_ID_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_FILLCOMMAND_C_ID_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_FILLCOMMAND_C_ID_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_FILLCOMMAND_C_ID_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_FILLCOMMAND_C_ID_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_FILLCOMMAND_C_ID_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
 
 /*
  * Byte-aligned destination address
  * Byte-aligned destination address.
  */
-#define C_FILLCOMMAND_C_ADDRESS_OFFSET UINT64_C(0)
+#define C_FILLCOMMAND_C_ADDRESS_OFFSET UINT64_C(16)
 #define C_FILLCOMMAND_C_ADDRESS_WIDTH UINT64_C(8)
 #define C_FILLCOMMAND_C_ADDRESS_ENDIAN C_FILLCOMMAND_ENDIAN_LITTLE
 static inline uint64_t C_FILLCOMMAND_LOAD_C_ADDRESS(const uint8_t bytes[C_FILLCOMMAND_SIZE]) {
@@ -746,7 +1019,7 @@ static inline void C_FILLCOMMAND_STORE_C_ADDRESS(uint8_t bytes[C_FILLCOMMAND_SIZ
  * Byte count including any partial final pattern
  * Byte count including any partial final pattern.
  */
-#define C_FILLCOMMAND_C_LENGTH_OFFSET UINT64_C(8)
+#define C_FILLCOMMAND_C_LENGTH_OFFSET UINT64_C(24)
 #define C_FILLCOMMAND_C_LENGTH_WIDTH UINT64_C(8)
 #define C_FILLCOMMAND_C_LENGTH_ENDIAN C_FILLCOMMAND_ENDIAN_LITTLE
 static inline uint64_t C_FILLCOMMAND_LOAD_C_LENGTH(const uint8_t bytes[C_FILLCOMMAND_SIZE]) {
@@ -767,7 +1040,7 @@ static inline void C_FILLCOMMAND_STORE_C_LENGTH(uint8_t bytes[C_FILLCOMMAND_SIZE
  * Repeated low little-endian pattern bytes
  * Repeated low little-endian pattern bytes.
  */
-#define C_FILLCOMMAND_C_PATTERN_OFFSET UINT64_C(16)
+#define C_FILLCOMMAND_C_PATTERN_OFFSET UINT64_C(32)
 #define C_FILLCOMMAND_C_PATTERN_WIDTH UINT64_C(8)
 #define C_FILLCOMMAND_C_PATTERN_ENDIAN C_FILLCOMMAND_ENDIAN_LITTLE
 static inline uint64_t C_FILLCOMMAND_LOAD_C_PATTERN(const uint8_t bytes[C_FILLCOMMAND_SIZE]) {
@@ -788,7 +1061,7 @@ static inline void C_FILLCOMMAND_STORE_C_PATTERN(uint8_t bytes[C_FILLCOMMAND_SIZ
  * Destination address-space selector
  * Destination address-space selector.
  */
-#define C_FILLCOMMAND_C_CONTEXT_OFFSET UINT64_C(24)
+#define C_FILLCOMMAND_C_CONTEXT_OFFSET UINT64_C(40)
 #define C_FILLCOMMAND_C_CONTEXT_WIDTH UINT64_C(4)
 #define C_FILLCOMMAND_C_CONTEXT_ENDIAN C_FILLCOMMAND_ENDIAN_LITTLE
 static inline uint32_t C_FILLCOMMAND_LOAD_C_CONTEXT(const uint8_t bytes[C_FILLCOMMAND_SIZE]) {
@@ -808,7 +1081,7 @@ static inline void C_FILLCOMMAND_STORE_C_CONTEXT(uint8_t bytes[C_FILLCOMMAND_SIZ
 #define C_FILLCOMMAND_C_WIDTH_C_QUBYTE UINT64_C(0)
 #define C_FILLCOMMAND_C_WIDTH_C_QUBITS32 UINT64_C(1)
 #define C_FILLCOMMAND_C_WIDTH_C_QUBITS64 UINT64_C(2)
-#define C_FILLCOMMAND_C_WIDTH_OFFSET UINT64_C(28)
+#define C_FILLCOMMAND_C_WIDTH_OFFSET UINT64_C(44)
 #define C_FILLCOMMAND_C_WIDTH_WIDTH UINT64_C(4)
 #define C_FILLCOMMAND_C_WIDTH_ENDIAN C_FILLCOMMAND_ENDIAN_LITTLE
 static inline uint32_t C_FILLCOMMAND_LOAD_C_WIDTH(const uint8_t bytes[C_FILLCOMMAND_SIZE]) {
@@ -820,15 +1093,22 @@ static inline void C_FILLCOMMAND_STORE_C_WIDTH(uint8_t bytes[C_FILLCOMMAND_SIZE]
     bytes[C_FILLCOMMAND_C_WIDTH_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
     bytes[C_FILLCOMMAND_C_WIDTH_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
 }
+#define C_FILLCOMMAND_RECORD_C_HEADER_OFFSET UINT64_C(0)
+#define C_FILLCOMMAND_RECORD_C_HEADER_SIZE UINT64_C(1)
 
 /*
  * Retained polling dependency; successful observation has acquire semantics
  * Retained polling dependency; successful observation has acquire semantics.
  */
-#define C_WAITCOMMAND_SIZE UINT64_C(32)
+#define C_WAITCOMMAND_SIZE UINT64_C(48)
 #define C_WAITCOMMAND_ALIGNMENT UINT64_C(8)
 #define C_WAITCOMMAND_ENDIAN_LITTLE UINT32_C(0)
 #define C_WAITCOMMAND_ENDIAN_BIG UINT32_C(1)
+/*
+ * WaitCommand.header
+ * Shared command header
+ * Opcode selecting this complete command.
+ */
 /*
  * WaitCommand.target
  * Word loaded for the comparison
@@ -836,10 +1116,54 @@ static inline void C_FILLCOMMAND_STORE_C_WIDTH(uint8_t bytes[C_FILLCOMMAND_SIZE]
  */
 
 /*
+ * Command opcode
+ * Assigned opcodes 0 through 8; all other values are invalid.
+ */
+#define C_WAITCOMMAND_C_HEADERQX2EOPCODE_C_QUCOPY UINT64_C(0)
+#define C_WAITCOMMAND_C_HEADERQX2EOPCODE_C_QUWRITE UINT64_C(1)
+#define C_WAITCOMMAND_C_HEADERQX2EOPCODE_C_QUFILL UINT64_C(2)
+#define C_WAITCOMMAND_C_HEADERQX2EOPCODE_C_QUWAIT UINT64_C(3)
+#define C_WAITCOMMAND_C_HEADERQX2EOPCODE_C_QUATOMIC UINT64_C(4)
+#define C_WAITCOMMAND_C_HEADERQX2EOPCODE_C_QUSEMAPHORE UINT64_C(5)
+#define C_WAITCOMMAND_C_HEADERQX2EOPCODE_C_QUFENCE UINT64_C(6)
+#define C_WAITCOMMAND_C_HEADERQX2EOPCODE_C_QUTRAP UINT64_C(7)
+#define C_WAITCOMMAND_C_HEADERQX2EOPCODE_C_QUTIMESTAMP UINT64_C(8)
+#define C_WAITCOMMAND_C_HEADERQX2EOPCODE_OFFSET UINT64_C(0)
+#define C_WAITCOMMAND_C_HEADERQX2EOPCODE_WIDTH UINT64_C(1)
+#define C_WAITCOMMAND_C_HEADERQX2EOPCODE_ENDIAN C_WAITCOMMAND_ENDIAN_LITTLE
+static inline uint8_t C_WAITCOMMAND_LOAD_C_HEADERQX2EOPCODE(const uint8_t bytes[C_WAITCOMMAND_SIZE]) {
+    return (uint8_t)bytes[C_WAITCOMMAND_C_HEADERQX2EOPCODE_OFFSET];
+}
+static inline void C_WAITCOMMAND_STORE_C_HEADERQX2EOPCODE(uint8_t bytes[C_WAITCOMMAND_SIZE], uint8_t value) {
+    bytes[C_WAITCOMMAND_C_HEADERQX2EOPCODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+}
+
+/*
+ * Software identifier
+ * Software identifier retained in error events.
+ */
+#define C_WAITCOMMAND_C_ID_OFFSET UINT64_C(8)
+#define C_WAITCOMMAND_C_ID_WIDTH UINT64_C(8)
+#define C_WAITCOMMAND_C_ID_ENDIAN C_WAITCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_WAITCOMMAND_LOAD_C_ID(const uint8_t bytes[C_WAITCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_WAITCOMMAND_C_ID_OFFSET] | ((uint64_t)bytes[C_WAITCOMMAND_C_ID_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_WAITCOMMAND_C_ID_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_WAITCOMMAND_C_ID_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_WAITCOMMAND_C_ID_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_WAITCOMMAND_C_ID_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_WAITCOMMAND_C_ID_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_WAITCOMMAND_C_ID_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_WAITCOMMAND_STORE_C_ID(uint8_t bytes[C_WAITCOMMAND_SIZE], uint64_t value) {
+    bytes[C_WAITCOMMAND_C_ID_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_ID_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_ID_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_ID_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_ID_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_ID_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_ID_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_WAITCOMMAND_C_ID_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
  * Naturally aligned little-endian word address
  * Naturally aligned little-endian word address.
  */
-#define C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET UINT64_C(0)
+#define C_WAITCOMMAND_C_TARGETQX2EADDRESS_OFFSET UINT64_C(16)
 #define C_WAITCOMMAND_C_TARGETQX2EADDRESS_WIDTH UINT64_C(8)
 #define C_WAITCOMMAND_C_TARGETQX2EADDRESS_ENDIAN C_WAITCOMMAND_ENDIAN_LITTLE
 static inline uint64_t C_WAITCOMMAND_LOAD_C_TARGETQX2EADDRESS(const uint8_t bytes[C_WAITCOMMAND_SIZE]) {
@@ -860,7 +1184,7 @@ static inline void C_WAITCOMMAND_STORE_C_TARGETQX2EADDRESS(uint8_t bytes[C_WAITC
  * Target address-space selector
  * Target address-space selector.
  */
-#define C_WAITCOMMAND_C_TARGETQX2ECONTEXT_OFFSET UINT64_C(8)
+#define C_WAITCOMMAND_C_TARGETQX2ECONTEXT_OFFSET UINT64_C(24)
 #define C_WAITCOMMAND_C_TARGETQX2ECONTEXT_WIDTH UINT64_C(4)
 #define C_WAITCOMMAND_C_TARGETQX2ECONTEXT_ENDIAN C_WAITCOMMAND_ENDIAN_LITTLE
 static inline uint32_t C_WAITCOMMAND_LOAD_C_TARGETQX2ECONTEXT(const uint8_t bytes[C_WAITCOMMAND_SIZE]) {
@@ -879,7 +1203,7 @@ static inline void C_WAITCOMMAND_STORE_C_TARGETQX2ECONTEXT(uint8_t bytes[C_WAITC
  */
 #define C_WAITCOMMAND_C_TARGETQX2EWIDTH_C_QUBITS32 UINT64_C(0)
 #define C_WAITCOMMAND_C_TARGETQX2EWIDTH_C_QUBITS64 UINT64_C(1)
-#define C_WAITCOMMAND_C_TARGETQX2EWIDTH_OFFSET UINT64_C(12)
+#define C_WAITCOMMAND_C_TARGETQX2EWIDTH_OFFSET UINT64_C(28)
 #define C_WAITCOMMAND_C_TARGETQX2EWIDTH_WIDTH UINT64_C(4)
 #define C_WAITCOMMAND_C_TARGETQX2EWIDTH_ENDIAN C_WAITCOMMAND_ENDIAN_LITTLE
 static inline uint32_t C_WAITCOMMAND_LOAD_C_TARGETQX2EWIDTH(const uint8_t bytes[C_WAITCOMMAND_SIZE]) {
@@ -896,7 +1220,7 @@ static inline void C_WAITCOMMAND_STORE_C_TARGETQX2EWIDTH(uint8_t bytes[C_WAITCOM
  * Comparison value truncated to selected width
  * Comparison value truncated to selected width.
  */
-#define C_WAITCOMMAND_C_VALUE_OFFSET UINT64_C(16)
+#define C_WAITCOMMAND_C_VALUE_OFFSET UINT64_C(32)
 #define C_WAITCOMMAND_C_VALUE_WIDTH UINT64_C(8)
 #define C_WAITCOMMAND_C_VALUE_ENDIAN C_WAITCOMMAND_ENDIAN_LITTLE
 static inline uint64_t C_WAITCOMMAND_LOAD_C_VALUE(const uint8_t bytes[C_WAITCOMMAND_SIZE]) {
@@ -928,7 +1252,7 @@ static inline void C_WAITCOMMAND_STORE_C_VALUE(uint8_t bytes[C_WAITCOMMAND_SIZE]
 #define C_WAITCOMMAND_C_COMPARISON_C_QUSIGNEDQUGREATER UINT64_C(8)
 #define C_WAITCOMMAND_C_COMPARISON_C_QUSIGNEDQUGREATERQUEQQUAL UINT64_C(9)
 #define C_WAITCOMMAND_C_COMPARISON_C_QUREACHED UINT64_C(10)
-#define C_WAITCOMMAND_C_COMPARISON_OFFSET UINT64_C(24)
+#define C_WAITCOMMAND_C_COMPARISON_OFFSET UINT64_C(40)
 #define C_WAITCOMMAND_C_COMPARISON_WIDTH UINT64_C(4)
 #define C_WAITCOMMAND_C_COMPARISON_ENDIAN C_WAITCOMMAND_ENDIAN_LITTLE
 static inline uint32_t C_WAITCOMMAND_LOAD_C_COMPARISON(const uint8_t bytes[C_WAITCOMMAND_SIZE]) {
@@ -940,17 +1264,24 @@ static inline void C_WAITCOMMAND_STORE_C_COMPARISON(uint8_t bytes[C_WAITCOMMAND_
     bytes[C_WAITCOMMAND_C_COMPARISON_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
     bytes[C_WAITCOMMAND_C_COMPARISON_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
 }
-#define C_WAITCOMMAND_RECORD_C_TARGET_OFFSET UINT64_C(0)
+#define C_WAITCOMMAND_RECORD_C_HEADER_OFFSET UINT64_C(0)
+#define C_WAITCOMMAND_RECORD_C_HEADER_SIZE UINT64_C(1)
+#define C_WAITCOMMAND_RECORD_C_TARGET_OFFSET UINT64_C(16)
 #define C_WAITCOMMAND_RECORD_C_TARGET_SIZE UINT64_C(16)
 
 /*
  * One atomic effect with no returned-result storage
  * One atomic effect with no returned-result storage.
  */
-#define C_ATOMICCOMMAND_SIZE UINT64_C(40)
+#define C_ATOMICCOMMAND_SIZE UINT64_C(56)
 #define C_ATOMICCOMMAND_ALIGNMENT UINT64_C(8)
 #define C_ATOMICCOMMAND_ENDIAN_LITTLE UINT32_C(0)
 #define C_ATOMICCOMMAND_ENDIAN_BIG UINT32_C(1)
+/*
+ * AtomicCommand.header
+ * Shared command header
+ * Opcode selecting this complete command.
+ */
 /*
  * AtomicCommand.target
  * RMW target; requires discovered width capability
@@ -958,10 +1289,54 @@ static inline void C_WAITCOMMAND_STORE_C_COMPARISON(uint8_t bytes[C_WAITCOMMAND_
  */
 
 /*
+ * Command opcode
+ * Assigned opcodes 0 through 8; all other values are invalid.
+ */
+#define C_ATOMICCOMMAND_C_HEADERQX2EOPCODE_C_QUCOPY UINT64_C(0)
+#define C_ATOMICCOMMAND_C_HEADERQX2EOPCODE_C_QUWRITE UINT64_C(1)
+#define C_ATOMICCOMMAND_C_HEADERQX2EOPCODE_C_QUFILL UINT64_C(2)
+#define C_ATOMICCOMMAND_C_HEADERQX2EOPCODE_C_QUWAIT UINT64_C(3)
+#define C_ATOMICCOMMAND_C_HEADERQX2EOPCODE_C_QUATOMIC UINT64_C(4)
+#define C_ATOMICCOMMAND_C_HEADERQX2EOPCODE_C_QUSEMAPHORE UINT64_C(5)
+#define C_ATOMICCOMMAND_C_HEADERQX2EOPCODE_C_QUFENCE UINT64_C(6)
+#define C_ATOMICCOMMAND_C_HEADERQX2EOPCODE_C_QUTRAP UINT64_C(7)
+#define C_ATOMICCOMMAND_C_HEADERQX2EOPCODE_C_QUTIMESTAMP UINT64_C(8)
+#define C_ATOMICCOMMAND_C_HEADERQX2EOPCODE_OFFSET UINT64_C(0)
+#define C_ATOMICCOMMAND_C_HEADERQX2EOPCODE_WIDTH UINT64_C(1)
+#define C_ATOMICCOMMAND_C_HEADERQX2EOPCODE_ENDIAN C_ATOMICCOMMAND_ENDIAN_LITTLE
+static inline uint8_t C_ATOMICCOMMAND_LOAD_C_HEADERQX2EOPCODE(const uint8_t bytes[C_ATOMICCOMMAND_SIZE]) {
+    return (uint8_t)bytes[C_ATOMICCOMMAND_C_HEADERQX2EOPCODE_OFFSET];
+}
+static inline void C_ATOMICCOMMAND_STORE_C_HEADERQX2EOPCODE(uint8_t bytes[C_ATOMICCOMMAND_SIZE], uint8_t value) {
+    bytes[C_ATOMICCOMMAND_C_HEADERQX2EOPCODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+}
+
+/*
+ * Software identifier
+ * Software identifier retained in error events.
+ */
+#define C_ATOMICCOMMAND_C_ID_OFFSET UINT64_C(8)
+#define C_ATOMICCOMMAND_C_ID_WIDTH UINT64_C(8)
+#define C_ATOMICCOMMAND_C_ID_ENDIAN C_ATOMICCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_ATOMICCOMMAND_LOAD_C_ID(const uint8_t bytes[C_ATOMICCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_ATOMICCOMMAND_C_ID_OFFSET] | ((uint64_t)bytes[C_ATOMICCOMMAND_C_ID_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_ATOMICCOMMAND_C_ID_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_ATOMICCOMMAND_C_ID_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_ATOMICCOMMAND_C_ID_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_ATOMICCOMMAND_C_ID_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_ATOMICCOMMAND_C_ID_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_ATOMICCOMMAND_C_ID_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_ATOMICCOMMAND_STORE_C_ID(uint8_t bytes[C_ATOMICCOMMAND_SIZE], uint64_t value) {
+    bytes[C_ATOMICCOMMAND_C_ID_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_ATOMICCOMMAND_C_ID_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_ATOMICCOMMAND_C_ID_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_ATOMICCOMMAND_C_ID_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_ATOMICCOMMAND_C_ID_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_ATOMICCOMMAND_C_ID_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_ATOMICCOMMAND_C_ID_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_ATOMICCOMMAND_C_ID_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
  * Naturally aligned little-endian word address
  * Naturally aligned little-endian word address.
  */
-#define C_ATOMICCOMMAND_C_TARGETQX2EADDRESS_OFFSET UINT64_C(0)
+#define C_ATOMICCOMMAND_C_TARGETQX2EADDRESS_OFFSET UINT64_C(16)
 #define C_ATOMICCOMMAND_C_TARGETQX2EADDRESS_WIDTH UINT64_C(8)
 #define C_ATOMICCOMMAND_C_TARGETQX2EADDRESS_ENDIAN C_ATOMICCOMMAND_ENDIAN_LITTLE
 static inline uint64_t C_ATOMICCOMMAND_LOAD_C_TARGETQX2EADDRESS(const uint8_t bytes[C_ATOMICCOMMAND_SIZE]) {
@@ -982,7 +1357,7 @@ static inline void C_ATOMICCOMMAND_STORE_C_TARGETQX2EADDRESS(uint8_t bytes[C_ATO
  * Target address-space selector
  * Target address-space selector.
  */
-#define C_ATOMICCOMMAND_C_TARGETQX2ECONTEXT_OFFSET UINT64_C(8)
+#define C_ATOMICCOMMAND_C_TARGETQX2ECONTEXT_OFFSET UINT64_C(24)
 #define C_ATOMICCOMMAND_C_TARGETQX2ECONTEXT_WIDTH UINT64_C(4)
 #define C_ATOMICCOMMAND_C_TARGETQX2ECONTEXT_ENDIAN C_ATOMICCOMMAND_ENDIAN_LITTLE
 static inline uint32_t C_ATOMICCOMMAND_LOAD_C_TARGETQX2ECONTEXT(const uint8_t bytes[C_ATOMICCOMMAND_SIZE]) {
@@ -1001,7 +1376,7 @@ static inline void C_ATOMICCOMMAND_STORE_C_TARGETQX2ECONTEXT(uint8_t bytes[C_ATO
  */
 #define C_ATOMICCOMMAND_C_TARGETQX2EWIDTH_C_QUBITS32 UINT64_C(0)
 #define C_ATOMICCOMMAND_C_TARGETQX2EWIDTH_C_QUBITS64 UINT64_C(1)
-#define C_ATOMICCOMMAND_C_TARGETQX2EWIDTH_OFFSET UINT64_C(12)
+#define C_ATOMICCOMMAND_C_TARGETQX2EWIDTH_OFFSET UINT64_C(28)
 #define C_ATOMICCOMMAND_C_TARGETQX2EWIDTH_WIDTH UINT64_C(4)
 #define C_ATOMICCOMMAND_C_TARGETQX2EWIDTH_ENDIAN C_ATOMICCOMMAND_ENDIAN_LITTLE
 static inline uint32_t C_ATOMICCOMMAND_LOAD_C_TARGETQX2EWIDTH(const uint8_t bytes[C_ATOMICCOMMAND_SIZE]) {
@@ -1022,7 +1397,7 @@ static inline void C_ATOMICCOMMAND_STORE_C_TARGETQX2EWIDTH(uint8_t bytes[C_ATOMI
 #define C_ATOMICCOMMAND_C_ORDER_C_QUACQQUIRE UINT64_C(1)
 #define C_ATOMICCOMMAND_C_ORDER_C_QURELEASE UINT64_C(2)
 #define C_ATOMICCOMMAND_C_ORDER_C_QUACQQUIREQURELEASE UINT64_C(3)
-#define C_ATOMICCOMMAND_C_ORDER_OFFSET UINT64_C(16)
+#define C_ATOMICCOMMAND_C_ORDER_OFFSET UINT64_C(32)
 #define C_ATOMICCOMMAND_C_ORDER_WIDTH UINT64_C(4)
 #define C_ATOMICCOMMAND_C_ORDER_ENDIAN C_ATOMICCOMMAND_ENDIAN_LITTLE
 static inline uint32_t C_ATOMICCOMMAND_LOAD_C_ORDER(const uint8_t bytes[C_ATOMICCOMMAND_SIZE]) {
@@ -1046,7 +1421,7 @@ static inline void C_ATOMICCOMMAND_STORE_C_ORDER(uint8_t bytes[C_ATOMICCOMMAND_S
 #define C_ATOMICCOMMAND_C_OPERATION_C_QUXOR UINT64_C(4)
 #define C_ATOMICCOMMAND_C_OPERATION_C_QUEXCHANGE UINT64_C(5)
 #define C_ATOMICCOMMAND_C_OPERATION_C_QUCOMPAREQUEXCHANGE UINT64_C(6)
-#define C_ATOMICCOMMAND_C_OPERATION_OFFSET UINT64_C(20)
+#define C_ATOMICCOMMAND_C_OPERATION_OFFSET UINT64_C(36)
 #define C_ATOMICCOMMAND_C_OPERATION_WIDTH UINT64_C(4)
 #define C_ATOMICCOMMAND_C_OPERATION_ENDIAN C_ATOMICCOMMAND_ENDIAN_LITTLE
 static inline uint32_t C_ATOMICCOMMAND_LOAD_C_OPERATION(const uint8_t bytes[C_ATOMICCOMMAND_SIZE]) {
@@ -1063,7 +1438,7 @@ static inline void C_ATOMICCOMMAND_STORE_C_OPERATION(uint8_t bytes[C_ATOMICCOMMA
  * Width-truncated bit patterns
  * Width-truncated bit patterns. Arithmetic wraps. CAS mismatch succeeds unchanged; no software old-value destination.
  */
-#define C_ATOMICCOMMAND_C_WORD0_OFFSET UINT64_C(24)
+#define C_ATOMICCOMMAND_C_WORD0_OFFSET UINT64_C(40)
 #define C_ATOMICCOMMAND_C_WORD0_WIDTH UINT64_C(8)
 #define C_ATOMICCOMMAND_C_WORD0_ENDIAN C_ATOMICCOMMAND_ENDIAN_LITTLE
 static inline uint64_t C_ATOMICCOMMAND_LOAD_C_WORD0(const uint8_t bytes[C_ATOMICCOMMAND_SIZE]) {
@@ -1084,7 +1459,7 @@ static inline void C_ATOMICCOMMAND_STORE_C_WORD0(uint8_t bytes[C_ATOMICCOMMAND_S
  * Width-truncated bit patterns
  * Width-truncated bit patterns. Arithmetic wraps. CAS mismatch succeeds unchanged; no software old-value destination.
  */
-#define C_ATOMICCOMMAND_C_WORD1_OFFSET UINT64_C(32)
+#define C_ATOMICCOMMAND_C_WORD1_OFFSET UINT64_C(48)
 #define C_ATOMICCOMMAND_C_WORD1_WIDTH UINT64_C(8)
 #define C_ATOMICCOMMAND_C_WORD1_ENDIAN C_ATOMICCOMMAND_ENDIAN_LITTLE
 static inline uint64_t C_ATOMICCOMMAND_LOAD_C_WORD1(const uint8_t bytes[C_ATOMICCOMMAND_SIZE]) {
@@ -1100,17 +1475,24 @@ static inline void C_ATOMICCOMMAND_STORE_C_WORD1(uint8_t bytes[C_ATOMICCOMMAND_S
     bytes[C_ATOMICCOMMAND_C_WORD1_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
     bytes[C_ATOMICCOMMAND_C_WORD1_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
 }
-#define C_ATOMICCOMMAND_RECORD_C_TARGET_OFFSET UINT64_C(0)
+#define C_ATOMICCOMMAND_RECORD_C_HEADER_OFFSET UINT64_C(0)
+#define C_ATOMICCOMMAND_RECORD_C_HEADER_SIZE UINT64_C(1)
+#define C_ATOMICCOMMAND_RECORD_C_TARGET_OFFSET UINT64_C(16)
 #define C_ATOMICCOMMAND_RECORD_C_TARGET_SIZE UINT64_C(16)
 
 /*
  * Atomic semaphore; requires selected-width RMW capability
  * Atomic semaphore; requires selected-width RMW capability.
  */
-#define C_SEMAPHORECOMMAND_SIZE UINT64_C(24)
+#define C_SEMAPHORECOMMAND_SIZE UINT64_C(40)
 #define C_SEMAPHORECOMMAND_ALIGNMENT UINT64_C(8)
 #define C_SEMAPHORECOMMAND_ENDIAN_LITTLE UINT32_C(0)
 #define C_SEMAPHORECOMMAND_ENDIAN_BIG UINT32_C(1)
+/*
+ * SemaphoreCommand.header
+ * Shared command header
+ * Opcode selecting this complete command.
+ */
 /*
  * SemaphoreCommand.target
  * Unsigned permit counter
@@ -1118,10 +1500,54 @@ static inline void C_ATOMICCOMMAND_STORE_C_WORD1(uint8_t bytes[C_ATOMICCOMMAND_S
  */
 
 /*
+ * Command opcode
+ * Assigned opcodes 0 through 8; all other values are invalid.
+ */
+#define C_SEMAPHORECOMMAND_C_HEADERQX2EOPCODE_C_QUCOPY UINT64_C(0)
+#define C_SEMAPHORECOMMAND_C_HEADERQX2EOPCODE_C_QUWRITE UINT64_C(1)
+#define C_SEMAPHORECOMMAND_C_HEADERQX2EOPCODE_C_QUFILL UINT64_C(2)
+#define C_SEMAPHORECOMMAND_C_HEADERQX2EOPCODE_C_QUWAIT UINT64_C(3)
+#define C_SEMAPHORECOMMAND_C_HEADERQX2EOPCODE_C_QUATOMIC UINT64_C(4)
+#define C_SEMAPHORECOMMAND_C_HEADERQX2EOPCODE_C_QUSEMAPHORE UINT64_C(5)
+#define C_SEMAPHORECOMMAND_C_HEADERQX2EOPCODE_C_QUFENCE UINT64_C(6)
+#define C_SEMAPHORECOMMAND_C_HEADERQX2EOPCODE_C_QUTRAP UINT64_C(7)
+#define C_SEMAPHORECOMMAND_C_HEADERQX2EOPCODE_C_QUTIMESTAMP UINT64_C(8)
+#define C_SEMAPHORECOMMAND_C_HEADERQX2EOPCODE_OFFSET UINT64_C(0)
+#define C_SEMAPHORECOMMAND_C_HEADERQX2EOPCODE_WIDTH UINT64_C(1)
+#define C_SEMAPHORECOMMAND_C_HEADERQX2EOPCODE_ENDIAN C_SEMAPHORECOMMAND_ENDIAN_LITTLE
+static inline uint8_t C_SEMAPHORECOMMAND_LOAD_C_HEADERQX2EOPCODE(const uint8_t bytes[C_SEMAPHORECOMMAND_SIZE]) {
+    return (uint8_t)bytes[C_SEMAPHORECOMMAND_C_HEADERQX2EOPCODE_OFFSET];
+}
+static inline void C_SEMAPHORECOMMAND_STORE_C_HEADERQX2EOPCODE(uint8_t bytes[C_SEMAPHORECOMMAND_SIZE], uint8_t value) {
+    bytes[C_SEMAPHORECOMMAND_C_HEADERQX2EOPCODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+}
+
+/*
+ * Software identifier
+ * Software identifier retained in error events.
+ */
+#define C_SEMAPHORECOMMAND_C_ID_OFFSET UINT64_C(8)
+#define C_SEMAPHORECOMMAND_C_ID_WIDTH UINT64_C(8)
+#define C_SEMAPHORECOMMAND_C_ID_ENDIAN C_SEMAPHORECOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_SEMAPHORECOMMAND_LOAD_C_ID(const uint8_t bytes[C_SEMAPHORECOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_SEMAPHORECOMMAND_C_ID_OFFSET] | ((uint64_t)bytes[C_SEMAPHORECOMMAND_C_ID_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_SEMAPHORECOMMAND_C_ID_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_SEMAPHORECOMMAND_C_ID_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_SEMAPHORECOMMAND_C_ID_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_SEMAPHORECOMMAND_C_ID_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_SEMAPHORECOMMAND_C_ID_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_SEMAPHORECOMMAND_C_ID_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_SEMAPHORECOMMAND_STORE_C_ID(uint8_t bytes[C_SEMAPHORECOMMAND_SIZE], uint64_t value) {
+    bytes[C_SEMAPHORECOMMAND_C_ID_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_SEMAPHORECOMMAND_C_ID_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_SEMAPHORECOMMAND_C_ID_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_SEMAPHORECOMMAND_C_ID_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_SEMAPHORECOMMAND_C_ID_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_SEMAPHORECOMMAND_C_ID_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_SEMAPHORECOMMAND_C_ID_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_SEMAPHORECOMMAND_C_ID_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
  * Naturally aligned little-endian word address
  * Naturally aligned little-endian word address.
  */
-#define C_SEMAPHORECOMMAND_C_TARGETQX2EADDRESS_OFFSET UINT64_C(0)
+#define C_SEMAPHORECOMMAND_C_TARGETQX2EADDRESS_OFFSET UINT64_C(16)
 #define C_SEMAPHORECOMMAND_C_TARGETQX2EADDRESS_WIDTH UINT64_C(8)
 #define C_SEMAPHORECOMMAND_C_TARGETQX2EADDRESS_ENDIAN C_SEMAPHORECOMMAND_ENDIAN_LITTLE
 static inline uint64_t C_SEMAPHORECOMMAND_LOAD_C_TARGETQX2EADDRESS(const uint8_t bytes[C_SEMAPHORECOMMAND_SIZE]) {
@@ -1142,7 +1568,7 @@ static inline void C_SEMAPHORECOMMAND_STORE_C_TARGETQX2EADDRESS(uint8_t bytes[C_
  * Target address-space selector
  * Target address-space selector.
  */
-#define C_SEMAPHORECOMMAND_C_TARGETQX2ECONTEXT_OFFSET UINT64_C(8)
+#define C_SEMAPHORECOMMAND_C_TARGETQX2ECONTEXT_OFFSET UINT64_C(24)
 #define C_SEMAPHORECOMMAND_C_TARGETQX2ECONTEXT_WIDTH UINT64_C(4)
 #define C_SEMAPHORECOMMAND_C_TARGETQX2ECONTEXT_ENDIAN C_SEMAPHORECOMMAND_ENDIAN_LITTLE
 static inline uint32_t C_SEMAPHORECOMMAND_LOAD_C_TARGETQX2ECONTEXT(const uint8_t bytes[C_SEMAPHORECOMMAND_SIZE]) {
@@ -1161,7 +1587,7 @@ static inline void C_SEMAPHORECOMMAND_STORE_C_TARGETQX2ECONTEXT(uint8_t bytes[C_
  */
 #define C_SEMAPHORECOMMAND_C_TARGETQX2EWIDTH_C_QUBITS32 UINT64_C(0)
 #define C_SEMAPHORECOMMAND_C_TARGETQX2EWIDTH_C_QUBITS64 UINT64_C(1)
-#define C_SEMAPHORECOMMAND_C_TARGETQX2EWIDTH_OFFSET UINT64_C(12)
+#define C_SEMAPHORECOMMAND_C_TARGETQX2EWIDTH_OFFSET UINT64_C(28)
 #define C_SEMAPHORECOMMAND_C_TARGETQX2EWIDTH_WIDTH UINT64_C(4)
 #define C_SEMAPHORECOMMAND_C_TARGETQX2EWIDTH_ENDIAN C_SEMAPHORECOMMAND_ENDIAN_LITTLE
 static inline uint32_t C_SEMAPHORECOMMAND_LOAD_C_TARGETQX2EWIDTH(const uint8_t bytes[C_SEMAPHORECOMMAND_SIZE]) {
@@ -1180,7 +1606,7 @@ static inline void C_SEMAPHORECOMMAND_STORE_C_TARGETQX2EWIDTH(uint8_t bytes[C_SE
  */
 #define C_SEMAPHORECOMMAND_C_OPERATION_C_QUSIGNAL UINT64_C(0)
 #define C_SEMAPHORECOMMAND_C_OPERATION_C_QUWAIT UINT64_C(1)
-#define C_SEMAPHORECOMMAND_C_OPERATION_OFFSET UINT64_C(16)
+#define C_SEMAPHORECOMMAND_C_OPERATION_OFFSET UINT64_C(32)
 #define C_SEMAPHORECOMMAND_C_OPERATION_WIDTH UINT64_C(4)
 #define C_SEMAPHORECOMMAND_C_OPERATION_ENDIAN C_SEMAPHORECOMMAND_ENDIAN_LITTLE
 static inline uint32_t C_SEMAPHORECOMMAND_LOAD_C_OPERATION(const uint8_t bytes[C_SEMAPHORECOMMAND_SIZE]) {
@@ -1192,23 +1618,74 @@ static inline void C_SEMAPHORECOMMAND_STORE_C_OPERATION(uint8_t bytes[C_SEMAPHOR
     bytes[C_SEMAPHORECOMMAND_C_OPERATION_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
     bytes[C_SEMAPHORECOMMAND_C_OPERATION_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
 }
-#define C_SEMAPHORECOMMAND_RECORD_C_TARGET_OFFSET UINT64_C(0)
+#define C_SEMAPHORECOMMAND_RECORD_C_HEADER_OFFSET UINT64_C(0)
+#define C_SEMAPHORECOMMAND_RECORD_C_HEADER_SIZE UINT64_C(1)
+#define C_SEMAPHORECOMMAND_RECORD_C_TARGET_OFFSET UINT64_C(16)
 #define C_SEMAPHORECOMMAND_RECORD_C_TARGET_SIZE UINT64_C(16)
 
 /*
  * External timer sample destination
  * Writes one little-endian 64-bit external timer sample. A target PageFault retains the original sample until resume or cancellation; units and timer progression belong to the platform.
  */
-#define C_TIMESTAMPCOMMAND_SIZE UINT64_C(16)
+#define C_TIMESTAMPCOMMAND_SIZE UINT64_C(32)
 #define C_TIMESTAMPCOMMAND_ALIGNMENT UINT64_C(8)
 #define C_TIMESTAMPCOMMAND_ENDIAN_LITTLE UINT32_C(0)
 #define C_TIMESTAMPCOMMAND_ENDIAN_BIG UINT32_C(1)
+/*
+ * TimestampCommand.header
+ * Shared command header
+ * Opcode selecting this complete command.
+ */
+
+/*
+ * Command opcode
+ * Assigned opcodes 0 through 8; all other values are invalid.
+ */
+#define C_TIMESTAMPCOMMAND_C_HEADERQX2EOPCODE_C_QUCOPY UINT64_C(0)
+#define C_TIMESTAMPCOMMAND_C_HEADERQX2EOPCODE_C_QUWRITE UINT64_C(1)
+#define C_TIMESTAMPCOMMAND_C_HEADERQX2EOPCODE_C_QUFILL UINT64_C(2)
+#define C_TIMESTAMPCOMMAND_C_HEADERQX2EOPCODE_C_QUWAIT UINT64_C(3)
+#define C_TIMESTAMPCOMMAND_C_HEADERQX2EOPCODE_C_QUATOMIC UINT64_C(4)
+#define C_TIMESTAMPCOMMAND_C_HEADERQX2EOPCODE_C_QUSEMAPHORE UINT64_C(5)
+#define C_TIMESTAMPCOMMAND_C_HEADERQX2EOPCODE_C_QUFENCE UINT64_C(6)
+#define C_TIMESTAMPCOMMAND_C_HEADERQX2EOPCODE_C_QUTRAP UINT64_C(7)
+#define C_TIMESTAMPCOMMAND_C_HEADERQX2EOPCODE_C_QUTIMESTAMP UINT64_C(8)
+#define C_TIMESTAMPCOMMAND_C_HEADERQX2EOPCODE_OFFSET UINT64_C(0)
+#define C_TIMESTAMPCOMMAND_C_HEADERQX2EOPCODE_WIDTH UINT64_C(1)
+#define C_TIMESTAMPCOMMAND_C_HEADERQX2EOPCODE_ENDIAN C_TIMESTAMPCOMMAND_ENDIAN_LITTLE
+static inline uint8_t C_TIMESTAMPCOMMAND_LOAD_C_HEADERQX2EOPCODE(const uint8_t bytes[C_TIMESTAMPCOMMAND_SIZE]) {
+    return (uint8_t)bytes[C_TIMESTAMPCOMMAND_C_HEADERQX2EOPCODE_OFFSET];
+}
+static inline void C_TIMESTAMPCOMMAND_STORE_C_HEADERQX2EOPCODE(uint8_t bytes[C_TIMESTAMPCOMMAND_SIZE], uint8_t value) {
+    bytes[C_TIMESTAMPCOMMAND_C_HEADERQX2EOPCODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+}
+
+/*
+ * Software identifier
+ * Software identifier retained in error events.
+ */
+#define C_TIMESTAMPCOMMAND_C_ID_OFFSET UINT64_C(8)
+#define C_TIMESTAMPCOMMAND_C_ID_WIDTH UINT64_C(8)
+#define C_TIMESTAMPCOMMAND_C_ID_ENDIAN C_TIMESTAMPCOMMAND_ENDIAN_LITTLE
+static inline uint64_t C_TIMESTAMPCOMMAND_LOAD_C_ID(const uint8_t bytes[C_TIMESTAMPCOMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_TIMESTAMPCOMMAND_C_ID_OFFSET] | ((uint64_t)bytes[C_TIMESTAMPCOMMAND_C_ID_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_TIMESTAMPCOMMAND_C_ID_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_TIMESTAMPCOMMAND_C_ID_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_TIMESTAMPCOMMAND_C_ID_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_TIMESTAMPCOMMAND_C_ID_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_TIMESTAMPCOMMAND_C_ID_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_TIMESTAMPCOMMAND_C_ID_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_TIMESTAMPCOMMAND_STORE_C_ID(uint8_t bytes[C_TIMESTAMPCOMMAND_SIZE], uint64_t value) {
+    bytes[C_TIMESTAMPCOMMAND_C_ID_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_TIMESTAMPCOMMAND_C_ID_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_TIMESTAMPCOMMAND_C_ID_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_TIMESTAMPCOMMAND_C_ID_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_TIMESTAMPCOMMAND_C_ID_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_TIMESTAMPCOMMAND_C_ID_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_TIMESTAMPCOMMAND_C_ID_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_TIMESTAMPCOMMAND_C_ID_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
 
 /*
  * Eight-byte-aligned destination address
  * Eight-byte-aligned destination address for one 64-bit timer sample.
  */
-#define C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET UINT64_C(0)
+#define C_TIMESTAMPCOMMAND_C_ADDRESS_OFFSET UINT64_C(16)
 #define C_TIMESTAMPCOMMAND_C_ADDRESS_WIDTH UINT64_C(8)
 #define C_TIMESTAMPCOMMAND_C_ADDRESS_ENDIAN C_TIMESTAMPCOMMAND_ENDIAN_LITTLE
 static inline uint64_t C_TIMESTAMPCOMMAND_LOAD_C_ADDRESS(const uint8_t bytes[C_TIMESTAMPCOMMAND_SIZE]) {
@@ -1229,7 +1706,7 @@ static inline void C_TIMESTAMPCOMMAND_STORE_C_ADDRESS(uint8_t bytes[C_TIMESTAMPC
  * Destination address-space selector
  * Destination context, authorized through the ordinary DMA memory path and retained through command retirement.
  */
-#define C_TIMESTAMPCOMMAND_C_CONTEXT_OFFSET UINT64_C(8)
+#define C_TIMESTAMPCOMMAND_C_CONTEXT_OFFSET UINT64_C(24)
 #define C_TIMESTAMPCOMMAND_C_CONTEXT_WIDTH UINT64_C(4)
 #define C_TIMESTAMPCOMMAND_C_CONTEXT_ENDIAN C_TIMESTAMPCOMMAND_ENDIAN_LITTLE
 static inline uint32_t C_TIMESTAMPCOMMAND_LOAD_C_CONTEXT(const uint8_t bytes[C_TIMESTAMPCOMMAND_SIZE]) {
@@ -1241,6 +1718,8 @@ static inline void C_TIMESTAMPCOMMAND_STORE_C_CONTEXT(uint8_t bytes[C_TIMESTAMPC
     bytes[C_TIMESTAMPCOMMAND_C_CONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
     bytes[C_TIMESTAMPCOMMAND_C_CONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
 }
+#define C_TIMESTAMPCOMMAND_RECORD_C_HEADER_OFFSET UINT64_C(0)
+#define C_TIMESTAMPCOMMAND_RECORD_C_HEADER_SIZE UINT64_C(1)
 
 /*
  * Error-only event

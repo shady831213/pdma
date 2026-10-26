@@ -1,6 +1,10 @@
+use pdma_model_contract::dma::{
+    ChannelBlock, CopyCommandDestinationValues, CopyCommandSourceValues, EventRegisters,
+    LinearEndpoint,
+};
+
 use super::*;
 use hardware_interface_pipeline::RunError;
-use pdma_model_contract::dma::{ChannelBlock, Endpoint, EventRegisters};
 use pdma_model_dma::{CommandExecution, Completion, Flow};
 use std::{cell::Cell, rc::Rc};
 
@@ -82,18 +86,22 @@ fn custom_command_tail_receives_only_final_completion_for_multiple_chunks() -> T
     let source = [0x5a; 600];
     let descriptor = {
         let original = command();
-        let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload else {
+        let pdma_model_contract::dma::Command::Copy(copy) = original else {
             return Err("copy fixture required".into());
         };
-        pdma_model_contract::dma::Command::copy(
-            original.id,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: u64::try_from(source.len())?,
-                source: Endpoint::linear(0x1400, 0),
-                destination: Endpoint::linear(0x1800, 0),
-                ..copy
-            },
-        )
+        pdma_model_contract::dma::Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: original.id(),
+            copy_length: u64::try_from(source.len())?,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0x1400,
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x1800,
+                offset: 0,
+            }),
+            ..copy
+        })
     };
     memory.write(0x1400.into(), MemoryAlignment::ONE, &source)?;
     submit(&mut device, &memory, descriptor)?;
@@ -147,18 +155,22 @@ fn raw_child_error_retains_command_and_resumes_without_replaying_committed_chunk
     let (mut device, memory) = setup(0x1100, 2)?;
     let descriptor = {
         let original = command();
-        let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload else {
+        let pdma_model_contract::dma::Command::Copy(copy) = original else {
             return Err("copy fixture required".into());
         };
-        pdma_model_contract::dma::Command::copy(
-            original.id,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 600,
-                source: Endpoint::linear(0x1400, 0),
-                destination: Endpoint::linear(0x1800, 0),
-                ..copy
-            },
-        )
+        pdma_model_contract::dma::Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: original.id(),
+            copy_length: 600,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0x1400,
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x1800,
+                offset: 0,
+            }),
+            ..copy
+        })
     };
     memory.write(0x1400.into(), MemoryAlignment::ONE, &[0x5a; 600])?;
     submit(&mut device, &memory, descriptor)?;

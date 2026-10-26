@@ -1,7 +1,11 @@
+use pdma_model_contract::dma::{
+    Command, CopyCommandDestinationValues, CopyCommandSourceValues, Event, ScatterGatherEndpoint,
+    Segment,
+};
+
 use super::super::buffers::Driver;
 use super::{Grant, Input, Ports, Space, TestResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::{Command, ContextId, Endpoint, Event, Segment};
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings};
 use pdma_model_software::dma::ChannelControl;
 
@@ -28,8 +32,8 @@ pub(super) async fn prepare<M: Send>(
         .allocator
         .memory_access()
         .write(src, MemoryAlignment::ONE, &input.payload)?;
-    let source_endpoint = endpoint(lists, (src, input.splits[0], length), source_id)?;
-    let destination_endpoint = endpoint(lists, (dst, input.splits[1], length), destination_id)?;
+    let source_endpoint = endpoint(lists, (src, input.splits[0], length))?;
+    let destination_endpoint = endpoint(lists, (dst, input.splits[1], length))?;
     source.pages.evict((src.raw() + input.fault_offset).into());
     destination
         .pages
@@ -59,15 +63,16 @@ pub(super) async fn prepare<M: Send>(
         ports.bus.addresses().dma,
     )
     .await?;
-    let request = Command::copy(
-        input.id,
-        pdma_model_contract::dma::CopyCommand {
-            source: source_endpoint,
-            destination: destination_endpoint,
-            copy_length: length,
-            sg_context: list_id.raw(),
-        },
-    );
+    let request = Command::Copy(pdma_model_contract::dma::CopyCommand {
+        id: input.id,
+        source: CopyCommandSourceValues::ScatterGather(source_endpoint),
+        source_context: source_id.raw(),
+        destination: CopyCommandDestinationValues::ScatterGather(destination_endpoint),
+        destination_context: destination_id.raw(),
+        copy_length: length,
+        sg_context: list_id.raw(),
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    });
     let address = ports.allocator.allocate(8, MemoryAlignment::try_new(8)?)?;
     ports
         .memory
@@ -86,8 +91,7 @@ pub(super) async fn prepare<M: Send>(
 fn endpoint(
     lists: &Space,
     (address, split, length): (MemoryAddress, u64, u64),
-    context: ContextId,
-) -> TestResult<Endpoint> {
+) -> TestResult<ScatterGatherEndpoint> {
     let base = lists.allocator.allocate(
         u64::try_from(2 * Segment::RECORD_SIZE)?,
         MemoryAlignment::try_new(u64::try_from(Segment::RECORD_ALIGNMENT)?)?,
@@ -111,8 +115,10 @@ fn endpoint(
             &segment.to_bytes()?,
         )?;
     }
-    Ok(Endpoint {
-        context: context.raw(),
-        ..Endpoint::scatter_gather(base.raw(), 2)
+    Ok(ScatterGatherEndpoint {
+        list_address: base.raw(),
+        count: 2,
+        index: 0,
+        offset: 0,
     })
 }

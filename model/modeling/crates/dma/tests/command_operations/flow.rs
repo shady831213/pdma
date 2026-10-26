@@ -1,10 +1,9 @@
 use super::support::{CAUSE, EVENT_PRODUCER, Rig, TestResult, fence, target};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::ChannelInterrupts;
-use pdma_model_contract::dma::ChannelRecovery;
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelRegisters, Command, FillCommand, FillCommandWidth, WaitCommand,
-    WaitCommandComparison, WordWrite,
+    ChannelBlock, ChannelInterrupts, ChannelRecovery, ChannelRegisters, Command, CommandHeader,
+    FillCommand, FillCommandWidth, Opcode, TrapCommand, WaitCommand, WaitCommandComparison,
+    WordWrite, WriteCommand,
 };
 
 #[test]
@@ -14,23 +13,27 @@ fn write_fill_and_fence_commit_without_events() -> TestResult {
     rig.submit(
         0,
         &[
-            Command::write(
-                1,
-                WordWrite {
+            Command::Write(WriteCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Write,
+                },
+                id: 1,
+                word: WordWrite {
                     target: target(0x8000),
                     value: 0x1234,
                 },
-            ),
-            Command::fill(
-                2,
-                FillCommand {
-                    address: 0x8101,
-                    length: 259,
-                    pattern: 0x0403_0201,
-                    context: 0,
-                    width: FillCommandWidth::Bits32,
+            }),
+            Command::Fill(FillCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Fill,
                 },
-            ),
+                id: 2,
+                address: 0x8101,
+                length: 259,
+                pattern: 0x0403_0201,
+                context: 0,
+                width: FillCommandWidth::Bits32,
+            }),
             fence(0x9000),
         ],
     )?;
@@ -59,14 +62,15 @@ fn false_wait_yields_to_peer_and_blocks_own_fence() -> TestResult {
     rig.submit(
         0,
         &[
-            Command::wait(
-                1,
-                WaitCommand {
-                    target: target(0x8000),
-                    value: 7,
-                    comparison: WaitCommandComparison::Equal,
+            Command::Wait(WaitCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Wait,
                 },
-            ),
+                id: 1,
+                target: target(0x8000),
+                value: 7,
+                comparison: WaitCommandComparison::Equal,
+            }),
             fence(0x9000),
         ],
     )?;
@@ -85,13 +89,16 @@ fn false_wait_yields_to_peer_and_blocks_own_fence() -> TestResult {
     rig.submit(
         1,
         &[
-            Command::write(
-                2,
-                WordWrite {
+            Command::Write(WriteCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Write,
+                },
+                id: 2,
+                word: WordWrite {
                     target: target(0x8000),
                     value: 7,
                 },
-            ),
+            }),
             fence(0x9010),
         ],
     )?;
@@ -107,7 +114,18 @@ fn false_wait_yields_to_peer_and_blocks_own_fence() -> TestResult {
 fn trap_ack_preserves_pending_notification() -> TestResult {
     // Given: a Trap followed by software-visible completion storage.
     let mut rig = Rig::new(1, 0)?;
-    rig.submit(0, &[Command::trap(1), fence(0x9000)])?;
+    rig.submit(
+        0,
+        &[
+            Command::Trap(TrapCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Trap,
+                },
+                id: 1,
+            }),
+            fence(0x9000),
+        ],
+    )?;
     // When: software acknowledges the sticky cause before claiming the IRQ.
     rig.drive()?;
     assert_eq!(rig.register(0, CAUSE)? & 2, 2);
@@ -131,17 +149,18 @@ fn abort_cancels_wait_without_fault_resume() -> TestResult {
     let mut rig = Rig::new(1, 0)?;
     rig.submit(
         0,
-        &[Command::wait(
-            1,
-            WaitCommand {
-                target: pdma_model_contract::dma::WordTarget {
-                    context: 1,
-                    ..target(0x8000)
-                },
-                value: 1,
-                comparison: WaitCommandComparison::Equal,
+        &[Command::Wait(WaitCommand {
+            header: CommandHeader {
+                opcode: Opcode::Wait,
             },
-        )],
+            id: 1,
+            target: pdma_model_contract::dma::WordTarget {
+                context: 1,
+                ..target(0x8000)
+            },
+            value: 1,
+            comparison: WaitCommandComparison::Equal,
+        })],
     )?;
     rig.drive()?;
     // When: context Abort cancels that wait.

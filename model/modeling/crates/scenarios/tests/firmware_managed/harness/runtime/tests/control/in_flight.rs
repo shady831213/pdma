@@ -1,8 +1,11 @@
+use pdma_model_contract::dma::{
+    Command, CopyCommandDestinationValues, CopyCommandSourceValues, Event, LinearEndpoint,
+};
+
 const PF: FunctionId = FunctionId::new(0);
 
 use super::*;
 use hardware_interface_runtime::{MemoryAccess, MemoryAccessError};
-use pdma_model_contract::dma::{Command, Endpoint, Event};
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::{Channel, ChannelConfig, Rings};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -185,15 +188,20 @@ fn prepare_copy(
 }
 
 fn copy(id: u64, (source, destination): (MemoryAddress, MemoryAddress), length: u64) -> Command {
-    Command::copy(
+    Command::Copy(pdma_model_contract::dma::CopyCommand {
         id,
-        pdma_model_contract::dma::CopyCommand {
-            copy_length: length,
-            sg_context: 0,
-            source: Endpoint::linear(source.raw(), 0),
-            destination: Endpoint::linear(destination.raw(), 0),
-        },
-    )
+        copy_length: length,
+        sg_context: 0,
+        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: source.raw(),
+            offset: 0,
+        }),
+        destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: destination.raw(),
+            offset: 0,
+        }),
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    })
 }
 
 async fn complete(

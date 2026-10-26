@@ -1,10 +1,11 @@
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelConfiguration, ChannelId, ChannelInterrupts, ChannelRegisters, Command,
+    CommandHeader, CommandRegisters, CopyCommandDestinationValues, CopyCommandSourceValues,
+    EventRegisters, FenceCommand, LinearEndpoint, Opcode,
+};
+
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::ChannelConfiguration;
-use pdma_model_contract::dma::ChannelInterrupts;
-use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Endpoint, EventRegisters,
-};
 use pdma_model_dma::Dma;
 /// Test harness error propagation.
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -86,15 +87,20 @@ where
     M::Error: std::error::Error + 'static,
 {
     let memory = 0x1000 + u64::try_from(index)? * 0x1000;
-    let command = Command::copy(
+    let command = Command::Copy(pdma_model_contract::dma::CopyCommand {
         id,
-        pdma_model_contract::dma::CopyCommand {
-            copy_length: 512,
-            sg_context: 0,
-            source: Endpoint::linear(memory + 0x200, 0),
-            destination: Endpoint::linear(memory + 0x400, 0),
-        },
-    );
+        copy_length: 512,
+        sg_context: 0,
+        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: memory + 0x200,
+            offset: 0,
+        }),
+        destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: memory + 0x400,
+            offset: 0,
+        }),
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    });
     device.memory.write(
         MemoryAddress::new(memory),
         MemoryAlignment::ONE,
@@ -109,9 +115,12 @@ where
     M::Error: std::error::Error + 'static,
 {
     let memory = 0x1000 + u64::try_from(index)? * 0x1000;
-    let fence = Command::fence(
+    let fence = Command::Fence(FenceCommand {
+        header: CommandHeader {
+            opcode: Opcode::Fence,
+        },
         id,
-        pdma_model_contract::dma::WordWrite {
+        word: pdma_model_contract::dma::WordWrite {
             target: pdma_model_contract::dma::WordTarget {
                 address: memory + 0xf00,
                 context: 0,
@@ -119,7 +128,7 @@ where
             },
             value: id.wrapping_add(1),
         },
-    );
+    });
     device.memory.write(
         MemoryAddress::new(memory + 0xf00),
         MemoryAlignment::ONE,

@@ -10,7 +10,7 @@ record_schema! {
                 kind: 3..=4 => enum { variants: { Small = 1, Large = 2 } },
                 priority: 5..=7,
             } },
-            payload: union {
+            payload: tagged_union {
                 tag: self.flags.kind,
                 cases: { Small { first: u16 }, Large { first: u16, second: u16 } },
             },
@@ -40,10 +40,10 @@ record_schema! {
                 right: 2..=2 => enum { variants: { First = 0, Second = 1 } },
                 ready: 7..=7,
             } },
-            left: union { tag: self.tags.left,
+            left: tagged_union { tag: self.tags.left,
                 cases: { First { value: u8 }, Second { value: u8 } },
             },
-            right: union { tag: self.tags.right,
+            right: tagged_union { tag: self.tags.right,
                 cases: { First { value: u8 }, Second { value: u8 } },
             },
         },
@@ -59,7 +59,7 @@ record_schema! {
         fields: {
             prefix: u16,
             header: bits(named::Header),
-            payload: union {
+            payload: tagged_union {
                 tag: self.header.kind,
                 cases: { Small(Small), Large(Large) },
             },

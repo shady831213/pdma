@@ -1,8 +1,8 @@
 use super::support::{CAUSE, EVENT_PRODUCER, Rig, TestResult, fence, target};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelRegisters, Command, WaitCommand, WaitCommandComparison,
+    ChannelBlock, ChannelInterrupts, ChannelRegisters, Command, CommandHeader, Opcode, TrapCommand,
+    WaitCommand, WaitCommandComparison,
 };
 
 #[test]
@@ -17,17 +17,28 @@ fn unmask_does_not_replay_trap_but_a_later_trap_emits() -> TestResult {
     rig.submit(
         0,
         &[
-            Command::trap(1),
-            fence(0x9000),
-            Command::wait(
-                2,
-                WaitCommand {
-                    target: target(0x8000),
-                    value: 1,
-                    comparison: WaitCommandComparison::Equal,
+            Command::Trap(TrapCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Trap,
                 },
-            ),
-            Command::trap(3),
+                id: 1,
+            }),
+            fence(0x9000),
+            Command::Wait(WaitCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Wait,
+                },
+                id: 2,
+                target: target(0x8000),
+                value: 1,
+                comparison: WaitCommandComparison::Equal,
+            }),
+            Command::Trap(TrapCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Trap,
+                },
+                id: 3,
+            }),
             fence(0x9010),
         ],
     )?;

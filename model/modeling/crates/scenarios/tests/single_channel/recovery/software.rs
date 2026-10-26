@@ -1,14 +1,18 @@
 //! Complete CPU-local programs: allocation, ISR registration, draining and reset.
 
+use pdma_model_contract::dma::{
+    ChannelFatalCode, ChannelId, ChannelIrqCauseValues, ChannelIrqMaskValues, Command,
+    CommandHeader, CopyCommand, CopyCommandDestinationValues, CopyCommandSourceValues, Event,
+    LinearEndpoint, Opcode, ScatterGatherEndpoint, TrapCommand,
+};
+
+mod submission;
+
 use super::Scenario;
 use crate::harness::TestResult;
 use hardware_interface_runtime::{
     InterruptHandler, InterruptRegistration, MemoryAccess, MemoryAddress, MemoryAlignment,
     RegisterAccess, SharedMemoryAccess, SharedMemoryAllocator,
-};
-use pdma_model_contract::dma::{
-    ChannelFatalCode, ChannelId, ChannelIrqCauseValues, ChannelIrqMaskValues, Command, Endpoint,
-    Event,
 };
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Irq};
 use std::{convert::Infallible, error::Error};
@@ -98,49 +102,19 @@ where
     };
     let fence = completion(&ports.allocator)?;
     let request = pdma_model_contract::dma::CopyCommand {
-        source: Endpoint::linear(source.raw(), 0),
-        destination: Endpoint::linear(destination.raw(), 0),
+        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: source.raw(),
+            offset: 0,
+        }),
+        destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: destination.raw(),
+            offset: 0,
+        }),
         copy_length: length,
         sg_context: 0,
+        ..pdma_model_contract::dma::CopyCommand::ZERO
     };
-    match scenario {
-        Scenario::Batch => {
-            channel
-                .set_irq_mask(ChannelIrqMaskValues::default().with_event_non_empty(true)?)
-                .await?;
-            for index in 0..3 {
-                channel
-                    .submit(Command::copy(
-                        40 + index,
-                        pdma_model_contract::dma::CopyCommand {
-                            destination: Endpoint::linear(destination.raw() + index * length, 0),
-                            ..request
-                        },
-                    ))
-                    .await?;
-            }
-            channel.submit(fence.command(43)).await?;
-            channel.submit(Command::trap(44)).await?;
-        }
-        Scenario::ChannelReset => {
-            channel
-                .set_irq_mask(
-                    ChannelIrqMaskValues::default()
-                        .with_event_non_empty(true)?
-                        .with_trap(true)?,
-                )
-                .await?;
-            channel
-                .submit(Command::copy(
-                    41,
-                    pdma_model_contract::dma::CopyCommand {
-                        destination: Endpoint::scatter_gather(0, 0),
-                        ..request
-                    },
-                ))
-                .await?;
-        }
-    }
+    submission::initial(&mut channel, scenario, (request, fence)).await?;
     outcome
         .wait_and_drain(&mut channel, &mut notifications)
         .await?;
@@ -150,9 +124,18 @@ where
             outcome.fatal = channel.fatal().await?;
             channel.reset().await?;
             channel = Channel::setup(ports.bus, ports.memory.clone(), config).await?;
-            channel.submit(Command::copy(42, request)).await?;
+            channel
+                .submit(Command::Copy(CopyCommand { id: 42, ..request }))
+                .await?;
             channel.submit(fence.command(43)).await?;
-            channel.submit(Command::trap(44)).await?;
+            channel
+                .submit(Command::Trap(TrapCommand {
+                    header: CommandHeader {
+                        opcode: Opcode::Trap,
+                    },
+                    id: 44,
+                }))
+                .await?;
             outcome
                 .wait_and_drain(&mut channel, &mut notifications)
                 .await?;

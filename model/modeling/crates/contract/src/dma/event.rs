@@ -26,7 +26,7 @@ record_schema! {
             code: enum(u32) { variants: { InvalidLength = 1, ReadError = 2, WriteError = 3, LengthMismatch = 4, ListReadError = 5, Unsupported = 6, InvalidOperation = 7, ArithmeticOverflow = 8 } },
             #[short_description = "Code-selected error progress"]
             #[description = "Code-selected error progress."]
-            info: union { tag: self.code, cases: { InvalidLength(ErrorInfo), ReadError(ErrorInfo), WriteError(ErrorInfo), LengthMismatch(ErrorInfo), ListReadError(ErrorInfo), Unsupported(ErrorInfo), InvalidOperation(ErrorInfo), ArithmeticOverflow(ErrorInfo) } },
+            info: tagged_union { tag: self.code, cases: { InvalidLength(ErrorInfo), ReadError(ErrorInfo), WriteError(ErrorInfo), LengthMismatch(ErrorInfo), ListReadError(ErrorInfo), Unsupported(ErrorInfo), InvalidOperation(ErrorInfo), ArithmeticOverflow(ErrorInfo) } },
         },
     }
 }

@@ -1,5 +1,7 @@
 //! Software owns allocation, shared IRQ draining and channel reset through the bus.
 
+use pdma_model_contract::dma::{ChannelId, CommandHeader, DmaRegisters, Opcode, TrapCommand};
+
 mod buffers;
 mod reset;
 
@@ -7,7 +9,6 @@ use hardware_interface_runtime::{
     InterruptHandler, InterruptRegistration, MemoryAddress, RegisterAccess, SharedMemoryAccess,
     SharedMemoryAllocator,
 };
-use pdma_model_contract::dma::{ChannelId, DmaRegisters};
 use pdma_model_host::{Channel, runtime::Irq};
 use std::{convert::Infallible, error::Error};
 use tokio::sync::mpsc;
@@ -108,7 +109,12 @@ where
     fresh.fence.0.value = 20;
     replacement.submit(fresh.fence.command(120)).await?;
     replacement
-        .submit(pdma_model_contract::dma::Command::trap(220))
+        .submit(pdma_model_contract::dma::Command::Trap(TrapCommand {
+            header: CommandHeader {
+                opcode: Opcode::Trap,
+            },
+            id: 220,
+        }))
         .await?;
     channels.insert(reset_index, replacement);
     let fresh_destination = fresh.destination;
@@ -186,9 +192,12 @@ where
             .submit(allocation.fence.command(100 + u64::try_from(index)?))
             .await?;
         channel
-            .submit(pdma_model_contract::dma::Command::trap(
-                200 + u64::try_from(index)?,
-            ))
+            .submit(pdma_model_contract::dma::Command::Trap(TrapCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Trap,
+                },
+                id: 200 + u64::try_from(index)?,
+            }))
             .await?;
         buffers.push(allocation);
         channels.push(channel);

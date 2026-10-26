@@ -1,12 +1,13 @@
 //! Channel requests cross stage boundaries as values, without speculative fetches.
 
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelConfiguration, ChannelId, ChannelRegisters, Command, CommandRegisters,
+    CopyCommandDestinationValues, CopyCommandSourceValues, EventRegisters, LinearEndpoint,
+};
+
 use hardware_interface_pipeline::{Arbitration, Operation, Stage, StepOutcome, StepResult, Then};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-};
-use pdma_model_contract::dma::ChannelConfiguration;
-use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Endpoint, EventRegisters,
 };
 use pdma_model_dma::{Candidate, CommandRequest, Dma, Fetch, FetchedCommand, RoundRobin};
 use std::cell::RefCell;
@@ -70,15 +71,20 @@ fn fixture() -> TestResult<Dma<ObservedMemory>> {
     for index in 0..2 {
         let base = ChannelId::new(index).register_offset(2).ok_or("channel")?;
         let address = 0x1000 + u64::try_from(index)? * 0x100;
-        let command = Command::copy(
-            address,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 4,
-                sg_context: 0,
-                source: Endpoint::linear(0x2000, 0),
-                destination: Endpoint::linear(0x2100, 0),
-            },
-        );
+        let command = Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: address,
+            copy_length: 4,
+            sg_context: 0,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0x2000,
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x2100,
+                offset: 0,
+            }),
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        });
         device
             .memory
             .backing

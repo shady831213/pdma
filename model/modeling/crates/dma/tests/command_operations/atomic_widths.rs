@@ -5,7 +5,7 @@ use pdma_model_contract::dma::{
     AtomicCommandOperandsCompareExchangeValues, AtomicCommandOperandsExchangeValues,
     AtomicCommandOperandsOrValues, AtomicCommandOperandsSubtractValues,
     AtomicCommandOperandsValues as Operands, AtomicCommandOperandsXorValues, AtomicCommandOrder,
-    Command, WordTargetWidth,
+    Command, CommandHeader, Opcode, WordTargetWidth,
 };
 
 #[test]
@@ -58,15 +58,16 @@ fn each_atomic_operation_uses_width_truncated_bits() -> TestResult {
             rig.submit(
                 0,
                 &[
-                    Command::atomic(
-                        1,
-                        AtomicCommand {
-                            target,
-                            order: AtomicCommandOrder::Release,
-                            operation: operands.tag(),
-                            operands,
+                    Command::Atomic(AtomicCommand {
+                        header: CommandHeader {
+                            opcode: Opcode::Atomic,
                         },
-                    ),
+                        id: 1,
+                        target,
+                        order: AtomicCommandOrder::Release,
+                        operation: operands.tag(),
+                        operands,
+                    }),
                     fence(0x9000),
                 ],
             )?;

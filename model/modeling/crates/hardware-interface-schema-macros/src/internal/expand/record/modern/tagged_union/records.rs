@@ -1,19 +1,19 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-use super::{codec, scalar, tag_info, union_geometry};
-use crate::internal::syntax::{ModernRecordDecl, UnionDecl};
+use super::{codec, scalar, tag_info, tagged_union_geometry};
+use crate::internal::syntax::{ModernRecordDecl, TaggedUnionDecl};
 
 pub(in crate::internal::expand::record::modern) fn expand(
     record: &ModernRecordDecl,
     field: &syn::Ident,
-    decl: &UnionDecl,
+    decl: &TaggedUnionDecl,
     visibility: &syn::Visibility,
     facade: &TokenStream,
 ) -> syn::Result<TokenStream> {
     let name = scalar::type_name(&record.name, field, "Values");
     let raw = scalar::type_name(&record.name, field, "Raw");
-    let geometry = union_geometry(decl, facade)
+    let geometry = tagged_union_geometry(decl, facade)
         .ok_or_else(|| syn::Error::new(field.span(), "union has no storage"))?;
     let extent = &geometry.extent;
     let alignment = &geometry.storage.width;

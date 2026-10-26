@@ -13,8 +13,8 @@ mod register;
 
 pub(in crate::internal) use map_ordered::{AccessPathDecl, OrderedMapDecl, OrderedPlacementDecl};
 pub(in crate::internal) use record::{
-    BitsDecl, ModernFieldDecl, ModernRecordDecl, ModernTypeDecl, ScalarType, ScopedPath,
-    UnionCaseDecl, UnionDecl, UnionFieldDecl, UnionFieldType,
+    BitsDecl, ModernFieldDecl, ModernRecordDecl, ModernTypeDecl, ScalarType, TaggedUnionCaseDecl,
+    TaggedUnionDecl, TaggedUnionFieldDecl, TaggedUnionFieldType, TaggedUnionTagPath,
 };
 pub(in crate::internal) use register::{AccessValue, RegisterDefinitionDecl, RegisterFieldsDecl};
 
@@ -50,3 +50,7 @@ pub(in crate::internal) fn u64_lit(input: ParseStream<'_>) -> Result<(u64, proc_
     Ok((value, literal.span()))
 }
 pub(in crate::internal) use bits::{BitFieldDecl, BitsSchemaDecl};
+mod untagged_union;
+pub(in crate::internal) use untagged_union::UntaggedUnionDecl;
+#[cfg(test)]
+mod union_keyword_tests;

@@ -1,10 +1,14 @@
+use pdma_model_contract::dma::{
+    ChannelId, Command, CopyCommandDestinationValues, CopyCommandSourceValues, Event,
+    LinearEndpoint,
+};
+
 use super::{Ports, TestResult};
 use crate::harness::runtime::HostBus;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
 use pdma_model_contract::control::{ControlQueue, ControlRequest, ControlResponse};
-use pdma_model_contract::dma::{ChannelId, Command, Endpoint, Event};
 use pdma_model_host::{
     Channel, ChannelConfig, Management, ManagementConfig, ManagementRings, RingConfig, Rings,
 };
@@ -62,15 +66,20 @@ impl Transfer {
         driver.set_irq_enabled(false).await?;
         Ok(Self {
             driver,
-            command: Command::copy(
-                0,
-                pdma_model_contract::dma::CopyCommand {
-                    copy_length: length,
-                    sg_context: 0,
-                    source: Endpoint::linear(source.raw(), 0),
-                    destination: Endpoint::linear(destination.raw(), 0),
-                },
-            ),
+            command: Command::Copy(pdma_model_contract::dma::CopyCommand {
+                id: 0,
+                copy_length: length,
+                sg_context: 0,
+                source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                    address: source.raw(),
+                    offset: 0,
+                }),
+                destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                    address: destination.raw(),
+                    offset: 0,
+                }),
+                ..pdma_model_contract::dma::CopyCommand::ZERO
+            }),
             destination,
             length: payload.len(),
             memory: ports.memory.clone(),
@@ -88,7 +97,10 @@ impl Transfer {
     }
 
     pub(super) async fn start(&mut self, id: u64) -> TestResult {
-        self.command.id = id;
+        let Command::Copy(copy) = &mut self.command else {
+            return Err("expected Copy".into());
+        };
+        copy.id = id;
         self.completion.0.value = id;
         self.driver.submit(self.command).await?;
         self.driver.submit(self.completion.command(id)).await?;

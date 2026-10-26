@@ -1,3 +1,7 @@
+use pdma_model_contract::dma::{
+    CopyCommandDestinationValues, CopyCommandSourceValues, LinearEndpoint,
+};
+
 use super::*;
 
 pub(in crate::harness::program::contexts) struct Mixed {
@@ -109,19 +113,20 @@ const fn command(
     (source, destination): ((MemoryAddress, ContextId), (MemoryAddress, ContextId)),
     length: u64,
 ) -> Command {
-    Command::copy(
+    Command::Copy(pdma_model_contract::dma::CopyCommand {
         id,
-        pdma_model_contract::dma::CopyCommand {
-            copy_length: length,
-            source: Endpoint {
-                context: source.1.raw(),
-                ..Endpoint::linear(source.0.raw(), 0)
-            },
-            destination: Endpoint {
-                context: destination.1.raw(),
-                ..Endpoint::linear(destination.0.raw(), 0)
-            },
-            sg_context: 0,
-        },
-    )
+        copy_length: length,
+        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: source.0.raw(),
+            offset: 0,
+        }),
+        source_context: source.1.raw(),
+        destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: destination.0.raw(),
+            offset: 0,
+        }),
+        destination_context: destination.1.raw(),
+        sg_context: 0,
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    })
 }

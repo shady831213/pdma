@@ -1,14 +1,15 @@
 //! The complete software program and its persistent interrupt handler.
 
+use pdma_model_contract::dma::{
+    ChannelFatalCode, ChannelId, Command, CommandHeader, CopyCommand, Event, FenceCommand, Opcode,
+    Segment, TrapCommand, WordTarget, WordTargetWidth, WordWrite,
+};
+
 mod buffers;
 
 use hardware_interface_runtime::{
     InterruptHandler, InterruptRegistration, MemoryAccess, MemoryAddress, MemoryAlignment,
     RegisterAccess, SharedMemoryAccess, SharedMemoryAllocator,
-};
-use pdma_model_contract::dma::{
-    ChannelFatalCode, ChannelId, Command, CopyCommand, Event, Segment, WordTarget, WordTargetWidth,
-    WordWrite,
 };
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as HostError, RingConfig, Rings, runtime::Irq,
@@ -154,20 +155,29 @@ where
         .write(fence, MemoryAlignment::try_new(8)?, &0_u64.to_le_bytes())?;
     let mut channel = Channel::setup(ports.bus, ports.memory.clone(), config).await?;
     channel
-        .submit(Command::copy(
-            7,
-            CopyCommand {
-                copy_length: u64::try_from(input.data.len())?,
-                sg_context: 0,
-                source: source.endpoint,
-                destination: destination.endpoint,
+        .submit(Command::Copy(CopyCommand {
+            id: 7,
+            copy_length: u64::try_from(input.data.len())?,
+            sg_context: 0,
+            source: source.endpoint,
+            destination: match destination.endpoint {
+                pdma_model_contract::dma::CopyCommandSourceValues::Linear(endpoint) => {
+                    pdma_model_contract::dma::CopyCommandDestinationValues::Linear(endpoint)
+                }
+                pdma_model_contract::dma::CopyCommandSourceValues::ScatterGather(endpoint) => {
+                    pdma_model_contract::dma::CopyCommandDestinationValues::ScatterGather(endpoint)
+                }
             },
-        ))
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        }))
         .await?;
     channel
-        .submit(Command::fence(
-            8,
-            WordWrite {
+        .submit(Command::Fence(FenceCommand {
+            header: CommandHeader {
+                opcode: Opcode::Fence,
+            },
+            id: 8,
+            word: WordWrite {
                 target: WordTarget {
                     address: fence.raw(),
                     context: 0,
@@ -175,9 +185,16 @@ where
                 },
                 value: 7,
             },
-        ))
+        }))
         .await?;
-    channel.submit(Command::trap(9)).await?;
+    channel
+        .submit(Command::Trap(TrapCommand {
+            header: CommandHeader {
+                opcode: Opcode::Trap,
+            },
+            id: 9,
+        }))
+        .await?;
 
     let (completion, received) = oneshot::channel();
     ports.interrupts.register(

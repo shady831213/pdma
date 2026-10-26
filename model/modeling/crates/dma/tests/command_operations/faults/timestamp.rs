@@ -1,7 +1,9 @@
 use super::{FaultMemory, rig};
 use crate::command_operations::support::{EVENT_PRODUCER, Rig, TestResult, fence};
-use pdma_model_contract::dma::ChannelRecovery;
-use pdma_model_contract::dma::{ChannelBlock, ChannelRegisters, Command, TimestampCommand};
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelRecovery, ChannelRegisters, Command, CommandHeader, Opcode,
+    TimestampCommand,
+};
 use pdma_model_dma::Timer;
 use std::sync::{
     Arc,
@@ -19,13 +21,14 @@ impl Timer for PlatformTimer {
 }
 
 const fn timestamp(id: u64, address: u64) -> Command {
-    Command::timestamp(
-        id,
-        TimestampCommand {
-            address,
-            context: 0,
+    Command::Timestamp(TimestampCommand {
+        header: CommandHeader {
+            opcode: Opcode::Timestamp,
         },
-    )
+        id,
+        address,
+        context: 0,
+    })
 }
 
 fn resume(rig: &mut Rig<FaultMemory>) -> TestResult {

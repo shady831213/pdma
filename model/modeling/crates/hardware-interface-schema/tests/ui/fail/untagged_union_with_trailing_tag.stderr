@@ -1,0 +1,5 @@
+error: untagged union cannot declare `tag`; use an inline `tagged_union` field in a record
+ --> tests/ui/fail/untagged_union_with_trailing_tag.rs:5:5
+  |
+5 |     tag: self.kind,
+  |     ^^^

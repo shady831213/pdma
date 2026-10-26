@@ -12,7 +12,7 @@ use crate::harness::{
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::{
     control::ControlResponseStatus,
-    dma::{ChannelId, Command, ContextId, Endpoint, Event},
+    dma::{ChannelId, Command, ContextId, Event},
     memory::{ContextAttributes, FunctionId},
 };
 use pdma_model_software::control::InterruptEvent;
@@ -103,11 +103,14 @@ pub(in crate::harness) async fn main<M: Send>(
         .ok_or("unknown new source")?;
     let mut next_driver = setup::driver(&ports, new_channel, session.ring_context).await?;
     payload.pages.evict(first.address);
+    let Command::Copy(copy) = request else {
+        return Err("expected Copy".into());
+    };
     next_driver
-        .submit(Command {
+        .submit(Command::Copy(pdma_model_contract::dma::CopyCommand {
             id: input.ids[2],
-            ..request
-        })
+            ..copy
+        }))
         .await?;
     let fence = setup::fence(&ports, session.ring_context, input.ids[2])?;
     next_driver.submit(fence.command(input.ids[2])).await?;

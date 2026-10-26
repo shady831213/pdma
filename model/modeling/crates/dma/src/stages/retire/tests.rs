@@ -1,12 +1,13 @@
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelConfiguration, ChannelId, ChannelRegisters, Command, CommandRegisters,
+    CopyCommandDestinationValues, CopyCommandSourceValues, EventRegisters, LinearEndpoint,
+};
+
 use crate::{Dma, Error, PrepareChunk, ReadCopy, WriteCopy};
-use pdma_model_contract::dma::ChannelConfiguration;
 mod collection;
 mod identity;
 use hardware_interface_pipeline::{Operation, StepOutcome, Then};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, MemoryRegion, SharedMemory};
-use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Endpoint, EventRegisters,
-};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -17,15 +18,20 @@ fn queued_channel(channel: ChannelId) -> TestResult<Dma<SharedMemory>> {
         0x1000,
         MemoryAlignment::ONE,
     )?])?;
-    let command = Command::copy(
-        17,
-        pdma_model_contract::dma::CopyCommand {
-            copy_length: 4,
-            sg_context: 0,
-            source: Endpoint::linear(0x1200, 0),
-            destination: Endpoint::linear(0x1300, 0),
-        },
-    );
+    let command = Command::Copy(pdma_model_contract::dma::CopyCommand {
+        id: 17,
+        copy_length: 4,
+        sg_context: 0,
+        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: 0x1200,
+            offset: 0,
+        }),
+        destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: 0x1300,
+            offset: 0,
+        }),
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    });
     memory.write(0x1000.into(), MemoryAlignment::ONE, &command.to_bytes()?)?;
     memory.write(0x1200.into(), MemoryAlignment::ONE, &[1, 3, 5, 7])?;
     let mut dma = Dma::new(memory, 2)?;

@@ -1,15 +1,16 @@
 //! Host interrupt controls and explicit reset recovery.
 
+use pdma_model_contract::dma::{
+    ChannelInterrupts, ChannelIrqMaskValues, ChannelRegisters, Command, CommandHeader, DmaControl,
+    DmaFatalCode, Event, Opcode, TrapCommand,
+};
+
 use hardware_interface_pipeline::{
     AsyncExecutor, AsyncInteractionBackend, HardwareDriver, StepOutcome,
 };
 use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
-};
-use pdma_model_contract::dma::ChannelInterrupts;
-use pdma_model_contract::dma::{
-    ChannelIrqMaskValues, ChannelRegisters, Command, DmaControl, DmaFatalCode, Endpoint, Event,
 };
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
@@ -136,7 +137,13 @@ async fn masked_trap_cause_remains_visible_without_unmask_catch_up()
         .await?;
     cpu.run_main(channel.set_irq_mask(ChannelIrqMaskValues::new(3)))
         .await?;
-    cpu.run_main(channel.submit(Command::trap(7))).await?;
+    cpu.run_main(channel.submit(Command::Trap(TrapCommand {
+        header: CommandHeader {
+            opcode: Opcode::Trap,
+        },
+        id: 7,
+    })))
+    .await?;
     // When: hardware publishes a masked Trap and software unmasks.
     let executor = AsyncExecutor::new(model.clone());
     let mut driver = HardwareDriver::new();

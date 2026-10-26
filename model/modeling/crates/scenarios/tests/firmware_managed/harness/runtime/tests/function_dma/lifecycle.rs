@@ -3,7 +3,10 @@ use super::support::{
 };
 use hardware_interface_pipeline::HardwareDriver;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::{ChannelId, Endpoint};
+use pdma_model_contract::dma::ChannelId;
+use pdma_model_contract::dma::{
+    CopyCommandDestinationValues, CopyCommandSourceValues, LinearEndpoint,
+};
 use pdma_model_contract::hw_components::windows::WindowControl;
 
 #[test]
@@ -25,12 +28,18 @@ fn reset_before_regrant_prevents_old_work_from_entering_the_new_space() -> TestR
         &[0xa5; 1024],
     )?;
     let mut work = command(1);
-    let pdma_model_contract::dma::CommandPayloadValues::Copy(ref mut copy) = work.payload else {
+    let pdma_model_contract::dma::Command::Copy(ref mut copy) = work else {
         return Err("expected Copy".into());
     };
     copy.copy_length = 1024;
-    copy.source = Endpoint::linear(0x1600, 0);
-    copy.destination = Endpoint::linear(0x1b00, 0);
+    copy.source = CopyCommandSourceValues::Linear(LinearEndpoint {
+        address: 0x1600,
+        offset: 0,
+    });
+    copy.destination = CopyCommandDestinationValues::Linear(LinearEndpoint {
+        address: 0x1b00,
+        offset: 0,
+    });
     publish(&mut dma, &old, (ChannelId::new(0), work))?;
     let mut pipeline = dma.hardware();
     let mut driver = HardwareDriver::new();

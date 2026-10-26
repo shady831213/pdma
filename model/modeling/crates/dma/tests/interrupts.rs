@@ -1,14 +1,15 @@
 //! Channel notification sources and independent acknowledgment.
 
-use pdma_model_contract::dma::ChannelInterrupts;
+use pdma_model_contract::dma::{
+    ChannelInterrupts, ChannelIrqCauseValues, ChannelRegisters, Command, CommandHeader,
+    CommandRegisters, CopyCommand, CopyCommandDestinationValues, CopyCommandSourceValues,
+    EventRegisters, LinearEndpoint, Opcode, ScatterGatherEndpoint, TrapCommand,
+};
+
 /// Shared raw-bus fixtures.
 pub mod support;
 
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::{
-    ChannelIrqCauseValues, ChannelRegisters, Command, CommandRegisters, CopyCommand, Endpoint,
-    EventRegisters,
-};
 use support::{TestResult, command, read_word, run, setup, submit};
 
 const CONTROL: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
@@ -37,15 +38,22 @@ fn append(
 }
 
 const fn invalid() -> Command {
-    Command::copy(
-        7,
-        CopyCommand {
-            source: Endpoint::linear(0x1200, 0),
-            destination: Endpoint::scatter_gather(0, 0),
-            copy_length: 4,
-            sg_context: 0,
-        },
-    )
+    Command::Copy(CopyCommand {
+        id: 7,
+        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: 0x1200,
+            offset: 0,
+        }),
+        destination: CopyCommandDestinationValues::ScatterGather(ScatterGatherEndpoint {
+            list_address: 0,
+            count: 0,
+            index: 0,
+            offset: 0,
+        }),
+        copy_length: 4,
+        sg_context: 0,
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    })
 }
 
 #[test]
@@ -58,7 +66,16 @@ fn trap_obeys_only_its_own_mask() -> TestResult {
             &mask.to_le_bytes(),
         )?;
         // When: a Trap executes without producing an error event.
-        submit(&mut device, &memory, Command::trap(1))?;
+        submit(
+            &mut device,
+            &memory,
+            Command::Trap(TrapCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Trap,
+                },
+                id: 1,
+            }),
+        )?;
         run(&mut device)?;
         // Then: only Trap's mask controls delivery; its cause remains visible.
         assert_eq!(device.take_interrupt(), mask & 2 == 0);
@@ -99,14 +116,33 @@ fn repeated_traps_notify_and_unmask_does_not_replay() -> TestResult {
     let (mut device, memory) = setup(0x1800, 4)?;
     let mask = CONTROL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::MASK.offset();
     device.write(mask, &2_u32.to_le_bytes())?;
-    submit(&mut device, &memory, Command::trap(1))?;
+    submit(
+        &mut device,
+        &memory,
+        Command::Trap(TrapCommand {
+            header: CommandHeader {
+                opcode: Opcode::Trap,
+            },
+            id: 1,
+        }),
+    )?;
     run(&mut device)?;
     assert!(!device.take_interrupt());
     // When: software unmasks, then submits two fresh Trap commands.
     device.write(mask, &0_u32.to_le_bytes())?;
     assert!(!device.take_interrupt());
     for index in 1..3 {
-        append(&mut device, &memory, index, Command::trap(u64::from(index)))?;
+        append(
+            &mut device,
+            &memory,
+            index,
+            Command::Trap(TrapCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Trap,
+                },
+                id: u64::from(index),
+            }),
+        )?;
         // Then: each new Trap can emit despite the already-set cause.
         assert!(device.take_interrupt());
         assert!(!device.take_interrupt());
@@ -154,11 +190,20 @@ fn error_event_stops_channel_after_consumption_and_bypasses_routine_masks() -> T
 fn fatal_notifies_independently_of_sticky_trap() -> TestResult {
     // Given: an acknowledged notification whose Trap cause remains set.
     let (mut device, memory) = setup(0x1800, 2)?;
-    submit(&mut device, &memory, Command::trap(1))?;
+    submit(
+        &mut device,
+        &memory,
+        Command::Trap(TrapCommand {
+            header: CommandHeader {
+                opcode: Opcode::Trap,
+            },
+            id: 1,
+        }),
+    )?;
     run(&mut device)?;
     assert!(device.take_interrupt());
     let mut malformed = command().to_bytes()?;
-    *malformed.get_mut(8).ok_or("missing kind")? = 255;
+    *malformed.get_mut(0).ok_or("missing opcode")? = 255;
     memory.write(
         MemoryAddress::new(0x1000 + u64::try_from(Command::RECORD_SIZE)?),
         MemoryAlignment::ONE,
@@ -184,7 +229,16 @@ fn fatal_notifies_independently_of_sticky_trap() -> TestResult {
 fn trap_ack_clears_cause_without_retracting_pending_notification() -> TestResult {
     // Given: a pending Trap notification.
     let (mut device, memory) = setup(0x1800, 2)?;
-    submit(&mut device, &memory, Command::trap(1))?;
+    submit(
+        &mut device,
+        &memory,
+        Command::Trap(TrapCommand {
+            header: CommandHeader {
+                opcode: Opcode::Trap,
+            },
+            id: 1,
+        }),
+    )?;
     run(&mut device)?;
     // When: software acknowledges the sticky source before platform delivery.
     let ack = CONTROL + ChannelRegisters::IRQ.offset() + ChannelInterrupts::TRAP_ACK.offset();

@@ -20,7 +20,7 @@ record_schema! {
                     Only = 1,
                 },
             },
-            payload: union {
+            payload: tagged_union {
                 tag: self.opcode,
                 cases: {
                     Only {
@@ -61,7 +61,7 @@ record_schema! {
         endian: Little,
         fields: {
             header: ModernHeader,
-            payload: union {
+            payload: tagged_union {
                 tag: self.header.opcode,
                 cases: {
                     Compact {

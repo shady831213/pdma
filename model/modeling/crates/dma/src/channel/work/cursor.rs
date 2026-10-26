@@ -1,6 +1,15 @@
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::Decode;
-use pdma_model_contract::dma::{Endpoint, EndpointPayloadValues, EventCode, Segment, SegmentRaw};
+use pdma_model_contract::dma::{
+    CopyCommand, CopyCommandDestinationValues, CopyCommandSourceValues, EventCode, LinearEndpoint,
+    ScatterGatherEndpoint, Segment, SegmentRaw,
+};
+
+#[derive(Debug)]
+enum Endpoint {
+    Linear(LinearEndpoint),
+    ScatterGather(ScatterGatherEndpoint),
+}
 
 #[derive(Debug)]
 pub(in crate::channel) struct Cursor {
@@ -10,7 +19,23 @@ pub(in crate::channel) struct Cursor {
 }
 
 impl Cursor {
-    pub(super) const fn new(endpoint: Endpoint, length: u64) -> Self {
+    pub(super) const fn source(command: CopyCommand) -> Self {
+        let endpoint = match command.source {
+            CopyCommandSourceValues::Linear(value) => Endpoint::Linear(value),
+            CopyCommandSourceValues::ScatterGather(value) => Endpoint::ScatterGather(value),
+        };
+        Self::new(endpoint, command.copy_length)
+    }
+
+    pub(super) const fn destination(command: CopyCommand) -> Self {
+        let endpoint = match command.destination {
+            CopyCommandDestinationValues::Linear(value) => Endpoint::Linear(value),
+            CopyCommandDestinationValues::ScatterGather(value) => Endpoint::ScatterGather(value),
+        };
+        Self::new(endpoint, command.copy_length)
+    }
+
+    const fn new(endpoint: Endpoint, length: u64) -> Self {
         Self {
             endpoint,
             segment: None,
@@ -19,15 +44,15 @@ impl Cursor {
     }
 
     pub(super) fn next_segment(&mut self, memory: &impl MemoryAccess) -> Result<bool, EventCode> {
-        let segment = match self.endpoint.payload {
-            EndpointPayloadValues::Linear(linear) => Segment {
+        let segment = match self.endpoint {
+            Endpoint::Linear(linear) => Segment {
                 address: linear.address,
                 length: linear
                     .offset
                     .checked_add(self.length)
                     .ok_or(EventCode::InvalidLength)?,
             },
-            EndpointPayloadValues::ScatterGather(list) => {
+            Endpoint::ScatterGather(list) => {
                 if list.index >= list.count {
                     return Ok(false);
                 }
@@ -60,9 +85,9 @@ impl Cursor {
     }
 
     const fn offset(&self) -> u64 {
-        match self.endpoint.payload {
-            EndpointPayloadValues::Linear(linear) => linear.offset,
-            EndpointPayloadValues::ScatterGather(list) => list.offset,
+        match self.endpoint {
+            Endpoint::Linear(linear) => linear.offset,
+            Endpoint::ScatterGather(list) => list.offset,
         }
     }
 
@@ -76,9 +101,9 @@ impl Cursor {
     }
 
     pub(super) fn advance(&mut self, count: u64) {
-        match &mut self.endpoint.payload {
-            EndpointPayloadValues::Linear(linear) => linear.offset += count,
-            EndpointPayloadValues::ScatterGather(list) => {
+        match &mut self.endpoint {
+            Endpoint::Linear(linear) => linear.offset += count,
+            Endpoint::ScatterGather(list) => {
                 list.offset += count;
                 if self
                     .segment

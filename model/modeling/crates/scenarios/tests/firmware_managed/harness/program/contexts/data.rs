@@ -1,9 +1,13 @@
+use pdma_model_contract::dma::{
+    ChannelId, Command, ContextId, CopyCommandDestinationValues, CopyCommandSourceValues, Event,
+    LinearEndpoint, ScatterGatherEndpoint, Segment,
+};
+
 use super::{Ports, Spaces, TestResult};
 use crate::harness::program::buffers::Driver;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
-use pdma_model_contract::dma::{ChannelId, Command, ContextId, Endpoint, Event, Segment};
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings};
 use pdma_model_software::dma::ChannelControl;
 
@@ -77,25 +81,32 @@ impl Transfer {
         )
         .await?;
         driver.set_irq_enabled(false).await?;
-        let mut source_endpoint = Endpoint::scatter_gather(list.raw(), 1);
-        source_endpoint.context = contexts[2].raw();
-        let mut destination_endpoint = Endpoint::linear(destination.raw(), 0);
-        destination_endpoint.context = contexts[3].raw();
+        let source_endpoint = CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+            list_address: list.raw(),
+            count: 1,
+            index: 0,
+            offset: 0,
+        });
+        let destination_endpoint = CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: destination.raw(),
+            offset: 0,
+        });
         let address = ports.allocator.allocate(8, MemoryAlignment::try_new(8)?)?;
         ports
             .memory
             .write(address, MemoryAlignment::ONE, &0_u64.to_le_bytes())?;
         Ok(Self {
             driver,
-            command: Command::copy(
-                37,
-                pdma_model_contract::dma::CopyCommand {
-                    copy_length: length,
-                    source: source_endpoint,
-                    destination: destination_endpoint,
-                    sg_context: contexts[0].raw(),
-                },
-            ),
+            command: Command::Copy(pdma_model_contract::dma::CopyCommand {
+                id: 37,
+                copy_length: length,
+                source: source_endpoint,
+                source_context: contexts[2].raw(),
+                destination: destination_endpoint,
+                destination_context: contexts[3].raw(),
+                sg_context: contexts[0].raw(),
+                ..pdma_model_contract::dma::CopyCommand::ZERO
+            }),
             destination,
             same_address: source == destination,
             memory: ports.memory.clone(),
@@ -113,17 +124,17 @@ impl Transfer {
     pub(super) async fn submit(&mut self, failure: bool) -> TestResult {
         let mut command = self.command;
         if failure {
-            let mut source = Endpoint::linear(u64::MAX - 4096, 0);
-            let pdma_model_contract::dma::CommandPayloadValues::Copy(ref mut copy) =
-                command.payload
-            else {
+            let source = CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: u64::MAX - 4096,
+                offset: 0,
+            });
+            let pdma_model_contract::dma::Command::Copy(ref mut copy) = command else {
                 return Err("expected Copy".into());
             };
-            source.context = copy.source.context;
             copy.source = source;
         }
         self.driver.submit(command).await?;
-        self.driver.submit(self.fence.command(command.id)).await?;
+        self.driver.submit(self.fence.command(command.id())).await?;
         Ok(())
     }
 

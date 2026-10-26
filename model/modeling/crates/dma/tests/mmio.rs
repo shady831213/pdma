@@ -1,14 +1,14 @@
 //! MMIO rejection and side-effect boundaries.
 
-use pdma_model_contract::dma::ChannelConfiguration;
-use pdma_model_contract::dma::ChannelInterrupts;
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelConfiguration, ChannelInterrupts, ChannelRegisters, Command,
+    CommandHeader, CopyCommand, CopyCommandDestinationValues, CopyCommandSourceValues, DmaControl,
+    DmaRegisters, EventRegisters, LinearEndpoint, Opcode, TrapCommand,
+};
+
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use pdma_model_contract::dma::{
-    ChannelBlock, ChannelRegisters, Command, CopyCommand, DmaControl, DmaRegisters, Endpoint,
-    EventRegisters,
-};
 use pdma_model_dma::Error;
 use support::{TestResult, read_word, run, setup, submit};
 
@@ -24,15 +24,20 @@ fn rejected_root_access_preserves_channels_and_pending_irq() -> TestResult {
     submit(
         &mut device,
         &memory,
-        Command::copy(
-            1,
-            CopyCommand {
-                source: Endpoint::linear(0, 0),
-                destination: Endpoint::linear(0x1300, 0),
-                copy_length: 4,
-                sg_context: 0,
-            },
-        ),
+        Command::Copy(CopyCommand {
+            id: 1,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0,
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x1300,
+                offset: 0,
+            }),
+            copy_length: 4,
+            sg_context: 0,
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        }),
     )?;
     run(&mut device)?;
     let reset = (pdma_model_contract::dma::DmaDiscovery::EXTENT
@@ -72,7 +77,16 @@ fn rejected_root_access_preserves_channels_and_pending_irq() -> TestResult {
 fn rejected_reads_preserve_destination_and_pending_notification() -> TestResult {
     // Given: a pending Trap notification and a sentinel destination.
     let (mut device, memory) = setup(0x1100, 2)?;
-    submit(&mut device, &memory, Command::trap(1))?;
+    submit(
+        &mut device,
+        &memory,
+        Command::Trap(TrapCommand {
+            header: CommandHeader {
+                opcode: Opcode::Trap,
+            },
+            id: 1,
+        }),
+    )?;
     run(&mut device)?;
     for (offset, width, expected) in [
         (
@@ -106,7 +120,16 @@ fn rejected_reads_preserve_destination_and_pending_notification() -> TestResult 
 fn rejected_consumption_preserves_trap_and_consumer() -> TestResult {
     // Given: one sticky Trap cause and its delivered notification.
     let (mut device, memory) = setup(0x1100, 2)?;
-    submit(&mut device, &memory, Command::trap(1))?;
+    submit(
+        &mut device,
+        &memory,
+        Command::Trap(TrapCommand {
+            header: CommandHeader {
+                opcode: Opcode::Trap,
+            },
+            id: 1,
+        }),
+    )?;
     run(&mut device)?;
     assert!(device.take_interrupt());
     // When: software attempts to consume beyond the empty event ring.

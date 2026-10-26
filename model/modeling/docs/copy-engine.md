@@ -48,6 +48,47 @@ Timestamp units and progression are platform-defined, not DMA clock cycles.
 No generic instruction branching, indirect command buffer, batch container, GPU
 page-table operation, cache-maintenance command or AQL compatibility is introduced.
 
+## Wire layout
+
+The fixed Command slot is 96 bytes with alignment eight. Each complete command
+starts at slot offset zero and contains the same one-byte `CommandHeader` opcode
+and an ID at offset eight. Opcode values 0 through 8 select Copy, Write, Fill,
+Wait, Atomic, Semaphore, Fence, Trap and Timestamp respectively. The opcode enum
+is defined once. It is not inferred from singleton enums in the individual cases.
+
+The generic untagged union only overlays complete records. Its explicit case
+codec knows nothing about opcodes. PDMA's contract reads the common header and
+chooses a case; protocol encoding rejects a semantic case whose header names a
+different operation. Copy's endpoint unions remain tagged unions, selected by
+its own options fields. This separates storage layout from protocol selection.
+Schema declarations spell those fields `tagged_union { tag: ..., cases: ... }`.
+The independent untagged layout uses `union_schema! { ... union ... }`; the old
+inline `union { tag: ... }` spelling is rejected rather than retained as an alias.
+
+| Complete command | Bytes before unused slot tail | Operands after header/ID |
+| --- | ---: | --- |
+| Copy | 96 | Options at 1, SG context at 4, length at 16, payload contexts at 24/28, source/destination unions at 32/64 |
+| Write / Fence | 40 | WordWrite at 16 |
+| Fill | 48 | Address/length/pattern/context/width at 16/24/32/40/44 |
+| Wait | 48 | WordTarget/value/comparison at 16/32/40 |
+| Atomic | 56 | WordTarget/order/operation/operand union at 16/32/36/40 |
+| Semaphore | 40 | WordTarget/operation at 16/32 |
+| Trap | 16 | None |
+| Timestamp | 32 | Address/context at 16/24 |
+
+Copy options bit zero selects source mode and bit one destination mode: Linear
+zero, ScatterGather one. Other options bits are reserved. Each endpoint occupies
+32 bytes: Linear stores base/offset at 0/8 and leaves the remainder zero;
+ScatterGather stores table/count/index/offset at 0/8/16/24. Counts, indices,
+offsets, lengths and addresses retain all 64 bits. No field is split across a
+parent header and child record. All multibyte fields retain natural alignment.
+
+Wire values are little-endian. Reserved fields, direct complete-case alignment
+gaps and unused slot tails must be zero. Software using C stores initializes the
+entire 96-byte slot and then fills the selected complete case, including the
+shared header. Generated headers expose the common header and individual case
+layouts. Event and management-ring formats are unchanged by this repacking.
+
 ## Completion, error events and notification
 
 **HW-CE-2.** Successful commands do not write per-task responses or error events.
@@ -228,14 +269,7 @@ Fence publication. Uniform target-fault recovery preserves both ordering and the
 existing software lifetime obligations. External timer simulation may use ticks;
 the earlier warning against treating step counts as physical time still applies.
 
-## Wire records, reporting and discovery
-
-`Command` is a 112-byte, 8-byte-aligned tagged record: ID at 0, kind at 8 and
-payload at 16. Copy/Write/Fill/Wait/Atomic/Semaphore/Fence/Trap/Timestamp are kinds 0..8.
-Copy retains its independent endpoint/SG positions; scalar commands carry their
-own context selector. Timestamp's 16-byte payload contains address at byte 0 and
-context at byte 8, with trailing reserved zero padding. Trap has no payload. Generated schemas and headers define
-the nested widths, reserved zero padding and enum encodings.
+## Error records, reporting and discovery
 
 `Event` is a 24-byte, 8-byte-aligned error record: ID at 0, code at 8, error info
 at 16. Codes 1..8 are InvalidLength, ReadError, WriteError, LengthMismatch,

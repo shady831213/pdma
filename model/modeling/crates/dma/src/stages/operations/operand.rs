@@ -4,10 +4,11 @@ use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::dma::{
     AtomicCommand, FillCommand, SemaphoreCommand, TimestampCommand, TrapCommand, WaitCommand,
 };
-use pdma_model_contract::dma::{CommandPayloadValues, WordWrite};
+use pdma_model_contract::dma::{Command, FenceCommand, WriteCommand};
 
 pub(super) trait Operand: Copy {
-    fn project(payload: CommandPayloadValues) -> Result<Self, Error>;
+    fn project(command: Command) -> Result<Self, Error>;
+    fn id(self) -> u64;
     fn execute<M: MemoryAccess<SB>, SB>(
         self,
         context: &mut SelectedResources<'_, M, SB>,
@@ -16,15 +17,15 @@ pub(super) trait Operand: Copy {
         M::Error: Into<MemoryFailure>;
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(in crate::stages) struct Write(WordWrite);
-
-impl Operand for Write {
-    fn project(payload: CommandPayloadValues) -> Result<Self, Error> {
-        let CommandPayloadValues::Write(operand) = payload else {
+impl Operand for WriteCommand {
+    fn id(self) -> u64 {
+        self.id
+    }
+    fn project(command: Command) -> Result<Self, Error> {
+        let Command::Write(operand) = command else {
             return Err(Error::Routing);
         };
-        Ok(Self(operand))
+        Ok(operand)
     }
     fn execute<M: MemoryAccess<SB>, SB>(
         self,
@@ -33,13 +34,16 @@ impl Operand for Write {
     where
         M::Error: Into<MemoryFailure>,
     {
-        word::write(context, self.0)
+        word::write(context, self.word)
     }
 }
 
 impl Operand for FillCommand {
-    fn project(payload: CommandPayloadValues) -> Result<Self, Error> {
-        let CommandPayloadValues::Fill(operand) = payload else {
+    fn id(self) -> u64 {
+        self.id
+    }
+    fn project(command: Command) -> Result<Self, Error> {
+        let Command::Fill(operand) = command else {
             return Err(Error::Routing);
         };
         Ok(operand)
@@ -56,8 +60,11 @@ impl Operand for FillCommand {
 }
 
 impl Operand for WaitCommand {
-    fn project(payload: CommandPayloadValues) -> Result<Self, Error> {
-        let CommandPayloadValues::Wait(operand) = payload else {
+    fn id(self) -> u64 {
+        self.id
+    }
+    fn project(command: Command) -> Result<Self, Error> {
+        let Command::Wait(operand) = command else {
             return Err(Error::Routing);
         };
         Ok(operand)
@@ -74,8 +81,11 @@ impl Operand for WaitCommand {
 }
 
 impl Operand for AtomicCommand {
-    fn project(payload: CommandPayloadValues) -> Result<Self, Error> {
-        let CommandPayloadValues::Atomic(operand) = payload else {
+    fn id(self) -> u64 {
+        self.id
+    }
+    fn project(command: Command) -> Result<Self, Error> {
+        let Command::Atomic(operand) = command else {
             return Err(Error::Routing);
         };
         Ok(operand)
@@ -92,8 +102,11 @@ impl Operand for AtomicCommand {
 }
 
 impl Operand for SemaphoreCommand {
-    fn project(payload: CommandPayloadValues) -> Result<Self, Error> {
-        let CommandPayloadValues::Semaphore(operand) = payload else {
+    fn id(self) -> u64 {
+        self.id
+    }
+    fn project(command: Command) -> Result<Self, Error> {
+        let Command::Semaphore(operand) = command else {
             return Err(Error::Routing);
         };
         Ok(operand)
@@ -109,15 +122,15 @@ impl Operand for SemaphoreCommand {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(in crate::stages) struct Fence(WordWrite);
-
-impl Operand for Fence {
-    fn project(payload: CommandPayloadValues) -> Result<Self, Error> {
-        let CommandPayloadValues::Fence(operand) = payload else {
+impl Operand for FenceCommand {
+    fn id(self) -> u64 {
+        self.id
+    }
+    fn project(command: Command) -> Result<Self, Error> {
+        let Command::Fence(operand) = command else {
             return Err(Error::Routing);
         };
-        Ok(Self(operand))
+        Ok(operand)
     }
     fn execute<M: MemoryAccess<SB>, SB>(
         self,
@@ -126,13 +139,16 @@ impl Operand for Fence {
     where
         M::Error: Into<MemoryFailure>,
     {
-        word::write(context, self.0)
+        word::write(context, self.word)
     }
 }
 
 impl Operand for TimestampCommand {
-    fn project(payload: CommandPayloadValues) -> Result<Self, Error> {
-        let CommandPayloadValues::Timestamp(operand) = payload else {
+    fn id(self) -> u64 {
+        self.id
+    }
+    fn project(command: Command) -> Result<Self, Error> {
+        let Command::Timestamp(operand) = command else {
             return Err(Error::Routing);
         };
         Ok(operand)
@@ -149,8 +165,11 @@ impl Operand for TimestampCommand {
 }
 
 impl Operand for TrapCommand {
-    fn project(payload: CommandPayloadValues) -> Result<Self, Error> {
-        let CommandPayloadValues::Trap(operand) = payload else {
+    fn id(self) -> u64 {
+        self.id
+    }
+    fn project(command: Command) -> Result<Self, Error> {
+        let Command::Trap(operand) = command else {
             return Err(Error::Routing);
         };
         Ok(operand)

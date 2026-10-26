@@ -1,6 +1,7 @@
 use super::{Ports, TestResult, setup};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::dma::*;
+use pdma_model_contract::dma::{CommandHeader, Opcode, WaitCommand};
 use pdma_model_host::{CompletionWord, runtime::Model};
 
 pub(in super::super) async fn run(
@@ -26,14 +27,15 @@ pub(in super::super) async fn run(
         value: 29,
     });
     waiting
-        .submit(Command::wait(
-            1,
-            WaitCommand {
-                target: target(0),
-                value: 1,
-                comparison: WaitCommandComparison::Equal,
+        .submit(Command::Wait(WaitCommand {
+            header: CommandHeader {
+                opcode: Opcode::Wait,
             },
-        ))
+            id: 1,
+            target: target(0),
+            value: 1,
+            comparison: WaitCommandComparison::Equal,
+        }))
         .await?;
     waiting.submit(cancelled.command(2)).await?;
     peer.submit(peer_done.command(3)).await?;

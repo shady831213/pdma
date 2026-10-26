@@ -4,7 +4,8 @@ use crate::command_operations::{
     support::{EVENT_PRODUCER, Rig},
 };
 use pdma_model_contract::dma::{
-    ChannelId, Command, ContextId, DmaAdmin, DmaDiscovery, TimestampCommand, WordWrite,
+    ChannelId, Command, CommandHeader, ContextId, DmaAdmin, DmaDiscovery, FenceCommand, Opcode,
+    TimestampCommand, WordWrite,
 };
 use pdma_model_dma::MaintenanceError;
 use std::sync::{
@@ -66,23 +67,27 @@ fn context_drain_detects_parked_timestamp_and_abort_discards_it() -> TestResult 
     // Given: Fence and Timestamp both retain their target context while parked.
     let context = ContextId::new(7);
     for command in [
-        Command::timestamp(
-            1,
-            TimestampCommand {
-                address: 0x9000,
-                context: context.raw(),
+        Command::Timestamp(TimestampCommand {
+            header: CommandHeader {
+                opcode: Opcode::Timestamp,
             },
-        ),
-        Command::fence(
-            1,
-            WordWrite {
+            id: 1,
+            address: 0x9000,
+            context: context.raw(),
+        }),
+        Command::Fence(FenceCommand {
+            header: CommandHeader {
+                opcode: Opcode::Fence,
+            },
+            id: 1,
+            word: WordWrite {
                 target: pdma_model_contract::dma::WordTarget {
                     context: context.raw(),
                     ..crate::command_operations::support::target(0x9000)
                 },
                 value: 17,
             },
-        ),
+        }),
     ] {
         let mut rig = rig(0x9000)?;
         rig.dma = rig

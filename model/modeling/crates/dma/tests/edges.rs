@@ -1,15 +1,15 @@
 //! Adverse channel transactions and ring boundaries.
 
-use pdma_model_contract::dma::ChannelConfiguration;
-use pdma_model_contract::dma::ChannelInterrupts;
-use pdma_model_contract::dma::ChannelRecovery;
+use pdma_model_contract::dma::{
+    ChannelConfiguration, ChannelInterrupts, ChannelRecovery, ChannelRegisters, Command,
+    CommandRegisters, CopyCommandDestinationValues, CopyCommandSourceValues, Event, EventCode,
+    EventRegisters, LinearEndpoint,
+};
+
 /// Shared channel integration fixtures.
 pub mod support;
 
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
-use pdma_model_contract::dma::{
-    ChannelRegisters, Command, CommandRegisters, Endpoint, Event, EventCode, EventRegisters,
-};
 use pdma_model_dma::{ChannelFatal, Dma, Error};
 use support::{TestResult, command, read_word, run, setup, submit};
 
@@ -176,16 +176,17 @@ fn destination_fault_is_a_failed_completion() -> TestResult {
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, {
         let original = command();
-        let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload else {
+        let pdma_model_contract::dma::Command::Copy(copy) = original else {
             return Err("copy fixture required".into());
         };
-        Command::copy(
-            original.id,
-            pdma_model_contract::dma::CopyCommand {
-                destination: Endpoint::linear(0x8000, 0),
-                ..copy
-            },
-        )
+        Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: original.id(),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x8000,
+                offset: 0,
+            }),
+            ..copy
+        })
     })?;
     // When
     run(&mut device)?;
@@ -205,19 +206,22 @@ fn zero_length_skips_payload_and_longer_copy_reports_inaccessible_source() -> Te
         let (mut device, memory) = setup(0x1100, 2)?;
         submit(&mut device, &memory, {
             let original = command();
-            let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload
-            else {
+            let pdma_model_contract::dma::Command::Copy(copy) = original else {
                 return Err("copy fixture required".into());
             };
-            Command::copy(
-                original.id,
-                pdma_model_contract::dma::CopyCommand {
-                    copy_length: length,
-                    source: Endpoint::linear(0x8000, 0),
-                    destination: Endpoint::linear(0x9000, 0),
-                    ..copy
-                },
-            )
+            Command::Copy(pdma_model_contract::dma::CopyCommand {
+                id: original.id(),
+                copy_length: length,
+                source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                    address: 0x8000,
+                    offset: 0,
+                }),
+                destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                    address: 0x9000,
+                    offset: 0,
+                }),
+                ..copy
+            })
         })?;
         // When
         run(&mut device)?;
@@ -252,10 +256,10 @@ fn rings_reuse_slots_in_order_after_wrap() -> TestResult {
         memory.write(
             MemoryAddress::new(0x1000 + slot * u64::try_from(Command::RECORD_SIZE)?),
             MemoryAlignment::ONE,
-            &Command {
+            &Command::Copy(pdma_model_contract::dma::CopyCommand {
                 id: u64::from(cursor),
-                ..command()
-            }
+                ..*support::copy(&command())?
+            })
             .to_bytes()?,
         )?;
         memory.write(

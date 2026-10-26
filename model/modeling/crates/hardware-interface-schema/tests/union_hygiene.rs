@@ -9,7 +9,7 @@ record_schema! {
         alignment: 8, endian: Little,
         fields: {
             kind: enum(u8) { variants: { Scalars = 0, Bits = 1 } },
-            payload: union {
+            payload: tagged_union {
                 tag: self.kind,
                 cases: {
                     Scalars { offset: u64, base: u64, bytes: u64, end: u64, actual: u64 },
@@ -94,7 +94,7 @@ mod caller_names {
             endian: Little,
             fields: {
                 tag: enum(u8) { variants: { Item = 0 } },
-                payload: union { tag: self.tag, cases: { Item(Item) } },
+                payload: tagged_union { tag: self.tag, cases: { Item(Item) } },
             },
         }
     }

@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-use crate::internal::syntax::{ModernTypeDecl, ScopedPath};
+use crate::internal::syntax::{ModernTypeDecl, TaggedUnionTagPath};
 
 use super::super::{layout::PlacedField, scalar};
 
@@ -82,7 +82,7 @@ pub(super) fn decode(
             <#path as #facade::RecordLayout>::decode(field)
                 .map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(#marker::#offset)))?
         };)),
-        ModernTypeDecl::Union(decl) => {
+        ModernTypeDecl::TaggedUnion(decl) => {
             let ty = scalar::type_name(marker, name, "Values");
             let tag = local_tag(&decl.tag)?;
             Ok(quote!(let #name = #ty::decode(bytes, #marker::#offset, #tag)?;))
@@ -154,13 +154,13 @@ pub(super) fn encode(
             <#path as #facade::RecordLayout>::encode(field, &normalized.#name)
                 .map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(#marker::#offset)))?;
         }),
-        ModernTypeDecl::Union(_) => {
+        ModernTypeDecl::TaggedUnion(_) => {
             quote!(normalized.#name.encode_into(&mut encoded, #marker::#offset)?;)
         }
     }
 }
 
-fn local_tag(path: &ScopedPath) -> syn::Result<TokenStream> {
+fn local_tag(path: &TaggedUnionTagPath) -> syn::Result<TokenStream> {
     let Some(first) = path.segments.first() else {
         return Err(syn::Error::new(path.span, "tag path is empty"));
     };

@@ -1,12 +1,12 @@
+use pdma_model_contract::dma::{
+    ChannelConfiguration, ChannelId, ChannelInterrupts, ChannelRegisters, Command,
+    CommandRegisters, CopyCommandDestinationValues, CopyCommandSourceValues, EventRegisters,
+    LinearEndpoint,
+};
+
 use hardware_interface_pipeline::{Operation, StepOutcome, Then};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-};
-use pdma_model_contract::dma::ChannelConfiguration;
-use pdma_model_contract::dma::ChannelId;
-use pdma_model_contract::dma::ChannelInterrupts;
-use pdma_model_contract::dma::{
-    ChannelRegisters, Command, CommandRegisters, Endpoint, EventRegisters,
 };
 use pdma_model_dma::{
     CheckRanges, ChunkInput, CommandRequest, Dma, Fetch, FetchedCommand, Flow, Pipeline,
@@ -177,45 +177,48 @@ pub fn assert_no_event<M>(device: &mut Dma<M>) -> TestResult {
 
 /// Canonical four-byte copy input.
 pub const fn command() -> Command {
-    Command::copy(
-        7,
-        pdma_model_contract::dma::CopyCommand {
-            copy_length: 4,
-            sg_context: 0,
-            source: Endpoint::linear(0x1200, 0),
-            destination: Endpoint::linear(0x1300, 0),
-        },
-    )
+    Command::Copy(pdma_model_contract::dma::CopyCommand {
+        id: 7,
+        copy_length: 4,
+        sg_context: 0,
+        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: 0x1200,
+            offset: 0,
+        }),
+        destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: 0x1300,
+            offset: 0,
+        }),
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    })
 }
 
 #[doc = "Borrows the Copy payload of a typed test fixture."]
 pub fn copy(command: &Command) -> TestResult<&pdma_model_contract::dma::CopyCommand> {
-    use pdma_model_contract::dma::CommandPayloadValues;
-    match &command.payload {
-        CommandPayloadValues::Copy(copy) => Ok(copy),
-        CommandPayloadValues::Write(_)
-        | CommandPayloadValues::Fill(_)
-        | CommandPayloadValues::Wait(_)
-        | CommandPayloadValues::Atomic(_)
-        | CommandPayloadValues::Semaphore(_)
-        | CommandPayloadValues::Fence(_)
-        | CommandPayloadValues::Trap(_)
-        | CommandPayloadValues::Timestamp(_) => Err("Copy fixture required".into()),
+    match command {
+        Command::Copy(copy) => Ok(copy),
+        Command::Write(_)
+        | Command::Fill(_)
+        | Command::Wait(_)
+        | Command::Atomic(_)
+        | Command::Semaphore(_)
+        | Command::Fence(_)
+        | Command::Trap(_)
+        | Command::Timestamp(_) => Err("Copy fixture required".into()),
     }
 }
 
 #[doc = "Mutably borrows the Copy payload of a typed test fixture."]
 pub fn copy_mut(command: &mut Command) -> TestResult<&mut pdma_model_contract::dma::CopyCommand> {
-    use pdma_model_contract::dma::CommandPayloadValues;
-    match &mut command.payload {
-        CommandPayloadValues::Copy(copy) => Ok(copy),
-        CommandPayloadValues::Write(_)
-        | CommandPayloadValues::Fill(_)
-        | CommandPayloadValues::Wait(_)
-        | CommandPayloadValues::Atomic(_)
-        | CommandPayloadValues::Semaphore(_)
-        | CommandPayloadValues::Fence(_)
-        | CommandPayloadValues::Trap(_)
-        | CommandPayloadValues::Timestamp(_) => Err("Copy fixture required".into()),
+    match command {
+        Command::Copy(copy) => Ok(copy),
+        Command::Write(_)
+        | Command::Fill(_)
+        | Command::Wait(_)
+        | Command::Atomic(_)
+        | Command::Semaphore(_)
+        | Command::Fence(_)
+        | Command::Trap(_)
+        | Command::Timestamp(_) => Err("Copy fixture required".into()),
     }
 }

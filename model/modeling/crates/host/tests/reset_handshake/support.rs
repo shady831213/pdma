@@ -1,11 +1,15 @@
 //! Reset-handshake fixtures with suspended accepted DMA work.
 
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelId, Command, CommandRegisters, CopyCommandDestinationValues,
+    CopyCommandSourceValues, LinearEndpoint,
+};
+
 use hardware_interface_pipeline::{AsyncInteractionBackend, HardwareDriver, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, MemoryRegion, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SoftwareCpu,
 };
-use pdma_model_contract::dma::{ChannelBlock, ChannelId, Command, CommandRegisters, Endpoint};
 use pdma_model_dma::{Dma, Hardware};
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::{
@@ -70,15 +74,22 @@ pub(super) async fn fixture(cpu: &SoftwareCpu) -> Result<Fixture, Box<dyn std::e
             },
         ))
         .await?;
-    cpu.run_main(channel.submit(Command::copy(
-        71,
-        pdma_model_contract::dma::CopyCommand {
-            source: Endpoint::linear(0, 0),
-            destination: Endpoint::linear(0, 0),
+    cpu.run_main(
+        channel.submit(Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 71,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0,
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0,
+                offset: 0,
+            }),
             copy_length: 0,
             sg_context: 0,
-        },
-    )))
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        })),
+    )
     .await?;
     let consumer = u32::try_from(
         ChannelId::new(1)

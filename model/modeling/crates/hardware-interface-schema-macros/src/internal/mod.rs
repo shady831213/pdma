@@ -4,6 +4,9 @@ mod syntax;
 mod validate;
 
 impl crate::Expansion for () {
+    fn untagged_union(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+        expand::untagged_union::run(input)
+    }
     fn bits(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
         expand::bits::run(input)
     }

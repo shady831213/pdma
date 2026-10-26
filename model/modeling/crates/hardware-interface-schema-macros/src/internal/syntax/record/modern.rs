@@ -7,11 +7,12 @@ use super::ScalarType;
 use crate::internal::syntax::{Documentation, EnumDecl, key, keyword, usize_lit};
 
 mod bits;
-mod union;
+mod tagged_union;
 
 pub(in crate::internal) use bits::{BitsDecl, BitsTypeDecl};
-pub(in crate::internal) use union::{
-    ScopedPath, UnionCaseDecl, UnionDecl, UnionFieldDecl, UnionFieldType,
+pub(in crate::internal) use tagged_union::{
+    TaggedUnionCaseDecl, TaggedUnionDecl, TaggedUnionFieldDecl, TaggedUnionFieldType,
+    TaggedUnionTagPath,
 };
 
 pub(in crate::internal) struct ModernRecordDecl {
@@ -38,7 +39,7 @@ pub(in crate::internal) enum ModernTypeDecl {
     Bits(BitsDecl),
     BitsReference(Path),
     Record(Path),
-    Union(UnionDecl),
+    TaggedUnion(TaggedUnionDecl),
 }
 
 impl Parse for ModernRecordDecl {
@@ -96,7 +97,14 @@ impl ModernTypeDecl {
             return input.parse().map(Self::Enum);
         }
         if input.peek(Token![union]) {
-            return input.parse().map(Self::Union);
+            return Err(input.error("inline `union` is no longer supported; use `tagged_union`"));
+        }
+        let probe = input.fork();
+        if probe
+            .parse::<Ident>()
+            .is_ok_and(|ident| ident == "tagged_union")
+        {
+            return input.parse().map(Self::TaggedUnion);
         }
         let probe = input.fork();
         if probe.parse::<Ident>().is_ok_and(|ident| ident == "bits") {

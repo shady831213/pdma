@@ -1,13 +1,14 @@
 //! Register buses and resident DMA fixtures for control tests.
 
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelConfiguration, ChannelId, ChannelRegisters, Command, CommandRegisters,
+    CopyCommandDestinationValues, CopyCommandSourceValues, EventRegisters, LinearEndpoint,
+};
+
 use hardware_interface_pipeline::{HardwareDriver, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, RegisterAccess, SharedMemory,
     SharedMemoryAccess,
-};
-use pdma_model_contract::dma::ChannelConfiguration;
-use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Endpoint, EventRegisters,
 };
 use pdma_model_dma::{Dma, Hardware};
 use std::sync::{Arc, Mutex};
@@ -44,15 +45,20 @@ impl Bus {
             dma.memory.write_typed(
                 MemoryAddress::new(0x1000),
                 MemoryAlignment::ONE,
-                &Command::copy(
-                    13,
-                    pdma_model_contract::dma::CopyCommand {
-                        copy_length: 0,
-                        sg_context: 0,
-                        source: Endpoint::linear(0, 0),
-                        destination: Endpoint::linear(0, 0),
-                    },
-                )
+                &Command::Copy(pdma_model_contract::dma::CopyCommand {
+                    id: 13,
+                    copy_length: 0,
+                    sg_context: 0,
+                    source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                        address: 0,
+                        offset: 0,
+                    }),
+                    destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                        address: 0,
+                        offset: 0,
+                    }),
+                    ..pdma_model_contract::dma::CopyCommand::ZERO
+                })
                 .to_bytes()?,
             )?;
             let base = ChannelId::new(1).register_offset(2).ok_or("channel")?;

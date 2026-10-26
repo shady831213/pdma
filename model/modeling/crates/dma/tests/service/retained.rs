@@ -99,10 +99,11 @@ fn stale_payload_is_rejected_before_effects_and_recovers_after_reset() -> TestRe
     device.write(RESET, &1_u32.to_le_bytes())?;
     assert_eq!(read_word(&mut device, RESET)?, 0);
     reconfigure(&mut device)?;
-    let descriptor = pdma_model_contract::dma::Command {
-        id: 81,
-        ..command()
-    };
+    let descriptor =
+        pdma_model_contract::dma::Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 81,
+            ..*crate::support::copy(&command())?
+        });
     memory.write(0x1200.into(), MemoryAlignment::ONE, &[1, 2, 3, 4])?;
     submit(&mut device, &memory, descriptor)?;
     let input = crate::support::accept(&mut device, ChannelId::new(0))?;
@@ -159,10 +160,11 @@ fn completed_old_retirement_cannot_affect_a_newer_accepted_command() -> TestResu
     );
     device.write(RESET, &1_u32.to_le_bytes())?;
     reconfigure(&mut device)?;
-    let descriptor = pdma_model_contract::dma::Command {
-        id: 81,
-        ..command()
-    };
+    let descriptor =
+        pdma_model_contract::dma::Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 81,
+            ..*crate::support::copy(&command())?
+        });
     memory.write(0x1200.into(), MemoryAlignment::ONE, &[1, 2, 3, 4])?;
     submit(&mut device, &memory, descriptor)?;
     let input = crate::support::accept(&mut device, ChannelId::new(0))?;

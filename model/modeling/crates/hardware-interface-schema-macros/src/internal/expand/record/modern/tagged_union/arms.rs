@@ -1,17 +1,17 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-use crate::internal::syntax::{ModernRecordDecl, UnionDecl};
+use crate::internal::syntax::{ModernRecordDecl, TaggedUnionDecl};
 
-use super::super::layout::UnionStorage;
+use super::super::layout::TaggedUnionStorage;
 use super::{case_field, case_type};
 
 pub(super) struct Context<'a> {
     pub(super) record: &'a ModernRecordDecl,
     pub(super) field: &'a syn::Ident,
-    pub(super) decl: &'a UnionDecl,
+    pub(super) decl: &'a TaggedUnionDecl,
     pub(super) tag_type: &'a TokenStream,
-    pub(super) storage: &'a UnionStorage,
+    pub(super) storage: &'a TaggedUnionStorage,
     pub(super) slots: usize,
     pub(super) quantum: &'a TokenStream,
     pub(super) facade: &'a TokenStream,

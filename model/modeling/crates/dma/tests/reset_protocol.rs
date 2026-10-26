@@ -1,5 +1,7 @@
 //! Reset request, retirement and completion boundaries.
 
+use pdma_model_contract::dma::{CopyCommandSourceValues, LinearEndpoint};
+
 use pdma_model_contract::dma::ChannelConfiguration;
 /// Shared raw-bus fixtures.
 pub mod support;
@@ -88,7 +90,10 @@ fn reset_waits_for_the_resident_tail_after_event_publication() -> TestResult {
     // Given: a command whose event is published but whose composition has not exited.
     let (mut device, memory) = setup(0x1100, 2)?;
     let mut request = command();
-    support::copy_mut(&mut request)?.source = pdma_model_contract::dma::Endpoint::linear(0x9000, 0);
+    support::copy_mut(&mut request)?.source = CopyCommandSourceValues::Linear(LinearEndpoint {
+        address: 0x9000,
+        offset: 0,
+    });
     submit(&mut device, &memory, request)?;
     let chunk = support::chunk_pipeline();
     let pipeline = Then::new(chunk, CommandExit);

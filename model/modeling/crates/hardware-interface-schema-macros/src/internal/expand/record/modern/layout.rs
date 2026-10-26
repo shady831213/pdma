@@ -2,7 +2,8 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
 use crate::internal::syntax::{
-    ModernFieldDecl, ModernRecordDecl, ModernTypeDecl, ScalarType, UnionDecl, UnionFieldType,
+    ModernFieldDecl, ModernRecordDecl, ModernTypeDecl, ScalarType, TaggedUnionDecl,
+    TaggedUnionFieldType,
 };
 
 pub(super) struct RecordPlan<'a> {
@@ -15,16 +16,16 @@ pub(super) struct PlacedField<'a> {
     pub(super) decl: &'a ModernFieldDecl,
     pub(super) offset_name: syn::Ident,
     pub(super) offset: TokenStream,
-    pub(super) scoped_union: bool,
+    pub(super) scoped_tagged_union: bool,
 }
 
-pub(super) struct UnionGeometry {
-    pub(super) storage: UnionStorage,
+pub(super) struct TaggedUnionGeometry {
+    pub(super) storage: TaggedUnionStorage,
     pub(super) slots: usize,
     pub(super) extent: TokenStream,
 }
 
-pub(super) struct UnionStorage {
+pub(super) struct TaggedUnionStorage {
     pub(super) ty: TokenStream,
     pub(super) kind: TokenStream,
     pub(super) width: TokenStream,
@@ -33,10 +34,10 @@ pub(super) struct UnionStorage {
 impl<'a> RecordPlan<'a> {
     pub(super) fn new(decl: &'a ModernRecordDecl, facade: &TokenStream) -> Self {
         let mut fields = Vec::with_capacity(decl.fields.len());
-        let scoped_union = decl
+        let scoped_tagged_union = decl
             .fields
             .iter()
-            .filter(|field| matches!(field.ty, ModernTypeDecl::Union(_)))
+            .filter(|field| matches!(field.ty, ModernTypeDecl::TaggedUnion(_)))
             .count()
             > 1;
         let mut cursor = quote!(0_usize);
@@ -53,7 +54,7 @@ impl<'a> RecordPlan<'a> {
                 decl: field,
                 offset_name,
                 offset,
-                scoped_union,
+                scoped_tagged_union,
             });
         }
         let alignment = decl.alignment.map_or_else(
@@ -75,7 +76,10 @@ impl<'a> RecordPlan<'a> {
     }
 }
 
-pub(super) fn union_geometry(union: &UnionDecl, facade: &TokenStream) -> Option<UnionGeometry> {
+pub(super) fn tagged_union_geometry(
+    union: &TaggedUnionDecl,
+    facade: &TokenStream,
+) -> Option<TaggedUnionGeometry> {
     if union.cases.first()?.record.is_some() {
         let records = union
             .cases
@@ -84,8 +88,8 @@ pub(super) fn union_geometry(union: &UnionDecl, facade: &TokenStream) -> Option<
             .collect::<Vec<_>>();
         let alignment = quote!({ let mut value = 1_usize; #(if #records::RECORD_ALIGNMENT > value { value = #records::RECORD_ALIGNMENT; })* value });
         let extent = quote!({ let mut value = 0_usize; #(if #records::RECORD_SIZE > value { value = #records::RECORD_SIZE; })* #facade::inferred_align_up(value, #alignment) });
-        return Some(UnionGeometry {
-            storage: UnionStorage {
+        return Some(TaggedUnionGeometry {
+            storage: TaggedUnionStorage {
                 ty: quote!(u8),
                 kind: quote!(#facade::ScalarKind::U8),
                 width: alignment,
@@ -99,7 +103,7 @@ pub(super) fn union_geometry(union: &UnionDecl, facade: &TokenStream) -> Option<
         .iter()
         .flat_map(|case| case.fields.iter())
         .next()
-        .map(|field| union_storage(&field.ty, facade))?;
+        .map(|field| tagged_union_storage(&field.ty, facade))?;
     let slots = union
         .cases
         .iter()
@@ -108,7 +112,7 @@ pub(super) fn union_geometry(union: &UnionDecl, facade: &TokenStream) -> Option<
         .map_or(0, |slots| slots);
     let width = &storage.width;
     let extent = quote!((#width).saturating_mul(#slots));
-    Some(UnionGeometry {
+    Some(TaggedUnionGeometry {
         storage,
         slots,
         extent,
@@ -122,7 +126,7 @@ fn type_alignment(ty: &ModernTypeDecl, facade: &TokenStream) -> TokenStream {
         ModernTypeDecl::Bits(decl) => width(decl.storage),
         ModernTypeDecl::BitsReference(path) => quote!(#path::EXTENT),
         ModernTypeDecl::Record(path) => quote!(#path::RECORD_ALIGNMENT),
-        ModernTypeDecl::Union(union) => union_geometry(union, facade)
+        ModernTypeDecl::TaggedUnion(union) => tagged_union_geometry(union, facade)
             .map_or_else(|| quote!(1_usize), |geometry| geometry.storage.width),
     }
 }
@@ -134,7 +138,7 @@ fn type_extent(ty: &ModernTypeDecl, facade: &TokenStream) -> TokenStream {
         ModernTypeDecl::Bits(decl) => width(decl.storage),
         ModernTypeDecl::BitsReference(path) => quote!(#path::EXTENT),
         ModernTypeDecl::Record(path) => quote!(#path::RECORD_SIZE),
-        ModernTypeDecl::Union(union) => union_geometry(union, facade)
+        ModernTypeDecl::TaggedUnion(union) => tagged_union_geometry(union, facade)
             .map_or_else(|| quote!(0_usize), |geometry| geometry.extent),
     }
 }
@@ -144,19 +148,19 @@ fn width(scalar: ScalarType) -> TokenStream {
     quote!(#width)
 }
 
-fn union_storage(ty: &UnionFieldType, facade: &TokenStream) -> UnionStorage {
+fn tagged_union_storage(ty: &TaggedUnionFieldType, facade: &TokenStream) -> TaggedUnionStorage {
     match ty {
-        UnionFieldType::Scalar(scalar_type) => {
+        TaggedUnionFieldType::Scalar(scalar_type) => {
             let ty = super::scalar::ty(*scalar_type);
             let kind = super::scalar::kind(*scalar_type);
             let width = scalar_type.width();
-            UnionStorage {
+            TaggedUnionStorage {
                 ty,
                 kind: quote!(#facade::ScalarKind::#kind),
                 width: quote!(#width),
             }
         }
-        UnionFieldType::Bits(path) => UnionStorage {
+        TaggedUnionFieldType::Bits(path) => TaggedUnionStorage {
             ty: quote!(<#path as #facade::BitsLayout>::Storage),
             kind: quote!(<#path as #facade::BitsLayout>::SCALAR_KIND),
             width: quote!(<#path as #facade::BitsLayout>::EXTENT),

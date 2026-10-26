@@ -1,0 +1,5 @@
+error: untagged union cannot declare `tag`; use an inline `tagged_union` field in a record
+ --> tests/ui/fail/untagged_selector.rs:2:32
+  |
+2 | union_schema! { union Broken { tag: self.kind, cases: { One(A) } } }
+  |                                ^^^

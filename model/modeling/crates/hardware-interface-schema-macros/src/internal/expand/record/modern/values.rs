@@ -3,7 +3,7 @@ use quote::{format_ident, quote};
 
 use crate::internal::syntax::{ModernRecordDecl, ModernTypeDecl};
 
-use super::{layout::RecordPlan, scalar, union};
+use super::{layout::RecordPlan, scalar, tagged_union};
 
 mod codec;
 mod field;
@@ -129,14 +129,14 @@ fn normalizers(decl: &ModernRecordDecl, plan: &RecordPlan<'_>) -> syn::Result<Ve
     plan.fields
         .iter()
         .filter_map(|field| {
-            let ModernTypeDecl::Union(union_decl) = &field.decl.ty else {
+            let ModernTypeDecl::TaggedUnion(union_decl) = &field.decl.ty else {
                 return None;
             };
             Some((field, union_decl))
         })
         .map(|(field, union_decl)| {
             let union_name = &field.decl.name;
-            let tag = union::tag_info(decl, &union_decl.tag, &quote!(normalized))?;
+            let tag = tagged_union::tag_info(decl, &union_decl.tag, &quote!(normalized))?;
             let access = tag.access;
             Ok(quote!(#access = normalized.#union_name.tag();))
         })
@@ -191,7 +191,7 @@ fn field_type(
             let ty = scalar::type_name(marker, name, "");
             quote!(#ty)
         }
-        ModernTypeDecl::Bits(_) | ModernTypeDecl::Union(_) => {
+        ModernTypeDecl::Bits(_) | ModernTypeDecl::TaggedUnion(_) => {
             let ty = scalar::type_name(marker, name, "Values");
             quote!(#ty)
         }
@@ -216,7 +216,7 @@ fn zero_field(
             let ty = scalar::type_name(marker, name, "");
             quote!(#ty::ZERO)
         }
-        ModernTypeDecl::Bits(_) | ModernTypeDecl::Union(_) => {
+        ModernTypeDecl::Bits(_) | ModernTypeDecl::TaggedUnion(_) => {
             let ty = scalar::type_name(marker, name, "Values");
             quote!(#ty::ZERO)
         }

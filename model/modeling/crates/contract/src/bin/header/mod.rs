@@ -6,8 +6,9 @@ use pdma_model_contract::control::{
     ControlEvent, ControlQueue, ControlRequest, ControlResponse, ControlRingState,
 };
 use pdma_model_contract::dma::{
-    AtomicCommand, Command, CopyCommand, DmaRegisters, Endpoint, ErrorInfo, Event, FillCommand,
-    Segment, SemaphoreCommand, TimestampCommand, WaitCommand, WordTarget, WordWrite,
+    AtomicCommand, Command, CommandHeader, CopyCommand, DmaRegisters, ErrorInfo, Event,
+    FenceCommand, FillCommand, LinearEndpoint, ScatterGatherEndpoint, Segment, SemaphoreCommand,
+    TimestampCommand, TrapCommand, WaitCommand, WordTarget, WordWrite, WriteCommand,
 };
 use pdma_model_contract::hw_components::context::ContextTableRegisters;
 use pdma_model_contract::hw_components::control::ControlRegisters;
@@ -36,7 +37,15 @@ pub fn generate_with_contexts(count: usize, contexts: usize) -> Result<HeaderSet
     let mut common = InMemoryArtifactSink::new();
     for (name, record) in [
         ("segment", Segment::SPEC.resolve()?),
-        ("endpoint", Endpoint::SPEC.resolve()?),
+        ("linearendpoint", LinearEndpoint::SPEC.resolve()?),
+        (
+            "scattergatherendpoint",
+            ScatterGatherEndpoint::SPEC.resolve()?,
+        ),
+        ("commandheader", CommandHeader::SPEC.resolve()?),
+        ("writecommand", WriteCommand::SPEC.resolve()?),
+        ("fencecommand", FenceCommand::SPEC.resolve()?),
+        ("trapcommand", TrapCommand::SPEC.resolve()?),
         ("command", Command::SPEC.resolve()?),
         ("copycommand", CopyCommand::SPEC.resolve()?),
         ("wordtarget", WordTarget::SPEC.resolve()?),

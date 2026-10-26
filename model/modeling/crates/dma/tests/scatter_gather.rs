@@ -1,10 +1,14 @@
 //! Independent endpoint layouts share the same hardware copy pipeline.
 
+use pdma_model_contract::dma::{
+    Command, CopyCommandDestinationValues, CopyCommandSourceValues, LinearEndpoint,
+    ScatterGatherEndpoint, Segment,
+};
+
 /// Shared hardware test fixtures.
 pub mod support;
 
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
-use pdma_model_contract::dma::{Command, Endpoint, Segment};
 use support::{TestResult, run, setup, submit};
 
 fn write_segments(memory: &SharedMemory, base: u64, segments: &[Segment]) -> TestResult {
@@ -62,27 +66,42 @@ fn independent_endpoint_modes_copy_across_different_boundaries() -> TestResult {
             ],
         )?;
         let source = if gather {
-            Endpoint::scatter_gather(0x1400, 3)
+            CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+                list_address: 0x1400,
+                count: 3,
+                index: 0,
+                offset: 0,
+            })
         } else {
-            Endpoint::linear(0x1200, 0)
+            CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0x1200,
+                offset: 0,
+            })
         };
         let destination = if scatter {
-            Endpoint::scatter_gather(0x1500, 2)
+            CopyCommandDestinationValues::ScatterGather(ScatterGatherEndpoint {
+                list_address: 0x1500,
+                count: 2,
+                index: 0,
+                offset: 0,
+            })
         } else {
-            Endpoint::linear(0x1300, 0)
+            CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x1300,
+                offset: 0,
+            })
         };
         submit(
             &mut device,
             &memory,
-            Command::copy(
-                7,
-                pdma_model_contract::dma::CopyCommand {
-                    copy_length: 8,
-                    sg_context: 0,
-                    source,
-                    destination,
-                },
-            ),
+            Command::Copy(pdma_model_contract::dma::CopyCommand {
+                id: 7,
+                copy_length: 8,
+                sg_context: 0,
+                source,
+                destination,
+                ..pdma_model_contract::dma::CopyCommand::ZERO
+            }),
         )?;
         // When: the normal composed hardware executes one command.
         run(&mut device)?;
@@ -121,15 +140,20 @@ fn scratch_buffer_size_does_not_limit_command_length() -> TestResult {
     submit(
         &mut device,
         &memory,
-        Command::copy(
-            8,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 769,
-                sg_context: 0,
-                source: Endpoint::linear(0x1400, 0),
-                destination: Endpoint::linear(0x1800, 0),
-            },
-        ),
+        Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 8,
+            copy_length: 769,
+            sg_context: 0,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0x1400,
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x1800,
+                offset: 0,
+            }),
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        }),
     )?;
     // When: hardware executes through multiple copy iterations.
     run(&mut device)?;
@@ -163,15 +187,22 @@ fn overlapping_segments_follow_execution_order() -> TestResult {
     submit(
         &mut device,
         &memory,
-        Command::copy(
-            5,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 4,
-                sg_context: 0,
-                source: Endpoint::scatter_gather(0x1400, 2),
-                destination: Endpoint::linear(0x1202, 0),
-            },
-        ),
+        Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 5,
+            copy_length: 4,
+            sg_context: 0,
+            source: CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+                list_address: 0x1400,
+                count: 2,
+                index: 0,
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x1202,
+                offset: 0,
+            }),
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        }),
     )?;
     // When: hardware processes the stream without detecting or rejecting overlap.
     run(&mut device)?;

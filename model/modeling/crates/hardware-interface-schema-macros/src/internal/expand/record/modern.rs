@@ -11,7 +11,7 @@ use crate::internal::{
 mod bits;
 mod layout;
 mod metadata;
-mod union;
+mod tagged_union;
 mod values;
 mod views;
 
@@ -40,15 +40,15 @@ pub(super) fn expand(decl: &ModernRecordDecl) -> syn::Result<TokenStream> {
         crate::internal::syntax::ModernTypeDecl::Bits(bits_decl) => {
             bits::expand(marker, &field.name, bits_decl, visibility, &facade)
         }
-        crate::internal::syntax::ModernTypeDecl::Union(union_decl)
+        crate::internal::syntax::ModernTypeDecl::TaggedUnion(union_decl)
             if union_decl
                 .cases
                 .first()
                 .is_some_and(|case| case.record.is_some()) =>
         {
-            union::records::expand(decl, &field.name, union_decl, visibility, &facade)
+            tagged_union::records::expand(decl, &field.name, union_decl, visibility, &facade)
         }
-        crate::internal::syntax::ModernTypeDecl::Union(union_decl) => union::expand(
+        crate::internal::syntax::ModernTypeDecl::TaggedUnion(union_decl) => tagged_union::expand(
             decl,
             &field.name,
             union_decl,

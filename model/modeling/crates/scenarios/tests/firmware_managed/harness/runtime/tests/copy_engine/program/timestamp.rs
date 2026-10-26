@@ -1,8 +1,10 @@
+use pdma_model_contract::dma::{
+    Command, CommandHeader, CopyCommand, CopyCommandDestinationValues, CopyCommandSourceValues,
+    LinearEndpoint, Opcode, TimestampCommand, TrapCommand, WordTarget, WordTargetWidth, WordWrite,
+};
+
 use super::{Ports, TestResult, setup};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, RegisterAccess};
-use pdma_model_contract::dma::{
-    Command, CopyCommand, Endpoint, TimestampCommand, WordTarget, WordTargetWidth, WordWrite,
-};
 use pdma_model_host::CompletionWord;
 
 pub(in super::super) async fn run<B>(ports: Ports<B>, payload: &[u8; 16]) -> TestResult<[u64; 2]>
@@ -19,6 +21,7 @@ where
     let stamp = |offset| TimestampCommand {
         address: storage.raw() + offset,
         context: 0,
+        ..TimestampCommand::ZERO
     };
     let completion = CompletionWord(WordWrite {
         target: WordTarget {
@@ -29,19 +32,41 @@ where
         value: 99,
     });
     for command in [
-        Command::timestamp(1, stamp(0)),
-        Command::copy(
-            2,
-            CopyCommand {
-                source: Endpoint::linear(storage.raw() + 32, 0),
-                destination: Endpoint::linear(storage.raw() + 48, 0),
-                copy_length: 16,
-                sg_context: 0,
+        Command::Timestamp(TimestampCommand {
+            header: CommandHeader {
+                opcode: Opcode::Timestamp,
             },
-        ),
-        Command::timestamp(3, stamp(8)),
+            id: 1,
+            ..stamp(0)
+        }),
+        Command::Copy(CopyCommand {
+            id: 2,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: storage.raw() + 32,
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: storage.raw() + 48,
+                offset: 0,
+            }),
+            copy_length: 16,
+            sg_context: 0,
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        }),
+        Command::Timestamp(TimestampCommand {
+            header: CommandHeader {
+                opcode: Opcode::Timestamp,
+            },
+            id: 3,
+            ..stamp(8)
+        }),
         completion.command(4),
-        Command::trap(5),
+        Command::Trap(TrapCommand {
+            header: CommandHeader {
+                opcode: Opcode::Trap,
+            },
+            id: 5,
+        }),
     ] {
         selected.submit(command).await?;
     }

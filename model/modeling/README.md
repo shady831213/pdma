@@ -6,6 +6,14 @@ Host/platform obligations, and explicit model-to-RTL verification boundaries.
 DMA/event recovery. Raw DMA-wide fatal notification goes to firmware; PF receives
 firmware events and coordinates affected VFs.
 
+The DMA command slot is a naturally aligned 96-byte overlay of complete commands.
+All commands reuse one `CommandHeader`/opcode definition. Generic untagged union
+storage never interprets an opcode; PDMA contract decoding selects the command,
+while Copy's endpoint `tagged_union` fields retain their local mode tags.
+Complete command definitions live together in the contract's operations module;
+the command module owns the top-level union, shared header and protocol codec. See the
+[wire layout](docs/copy-engine.md#wire-layout) and [layout decisions](docs/layout-review.md).
+
 The [roadmap and SDMA gap comparison](docs/firmware-dma-goal.md#copy-engine-synchronization-reassessment)
 record the withdrawal of the first Signal/Wait implementation. The approved
 [copy-engine contract](docs/copy-engine.md) now defines Copy, Write, Fill, Wait,

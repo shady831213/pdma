@@ -32,7 +32,7 @@ pub use documentation::Documentation;
 pub use endian::Endian;
 pub use enumeration::{EnumDefinition, EnumVariantSpec};
 pub use hardware_interface_schema_macros::{
-    bits_schema, record_schema, register_map, register_schema,
+    bits_schema, record_schema, register_map, register_schema, union_schema,
 };
 pub use layout::{
     RecordLayout, RegisterBank, RegisterBankError, RegisterLayout, RegisterMapLayout,

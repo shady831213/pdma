@@ -1,11 +1,11 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-use crate::internal::syntax::UnionFieldDecl;
+use crate::internal::syntax::TaggedUnionFieldDecl;
 
 pub(super) fn expand(
     owner: &syn::Ident,
-    fields: &[UnionFieldDecl],
+    fields: &[TaggedUnionFieldDecl],
     facade: &TokenStream,
 ) -> TokenStream {
     let identities = fields.iter().map(|field| {

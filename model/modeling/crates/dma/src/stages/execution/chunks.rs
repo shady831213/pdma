@@ -69,8 +69,8 @@ impl<M: MemoryAccess<SB>, SB> Stage<ExecutionContext<'_, M, SB>> for PrepareChun
                 source,
                 destination,
                 length,
-                source_context: progress.command.source.context,
-                destination_context: progress.command.destination.context,
+                source_context: progress.command.source_context,
+                destination_context: progress.command.destination_context,
             };
             *state = None;
             Ok(StepOutcome::Complete(Ok(Some(chunk))))

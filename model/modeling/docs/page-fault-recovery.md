@@ -134,13 +134,14 @@ before acknowledging cleanup. Bindings remain valid on failure.
 
 ## Normative requirements and wire details
 
-**HW-PF-01 (range acceptance).** Command occupies 112 bytes: ID at 0, operation kind
-at 8 and the operation payload at 16. The 96-byte Copy payload places source,
-destination, copy length and SG context at relative offsets 0/40/80/88.
-Each 40-byte endpoint has
-mode/context at 0/4 and geometry at 8: Linear has base/offset; SG has
-table/count/index/offset. All records are little-endian, eight-byte aligned;
-unused storage encodes zero. Generated schemas are the wire-layout authority.
+**HW-PF-01 (range acceptance).** Command occupies 96 bytes. Complete commands share
+one opcode header at zero and ID at 8. Copy stores endpoint modes in options at 1,
+SG context at 4, length at 16, source/destination contexts at 24/28, and two 32-byte
+endpoint unions at 32/64. Linear parameters contain base/offset at 0/8; SG contains
+table/count/index/offset at 0/8/16/24. Every address, count, index, offset and length
+retains 64 bits. Command slots and endpoint records are eight-byte aligned;
+multibyte values are little-endian. Unused storage encodes zero. Generated schemas
+are the wire-layout authority; see [copy-engine.md](copy-engine.md#wire-layout).
 
 For nonzero length, Linear selected address/end arithmetic must fit u64. SG starts
 directly at its index, skips zero-length entries and walks only far enough to cover
@@ -149,8 +150,8 @@ InvalidLength; offset equal to an entry length advances. Insufficient entries,
 including start at/beyond count, is LengthMismatch. Inaccessible or undecodable
 entries are ListReadError. Neither unused prefixes nor suffixes are scanned.
 Both ranges pass before payload access; zero length touches no list or payload.
-Typed endpoint positions and matching-variant `with_start` remain general range
-selection helpers, independent of fault recovery.
+The selected endpoint parameters carry the initial offset/index directly;
+mutable traversal and parked progress remain channel-owned hardware state.
 
 **HW-PF-02 (progress and terminal completion).** Retain the original command, both
 current SG/Linear cursors, committed prefix, current copy phase and successful read

@@ -1,3 +1,4 @@
+use pdma_model_contract::dma::{CommandHeader, Opcode, WriteCommand};
 mod commands;
 pub(super) mod timestamp;
 pub(super) mod waiting;
@@ -56,13 +57,16 @@ where
     }
     assert!(!selected.faulted().await?);
     assert!(!fence.is_complete(&memory)?);
-    peer.submit(Command::write(
-        10,
-        WordWrite {
+    peer.submit(Command::Write(WriteCommand {
+        header: CommandHeader {
+            opcode: Opcode::Write,
+        },
+        id: 10,
+        word: WordWrite {
             target: dependency,
             value: 1,
         },
-    ))
+    }))
     .await?;
     let event = loop {
         if let Some(event) = selected.event().await? {

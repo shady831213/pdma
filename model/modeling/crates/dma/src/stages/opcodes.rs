@@ -1,6 +1,6 @@
 use super::Fetch;
 use super::execution::Install;
-use super::operations::{Execute, operand};
+use super::operations::Execute;
 use crate::{
     CheckRanges, ChunkInput, CommandRequest, Completion, CopyProgress, Dma, ExecutionContext,
     FetchedCommand, Flow,
@@ -8,8 +8,8 @@ use crate::{
 use hardware_interface_pipeline::{Dispatch, FanOut, Route, Stage, StepOutcome, StepResult, Then};
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::dma::{
-    AtomicCommand, CommandPayloadValues, FillCommand, SemaphoreCommand, TimestampCommand,
-    TrapCommand, WaitCommand,
+    AtomicCommand, Command, FenceCommand, FillCommand, SemaphoreCommand, TimestampCommand,
+    TrapCommand, WaitCommand, WriteCommand,
 };
 use std::convert::Infallible;
 
@@ -18,12 +18,12 @@ type Copy<S> = Then<CheckRanges, Then<Install, S, Flow<ChunkInput>>, Flow<CopyPr
 #[derive(Debug)]
 pub(super) enum Branch<S> {
     Copy(Box<Copy<S>>),
-    Write(Execute<operand::Write>),
+    Write(Execute<WriteCommand>),
     Fill(Execute<FillCommand>),
     Wait(Execute<WaitCommand>),
     Atomic(Execute<AtomicCommand>),
     Semaphore(Execute<SemaphoreCommand>),
-    Fence(Execute<operand::Fence>),
+    Fence(Execute<FenceCommand>),
     Trap(Execute<TrapCommand>),
     Timestamp(Execute<TimestampCommand>),
     Empty,
@@ -71,16 +71,16 @@ pub(super) struct Select;
 
 impl Route<Flow<FetchedCommand>, Infallible> for Select {
     fn target(&mut self, input: &Flow<FetchedCommand>) -> Result<usize, Infallible> {
-        Ok(match input.data().map(|fetched| &fetched.command.payload) {
-            Some(CommandPayloadValues::Copy(_)) => 0,
-            Some(CommandPayloadValues::Write(_)) => 1,
-            Some(CommandPayloadValues::Fill(_)) => 2,
-            Some(CommandPayloadValues::Wait(_)) => 3,
-            Some(CommandPayloadValues::Atomic(_)) => 4,
-            Some(CommandPayloadValues::Semaphore(_)) => 5,
-            Some(CommandPayloadValues::Fence(_)) => 6,
-            Some(CommandPayloadValues::Trap(_)) => 7,
-            Some(CommandPayloadValues::Timestamp(_)) => 8,
+        Ok(match input.data().map(|fetched| &fetched.command) {
+            Some(Command::Copy(_)) => 0,
+            Some(Command::Write(_)) => 1,
+            Some(Command::Fill(_)) => 2,
+            Some(Command::Wait(_)) => 3,
+            Some(Command::Atomic(_)) => 4,
+            Some(Command::Semaphore(_)) => 5,
+            Some(Command::Fence(_)) => 6,
+            Some(Command::Trap(_)) => 7,
+            Some(Command::Timestamp(_)) => 8,
             None => 9,
         })
     }

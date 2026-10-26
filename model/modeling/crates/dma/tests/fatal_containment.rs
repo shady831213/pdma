@@ -1,5 +1,9 @@
 //! Fatal admission and configuration containment through the public bus.
 
+use pdma_model_contract::dma::{
+    CopyCommandDestinationValues, CopyCommandSourceValues, LinearEndpoint,
+};
+
 use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, DmaControl, DmaDiscovery,
@@ -12,14 +16,22 @@ pub mod support;
 #[test]
 fn active_copy_fatal_stops_next_memory_access_and_reset_retires_old_work() -> support::TestResult {
     use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-    use pdma_model_contract::dma::Endpoint;
+
     // Given: the first chunk of an accepted two-chunk command is externally visible.
     let (mut dma, memory) = support::setup(0x1100, 2)?;
     memory.write(MemoryAddress::new(0x1200), MemoryAlignment::ONE, &[7; 512])?;
     let mut command = support::command();
     crate::support::copy_mut(&mut command)?.copy_length = 512;
-    crate::support::copy_mut(&mut command)?.source = Endpoint::linear(0x1200, 0);
-    crate::support::copy_mut(&mut command)?.destination = Endpoint::linear(0x1600, 0);
+    crate::support::copy_mut(&mut command)?.source =
+        CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: 0x1200,
+            offset: 0,
+        });
+    crate::support::copy_mut(&mut command)?.destination =
+        CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: 0x1600,
+            offset: 0,
+        });
     support::submit(&mut dma, &memory, command)?;
     let mut pipeline = dma.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();

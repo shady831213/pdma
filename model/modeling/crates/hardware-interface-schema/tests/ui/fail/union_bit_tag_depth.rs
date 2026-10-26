@@ -7,7 +7,7 @@ record_schema! {
             flags: bits(u8) { fields: {
                 kind: 0..=0 => enum { variants: { Item = 0 } },
             } },
-            payload: union { tag: self.flags.kind.extra, cases: { Item { value: u8 } } },
+            payload: tagged_union { tag: self.flags.kind.extra, cases: { Item { value: u8 } } },
         },
     }
 }

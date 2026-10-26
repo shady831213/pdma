@@ -1,19 +1,20 @@
 # Register and descriptor layout review
 
-The clearest immediate improvements are a denser context-management header and
-coherent channel configuration, recovery and interrupt groups. Command packing
-needs a separate encoding decision: the current 112-byte slot is dominated by
-the independently positioned source and destination SG descriptions. Shrinking
-enum types alone will not remove that cost.
+The current command slot is 96 bytes, naturally aligned to eight, with one shared
+header/opcode definition and complete records overlaid by an untagged union.
+The [2026-10-26 revision](#2026-10-26-revision-shared-headers-and-untagged-command-storage)
+records why the first complete-record design was discarded and how selection is
+kept outside generic union storage. The current wire table is in
+[copy-engine.md](copy-engine.md#wire-layout).
 
-The context-header, channel-group and control-configuration changes described
-below are implemented. The descriptor decision retains the existing encoding. The baseline
-layout below is measured at commit
-`79260ae18ff32b358b1546c7403fae9ccf51b6aa`. Sizes and offsets come from schema
-resolution; offsets are decimal bytes relative to the containing record/map.
-Wire records are little-endian. Rust object sizes are not wire sizes.
+The context-header, channel-group and control-configuration changes below are
+implemented. The following inventory and initial command decision are retained
+as the **2026-10-23 baseline**, measured at commit
+`79260ae18ff32b358b1546c7403fae9ccf51b6aa`. They explain the earlier 112-byte format,
+not the current ABI. Offsets are decimal bytes relative to the containing
+record/map. Wire records are little-endian; Rust object sizes are not wire sizes.
 
-## Record inventory
+## Initial record inventory (historical)
 
 Sources: [commands](../crates/contract/src/dma/command.rs),
 [endpoints](../crates/contract/src/dma/endpoint.rs),
@@ -113,7 +114,7 @@ belong to that body, keeping its decoding self-contained; parent-tag lookup and
 scattered child fields are not prerequisites for revisiting the command design.
 The schema enhancement itself leaves the PDMA descriptor encoding unchanged.
 
-The 96-byte sketch remains a possible future encoding, not an outstanding task in
+At this checkpoint the 96-byte sketch remained a possible future encoding, not an outstanding task in
 this implementation. No measured bus-throughput improvement follows from its byte
 count alone. In particular, 96-byte stride does not imply 64-byte slot alignment.
 
@@ -246,3 +247,27 @@ suite (1174 tests), formatting, strict clippy, private-item documentation and
 generated-header consistency checks. Neither suite has ignored tests. Review also
 removed a legacy numeric enable address from the firmware idle-test bus while
 preserving its exactly-one-read assertion.
+
+## 2026-10-26 revision: shared headers and untagged command storage
+
+The first uncommitted complete-record tagged-union implementation was discarded
+at the user's request, without a backup branch. The retained checkpoint is
+36fe54e (enum bitfields as tagged-union selectors). Its design inferred an opcode
+from a singleton enum in every complete command, which duplicated the public
+header/opcode definition and gave `self.header.opcode` no clear outer owner.
+
+The approved replacement distinguishes layout from selection. A generic untagged
+union overlays complete records at byte zero, infers natural alignment/maximum
+extent and never interprets a discriminator. CommandHeader and its opcode enum
+are defined once and reused by all complete command records. PDMA's contract
+interprets that common header to select a command. Copy's source/destination
+remain existing tagged unions whose mode selectors belong to Copy itself.
+
+A one-byte common header and one-byte Copy options allow sg_context@4, id@8,
+length@16, payload contexts@24/28 and 32-byte endpoint unions@32/64: a naturally
+aligned 96-byte command slot without parent-relative layout or split child records.
+All addresses/counts/indices/offsets/lengths retain their widths. This is not a
+claim of measured throughput improvement. No singleton-selector inference,
+implicit opcode decoding, parent-tag lookup or old compatibility wrapper belongs
+in the new generic untagged union. Tests must cover explicit variant selection,
+wrong/unknown command opcodes, truncation, inactive storage and C wire agreement.

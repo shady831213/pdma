@@ -9,7 +9,7 @@ record_schema! {
         endian: Little,
         fields: {
             tag: enum(u8) { variants: { Small = 0, Large = 1 } },
-            payload: union { tag: self.tag, cases: { Small(Small), Large(Large) } },
+            payload: tagged_union { tag: self.tag, cases: { Small(Small), Large(Large) } },
         },
     }
 }
@@ -20,8 +20,8 @@ record_schema! { pub record Tags { endian: Little, fields: {
 } } }
 record_schema! { pub record Pair { endian: Little, fields: {
     tags: Tags,
-    left: union { tag: self.tags.left, cases: { A { offset: u64 }, B { index: u64, offset: u64 } } },
-    right: union { tag: self.tags.right, cases: { A { offset: u64 }, B { index: u64, offset: u64 } } },
+    left: tagged_union { tag: self.tags.left, cases: { A { offset: u64 }, B { index: u64, offset: u64 } } },
+    right: tagged_union { tag: self.tags.right, cases: { A { offset: u64 }, B { index: u64, offset: u64 } } },
 } } }
 
 #[test]

@@ -5,7 +5,7 @@ record_schema! {
         endian: Little,
         fields: {
             opcode: enum(u8) { variants: { First = 1, Second } },
-            payload: union {
+            payload: tagged_union {
                 tag: self.opcode,
                 cases: { First { value: u8 } },
             },

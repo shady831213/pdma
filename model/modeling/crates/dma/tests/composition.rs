@@ -1,5 +1,7 @@
 //! Typed payloads connect independently composable execution stages.
 
+use pdma_model_contract::dma::{CopyCommandSourceValues, LinearEndpoint};
+
 mod command_tail;
 /// Shared raw-bus test fixtures.
 pub mod support;
@@ -99,8 +101,10 @@ fn failed_read_consumes_its_transient_state_without_repeating_the_event() -> Tes
     // Given: a real chunk whose source memory is inaccessible.
     let (mut device, memory) = setup(0x1100, 2)?;
     let mut descriptor = command();
-    support::copy_mut(&mut descriptor)?.source =
-        pdma_model_contract::dma::Endpoint::linear(0x9000, 0);
+    support::copy_mut(&mut descriptor)?.source = CopyCommandSourceValues::Linear(LinearEndpoint {
+        address: 0x9000,
+        offset: 0,
+    });
     submit(&mut device, &memory, descriptor)?;
     let channel = ChannelId::new(0);
     let request = support::accept(&mut device, channel)?;
@@ -142,7 +146,7 @@ fn failed_read_consumes_its_transient_state_without_repeating_the_event() -> Tes
     let event = Event::from_bytes(raw.as_ref())?;
     assert_eq!(
         (event.id, event.code, event.bytes_completed()),
-        (descriptor.id, EventCode::ReadError, 0)
+        (descriptor.id(), EventCode::ReadError, 0)
     );
     Ok(())
 }

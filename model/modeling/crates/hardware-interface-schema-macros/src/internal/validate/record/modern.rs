@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::internal::syntax::{ModernRecordDecl, ModernTypeDecl, UnionDecl};
+use crate::internal::syntax::{ModernRecordDecl, ModernTypeDecl, TaggedUnionDecl};
 use crate::internal::validate::enumeration::enum_variants;
 
 pub(in crate::internal) fn check(decl: &ModernRecordDecl) -> syn::Result<()> {
@@ -56,11 +56,11 @@ fn check_type(decl: &ModernRecordDecl, ty: &ModernTypeDecl) -> syn::Result<()> {
                 Ok(())
             }
         }
-        ModernTypeDecl::Union(union) => check_union(decl, union),
+        ModernTypeDecl::TaggedUnion(union) => check_tagged_union(decl, union),
     }
 }
 
-fn check_union(decl: &ModernRecordDecl, union: &UnionDecl) -> syn::Result<()> {
+fn check_tagged_union(decl: &ModernRecordDecl, union: &TaggedUnionDecl) -> syn::Result<()> {
     if union.cases.is_empty() {
         return Err(syn::Error::new(union.tag.span, "union requires a case"));
     }
@@ -80,7 +80,7 @@ fn check_union(decl: &ModernRecordDecl, union: &UnionDecl) -> syn::Result<()> {
         .iter()
         .find(|field| field.name == *root)
         .ok_or_else(|| syn::Error::new(root.span(), "union tag root does not exist"))?;
-    let names = check_union_cases(decl, union)?;
+    let names = check_tagged_union_cases(decl, union)?;
     let enumeration = match (union.tag.segments.as_slice(), &root_field.ty) {
         ([_], ModernTypeDecl::Enum(tag)) => Some(tag),
         ([_, member], ModernTypeDecl::Bits(bits)) => {
@@ -128,7 +128,10 @@ fn check_union(decl: &ModernRecordDecl, union: &UnionDecl) -> syn::Result<()> {
     Ok(())
 }
 
-fn check_union_cases(decl: &ModernRecordDecl, union: &UnionDecl) -> syn::Result<HashSet<String>> {
+fn check_tagged_union_cases(
+    decl: &ModernRecordDecl,
+    union: &TaggedUnionDecl,
+) -> syn::Result<HashSet<String>> {
     let mut names = HashSet::new();
     let mut field_count = 0_usize;
     for case in &union.cases {

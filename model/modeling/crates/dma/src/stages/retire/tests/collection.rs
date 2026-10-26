@@ -3,7 +3,8 @@ use crate::{Completion, Dma, Error, Fetch, Flow, Retire};
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::{
-    ChannelId, Command, WaitCommand, WaitCommandComparison, WordTarget, WordTargetWidth,
+    ChannelId, Command, CommandHeader, Opcode, WaitCommand, WaitCommandComparison, WordTarget,
+    WordTargetWidth,
 };
 
 fn fetched(
@@ -18,18 +19,19 @@ fn fetched(
 }
 
 fn waiting(dma: &mut Dma<SharedMemory>) -> TestResult<Flow<Completion>> {
-    let command = Command::wait(
-        23,
-        WaitCommand {
-            target: WordTarget {
-                address: 0x1200,
-                context: 0,
-                width: WordTargetWidth::Bits32,
-            },
-            value: 0,
-            comparison: WaitCommandComparison::Equal,
+    let command = Command::Wait(WaitCommand {
+        header: CommandHeader {
+            opcode: Opcode::Wait,
         },
-    );
+        id: 23,
+        target: WordTarget {
+            address: 0x1200,
+            context: 0,
+            width: WordTargetWidth::Bits32,
+        },
+        value: 0,
+        comparison: WaitCommandComparison::Equal,
+    });
     dma.memory
         .write(0x1000.into(), MemoryAlignment::ONE, &command.to_bytes()?)?;
     let flow = fetched(dma, ChannelId::new(0))?;

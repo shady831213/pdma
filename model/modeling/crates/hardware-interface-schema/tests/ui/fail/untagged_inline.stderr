@@ -1,0 +1,5 @@
+error: expected parentheses
+ --> tests/ui/fail/untagged_inline.rs:2:45
+  |
+2 | union_schema! { union Broken { cases: { One { value: u32 } } } }
+  |                                             ^

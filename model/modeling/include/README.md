@@ -86,23 +86,42 @@ registers provide no episode or stale-request check. Shared software offers
 `faulted() -> Result<bool, _>` and `resume()` without a ticket argument. See
 [pageable-copy recovery](../docs/page-fault-recovery.md) for ordering and lifetime.
 
-Shared wire records: Segment is 16 bytes, Endpoint 40, Command 112, Event 24,
-TimestampCommand 16 (64-bit target address and 32-bit context; command kind 8),
-ControlRequest 32 and ControlResponse 24, ContextAttributes 8, ControlRingState 24,
-ControlEvent 8 (alignment four), and ControlQueue 72. Enum bitfield constants are
-unshifted values. Endpoints select Linear (zero) or ScatterGather (one). Their
-context is at byte four and their mode-selected payload starts at byte eight.
+Shared wire records: Segment is 16 bytes, Command 96, Event 24,
+ControlRequest 32, ControlResponse 24, ContextAttributes 8, ControlRingState 24,
+ControlEvent 8 (alignment four), and ControlQueue 72. Command slots have alignment
+eight. The top-level Command is an untagged union of complete command records;
+its shared CommandHeader contains one opcode byte at zero. Software ID is at eight
+in every member. Opcodes Copy, Write, Fill, Wait, Atomic, Semaphore, Fence, Trap
+and Timestamp are assigned once as 0 through 8. Unknown opcodes are rejected.
 
-Command stores ID at zero, kind at eight and a 96-byte payload at sixteen. The
-nine kinds are Copy, Write, Fill, Wait, Atomic, Semaphore, Fence, Trap and Timestamp (0..8).
-CopyCommand stores source/destination at 0/40, length at 80 and SG context at 88.
-WordTarget stores address/context/width at 0/8/12. WordWrite adds value at 16.
-FillCommand stores address/length/pattern/context/width at 0/8/16/24/28.
-WaitCommand stores target/value/comparison at 0/16/24. AtomicCommand stores
-target/order/operation/operands at 0/16/20/24; CAS operands contain compare/value
-at 0/8, and other operands contain value at zero. Atomic has no software result
-address. SemaphoreCommand stores target/operation at 0/16. Trap has no payload.
-TimestampCommand stores its fixed-width destination address/context at 0/8.
+CopyCommand fills the slot: options at byte one selects source in bit zero and
+destination in bit one (Linear zero, ScatterGather one); bits 2..7 are reserved.
+SG context is at four, ID at eight, byte count at sixteen, source/destination
+contexts at 24/28, and source/destination unions at 32/64. Each endpoint union
+occupies 32 bytes. LinearEndpoint stores address/offset at 0/8, with remaining
+union bytes zero; ScatterGatherEndpoint stores list address/count/index/offset
+at 0/8/16/24. All endpoint operands retain 64-bit width. There is no separate
+position record or repeated endpoint mode/context header.
+
+Each scalar member starts with the same header and ID. WriteCommand and
+FenceCommand contain WordWrite at sixteen and occupy 40 bytes. WordTarget stores
+address/context/width at 0/8/12; WordWrite adds value at sixteen. FillCommand
+stores address/length/pattern/context/width at 16/24/32/40/44 and occupies 48 bytes.
+WaitCommand stores target/value/comparison at 16/32/40 and occupies 48 bytes.
+AtomicCommand stores target/order/operation/operands at 16/32/36/40 and occupies
+56 bytes; CAS operands contain compare/value at 0/8, other operands value at
+zero. Atomic has no result destination. SemaphoreCommand stores target/operation
+at 16/32 and occupies 40 bytes. TrapCommand occupies sixteen bytes.
+TimestampCommand stores address/context at 16/24 and occupies 32 bytes.
+
+Every selected member's alignment gaps, inactive union storage, and remaining
+96-byte slot tail must be zero. The contract decoder reads CommandHeader before
+selecting the complete record. Protocol encoding rejects a semantic variant
+whose header opcode does not match. Generated generic union views require an
+explicit case and are storage tools; callers use the contract codec at the PDMA
+protocol boundary. Initialize C slots to zero, store the shared opcode, and use
+the complete member's accessors directly on the slot. Enum bitfield constants
+are unshifted values.
 
 Event stores ID/code/info at 0/8/16. Codes 1..8 select InvalidLength, ReadError,
 WriteError, LengthMismatch, ListReadError, Unsupported, InvalidOperation and

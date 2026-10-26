@@ -1,0 +1,5 @@
+error: duplicate union case
+ --> tests/ui/fail/untagged_duplicate.rs:2:50
+  |
+2 | union_schema! { union Broken { cases: { Same(A), Same(B) } } }
+  |                                                  ^^^^

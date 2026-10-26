@@ -1,13 +1,15 @@
 //! Error publication belongs to the channel at the producing interaction.
+
 use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::ChannelRecovery;
+use pdma_model_contract::dma::{CopyCommandSourceValues, LinearEndpoint};
 #[doc = "Shared memory and MMIO fixtures."]
 pub mod support;
 
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome, Then};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, ChannelRegisters, Endpoint, Event, EventCode, EventRegisters,
+    ChannelBlock, ChannelId, ChannelRegisters, Event, EventCode, EventRegisters,
 };
 use pdma_model_dma::{PrepareChunk, ReadCopy, WriteCopy};
 use support::{TestResult, accept, command, copy_mut, read_word, setup, submit};
@@ -17,7 +19,10 @@ fn read_failure_publishes_before_any_downstream_stage_runs() -> TestResult {
     // Given: accepted Copy whose source is not mapped, with no event stage composed.
     let (mut dma, memory) = setup(0x1100, 2)?;
     let mut descriptor = command();
-    copy_mut(&mut descriptor)?.source = Endpoint::linear(0x9000, 0);
+    copy_mut(&mut descriptor)?.source = CopyCommandSourceValues::Linear(LinearEndpoint {
+        address: 0x9000,
+        offset: 0,
+    });
     submit(&mut dma, &memory, descriptor)?;
     let input = accept(&mut dma, ChannelId::new(0))?;
     let mut read = Then::new(PrepareChunk::default(), ReadCopy::default());
@@ -49,7 +54,7 @@ fn read_failure_publishes_before_any_downstream_stage_runs() -> TestResult {
     let event = Event::from_bytes(&bytes)?;
     assert_eq!(
         (event.id, event.code),
-        (descriptor.id, EventCode::ReadError)
+        (descriptor.id(), EventCode::ReadError)
     );
     let mut write = WriteCopy::default();
     assert!(matches!(
@@ -64,7 +69,10 @@ fn read_failure_publishes_before_any_downstream_stage_runs() -> TestResult {
 fn failing_read_reports_fatal_storage_failure_without_a_publisher() -> TestResult {
     let (mut dma, memory) = setup(0x9000, 2)?;
     let mut descriptor = command();
-    copy_mut(&mut descriptor)?.source = Endpoint::linear(0xa000, 0);
+    copy_mut(&mut descriptor)?.source = CopyCommandSourceValues::Linear(LinearEndpoint {
+        address: 0xa000,
+        offset: 0,
+    });
     submit(&mut dma, &memory, descriptor)?;
     let mut input = Some(accept(&mut dma, ChannelId::new(0))?);
     let mut stage = Then::new(PrepareChunk::default(), ReadCopy::default());
@@ -119,7 +127,10 @@ fn reset_between_chunk_preparation_and_read_prevents_error_publication() -> Test
     use pdma_model_contract::dma::{DmaAdmin, DmaDiscovery};
     let (mut dma, memory) = setup(0x1100, 2)?;
     let mut descriptor = command();
-    copy_mut(&mut descriptor)?.source = Endpoint::linear(0x9000, 0);
+    copy_mut(&mut descriptor)?.source = CopyCommandSourceValues::Linear(LinearEndpoint {
+        address: 0x9000,
+        offset: 0,
+    });
     submit(&mut dma, &memory, descriptor)?;
     let mut input = Some(accept(&mut dma, ChannelId::new(0))?);
     let mut prepare = PrepareChunk::default();

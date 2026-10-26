@@ -1,15 +1,15 @@
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelConfiguration, ChannelInterrupts, ChannelRegisters, Command,
+    CommandRegisters, CopyCommandDestinationValues, CopyCommandSourceValues, ErrorInfo, Event,
+    EventCode, EventInfoValues, EventRegisters, LinearEndpoint,
+};
+
 use crate::Dma;
 use hardware_interface_pipeline::StepOutcome;
-use pdma_model_contract::dma::ChannelConfiguration;
-use pdma_model_contract::dma::ChannelInterrupts;
 
 use hardware_interface_pipeline::Operation;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-};
-use pdma_model_contract::dma::{
-    ChannelBlock, ChannelRegisters, Command, CommandRegisters, Endpoint, ErrorInfo, Event,
-    EventCode, EventInfoValues, EventRegisters,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -36,15 +36,20 @@ pub(super) fn queued_copy(event_base: u64, fail_read: bool) -> TestResult<Dma<Sh
         0x1000,
         MemoryAlignment::ONE,
     )?])?;
-    let command = Command::copy(
-        17,
-        pdma_model_contract::dma::CopyCommand {
-            copy_length: 4,
-            sg_context: 0,
-            source: Endpoint::linear(if fail_read { 0x3000 } else { 0x1200 }, 0),
-            destination: Endpoint::linear(0x1300, 0),
-        },
-    );
+    let command = Command::Copy(pdma_model_contract::dma::CopyCommand {
+        id: 17,
+        copy_length: 4,
+        sg_context: 0,
+        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: if fail_read { 0x3000 } else { 0x1200 },
+            offset: 0,
+        }),
+        destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: 0x1300,
+            offset: 0,
+        }),
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    });
     memory.write(
         MemoryAddress::new(0x1000),
         MemoryAlignment::ONE,

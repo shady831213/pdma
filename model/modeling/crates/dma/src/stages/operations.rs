@@ -23,7 +23,7 @@ enum Progress {
 
 #[derive(Debug)]
 pub(super) struct Execute<T> {
-    state: Option<Flow<(u64, T)>>,
+    state: Option<Flow<T>>,
 }
 
 impl<T> Default for Execute<T> {
@@ -49,17 +49,14 @@ where
             self.state = input.take().map(|flow| {
                 let value = flow.value.and_then(|fetched| {
                     fetched
-                        .map(|fetched| {
-                            T::project(fetched.command.payload)
-                                .map(|operand| (fetched.command.id, operand))
-                        })
+                        .map(|fetched| T::project(fetched.command))
                         .transpose()
                 });
                 Flow::new(flow.work, value)
             });
         }
         Flow::advance(&mut self.state, context, |state, context| {
-            let Some((id, operand)) = state.as_ref().copied() else {
+            let Some(operand) = state.as_ref().copied() else {
                 return Ok(StepOutcome::Complete(Ok(None)));
             };
             let work = context.work();
@@ -91,7 +88,7 @@ where
                         .work
                         .as_ref()
                         .map_or(0, |accepted| accepted.fill_completed);
-                    let event = Event::stopping(id, code, bytes_completed);
+                    let event = Event::stopping(operand.id(), code, bytes_completed);
                     *state = None;
                     return Ok(StepOutcome::Complete(Err(context.report(&event))));
                 }

@@ -1,5 +1,10 @@
 //! Finite service boundaries retain hardware traversal and accepted ownership.
 
+use pdma_model_contract::dma::{
+    ChannelBlock, CommandRegisters, CopyCommandDestinationValues, CopyCommandSourceValues,
+    EventRegisters, LinearEndpoint,
+};
+
 /// Shared raw-bus test fixtures.
 pub mod support;
 
@@ -8,7 +13,6 @@ mod service_progress {
     mod pending_tail;
 }
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::dma::{ChannelBlock, CommandRegisters, Endpoint, EventRegisters};
 use pdma_model_dma::COPY_CHUNK_BYTES;
 use support::{TestResult, command, read_word, setup, submit};
 
@@ -23,8 +27,16 @@ fn one_command_invocation_completes_all_chunks_without_fetching_again() -> TestR
     let (mut device, memory) = setup(0x1100, 2)?;
     let mut descriptor = command();
     crate::support::copy_mut(&mut descriptor)?.copy_length = 600;
-    crate::support::copy_mut(&mut descriptor)?.source = Endpoint::linear(0x1400, 0);
-    crate::support::copy_mut(&mut descriptor)?.destination = Endpoint::linear(0x1800, 0);
+    crate::support::copy_mut(&mut descriptor)?.source =
+        CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: 0x1400,
+            offset: 0,
+        });
+    crate::support::copy_mut(&mut descriptor)?.destination =
+        CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: 0x1800,
+            offset: 0,
+        });
     memory.write(0x1400.into(), MemoryAlignment::ONE, &[0x5a; 600])?;
     submit(&mut device, &memory, descriptor)?;
     let mut before = [0xff; 600];
@@ -60,8 +72,16 @@ fn reset_between_chunks_retires_retained_progress() -> TestResult {
     let (mut device, memory) = setup(0x1100, 2)?;
     let mut descriptor = command();
     crate::support::copy_mut(&mut descriptor)?.copy_length = 600;
-    crate::support::copy_mut(&mut descriptor)?.source = Endpoint::linear(0x1400, 0);
-    crate::support::copy_mut(&mut descriptor)?.destination = Endpoint::linear(0x1800, 0);
+    crate::support::copy_mut(&mut descriptor)?.source =
+        CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: 0x1400,
+            offset: 0,
+        });
+    crate::support::copy_mut(&mut descriptor)?.destination =
+        CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: 0x1800,
+            offset: 0,
+        });
     memory.write(0x1400.into(), MemoryAlignment::ONE, &[0x5a; 600])?;
     submit(&mut device, &memory, descriptor)?;
     let mut hardware = device.hardware();
@@ -108,19 +128,22 @@ fn reset_at_every_chunk_boundary_retires_without_more_writes() -> TestResult {
         let (mut device, memory) = setup(0x1100, 2)?;
         let descriptor = {
             let original = command();
-            let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload
-            else {
+            let pdma_model_contract::dma::Command::Copy(copy) = original else {
                 return Err("copy fixture required".into());
             };
-            pdma_model_contract::dma::Command::copy(
-                original.id,
-                pdma_model_contract::dma::CopyCommand {
-                    copy_length: u64::try_from(COPY_CHUNK_BYTES * 3)?,
-                    source: Endpoint::linear(0x1400, 0),
-                    destination: Endpoint::linear(0x1800, 0),
-                    ..copy
-                },
-            )
+            pdma_model_contract::dma::Command::Copy(pdma_model_contract::dma::CopyCommand {
+                id: original.id(),
+                copy_length: u64::try_from(COPY_CHUNK_BYTES * 3)?,
+                source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                    address: 0x1400,
+                    offset: 0,
+                }),
+                destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                    address: 0x1800,
+                    offset: 0,
+                }),
+                ..copy
+            })
         };
         memory.write(
             0x1400.into(),

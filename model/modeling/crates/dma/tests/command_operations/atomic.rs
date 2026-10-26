@@ -2,21 +2,22 @@ use super::support::{EVENT_PRODUCER, Rig, TestResult, fence, target};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     AtomicCommand, AtomicCommandOperandsAddValues, AtomicCommandOperandsCompareExchangeValues,
-    AtomicCommandOperandsValues, AtomicCommandOrder, Command, SemaphoreCommand,
-    SemaphoreCommandOperation,
+    AtomicCommandOperandsValues, AtomicCommandOrder, Command, CommandHeader, Opcode,
+    SemaphoreCommand, SemaphoreCommandOperation,
 };
 
 const fn add(id: u64, value: u64) -> Command {
     let operands = AtomicCommandOperandsValues::Add(AtomicCommandOperandsAddValues { value });
-    Command::atomic(
-        id,
-        AtomicCommand {
-            target: target(0x8000),
-            order: AtomicCommandOrder::AcquireRelease,
-            operation: operands.tag(),
-            operands,
+    Command::Atomic(AtomicCommand {
+        header: CommandHeader {
+            opcode: Opcode::Atomic,
         },
-    )
+        id,
+        target: target(0x8000),
+        order: AtomicCommandOrder::AcquireRelease,
+        operation: operands.tag(),
+        operands,
+    })
 }
 
 #[test]
@@ -33,15 +34,16 @@ fn atomics_commit_once_without_result_storage() -> TestResult {
             compare: 8,
             value: 99,
         });
-    let cas = Command::atomic(
-        2,
-        AtomicCommand {
-            target: target(0x8000),
-            order: AtomicCommandOrder::Relaxed,
-            operation: operands.tag(),
-            operands,
+    let cas = Command::Atomic(AtomicCommand {
+        header: CommandHeader {
+            opcode: Opcode::Atomic,
         },
-    );
+        id: 2,
+        target: target(0x8000),
+        order: AtomicCommandOrder::Relaxed,
+        operation: operands.tag(),
+        operands,
+    });
     rig.submit(0, &[add(1, 3), cas, fence(0x9000)])?;
     // When: the complete sequence and extra idle steps run.
     rig.drive()?;
@@ -83,13 +85,14 @@ fn competing_waiters_consume_one_permit_once() -> TestResult {
         MemoryAlignment::ONE,
         &1_u64.to_le_bytes(),
     )?;
-    let wait = Command::semaphore(
-        1,
-        SemaphoreCommand {
-            target: target(0x8000),
-            operation: SemaphoreCommandOperation::Wait,
+    let wait = Command::Semaphore(SemaphoreCommand {
+        header: CommandHeader {
+            opcode: Opcode::Semaphore,
         },
-    );
+        id: 1,
+        target: target(0x8000),
+        operation: SemaphoreCommandOperation::Wait,
+    });
     rig.submit(0, &[wait, fence(0x9000)])?;
     rig.submit(1, &[wait, fence(0x9010)])?;
     // When: both channels repeatedly contend.
@@ -117,13 +120,14 @@ fn semaphore_overflow_stops_without_wrapping() -> TestResult {
     rig.submit(
         0,
         &[
-            Command::semaphore(
-                1,
-                SemaphoreCommand {
-                    target: target(0x8000),
-                    operation: SemaphoreCommandOperation::Signal,
+            Command::Semaphore(SemaphoreCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Semaphore,
                 },
-            ),
+                id: 1,
+                target: target(0x8000),
+                operation: SemaphoreCommandOperation::Signal,
+            }),
             fence(0x9000),
         ],
     )?;

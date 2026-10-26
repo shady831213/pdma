@@ -8,6 +8,7 @@ use proc_macro::TokenStream;
 
 trait Expansion {
     fn bits(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream;
+    fn untagged_union(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream;
     fn record(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream;
     fn register(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream;
     fn map(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream;
@@ -35,4 +36,10 @@ pub fn register_schema(input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn register_map(input: TokenStream) -> TokenStream {
     <() as Expansion>::map(input.into()).into()
+}
+
+/// Declares an untagged union of complete record layouts.
+#[proc_macro]
+pub fn union_schema(input: TokenStream) -> TokenStream {
+    <() as Expansion>::untagged_union(input.into()).into()
 }

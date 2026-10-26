@@ -1,12 +1,14 @@
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelId, Command, CopyCommandDestinationValues, CopyCommandSourceValues,
+    DmaControl, EventRegisters, LinearEndpoint, ScatterGatherEndpoint, Segment,
+};
+
 mod observed;
 
 use super::support::{TestResult, completion, configure, publish_fence, word};
 use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion};
 use observed::Observed;
-use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, Command, DmaControl, Endpoint, EventRegisters, Segment,
-};
 use pdma_model_dma::Dma;
 
 #[derive(Clone, Copy, Debug)]
@@ -58,15 +60,24 @@ fn setup() -> TestResult<Dma<Observed>> {
     }
     publish(
         &mut device,
-        Command::copy(
-            7,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 512,
-                sg_context: 0,
-                source: Endpoint::scatter_gather(0x1800, 2),
-                destination: Endpoint::scatter_gather(0x1900, 2),
-            },
-        ),
+        Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 7,
+            copy_length: 512,
+            sg_context: 0,
+            source: CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+                list_address: 0x1800,
+                count: 2,
+                index: 0,
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::ScatterGather(ScatterGatherEndpoint {
+                list_address: 0x1900,
+                count: 2,
+                index: 0,
+                offset: 0,
+            }),
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        }),
     )?;
     Ok(device)
 }
@@ -77,7 +88,7 @@ fn publish(device: &mut Dma<Observed>, command: Command) -> TestResult {
         MemoryAlignment::ONE,
         &command.to_bytes()?,
     )?;
-    publish_fence(device, 0, command.id)
+    publish_fence(device, 0, command.id())
 }
 
 fn snapshot(device: &Dma<Observed>, address: u64) -> TestResult<[u8; 512]> {
@@ -154,15 +165,20 @@ fn reset_stops_sg_interactions_before_completion_and_keeps_them_stopped() -> Tes
             configure(&mut device, 0)?;
             publish(
                 &mut device,
-                Command::copy(
-                    99,
-                    pdma_model_contract::dma::CopyCommand {
-                        copy_length: 512,
-                        sg_context: 0,
-                        source: Endpoint::linear(0x1200, 0),
-                        destination: Endpoint::linear(0x1600, 0),
-                    },
-                ),
+                Command::Copy(pdma_model_contract::dma::CopyCommand {
+                    id: 99,
+                    copy_length: 512,
+                    sg_context: 0,
+                    source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                        address: 0x1200,
+                        offset: 0,
+                    }),
+                    destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                        address: 0x1600,
+                        offset: 0,
+                    }),
+                    ..pdma_model_contract::dma::CopyCommand::ZERO
+                }),
             )?;
             for _ in 0..256 {
                 assert!(matches!(

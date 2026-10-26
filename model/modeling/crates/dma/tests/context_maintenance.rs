@@ -1,5 +1,7 @@
 //! Context cleanup boundaries through the sustained hardware pipeline.
 
+use pdma_model_contract::dma::{CopyCommandSourceValues, LinearEndpoint};
+
 /// Shared DMA bus and memory fixtures.
 pub mod support;
 
@@ -19,10 +21,8 @@ fn abort_discards_unstarted_work_without_event_publication() -> TestResult {
         let _ = operation.step(&mut pipeline, &mut dma)?;
     }
     let mut discarded = command();
-    crate::support::copy_mut(&mut discarded)?.source.context = 7;
-    crate::support::copy_mut(&mut discarded)?
-        .destination
-        .context = 7;
+    crate::support::copy_mut(&mut discarded)?.source_context = 7;
+    crate::support::copy_mut(&mut discarded)?.destination_context = 7;
     memory.write(
         MemoryAddress::new(0x1000),
         MemoryAlignment::ONE,
@@ -53,7 +53,7 @@ fn abort_waits_for_accepted_command_and_preserves_its_completed_payload() -> Tes
     // Given
     let (mut dma, memory) = setup(0x1100, 2)?;
     let mut input = command();
-    crate::support::copy_mut(&mut input)?.source.context = 7;
+    crate::support::copy_mut(&mut input)?.source_context = 7;
     memory.write(
         MemoryAddress::new(0x1200),
         MemoryAlignment::ONE,
@@ -112,7 +112,7 @@ fn reset_interrupts_drain_but_waits_for_resident_cleanup() -> TestResult {
         // Given: a fetched command is resident in a pending context Drain.
         let (mut dma, memory) = setup(0x1100, 2)?;
         let mut input = command();
-        crate::support::copy_mut(&mut input)?.source.context = 7;
+        crate::support::copy_mut(&mut input)?.source_context = 7;
         submit(&mut dma, &memory, input)?;
         let id = ChannelId::new(0);
         let consumer = id.register_offset(1).ok_or("layout")? + CommandRegisters::CONSUMER.offset();
@@ -168,10 +168,12 @@ fn failed_drain_returns_channel_and_releases_reset_interlock() -> TestResult {
     // Given
     let (mut dma, memory) = setup(0x1100, 2)?;
     let mut input = command();
-    crate::support::copy_mut(&mut input)?.source = pdma_model_contract::dma::Endpoint {
-        context: 7,
-        ..pdma_model_contract::dma::Endpoint::linear(0x9000, 0)
-    };
+    crate::support::copy_mut(&mut input)?.source_context = 7;
+    crate::support::copy_mut(&mut input)?.source =
+        CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: 0x9000,
+            offset: 0,
+        });
     submit(&mut dma, &memory, input)?;
     let channel = ChannelId::new(0);
     let reset = channel.admin_offset(1).ok_or("layout")?;

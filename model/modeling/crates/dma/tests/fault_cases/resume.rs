@@ -1,3 +1,7 @@
+use pdma_model_contract::dma::{
+    CopyCommandDestinationValues, CopyCommandSourceValues, LinearEndpoint,
+};
+
 use super::*;
 
 #[test]
@@ -54,7 +58,7 @@ fn sg_resume_preserves_progress_and_cached_destination_bytes() -> TestResult {
             .memory
             .write(0x1300.into(), MemoryAlignment::ONE, b"ZZ")?;
         resume(&mut device, 1)?;
-        completed(&mut device, command.id)?;
+        completed(&mut device, command.id())?;
         // Then: only remaining bytes commit, and a failed write retains its original read.
 
         assert_eq!(
@@ -95,18 +99,22 @@ fn repair_and_zero_resume_do_not_retry_or_admit_later_same_channel_work() -> Tes
     device.until(|dma| Ok(fault_status(dma)? == 1))?;
     let follower = {
         let original = Command::ZERO;
-        let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload else {
+        let pdma_model_contract::dma::Command::Copy(copy) = original else {
             return Err("copy fixture required".into());
         };
-        Command::copy(
-            99,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 3,
-                source: Endpoint::linear(0x1200, 0),
-                destination: Endpoint::linear(0x1600, 0),
-                ..copy
-            },
-        )
+        Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 99,
+            copy_length: 3,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0x1200,
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: 0x1600,
+                offset: 0,
+            }),
+            ..copy
+        })
     };
     submit(&mut device, follower, 1)?;
     // When: the backend is repaired without a write-one resume request.
@@ -135,7 +143,7 @@ fn repair_and_zero_resume_do_not_retry_or_admit_later_same_channel_work() -> Tes
     );
     assert!(!device.take_interrupt());
     resume(&mut device, 1)?;
-    completed(&mut device, command.id)?;
+    completed(&mut device, command.id())?;
     assert_eq!(
         read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
         0
@@ -161,10 +169,18 @@ fn mixed_endpoint_resumption_keeps_each_stream_cursor() -> TestResult {
                 .memory
                 .memory
                 .write(0x1200.into(), MemoryAlignment::ONE, b"abcdefgh")?;
-            crate::support::copy_mut(&mut command)?.source = Endpoint::linear(0x1200, 0);
+            crate::support::copy_mut(&mut command)?.source =
+                CopyCommandSourceValues::Linear(LinearEndpoint {
+                    address: 0x1200,
+                    offset: 0,
+                });
             device.memory.missing.set(Some((0x1343, true)));
         } else {
-            crate::support::copy_mut(&mut command)?.destination = Endpoint::linear(0x1600, 0);
+            crate::support::copy_mut(&mut command)?.destination =
+                CopyCommandDestinationValues::Linear(LinearEndpoint {
+                    address: 0x1600,
+                    offset: 0,
+                });
             device.memory.missing.set(Some((0x1242, false)));
         }
         submit(&mut device, command, 0)?;
@@ -172,7 +188,7 @@ fn mixed_endpoint_resumption_keeps_each_stream_cursor() -> TestResult {
         // When: software repairs the backend and resumes the original task.
         device.memory.missing.set(None);
         resume(&mut device, 1)?;
-        completed(&mut device, command.id)?;
+        completed(&mut device, command.id())?;
         // Then: one full-length success reports the original task and exact output.
 
         if linear_source {

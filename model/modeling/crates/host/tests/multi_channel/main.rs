@@ -1,14 +1,16 @@
 //! Host channel discovery and independent reset boundaries.
 
+use pdma_model_contract::dma::{
+    ChannelId, Command, CommandHeader, DmaRegisters, Event, FenceCommand, Opcode, WordTarget,
+    WordTargetWidth, WordWrite,
+};
+
 mod instances;
 
 use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
-};
-use pdma_model_contract::dma::{
-    ChannelId, Command, DmaRegisters, Event, WordTarget, WordTargetWidth, WordWrite,
 };
 use pdma_model_dma::Dma;
 use pdma_model_host::{
@@ -150,9 +152,12 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
                 Channel::setup(model.clone(), memory.clone(), config(&allocator, index)?).await?;
             let completion = allocator.allocate(8, MemoryAlignment::try_new(8)?)?;
             channel
-                .submit(Command::fence(
-                    u64::try_from(index)?,
-                    WordWrite {
+                .submit(Command::Fence(FenceCommand {
+                    header: CommandHeader {
+                        opcode: Opcode::Fence,
+                    },
+                    id: u64::try_from(index)?,
+                    word: WordWrite {
                         target: WordTarget {
                             address: completion.raw(),
                             context: 0,
@@ -160,7 +165,7 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
                         },
                         value: u64::try_from(index + 1)?,
                     },
-                ))
+                }))
                 .await?;
             channels.push(channel);
             completions.push(completion);

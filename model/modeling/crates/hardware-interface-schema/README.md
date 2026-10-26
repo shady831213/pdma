@@ -102,7 +102,7 @@ cargo run -p hardware-interface-schema --features export-c-header --example docu
 `record_schema!` declares record-level `endian`, optional `alignment`, and ordered
 fields whose aligned offsets and final size are generated.
 Its field types are scalars, nested records, `enum(storage)`, `bits(storage)` with
-LSB0 half-open ranges such as `0..5` or inclusive ranges such as `0..=4`, and `union`
+LSB0 half-open ranges such as `0..5` or inclusive ranges such as `0..=4`, and `tagged_union`
 cases selected by a local or nested `self` tag. Enum values may omit assignments after
 an explicit value. Union fields may
 use wider wire `storage`, while unused union slots and undeclared bits are reserved
@@ -479,6 +479,10 @@ DMA, reset and IRQ effects.
 
 ### Record-backed union cases
 
+An inline `tagged_union` requires a `tag: self...` discriminator. The old inline
+`union` spelling is rejected with a migration hint; replace that field keyword with
+`tagged_union`. This syntax change does not alter generated Rust names or wire layout.
+
 In addition to equal-width inline cases, a record union can reuse complete schemas:
 ```rust
 # use hardware_interface_schema::{record_schema, SchemaCodecError};
@@ -490,7 +494,7 @@ record_schema! {
         endian: Little,
         fields: {
             tag: enum(u8) { variants: { Small = 0, Large = 1 } },
-            payload: union { tag: self.tag, cases: { Small(Small), Large(Large) } },
+            payload: tagged_union { tag: self.tag, cases: { Small(Small), Large(Large) } },
         },
     }
 }
@@ -547,7 +551,7 @@ record_schema! {
         endian: Little,
         fields: {
             header: bits(Header),
-            payload: union { tag: self.header.kind,
+            payload: tagged_union { tag: self.header.kind,
                 cases: { Small { value: u32 }, Large { first: u32, second: u32 } },
             },
         },
@@ -576,3 +580,40 @@ or `self.flags.kind` for a bits member. It does not traverse to a parent record 
 scatter a child record's fields. The C exporter retains its unshifted enum constants
 and raw-word load/store interface; C callers pack the control word according to
 the declared bit positions and select consistent payload bytes.
+
+### Untagged complete-record unions
+
+`union_schema!` overlays independently defined complete records at byte zero:
+
+Its `union` declaration is untagged and cannot contain a `tag` clause. The caller
+selects the case explicitly; use an inline `tagged_union` in a record when the wire
+format carries a discriminator.
+
+```rust
+use hardware_interface_schema::{record_schema, union_schema};
+record_schema! { pub record Small { endian: Big, fields: { value: u16 } } }
+record_schema! { pub record Large { endian: Little, fields: { value: u64 } } }
+union_schema! { pub union Packet { cases: { Small(Small), Large(Large) } } }
+let value = Packet::Small(Small::new(0x1234));
+let mut raw = PacketRaw::default();
+value.encode_variant(raw.as_mut())?;
+assert_eq!(Packet::decode_variant(raw.as_ref(), PacketCase::Small)?, value);
+# Ok::<(), hardware_interface_schema::SchemaCodecError>(())
+```
+
+The caller always chooses `PacketCase`; the macro never infers or reads a selector.
+`RECORD_SIZE` is the largest case extent rounded to the largest case `RECORD_ALIGNMENT`.
+`ZERO` selects the first record's semantic zero. `PacketRaw` owns unvalidated bytes
+and provides `new`, `as_bytes`, `into_bytes`, `Default`, `AsRef` and `AsMut`.
+`PacketView` and `PacketViewMut` check extent at construction and expose
+`values(case)`; the mutable view also exposes atomic `set_values(&value)`.
+Decoding checks the selected record, its direct alignment gaps and trailing
+padding, and the union's inactive tail. Nested records keep their own padding
+policy; ordinary record decoding remains permissive about alignment padding.
+Encoding uses temporary fixed-size storage, zeros inactive bytes, and commits
+only after the selected record encodes successfully.
+
+The union has no automatic `Decode`, `Encode`, `RecordLayout` or `from_bytes`:
+protocol-aware adapters belong to the application. `Packet::SPEC` describes only
+opaque storage extent and alignment. Export each case's ordinary `SPEC` alongside
+it when consumers need field accessors; no selector metadata is generated.

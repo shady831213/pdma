@@ -1,0 +1,5 @@
+error: unexpected end of input, union requires at least one case
+ --> tests/ui/fail/untagged_empty.rs:2:40
+  |
+2 | union_schema! { union Broken { cases: {} } }
+  |                                        ^

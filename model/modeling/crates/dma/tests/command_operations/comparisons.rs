@@ -1,7 +1,7 @@
 use super::support::{Rig, TestResult, fence, target};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
-    Command, WaitCommand, WaitCommandComparison as Compare, WordTargetWidth,
+    Command, CommandHeader, Opcode, WaitCommand, WaitCommandComparison as Compare, WordTargetWidth,
 };
 
 #[test]
@@ -36,14 +36,15 @@ fn wait_comparisons_use_selected_width_and_signed_order() -> TestResult {
             rig.submit(
                 0,
                 &[
-                    Command::wait(
-                        1,
-                        WaitCommand {
-                            target,
-                            value,
-                            comparison,
+                    Command::Wait(WaitCommand {
+                        header: CommandHeader {
+                            opcode: Opcode::Wait,
                         },
-                    ),
+                        id: 1,
+                        target,
+                        value,
+                        comparison,
+                    }),
                     fence(0x9000),
                 ],
             )?;

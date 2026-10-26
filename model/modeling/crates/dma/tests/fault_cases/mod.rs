@@ -1,4 +1,9 @@
-use pdma_model_contract::dma::ChannelRecovery;
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelRecovery, ChannelRegisters, Command, CommandHeader, CommandRegisters,
+    CopyCommandDestinationValues, CopyCommandSourceValues, Event, EventCode, EventRaw,
+    EventRegisters, FenceCommand, Opcode, ScatterGatherEndpoint, Segment,
+};
+
 mod boundaries;
 mod chunks;
 mod composition;
@@ -15,10 +20,6 @@ use self::memory::Paged;
 use crate::support::{TestResult, configure};
 use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, MemoryRegion, SharedMemory};
-use pdma_model_contract::dma::{
-    ChannelBlock, ChannelRegisters, Command, CommandRegisters, Endpoint, Event, EventCode,
-    EventRaw, EventRegisters, Segment,
-};
 use pdma_model_dma::{Dma, Hardware};
 
 const CMD: usize = ChannelBlock::ALIGNMENT + ChannelBlock::COMMAND.offset();
@@ -152,9 +153,12 @@ fn completed(device: &mut Fixture, value: u64) -> TestResult {
         .memory
         .memory
         .write(0x1ff0.into(), MemoryAlignment::ONE, &0_u64.to_le_bytes())?;
-    let fence = Command::fence(
-        value,
-        pdma_model_contract::dma::WordWrite {
+    let fence = Command::Fence(FenceCommand {
+        header: CommandHeader {
+            opcode: Opcode::Fence,
+        },
+        id: value,
+        word: pdma_model_contract::dma::WordWrite {
             target: pdma_model_contract::dma::WordTarget {
                 address: 0x1ff0,
                 context: 0,
@@ -162,7 +166,7 @@ fn completed(device: &mut Fixture, value: u64) -> TestResult {
             },
             value,
         },
-    );
+    });
     submit(device, fence, sequence)?;
     device.until(|dma| {
         Ok(u64::from_le_bytes(
@@ -204,17 +208,25 @@ fn streams(device: &Dma<Paged>) -> TestResult<Command> {
     }
     Ok({
         let original = Command::ZERO;
-        let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload else {
+        let pdma_model_contract::dma::Command::Copy(copy) = original else {
             return Err("copy fixture required".into());
         };
-        Command::copy(
-            7,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 8,
-                source: Endpoint::scatter_gather(0x1400, 2),
-                destination: Endpoint::scatter_gather(0x1500, 2),
-                ..copy
-            },
-        )
+        Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 7,
+            copy_length: 8,
+            source: CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+                list_address: 0x1400,
+                count: 2,
+                index: 0,
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::ScatterGather(ScatterGatherEndpoint {
+                list_address: 0x1500,
+                count: 2,
+                index: 0,
+                offset: 0,
+            }),
+            ..copy
+        })
     })
 }

@@ -1,5 +1,5 @@
 error: tag path may select a local enum or one record/bits member
-  --> tests/ui/fail/union_bit_tag_depth.rs:10:35
+  --> tests/ui/fail/union_bit_tag_depth.rs:10:42
    |
-10 |             payload: union { tag: self.flags.kind.extra, cases: { Item { value: u8 } } },
-   |                                   ^^^^
+10 |             payload: tagged_union { tag: self.flags.kind.extra, cases: { Item { value: u8 } } },
+   |                                          ^^^^

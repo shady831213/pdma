@@ -1,5 +1,8 @@
+use pdma_model_contract::dma::{
+    ChannelId, ContextId, CopyCommandDestinationValues, CopyCommandSourceValues, LinearEndpoint,
+};
+
 use crate::{Dma, MaintenanceError};
-use pdma_model_contract::dma::{ChannelId, ContextId};
 use pdma_model_contract::register::{ReadWordValues, SwitchValues, WordValues};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -64,21 +67,22 @@ fn abort_preserves_parked_matching_work_outside_its_channel_scope() -> TestResul
 fn parked_peer() -> Result<(Dma<()>, pdma_model_contract::dma::Command), Box<dyn std::error::Error>>
 {
     let mut dma = Dma::new((), 2)?;
-    let command = pdma_model_contract::dma::Command::copy(
-        17,
-        pdma_model_contract::dma::CopyCommand {
-            copy_length: 4,
-            sg_context: 0,
-            source: pdma_model_contract::dma::Endpoint {
-                context: 7,
-                ..pdma_model_contract::dma::Endpoint::linear(0x1000, 0)
-            },
-            destination: pdma_model_contract::dma::Endpoint {
-                context: 7,
-                ..pdma_model_contract::dma::Endpoint::linear(0x2000, 0)
-            },
-        },
-    );
+    let command = pdma_model_contract::dma::Command::Copy(pdma_model_contract::dma::CopyCommand {
+        id: 17,
+        copy_length: 4,
+        sg_context: 0,
+        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: 0x1000,
+            offset: 0,
+        }),
+        source_context: 7,
+        destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: 0x2000,
+            offset: 0,
+        }),
+        destination_context: 7,
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    });
     let peer = dma.channels.get_mut(1).ok_or("channel")?;
     peer.work = Some(crate::channel::Accepted {
         fill_completed: 0,

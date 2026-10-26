@@ -14,10 +14,10 @@ fn linear_command_does_not_reference_ignored_sg_selector() -> TestResult {
     // Given
     let (mut dma, memory) = setup(0x1100, 4)?;
     let mut target = command();
-    crate::support::copy_mut(&mut target)?.source.context = 7;
+    crate::support::copy_mut(&mut target)?.source_context = 7;
     submit(&mut dma, &memory, target)?;
     let mut unrelated = command();
-    unrelated.id = 8;
+    crate::support::copy_mut(&mut unrelated)?.id = 8;
     crate::support::copy_mut(&mut unrelated)?.sg_context = 7;
     memory.write(
         MemoryAddress::new(0x1000 + u64::try_from(pdma_model_contract::dma::Command::RECORD_SIZE)?),
@@ -61,11 +61,11 @@ fn later_unrelated_publication_does_not_extend_the_drain_frontier() -> TestResul
     // Given
     let (mut dma, memory) = setup(0x1100, 4)?;
     let mut target = command();
-    crate::support::copy_mut(&mut target)?.source.context = 7;
+    crate::support::copy_mut(&mut target)?.source_context = 7;
     submit(&mut dma, &memory, target)?;
     dma.drain_context(ContextId::new(7), &[ChannelId::new(0)])?;
     let mut later = command();
-    later.id = 8;
+    crate::support::copy_mut(&mut later)?.id = 8;
     memory.write(
         MemoryAddress::new(0x1000 + u64::try_from(pdma_model_contract::dma::Command::RECORD_SIZE)?),
         MemoryAlignment::ONE,

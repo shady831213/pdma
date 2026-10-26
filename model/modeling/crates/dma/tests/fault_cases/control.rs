@@ -70,7 +70,10 @@ fn reset_discards_old_task_and_new_fault_requires_resume() -> TestResult {
         device.write(offset, &1_u32.to_le_bytes())?;
     }
     // When: a new task faults after reconfiguration and its mapping is repaired.
-    let replacement = Command { id: 91, ..command };
+    let replacement = Command::Copy(pdma_model_contract::dma::CopyCommand {
+        id: 91,
+        ..*crate::support::copy(&command)?
+    });
     submit(&mut device, replacement, 0)?;
     device.until(|dma| Ok(fault_status(dma)? == 1))?;
     assert_eq!(fault_status(&mut device)?, 1);
@@ -85,7 +88,7 @@ fn reset_discards_old_task_and_new_fault_requires_resume() -> TestResult {
         0
     );
     resume(&mut device, 1)?;
-    completed(&mut device, replacement.id)?;
+    completed(&mut device, replacement.id())?;
     assert_eq!(
         read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
         0
@@ -152,7 +155,7 @@ fn resume_does_not_enable_a_disabled_channel_or_clear_device_fatal() -> TestResu
                 CTRL + ChannelRegisters::CONFIG.offset() + ChannelConfiguration::ENABLE.offset(),
                 &1_u32.to_le_bytes(),
             )?;
-            completed(&mut device, command.id)?;
+            completed(&mut device, command.id())?;
             assert_eq!(
                 read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
                 0

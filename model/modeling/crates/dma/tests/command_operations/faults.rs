@@ -2,10 +2,10 @@ use super::support::{CAUSE, EVENT_PRODUCER, Rig, TestResult, fence, target};
 use hardware_interface_runtime::{
     AtomicAccessError, AtomicOperation, MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory,
 };
-use pdma_model_contract::dma::ChannelRecovery;
 use pdma_model_contract::dma::{
     AtomicCommand, AtomicCommandOperandsAddValues, AtomicCommandOperandsValues, AtomicCommandOrder,
-    CapabilitiesValues, ChannelBlock, ChannelRegisters, Command, DmaAdmin, DmaDiscovery, WordWrite,
+    CapabilitiesValues, ChannelBlock, ChannelRecovery, ChannelRegisters, Command, CommandHeader,
+    DmaAdmin, DmaDiscovery, Opcode, WordWrite, WriteCommand,
 };
 use pdma_model_dma::{Dma, DmaConfig, MemoryFailure};
 use std::{cell::Cell, rc::Rc};
@@ -118,15 +118,16 @@ fn rig_channels(
 
 const fn add() -> Command {
     let operands = AtomicCommandOperandsValues::Add(AtomicCommandOperandsAddValues { value: 3 });
-    Command::atomic(
-        1,
-        AtomicCommand {
-            target: target(0x8000),
-            order: AtomicCommandOrder::Relaxed,
-            operation: operands.tag(),
-            operands,
+    Command::Atomic(AtomicCommand {
+        header: CommandHeader {
+            opcode: Opcode::Atomic,
         },
-    )
+        id: 1,
+        target: target(0x8000),
+        order: AtomicCommandOrder::Relaxed,
+        operation: operands.tag(),
+        operands,
+    })
 }
 
 #[test]
@@ -197,13 +198,16 @@ fn fence_fault_resumes_publication_before_successors() -> TestResult {
         0,
         &[
             fence(0x9000),
-            Command::write(
-                2,
-                WordWrite {
+            Command::Write(WriteCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Write,
+                },
+                id: 2,
+                word: WordWrite {
                     target: target(0x8000),
                     value: 9,
                 },
-            ),
+            }),
         ],
     )?;
     // When: the Fence write faults.
@@ -244,13 +248,16 @@ fn event_write_failure_keeps_stop_and_emits_fatal() -> TestResult {
     rig.submit(
         0,
         &[
-            Command::write(
-                1,
-                WordWrite {
+            Command::Write(WriteCommand {
+                header: CommandHeader {
+                    opcode: Opcode::Write,
+                },
+                id: 1,
+                word: WordWrite {
                     target: target(0x8001),
                     value: 1,
                 },
-            ),
+            }),
             fence(0x9000),
         ],
     )?;

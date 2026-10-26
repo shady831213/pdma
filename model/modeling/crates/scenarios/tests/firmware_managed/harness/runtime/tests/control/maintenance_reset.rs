@@ -1,6 +1,10 @@
+use pdma_model_contract::dma::{
+    Command, CommandRegisters, ContextId, CopyCommandDestinationValues, CopyCommandSourceValues,
+    Event, LinearEndpoint,
+};
+
 use super::*;
 use hardware_interface_runtime::MemoryAccess;
-use pdma_model_contract::dma::{Command, CommandRegisters, ContextId, Endpoint, Event};
 use pdma_model_contract::memory::{
     ContextAttributes, ContextAttributesAddressSpace, MemoryIdentity,
 };
@@ -130,21 +134,22 @@ async fn submit_copy(
     )
     .await?;
     channel
-        .submit(Command::copy(
-            71,
-            pdma_model_contract::dma::CopyCommand {
-                sg_context: payload.raw(),
-                source: Endpoint {
-                    context: payload.raw(),
-                    ..Endpoint::linear(source.raw(), 0)
-                },
-                destination: Endpoint {
-                    context: payload.raw(),
-                    ..Endpoint::linear(destination.raw(), 0)
-                },
-                copy_length: u64::try_from(source_bytes.len())?,
-            },
-        ))
+        .submit(Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 71,
+            sg_context: payload.raw(),
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: source.raw(),
+                offset: 0,
+            }),
+            source_context: payload.raw(),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: destination.raw(),
+                offset: 0,
+            }),
+            destination_context: payload.raw(),
+            copy_length: u64::try_from(source_bytes.len())?,
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        }))
         .await?;
     let consumer = u32::try_from(
         id.register_offset(1).ok_or("channel layout")? + CommandRegisters::CONSUMER.offset(),

@@ -1,14 +1,15 @@
 //! Copy validation rejects misrouted descriptors without stranding their owner.
 
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelId, Command, CommandHeader, CommandRegisters, DmaAdmin, DmaDiscovery,
+    Opcode, WaitCommand, WaitCommandComparison, WordTarget, WordTargetWidth,
+};
+
 /// Shared raw-bus fixtures.
 pub mod support;
 
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
-use pdma_model_contract::dma::{
-    ChannelBlock, ChannelId, Command, CommandRegisters, DmaAdmin, DmaDiscovery, WaitCommand,
-    WaitCommandComparison, WordTarget, WordTargetWidth,
-};
 use pdma_model_dma::{CheckRanges, CommandAdmission, CommandRequest, Dma, Error, Fetch, Retire};
 use support::TestResult;
 
@@ -25,18 +26,19 @@ fn routing_error_retires_when_resumed_wait_enters_copy_validation() -> TestResul
 fn reject_wait(admission: CommandAdmission) -> TestResult {
     // Given: a real Wait descriptor, freshly queued or retained after yielding.
     let (mut dma, memory) = support::setup(0x1100, 2)?;
-    let descriptor = Command::wait(
-        41,
-        WaitCommand {
-            target: WordTarget {
-                address: 0x1200,
-                context: 0,
-                width: WordTargetWidth::Bits32,
-            },
-            value: 7,
-            comparison: WaitCommandComparison::Equal,
+    let descriptor = Command::Wait(WaitCommand {
+        header: CommandHeader {
+            opcode: Opcode::Wait,
         },
-    );
+        id: 41,
+        target: WordTarget {
+            address: 0x1200,
+            context: 0,
+            width: WordTargetWidth::Bits32,
+        },
+        value: 7,
+        comparison: WaitCommandComparison::Equal,
+    });
     memory.write(0x1200.into(), MemoryAlignment::ONE, b"abcd")?;
     memory.write(0x1300.into(), MemoryAlignment::ONE, b"----")?;
     support::submit(&mut dma, &memory, descriptor)?;

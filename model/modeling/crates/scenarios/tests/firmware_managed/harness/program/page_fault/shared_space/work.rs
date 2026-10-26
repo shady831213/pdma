@@ -1,3 +1,5 @@
+use pdma_model_contract::dma::{CopyCommandDestinationValues, LinearEndpoint};
+
 use super::*;
 use crate::harness::page_fault::platform::FaultHandler;
 use hardware_interface_runtime::MemoryAddress;
@@ -37,19 +39,18 @@ pub(super) async fn pair<M: Send>(
         work.push(Work {
             channel,
             driver: setup::driver(ports, channel, session.ring_context).await?,
-            request: Command::copy(
+            request: Command::Copy(pdma_model_contract::dma::CopyCommand {
                 id,
-                pdma_model_contract::dma::CopyCommand {
-                    destination: Endpoint {
-                        context: session.payload_context.raw(),
-                        ..Endpoint::linear(destination.raw(), 0)
-                    },
-                    ..match request.payload {
-                        pdma_model_contract::dma::CommandPayloadValues::Copy(copy) => copy,
-                        _ => return Err("expected Copy".into()),
-                    }
-                },
-            ),
+                destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                    address: destination.raw(),
+                    offset: 0,
+                }),
+                destination_context: session.payload_context.raw(),
+                ..match request {
+                    pdma_model_contract::dma::Command::Copy(copy) => copy,
+                    _ => return Err("expected Copy".into()),
+                }
+            }),
             fence: setup::fence(ports, session.ring_context, id)?,
             destination,
         });
@@ -58,7 +59,7 @@ pub(super) async fn pair<M: Send>(
     for task in work.iter_mut().rev() {
         task.driver.submit(task.request).await?;
         task.driver
-            .submit(task.fence.command(task.request.id))
+            .submit(task.fence.command(task.request.id()))
             .await?;
         let report = recovery
             .reports

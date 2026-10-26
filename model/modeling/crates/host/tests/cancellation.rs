@@ -1,11 +1,15 @@
 //! Retained device operations survive async driving cancellation.
 
+use pdma_model_contract::dma::{
+    Command, CommandRegisters, CopyCommandDestinationValues, CopyCommandSourceValues, Event,
+    LinearEndpoint,
+};
+
 use hardware_interface_pipeline::{AsyncExecutor, Operation};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::dma::{Command, CommandRegisters, Endpoint, Event};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
@@ -55,15 +59,22 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
             },
         ))
         .await?;
-    cpu.run_main(channel.submit(Command::copy(
-        11,
-        pdma_model_contract::dma::CopyCommand {
-            source: Endpoint::linear(source.raw(), 0),
-            destination: Endpoint::linear(destination.raw(), 0),
+    cpu.run_main(
+        channel.submit(Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 11,
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: source.raw(),
+                offset: 0,
+            }),
+            destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+                address: destination.raw(),
+                offset: 0,
+            }),
             copy_length: 8,
             sg_context: 0,
-        },
-    )))
+            ..pdma_model_contract::dma::CopyCommand::ZERO
+        })),
+    )
     .await?;
     let executor = AsyncExecutor::new(model.clone());
     let mut operation = Operation::new(());

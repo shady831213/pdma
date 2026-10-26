@@ -1,7 +1,10 @@
 //! DMA integration with an independently owned flat byte store.
 
-use pdma_model_contract::dma::ChannelConfiguration;
-use pdma_model_contract::dma::ChannelInterrupts;
+use pdma_model_contract::dma::{
+    ChannelConfiguration, ChannelInterrupts, ChannelRegisters, Command, CommandRegisters,
+    CopyCommandDestinationValues, CopyCommandSourceValues, EventRegisters, LinearEndpoint,
+};
+
 /// Shared raw-bus fixtures and single-command assembly.
 pub mod support;
 
@@ -9,9 +12,6 @@ use hardware_interface_pipeline::{Stage, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion,
     MemoryRegionError,
-};
-use pdma_model_contract::dma::{
-    ChannelRegisters, Command, CommandRegisters, Endpoint, EventRegisters,
 };
 use pdma_model_dma::Dma;
 use std::{cell::RefCell, ops::Range};
@@ -134,15 +134,20 @@ fn flat_store_preserves_bytes_when_write_crosses_extent() -> TestResult {
 fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
     // Given
     let mut device = Dma::new(FlatMemory::new()?, 1)?;
-    let command = Command::copy(
-        91,
-        pdma_model_contract::dma::CopyCommand {
-            copy_length: 4,
-            sg_context: 0,
-            source: Endpoint::linear(256, 0),
-            destination: Endpoint::linear(320, 0),
-        },
-    );
+    let command = Command::Copy(pdma_model_contract::dma::CopyCommand {
+        id: 91,
+        copy_length: 4,
+        sg_context: 0,
+        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: 256,
+            offset: 0,
+        }),
+        destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: 320,
+            offset: 0,
+        }),
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    });
     device.memory.write(
         MemoryAddress::new(0),
         MemoryAlignment::ONE,

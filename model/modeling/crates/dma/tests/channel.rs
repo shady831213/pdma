@@ -1,14 +1,14 @@
 //! Raw bus, copy publication and channel-fault behavior.
 
-use pdma_model_contract::dma::ChannelInterrupts;
-use pdma_model_contract::dma::ChannelRecovery;
+use pdma_model_contract::dma::{
+    ChannelInterrupts, ChannelRecovery, ChannelRegisters, Command, CommandRegisters,
+    CopyCommandSourceValues, Event, EventCode, EventRegisters, LinearEndpoint,
+};
+
 /// Shared raw-bus test fixtures.
 pub mod support;
 
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::{
-    ChannelRegisters, Command, CommandRegisters, Endpoint, Event, EventCode, EventRegisters,
-};
 use pdma_model_dma::ChannelFatal;
 use support::{TestResult, command, read_word, run, setup, submit};
 
@@ -43,7 +43,10 @@ fn event_write_fault_is_reported_without_event_memory() -> TestResult {
     // Given
     let (mut device, memory) = setup(0x8000, 2)?;
     let mut request = command();
-    support::copy_mut(&mut request)?.source = Endpoint::linear(0x9000, 0);
+    support::copy_mut(&mut request)?.source = CopyCommandSourceValues::Linear(LinearEndpoint {
+        address: 0x9000,
+        offset: 0,
+    });
     submit(&mut device, &memory, request)?;
     // When
     let result = run(&mut device);
@@ -97,16 +100,17 @@ fn source_access_failure_reports_a_stopping_event() -> TestResult {
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, {
         let original = command();
-        let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload else {
+        let pdma_model_contract::dma::Command::Copy(copy) = original else {
             return Err("copy fixture required".into());
         };
-        Command::copy(
-            original.id,
-            pdma_model_contract::dma::CopyCommand {
-                source: Endpoint::linear(0x8000, 0),
-                ..copy
-            },
-        )
+        Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: original.id(),
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0x8000,
+                offset: 0,
+            }),
+            ..copy
+        })
     })?;
     // When
     run(&mut device)?;
@@ -136,7 +140,11 @@ fn successive_successes_reuse_command_slots_without_event_consumption() -> TestR
     memory.write(
         MemoryAddress::new(0x1000),
         MemoryAlignment::ONE,
-        &Command { id: 8, ..command() }.to_bytes()?,
+        &Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: 8,
+            ..*support::copy(&command())?
+        })
+        .to_bytes()?,
     )?;
     memory.write(MemoryAddress::new(0x1200), MemoryAlignment::ONE, &[2; 4])?;
     device.write(

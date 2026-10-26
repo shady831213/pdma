@@ -1,12 +1,15 @@
 //! Terminal command failures bypass successful chunk and payload dataflow.
+
+use pdma_model_contract::dma::{
+    ChannelBlock, Command, CopyCommandSourceValues, Event, EventCode, EventRaw, EventRegisters,
+    LinearEndpoint, ScatterGatherEndpoint,
+};
+
 /// Shared hardware fixtures.
 pub mod support;
 
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome, StepResult, Then};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
-use pdma_model_contract::dma::{
-    ChannelBlock, Command, Endpoint, Event, EventCode, EventRaw, EventRegisters,
-};
 use pdma_model_dma::{
     Chunk, Completion, ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy,
 };
@@ -38,17 +41,17 @@ fn failed_read_bypasses_payload_transform_and_reaches_terminal_tail() -> TestRes
     check(
         {
             let original = command();
-            let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload
-            else {
+            let pdma_model_contract::dma::Command::Copy(copy) = original else {
                 return Err("copy fixture required".into());
             };
-            Command::copy(
-                original.id,
-                pdma_model_contract::dma::CopyCommand {
-                    source: Endpoint::linear(0x8000, 0),
-                    ..copy
-                },
-            )
+            Command::Copy(pdma_model_contract::dma::CopyCommand {
+                id: original.id(),
+                source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                    address: 0x8000,
+                    offset: 0,
+                }),
+                ..copy
+            })
         },
         Some(EventCode::ReadError),
         (1, 0),
@@ -60,17 +63,17 @@ fn invalid_range_bypasses_normal_chunk_and_payload_outputs() -> TestResult {
     check(
         {
             let original = command();
-            let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload
-            else {
+            let pdma_model_contract::dma::Command::Copy(copy) = original else {
                 return Err("copy fixture required".into());
             };
-            Command::copy(
-                original.id,
-                pdma_model_contract::dma::CopyCommand {
-                    source: Endpoint::linear(u64::MAX, 0),
-                    ..copy
-                },
-            )
+            Command::Copy(pdma_model_contract::dma::CopyCommand {
+                id: original.id(),
+                source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                    address: u64::MAX,
+                    offset: 0,
+                }),
+                ..copy
+            })
         },
         Some(EventCode::InvalidLength),
         (0, 0),
@@ -82,17 +85,19 @@ fn invalid_list_bypasses_normal_chunk_and_payload_outputs() -> TestResult {
     check(
         {
             let original = command();
-            let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload
-            else {
+            let pdma_model_contract::dma::Command::Copy(copy) = original else {
                 return Err("copy fixture required".into());
             };
-            Command::copy(
-                original.id,
-                pdma_model_contract::dma::CopyCommand {
-                    source: Endpoint::scatter_gather(0x8000, 1),
-                    ..copy
-                },
-            )
+            Command::Copy(pdma_model_contract::dma::CopyCommand {
+                id: original.id(),
+                source: CopyCommandSourceValues::ScatterGather(ScatterGatherEndpoint {
+                    list_address: 0x8000,
+                    count: 1,
+                    index: 0,
+                    offset: 0,
+                }),
+                ..copy
+            })
         },
         Some(EventCode::ListReadError),
         (0, 0),
@@ -104,18 +109,18 @@ fn empty_success_is_normal_dataflow_without_payload_access() -> TestResult {
     check(
         {
             let original = command();
-            let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload
-            else {
+            let pdma_model_contract::dma::Command::Copy(copy) = original else {
                 return Err("copy fixture required".into());
             };
-            Command::copy(
-                original.id,
-                pdma_model_contract::dma::CopyCommand {
-                    source: Endpoint::linear(0x8000, 0),
-                    copy_length: 0,
-                    ..copy
-                },
-            )
+            Command::Copy(pdma_model_contract::dma::CopyCommand {
+                id: original.id(),
+                source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                    address: 0x8000,
+                    offset: 0,
+                }),
+                copy_length: 0,
+                ..copy
+            })
         },
         None,
         (1, 1),
@@ -128,16 +133,17 @@ fn standalone_chunk_graph_publishes_the_actual_read_failure() -> TestResult {
     let (mut dma, memory) = setup(0x1100, 2)?;
     let descriptor = {
         let original = command();
-        let pdma_model_contract::dma::CommandPayloadValues::Copy(copy) = original.payload else {
+        let pdma_model_contract::dma::Command::Copy(copy) = original else {
             return Err("copy fixture required".into());
         };
-        Command::copy(
-            original.id,
-            pdma_model_contract::dma::CopyCommand {
-                source: Endpoint::linear(0x8000, 0),
-                ..copy
-            },
-        )
+        Command::Copy(pdma_model_contract::dma::CopyCommand {
+            id: original.id(),
+            source: CopyCommandSourceValues::Linear(LinearEndpoint {
+                address: 0x8000,
+                offset: 0,
+            }),
+            ..copy
+        })
     };
     submit(&mut dma, &memory, descriptor)?;
     let id = pdma_model_contract::dma::ChannelId::new(0);
@@ -176,7 +182,7 @@ fn standalone_chunk_graph_publishes_the_actual_read_failure() -> TestResult {
     let event = Event::from_bytes(raw.as_ref())?;
     assert_eq!(
         (event.id, event.code, event.bytes_completed()),
-        (descriptor.id, EventCode::ReadError, 0)
+        (descriptor.id(), EventCode::ReadError, 0)
     );
     Ok(())
 }
@@ -234,7 +240,7 @@ fn check(
         let event = Event::from_bytes(raw.as_ref())?;
         assert_eq!(
             (event.id, event.code, event.bytes_completed()),
-            (descriptor.id, code, 0)
+            (descriptor.id(), code, 0)
         );
     }
     assert_eq!(

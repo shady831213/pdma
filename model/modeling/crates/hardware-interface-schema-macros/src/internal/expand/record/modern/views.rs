@@ -3,7 +3,7 @@ use quote::{format_ident, quote};
 
 use crate::internal::syntax::{ModernRecordDecl, ModernTypeDecl};
 
-use super::{layout::RecordPlan, layout::union_geometry};
+use super::{layout::RecordPlan, layout::tagged_union_geometry};
 
 mod bits;
 mod raw_scalar;
@@ -125,13 +125,13 @@ fn getters(
                 <#path as #facade::RecordLayout>::view(bytes)
             }
         }],
-        ModernTypeDecl::Union(union) => {
-            union_geometry(union, facade).map_or_else(Vec::new, |geometry| {
+        ModernTypeDecl::TaggedUnion(union) => {
+            tagged_union_geometry(union, facade).map_or_else(Vec::new, |geometry| {
                 let width = &geometry.storage.width;
                 let ty = &geometry.storage.ty;
                 (0..geometry.slots)
                     .map(|index| {
-                        let method = if field.scoped_union {
+                        let method = if field.scoped_tagged_union {
                             format_ident!("{name}_word{index}")
                         } else {
                             format_ident!("word{index}")
@@ -191,13 +191,13 @@ fn setters(
                 }
             }]
         }
-        ModernTypeDecl::Union(union) => {
-            union_geometry(union, facade).map_or_else(Vec::new, |geometry| {
+        ModernTypeDecl::TaggedUnion(union) => {
+            tagged_union_geometry(union, facade).map_or_else(Vec::new, |geometry| {
                 let width = &geometry.storage.width;
                 let ty = &geometry.storage.ty;
                 (0..geometry.slots)
                     .map(|index| {
-                        let method = if field.scoped_union {
+                        let method = if field.scoped_tagged_union {
                             format_ident!("{name}_word{index}")
                         } else {
                             format_ident!("word{index}")

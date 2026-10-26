@@ -17,7 +17,7 @@ use std::{
 
 use hardware_interface_schema::{Documentation, ResolvedRegisterMap};
 use pdma_model_contract::control::{ControlRequest, ControlResponse};
-use pdma_model_contract::dma::{Command, DmaRegisters, Endpoint, Event, Segment};
+use pdma_model_contract::dma::{Command, DmaRegisters, Event, LinearEndpoint, Segment};
 use pdma_model_contract::hw_components::control::ControlRegisters;
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -49,7 +49,7 @@ fn generated_header_preserves_resolved_contract_descriptions() -> TestResult {
     // Given: the current record and MMIO schemas used by the device.
     let records = [
         Segment::SPEC.resolve()?,
-        Endpoint::SPEC.resolve()?,
+        LinearEndpoint::SPEC.resolve()?,
         Command::SPEC.resolve()?,
         Event::SPEC.resolve()?,
         ControlRequest::SPEC.resolve()?,

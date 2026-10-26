@@ -3,35 +3,35 @@ use syn::{Ident, Path, Result, Token, braced, parse::Parse, parse::ParseStream};
 use super::ScalarType;
 use crate::internal::syntax::key;
 
-pub(in crate::internal) struct UnionDecl {
-    pub(in crate::internal) tag: ScopedPath,
-    pub(in crate::internal) cases: Vec<UnionCaseDecl>,
+pub(in crate::internal) struct TaggedUnionDecl {
+    pub(in crate::internal) tag: TaggedUnionTagPath,
+    pub(in crate::internal) cases: Vec<TaggedUnionCaseDecl>,
 }
 
-pub(in crate::internal) struct ScopedPath {
+pub(in crate::internal) struct TaggedUnionTagPath {
     pub(in crate::internal) segments: Vec<Ident>,
     pub(in crate::internal) span: proc_macro2::Span,
 }
 
-pub(in crate::internal) struct UnionCaseDecl {
+pub(in crate::internal) struct TaggedUnionCaseDecl {
     pub(in crate::internal) name: Ident,
-    pub(in crate::internal) fields: Vec<UnionFieldDecl>,
+    pub(in crate::internal) fields: Vec<TaggedUnionFieldDecl>,
     pub(in crate::internal) record: Option<Path>,
 }
 
-pub(in crate::internal) struct UnionFieldDecl {
+pub(in crate::internal) struct TaggedUnionFieldDecl {
     pub(in crate::internal) name: Ident,
-    pub(in crate::internal) ty: UnionFieldType,
+    pub(in crate::internal) ty: TaggedUnionFieldType,
 }
 
-pub(in crate::internal) enum UnionFieldType {
+pub(in crate::internal) enum TaggedUnionFieldType {
     Scalar(ScalarType),
     Bits(Path),
 }
 
-impl Parse for UnionDecl {
+impl Parse for TaggedUnionDecl {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
-        input.parse::<Token![union]>()?;
+        crate::internal::syntax::keyword(input, "tagged_union")?;
         let body;
         braced!(body in input);
         key(&body, "tag")?;
@@ -41,7 +41,7 @@ impl Parse for UnionDecl {
         let cases_body;
         braced!(cases_body in body);
         let cases = cases_body
-            .parse_terminated(UnionCaseDecl::parse, Token![,])?
+            .parse_terminated(TaggedUnionCaseDecl::parse, Token![,])?
             .into_iter()
             .collect();
         let _ = body.parse::<Token![,]>();
@@ -49,7 +49,7 @@ impl Parse for UnionDecl {
     }
 }
 
-impl Parse for ScopedPath {
+impl Parse for TaggedUnionTagPath {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
         let self_token: Token![self] = input.parse()?;
         let mut segments = Vec::new();
@@ -67,7 +67,7 @@ impl Parse for ScopedPath {
     }
 }
 
-impl Parse for UnionCaseDecl {
+impl Parse for TaggedUnionCaseDecl {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
         let name = input.parse()?;
         if input.peek(syn::token::Paren) {
@@ -86,7 +86,7 @@ impl Parse for UnionCaseDecl {
         let body;
         braced!(body in input);
         let fields = body
-            .parse_terminated(UnionFieldDecl::parse, Token![,])?
+            .parse_terminated(TaggedUnionFieldDecl::parse, Token![,])?
             .into_iter()
             .collect();
         Ok(Self {
@@ -97,16 +97,16 @@ impl Parse for UnionCaseDecl {
     }
 }
 
-impl Parse for UnionFieldDecl {
+impl Parse for TaggedUnionFieldDecl {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
         let name = input.parse()?;
         input.parse::<Token![:]>()?;
         let probe = input.fork();
         let ty = if let Ok(scalar) = ScalarType::parse(&probe) {
             let _ = ScalarType::parse(input)?;
-            UnionFieldType::Scalar(scalar)
+            TaggedUnionFieldType::Scalar(scalar)
         } else {
-            UnionFieldType::Bits(input.parse()?)
+            TaggedUnionFieldType::Bits(input.parse()?)
         };
         Ok(Self { name, ty })
     }

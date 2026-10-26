@@ -4,12 +4,11 @@ use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::dma::{CopyCommand, EventCode};
 
 impl RangeCheck {
-    pub(crate) const fn new(id: u64, command: CopyCommand) -> Self {
+    pub(crate) const fn new(command: CopyCommand) -> Self {
         Self {
-            cursor: Cursor::new(command.source, command.copy_length),
+            cursor: Cursor::source(command),
             remaining: command.copy_length,
             command,
-            id,
             side: Side::Source,
         }
     }
@@ -21,7 +20,7 @@ impl RangeCheck {
         let result = if scan.remaining == 0 {
             match scan.side {
                 Side::Source => {
-                    scan.cursor = Cursor::new(scan.command.destination, scan.command.copy_length);
+                    scan.cursor = Cursor::destination(scan.command);
                     scan.remaining = scan.command.copy_length;
                     scan.side = Side::Destination;
                     return None;
@@ -50,6 +49,6 @@ impl RangeCheck {
                 Err(status) => Err(status),
             }
         };
-        Some(CopyState::new(scan.id, scan.command, result))
+        Some(CopyState::new(scan.command, result))
     }
 }

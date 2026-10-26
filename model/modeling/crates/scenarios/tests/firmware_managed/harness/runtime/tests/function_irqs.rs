@@ -1,3 +1,8 @@
+use pdma_model_contract::dma::{
+    ChannelId, Command, CommandHeader, CopyCommandDestinationValues, CopyCommandSourceValues,
+    Event, LinearEndpoint, Opcode, TrapCommand,
+};
+
 use super::super::{Driver, HostVector, ManagementBus};
 use super::{Managed, control::memory::poll_once};
 use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
@@ -5,7 +10,6 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAllocator,
 };
-use pdma_model_contract::dma::{ChannelId, Command, Endpoint, Event};
 use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_host::{Channel, ChannelConfig, Rings};
 use pdma_model_software::{
@@ -28,7 +32,7 @@ async fn pending_dma_notification_keeps_old_destination_after_reset_and_regrant(
     admin.write(window, &1_u32.to_le_bytes()).await.unwrap();
     let command = super::control::ring::<Command>(&allocator).unwrap();
     let response = super::control::ring::<Event>(&allocator).unwrap();
-    let (source, destination) = payload(&allocator);
+    let descriptor = payload(&allocator);
     let id = ChannelId::new(0);
     let mut channel = Channel::setup(
         old.bus.clone(),
@@ -43,19 +47,16 @@ async fn pending_dma_notification_keeps_old_destination_after_reset_and_regrant(
     )
     .await
     .unwrap();
+    channel.submit(descriptor).await.unwrap();
     channel
-        .submit(Command::copy(
-            1,
-            pdma_model_contract::dma::CopyCommand {
-                copy_length: 4,
-                sg_context: 0,
-                source: Endpoint::linear(source.raw(), 0),
-                destination: Endpoint::linear(destination.raw(), 0),
+        .submit(Command::Trap(TrapCommand {
+            header: CommandHeader {
+                opcode: Opcode::Trap,
             },
-        ))
+            id: 2,
+        }))
         .await
         .unwrap();
-    channel.submit(Command::trap(2)).await.unwrap();
     let hardware = async {
         let executor = AsyncExecutor::new(Driver(Arc::clone(&system.shared)));
         let mut hardware = system.hardware;
@@ -121,12 +122,25 @@ async fn pending_dma_notification_keeps_old_destination_after_reset_and_regrant(
     .unwrap();
 }
 
-fn payload(allocator: &SharedMemoryAllocator) -> (MemoryAddress, MemoryAddress) {
+fn payload(allocator: &SharedMemoryAllocator) -> Command {
     let source = allocator.allocate(4, MemoryAlignment::ONE).unwrap();
     let destination = allocator.allocate(4, MemoryAlignment::ONE).unwrap();
     allocator
         .memory_access()
         .write(source, MemoryAlignment::ONE, b"data")
         .unwrap();
-    (source, destination)
+    Command::Copy(pdma_model_contract::dma::CopyCommand {
+        id: 1,
+        copy_length: 4,
+        sg_context: 0,
+        source: CopyCommandSourceValues::Linear(LinearEndpoint {
+            address: source.raw(),
+            offset: 0,
+        }),
+        destination: CopyCommandDestinationValues::Linear(LinearEndpoint {
+            address: destination.raw(),
+            offset: 0,
+        }),
+        ..pdma_model_contract::dma::CopyCommand::ZERO
+    })
 }

@@ -1,5 +1,5 @@
 use core::fmt;
-use hardware_interface_schema::{RecordLayout, checked_align_up};
+use hardware_interface_schema::{SchemaCodec, checked_align_up};
 
 /// Shared ring calculations; implementations own their state and I/O operations.
 ///
@@ -7,7 +7,7 @@ use hardware_interface_schema::{RecordLayout, checked_align_up};
 /// may be synchronous or asynchronous without imposing either on this trait.
 pub trait Ring {
     /// Wire record stored in each slot.
-    type Entry: RecordLayout;
+    type Entry: SchemaCodec;
 
     /// Current ring base address.
     fn base(&self) -> u64;

@@ -42,7 +42,7 @@ fn check_type(decl: &ModernRecordDecl, ty: &ModernTypeDecl) -> syn::Result<()> {
             crate::internal::validate::bits::check(&bits.fields, bits.storage.width() * 8)
         }
         ModernTypeDecl::BitsReference(_) => Ok(()),
-        ModernTypeDecl::Record(path) => {
+        ModernTypeDecl::Codec(path) => {
             if path
                 .segments
                 .last()
@@ -98,7 +98,7 @@ fn check_tagged_union(decl: &ModernRecordDecl, union: &TaggedUnionDecl) -> syn::
         ([_], _) => {
             return Err(syn::Error::new(root.span(), "tag field must be an enum"));
         }
-        ([_, _], ModernTypeDecl::Record(_) | ModernTypeDecl::BitsReference(_)) => None,
+        ([_, _], ModernTypeDecl::Codec(_) | ModernTypeDecl::BitsReference(_)) => None,
         ([_, _], _) => {
             return Err(syn::Error::new(
                 root.span(),
@@ -135,9 +135,9 @@ fn check_tagged_union_cases(
     let mut names = HashSet::new();
     let mut field_count = 0_usize;
     for case in &union.cases {
-        if let Some(path) = &case.record {
+        if let Some(path) = &case.codec {
             field_count += 1;
-            check_type(decl, &ModernTypeDecl::Record(path.clone()))?;
+            check_type(decl, &ModernTypeDecl::Codec(path.clone()))?;
         }
         if !names.insert(case.name.to_string()) {
             return Err(syn::Error::new(case.name.span(), "duplicate union case"));
@@ -159,15 +159,15 @@ fn check_tagged_union_cases(
             "union requires at least one stored field",
         ));
     }
-    let record_cases = union
+    let codec_cases = union
         .cases
         .iter()
-        .filter(|case| case.record.is_some())
+        .filter(|case| case.codec.is_some())
         .count();
-    if record_cases != 0 && record_cases != union.cases.len() {
+    if codec_cases != 0 && codec_cases != union.cases.len() {
         return Err(syn::Error::new(
             union.tag.span,
-            "record and inline union cases cannot be mixed",
+            "codec and inline union cases cannot be mixed",
         ));
     }
     Ok(names)

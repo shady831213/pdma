@@ -64,9 +64,10 @@ its own options fields. This separates storage layout from protocol selection.
 Schema declarations spell those fields `tagged_union { tag: ..., cases: ... }`.
 The independent untagged layout uses `union_schema! { ... union ... }`; the old
 inline `union { tag: ... }` spelling is rejected rather than retained as an alias.
-`codec: external` optionally supplies mechanical `Encode`/`Decode`/`RecordLayout`
-and normal view adapters. They call the contract's `from_bytes` and `encode_into`
-methods; schema receives no opcode map, prefix or selection rule. Pure unions
+`codec: external` optionally supplies mechanical `Encode`/`Decode`, convenience
+methods and normal view adapters. They call the contract's direct `SchemaCodec`
+implementation; the option does not generate that implementation. Schema receives
+no opcode map, prefix or selection rule. Pure unions
 without this option need no protocol codec or selector. Their `variant` and
 `set_variant` view helpers make the chosen storage interpretation explicit.
 For Command, normal `values`/`set_values` views use the external protocol checks,

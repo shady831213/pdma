@@ -118,7 +118,8 @@ Every selected member's alignment gaps, inactive union storage, and remaining
 96-byte slot tail must be zero. The contract decoder reads CommandHeader before
 selecting the complete record. Protocol encoding rejects a semantic variant
 whose header opcode does not match. The optional `codec: external` generation
-supplies trait and normal view adapters that call this contract-owned codec.
+supplies convenience methods, trait and normal view adapters that call the
+contract-owned `SchemaCodec` implementation.
 Normal `values`/`set_values` views therefore enforce the protocol; `variant` and
 `set_variant` remain explicit storage tools. Schema has no opcode selection rule.
 Initialize C slots to zero, store the shared opcode, and use

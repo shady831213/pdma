@@ -18,8 +18,8 @@ fn expand(decl: &UntaggedUnionDecl) -> syn::Result<TokenStream> {
     let docs = decl.documentation.rust_docs();
     let metadata = decl.documentation.metadata(&facade);
     let cases: Vec<_> = decl.cases.iter().map(|(case, _)| case).collect();
-    let records: Vec<_> = decl.cases.iter().map(|(_, record)| record).collect();
-    let Some((first, record)) = decl.cases.first() else {
+    let codecs: Vec<_> = decl.cases.iter().map(|(_, codec)| codec).collect();
+    let Some((first, first_codec)) = decl.cases.first() else {
         return Err(syn::Error::new(
             name.span(),
             "union requires at least one case",
@@ -33,25 +33,25 @@ fn expand(decl: &UntaggedUnionDecl) -> syn::Result<TokenStream> {
         #docs
         #[doc = "Semantic value of an explicitly selected complete-record union."]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        #visibility enum #name { #(#[doc = "Complete record interpretation."] #cases(#records)),* }
+        #visibility enum #name { #(#[doc = "Complete codec interpretation."] #cases(<#codecs as #facade::SchemaCodec>::Value)),* }
         #[doc = "Caller-selected interpretation of untagged union storage."]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        #visibility enum #case_type { #(#[doc = "Selects this complete record interpretation."] #cases),* }
+        #visibility enum #case_type { #(#[doc = "Selects this complete codec interpretation."] #cases),* }
         impl #name {
             #[doc = "Maximum natural alignment of the complete cases."]
             pub const RECORD_ALIGNMENT: usize = {
                 let mut alignment = 1;
-                #(assert!(<#records as #facade::RecordLayout>::ALIGNMENT.is_power_of_two(), "union case alignment must be a nonzero power of two");)*
-                #(if <#records as #facade::RecordLayout>::ALIGNMENT > alignment {
-                    alignment = <#records as #facade::RecordLayout>::ALIGNMENT;
+                #(assert!(<#codecs as #facade::SchemaCodec>::ALIGNMENT.is_power_of_two(), "union case alignment must be a nonzero power of two");)*
+                #(if <#codecs as #facade::SchemaCodec>::ALIGNMENT > alignment {
+                    alignment = <#codecs as #facade::SchemaCodec>::ALIGNMENT;
                 })*
                 alignment
             };
             #[doc = "Maximum case extent rounded to the union alignment."]
             pub const RECORD_SIZE: usize = {
                 let mut extent = 0;
-                #(if <#records as #facade::RecordLayout>::EXTENT > extent {
-                    extent = <#records as #facade::RecordLayout>::EXTENT;
+                #(if <#codecs as #facade::SchemaCodec>::EXTENT > extent {
+                    extent = <#codecs as #facade::SchemaCodec>::EXTENT;
                 })*
                 let extent = #facade::inferred_align_up(extent, Self::RECORD_ALIGNMENT);
                 assert!(extent != usize::MAX, "union inferred layout overflows usize");
@@ -61,16 +61,26 @@ fn expand(decl: &UntaggedUnionDecl) -> syn::Result<TokenStream> {
             pub const SPEC: #facade::RecordSpec = #facade::RecordSpec::named(
                 stringify!(#name), Self::RECORD_SIZE, Self::RECORD_ALIGNMENT, &[], &[]
             ).with_documentation(#metadata);
-            #[doc = "First case with its record's zero semantic value."]
-            pub const ZERO: Self = Self::#first(#record::ZERO);
+            #[doc = "First case with its codec's zero semantic value."]
+            pub const ZERO: Self = Self::#first(<#first_codec as #facade::SchemaCodec>::ZERO);
             #[doc = "Decodes the caller-selected case, checking direct gaps and inactive tail."]
             pub fn decode_variant(bytes: &[u8], case: #case_type) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
                 let actual = bytes.len();
                 let bytes = bytes.get(..Self::RECORD_SIZE).ok_or(#facade::SchemaCodecError::BufferTooShort { required: Self::RECORD_SIZE, actual })?;
                 match case {
                     #(#case_type::#cases => {
-                        let value = #records::from_bytes(bytes)?;
-                        #facade::record::validate_union_padding(bytes, #records::SPEC)?;
+                        let extent = <#codecs as #facade::SchemaCodec>::EXTENT;
+                        let child = bytes.get(..extent).ok_or(#facade::SchemaCodecError::BufferTooShort { required: extent, actual: bytes.len() })?;
+                        let value = <#codecs as #facade::SchemaCodec>::decode(child)?;
+                        <#codecs as #facade::SchemaCodec>::validate_padding(child)?;
+                        for (offset, byte) in bytes.iter().copied().enumerate().skip(extent) {
+                            if byte != 0 {
+                                return ::core::result::Result::Err(#facade::SchemaCodecError::NonZeroReserved {
+                                    location: #facade::SchemaMemberIdentity::new(stringify!(#name), "tail").at_byte(offset),
+                                    observed: u64::from(byte),
+                                });
+                            }
+                        }
                         ::core::result::Result::Ok(Self::#cases(value))
                     }),*
                 }
@@ -80,7 +90,12 @@ fn expand(decl: &UntaggedUnionDecl) -> syn::Result<TokenStream> {
                 let actual = bytes.len();
                 let destination = bytes.get_mut(..Self::RECORD_SIZE).ok_or(#facade::SchemaCodecError::BufferTooShort { required: Self::RECORD_SIZE, actual })?;
                 let mut encoded = [0_u8; Self::RECORD_SIZE];
-                match self { #(Self::#cases(value) => value.encode_into(&mut encoded)?),* }
+                match self { #(Self::#cases(value) => {
+                    let extent = <#codecs as #facade::SchemaCodec>::EXTENT;
+                    let actual = encoded.len();
+                    let child = encoded.get_mut(..extent).ok_or(#facade::SchemaCodecError::BufferTooShort { required: extent, actual })?;
+                    <#codecs as #facade::SchemaCodec>::encode(child, value)?;
+                }),* }
                 destination.copy_from_slice(&encoded);
                 ::core::result::Result::Ok(())
             }

@@ -53,7 +53,7 @@ pub(super) fn expand(
         .fields
         .iter()
         .map(|placed| field::encode(marker, placed, facade, endian));
-    let constant_assertions = constant_assertions(plan);
+    let constant_assertions = constant_assertions(plan, facade);
     let codec = codec::expand(visibility, marker, values_name, &raw_name, facade);
     Ok(quote! {
         #(#constant_assertions)*
@@ -143,7 +143,7 @@ fn normalizers(decl: &ModernRecordDecl, plan: &RecordPlan<'_>) -> syn::Result<Ve
         .collect()
 }
 
-fn constant_assertions(plan: &RecordPlan<'_>) -> Vec<TokenStream> {
+fn constant_assertions(plan: &RecordPlan<'_>, facade: &TokenStream) -> Vec<TokenStream> {
     plan.fields
         .iter()
         .filter_map(|field| {
@@ -154,7 +154,7 @@ fn constant_assertions(plan: &RecordPlan<'_>) -> Vec<TokenStream> {
             else {
                 return None;
             };
-            let path = scalar::record_size_path(path);
+            let path = scalar::record_size_path(path, facade);
             let maximum = usize::try_from(scalar.maximum()).map_or(usize::MAX, |value| value);
             Some(quote!(
                 const _: () = assert!(#path <= #maximum, "record constant exceeds scalar storage");
@@ -196,7 +196,7 @@ fn field_type(
             quote!(#ty)
         }
         ModernTypeDecl::BitsReference(path) => quote!(<#path as #facade::BitsLayout>::Value),
-        ModernTypeDecl::Record(path) => quote!(<#path as #facade::RecordLayout>::Value),
+        ModernTypeDecl::Codec(path) => quote!(<#path as #facade::SchemaCodec>::Value),
     }
     .into()
 }
@@ -221,8 +221,8 @@ fn zero_field(
             quote!(#ty::ZERO)
         }
         ModernTypeDecl::BitsReference(path) => quote!(<#path as #facade::BitsLayout>::ZERO),
-        ModernTypeDecl::Record(path) => {
-            quote!(<#path as #facade::RecordLayout>::ZERO)
+        ModernTypeDecl::Codec(path) => {
+            quote!(<#path as #facade::SchemaCodec>::ZERO)
         }
     };
     Some(quote!(#name: #value))

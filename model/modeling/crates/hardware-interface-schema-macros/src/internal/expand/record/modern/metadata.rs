@@ -111,7 +111,7 @@ fn metadata_parts(
         let name = field.decl.name.to_string();
         let offset = &field.offset_name;
         let documentation = field.decl.documentation.metadata(facade);
-        if matches!(&field.decl.ty, ModernTypeDecl::TaggedUnion(union) if union.cases.first().is_some_and(|case| case.record.is_some()))
+        if matches!(&field.decl.ty, ModernTypeDecl::TaggedUnion(union) if union.cases.first().is_some_and(|case| case.codec.is_some()))
         {
             let ty = super::scalar::type_name(marker, &field.decl.name, "Values");
             let id_index = next_id;
@@ -123,14 +123,14 @@ fn metadata_parts(
             }));
             continue;
         }
-        if let ModernTypeDecl::Record(path) = &field.decl.ty {
+        if let ModernTypeDecl::Codec(path) = &field.decl.ty {
             let id_index = next_id;
             next_id += 1;
             placements.push(quote!({
                 let id = match #facade::inferred_field_id(#id_index) { ::core::option::Option::Some(id) => id, ::core::option::Option::None => 0 };
-                #facade::RecordPlacement::new(id, #name, #marker::#offset, &#path::SPEC)
+                #facade::RecordPlacement::new(id, #name, #marker::#offset, &<#path as #facade::SchemaCodec>::SPEC)
                     .with_declaration_index(#declaration_index)
-                    .with_documentation((#documentation).with_fallback(<#path as #facade::RecordLayout>::DOCUMENTATION))
+                    .with_documentation((#documentation).with_fallback(<#path as #facade::SchemaCodec>::DOCUMENTATION))
             }));
             continue;
         }

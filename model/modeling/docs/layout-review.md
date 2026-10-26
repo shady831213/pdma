@@ -281,7 +281,42 @@ opcode mapping DSL to provide useful union access.
 
 The chosen boundary keeps layout/raw storage and explicit case encode/decode
 helpers in schema. Contract owns protocol dispatch and any extra consistency
-checks. Optional mechanical trait/view adapters delegate to application-provided
-from_bytes/encode_into methods, without declaring a selector, prefix or opcode
-table in schema. Raw variant access and protocol-checked values access have
-distinct names so a normal view does not bypass application checks.
+checks through a direct `SchemaCodec` implementation. Optional mechanical
+trait/view adapters and the generated from_bytes/encode_into conveniences delegate
+to that trait, without declaring a selector, prefix or opcode table in schema.
+Raw variant access and protocol-checked values access have distinct names so a
+normal view does not bypass application checks. The earlier inherent-hook adapter
+direction was removed when SchemaCodec became the common composition boundary.
+
+### Recursive codec composition
+
+Review found that untagged branches still depended on record-specific inherent
+methods and field metadata despite the existing layout trait. In particular, an
+inner untagged union's opaque metadata caused valid nonzero bytes to be classified
+as padding by its parent. This prevented the promised recursive composition.
+
+`SchemaCodec` generalizes the former record-only contract: composition uses its
+associated Value, geometry, codec and view methods. Generated records provide the
+implementation; an externally implemented struct, enum or separate codec marker
+can do so without inherent schema APIs. Metadata defaults to an opaque extent,
+while generated records preserve their detailed metadata for exporters.
+
+An outer union passes exactly the selected child's extent to that codec and checks
+only its own remaining tail. The child's own padding hook preserves strict
+complete-record branch checks without changing ordinary record decoding's existing
+gap tolerance. Opaque codecs validate their internals themselves. Tagged fields
+continue receiving their external discriminator from their containing record;
+this does not manufacture a tagless decoder or move protocol selection into schema.
+
+Coverage includes multi-level nonzero nested unions, manual structs/enums and
+codec markers whose Value differs from Self, field and tagged-case composition,
+outer-tail ownership, exact child slices and independent unchanged PDMA wire bytes.
+
+### Deferred discussion: generated layout and custom codec responsibilities
+
+The next discussion will consider splitting `SchemaCodec` responsibilities so a
+generated untagged union can reuse its known value/view types and layout constants,
+with application code implementing only encode/decode. Handwritten types outside
+schema generation would still provide the complete layout and codec contract.
+The concrete trait split and API are not decided; this checkpoint keeps the
+current implementation unchanged.

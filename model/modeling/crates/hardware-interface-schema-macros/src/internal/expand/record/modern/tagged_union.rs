@@ -10,8 +10,8 @@ use super::{layout::tagged_union_geometry, scalar};
 mod arms;
 mod case_field;
 mod codec;
+pub(super) mod codecs;
 mod identity;
-pub(super) mod records;
 
 pub(super) struct TagInfo {
     pub(super) ty: TokenStream,
@@ -50,7 +50,7 @@ pub(super) fn tag_info(
         .find(|field| field.name == *first)
         .ok_or_else(|| syn::Error::new(first.span(), "tag record does not exist"))?;
     let ty = match &field.ty {
-        ModernTypeDecl::Record(definition) | ModernTypeDecl::BitsReference(definition) => {
+        ModernTypeDecl::Codec(definition) | ModernTypeDecl::BitsReference(definition) => {
             let ty = scalar::suffixed_path(definition, second);
             quote!(#ty)
         }

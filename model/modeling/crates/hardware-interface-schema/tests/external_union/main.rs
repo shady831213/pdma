@@ -1,37 +1,71 @@
 //! Application codecs own policy for opted-in union adapters.
 use hardware_interface_schema::{
-    Decode, Encode, RecordLayout, SchemaCodecError, record_schema, union_schema,
+    Decode, Encode, SchemaCodec, SchemaCodecError, record_schema, union_schema,
 };
+
+mod dispatch;
 
 record_schema! { pub record Small { endian: Big, fields: { value: u16 } } }
 record_schema! { pub record Large { endian: Little, fields: { value: u64 } } }
 union_schema! { pub union Fixed { cases: { Small(Small), Large(Large) }, codec: external, } }
 union_schema! { pub union Checked { cases: { Small(Small), Large(Large) }, codec: external } }
 
-// Inherent hooks can live outside the declaration module with ordinary Rust visibility.
+// Application trait implementations can live outside the declaration module.
 mod application {
     use super::*;
 
-    impl Fixed {
-        pub(super) fn from_bytes(bytes: &[u8]) -> Result<Self, SchemaCodecError> {
+    impl SchemaCodec for Fixed {
+        type Value = Self;
+        type View<'a> = FixedView<'a>;
+        type ViewMut<'a> = FixedViewMut<'a>;
+        const NAME: &'static str = "Fixed";
+        const ALIGNMENT: usize = Self::RECORD_ALIGNMENT;
+        const EXTENT: usize = Self::RECORD_SIZE;
+        const ZERO: Self = Self::ZERO;
+
+        fn decode(bytes: &[u8]) -> Result<Self, SchemaCodecError> {
             Self::decode_variant(bytes, FixedCase::Small)
         }
 
-        pub(super) fn encode_into(&self, bytes: &mut [u8]) -> Result<(), SchemaCodecError> {
-            self.encode_variant(bytes)
+        fn encode(bytes: &mut [u8], value: &Self) -> Result<(), SchemaCodecError> {
+            value.encode_variant(bytes)
+        }
+
+        fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError> {
+            FixedView::new(bytes)
+        }
+
+        fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError> {
+            FixedViewMut::new(bytes)
         }
     }
 
-    impl Checked {
-        pub(super) fn from_bytes(bytes: &[u8]) -> Result<Self, SchemaCodecError> {
+    impl SchemaCodec for Checked {
+        type Value = Self;
+        type View<'a> = CheckedView<'a>;
+        type ViewMut<'a> = CheckedViewMut<'a>;
+        const NAME: &'static str = "Checked";
+        const ALIGNMENT: usize = Self::RECORD_ALIGNMENT;
+        const EXTENT: usize = Self::RECORD_SIZE;
+        const ZERO: Self = Self::ZERO;
+
+        fn decode(bytes: &[u8]) -> Result<Self, SchemaCodecError> {
             let value = Self::decode_variant(bytes, CheckedCase::Small)?;
             validate(&value)?;
             Ok(value)
         }
 
-        pub(super) fn encode_into(&self, bytes: &mut [u8]) -> Result<(), SchemaCodecError> {
-            validate(self)?;
-            self.encode_variant(bytes)
+        fn encode(bytes: &mut [u8], value: &Self) -> Result<(), SchemaCodecError> {
+            validate(value)?;
+            value.encode_variant(bytes)
+        }
+
+        fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError> {
+            CheckedView::new(bytes)
+        }
+
+        fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError> {
+            CheckedViewMut::new(bytes)
         }
     }
 
@@ -73,15 +107,15 @@ fn external_fixed_case_needs_no_selector_and_keeps_natural_geometry() {
     assert_eq!(raw.decode(), Ok(value));
     assert_eq!(Fixed::try_from(raw), Ok(value));
     assert_eq!(FixedRaw::try_from(value), Ok(raw));
-    assert_eq!(<Fixed as RecordLayout>::decode(&expected), Ok(value));
-    assert_eq!(<Fixed as RecordLayout>::EXTENT, 8);
-    assert_eq!(<Fixed as RecordLayout>::ALIGNMENT, 8);
+    assert_eq!(<Fixed as SchemaCodec>::decode(&expected), Ok(value));
+    assert_eq!(<Fixed as SchemaCodec>::EXTENT, 8);
+    assert_eq!(<Fixed as SchemaCodec>::ALIGNMENT, 8);
     assert_eq!(
-        <Fixed as RecordLayout>::view(&expected).unwrap().decode(),
+        <Fixed as SchemaCodec>::view(&expected).unwrap().decode(),
         Ok(value)
     );
     let mut bytes = [0xff; 10];
-    <Fixed as RecordLayout>::view_mut(&mut bytes)
+    <Fixed as SchemaCodec>::view_mut(&mut bytes)
         .unwrap()
         .set_values(&value)
         .unwrap();
@@ -99,8 +133,9 @@ fn normal_views_delegate_application_validation_and_explicit_views_remain_availa
     // When decoding through all generated policy-facing paths.
     // Then they preserve the exact application error, while explicit interpretation bypasses policy.
     assert_eq!(CheckedRaw::new(bytes).decode(), Err(error));
+    assert_eq!(Checked::from_bytes(&bytes), Err(error));
     assert_eq!(Checked::try_from(CheckedRaw::new(bytes)), Err(error));
-    assert_eq!(<Checked as RecordLayout>::decode(&bytes), Err(error));
+    assert_eq!(<Checked as SchemaCodec>::decode(&bytes), Err(error));
     assert_eq!(CheckedView::new(&bytes).unwrap().values(), Err(error));
     assert_eq!(CheckedView::new(&bytes).unwrap().decode(), Err(error));
     assert_eq!(
@@ -121,17 +156,18 @@ fn normal_views_delegate_application_validation_and_explicit_views_remain_availa
 }
 
 #[test]
-fn encoding_errors_and_atomicity_come_from_the_application_hook() {
+fn encoding_errors_and_atomicity_come_from_the_application_trait() {
     // Given an application-invalid value and preexisting destination bytes.
     let invalid = Checked::Small(Small::new(8));
     let mut bytes = [0xaa; 10];
     let error = policy_error(8);
-    // When all generated encoders delegate to the validating application hook.
+    // When all generated encoders delegate to the validating application trait.
     assert_eq!(invalid.encode(), Err(error));
     assert_eq!(invalid.to_bytes(), Err(error));
+    assert_eq!(invalid.encode_into(&mut bytes), Err(error));
     assert_eq!(CheckedRaw::try_from(invalid), Err(error));
     assert_eq!(
-        <Checked as RecordLayout>::encode(&mut bytes, &invalid),
+        <Checked as SchemaCodec>::encode(&mut bytes, &invalid),
         Err(error)
     );
     assert_eq!(
@@ -140,7 +176,7 @@ fn encoding_errors_and_atomicity_come_from_the_application_hook() {
             .set_values(&invalid),
         Err(error)
     );
-    // Then the hook's rejection leaves the destination unchanged.
+    // Then the trait's rejection leaves the destination unchanged.
     assert_eq!(bytes, [0xaa; 10]);
     let valid = Checked::Small(Small::new(7));
     let mut view = CheckedViewMut::new(&mut bytes).unwrap();

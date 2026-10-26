@@ -29,7 +29,7 @@ pub(super) fn rings(
     })
 }
 
-pub(super) fn ring<E: hardware_interface_schema::RecordLayout>(
+pub(super) fn ring<E: hardware_interface_schema::SchemaCodec>(
     allocator: &SharedMemoryAllocator,
 ) -> crate::harness::TestResult<RingConfig<E>> {
     let layout = RingConfig::<E>::new(0, 2)?;

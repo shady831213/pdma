@@ -1,5 +1,5 @@
 //! Independent complete-command ABI fixture.
-use hardware_interface_schema::{Decode, Encode, RecordLayout, SchemaCodecError};
+use hardware_interface_schema::{Decode, Encode, SchemaCodec, SchemaCodecError};
 use pdma_model_contract::dma::*;
 
 #[test]
@@ -44,7 +44,7 @@ fn every_opcode_uses_one_header_and_rejects_inconsistent_encoding() {
         ));
         assert!(command.encode().is_err());
         let mut target = [0xa5; 96];
-        assert!(<Command as RecordLayout>::encode(&mut target, &command).is_err());
+        assert!(<Command as SchemaCodec>::encode(&mut target, &command).is_err());
         assert_eq!(target, [0xa5; 96]);
     }
 }

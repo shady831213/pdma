@@ -1,17 +1,17 @@
 use crate::{RecordSpec, SchemaCodecError, SchemaMemberIdentity};
 
-/// Checks direct case padding and the inactive tail of a complete-record union.
+/// Checks a generated record's own direct alignment and trailing padding.
 /// Nested records retain their own padding policy.
 #[doc(hidden)]
-pub fn validate_union_padding(bytes: &[u8], case: RecordSpec) -> Result<(), SchemaCodecError> {
+pub fn validate_record_padding(bytes: &[u8], record: RecordSpec) -> Result<(), SchemaCodecError> {
     for (offset, byte) in bytes.iter().copied().enumerate() {
         if byte == 0 {
             continue;
         }
-        let field = case.fields().iter().any(|field| {
+        let field = record.fields().iter().any(|field| {
             (field.offset()..field.offset().saturating_add(field.width())).contains(&offset)
         });
-        let record = case.records().iter().any(|record| {
+        let nested = record.records().iter().any(|record| {
             (0..record.count()).any(|index| {
                 let start = record
                     .offset()
@@ -19,9 +19,9 @@ pub fn validate_union_padding(bytes: &[u8], case: RecordSpec) -> Result<(), Sche
                 (start..start.saturating_add(record.definition().size())).contains(&offset)
             })
         });
-        if !field && !record {
+        if !field && !nested {
             return Err(SchemaCodecError::NonZeroReserved {
-                location: SchemaMemberIdentity::new(case.name(), "padding").at_byte(offset),
+                location: SchemaMemberIdentity::new(record.name(), "padding").at_byte(offset),
                 observed: u64::from(byte),
             });
         }

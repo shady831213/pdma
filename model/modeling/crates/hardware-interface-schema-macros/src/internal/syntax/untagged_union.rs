@@ -34,7 +34,7 @@ impl Parse for UntaggedUnionDecl {
             parenthesized!(record in content);
             let path = record.parse()?;
             if !record.is_empty() {
-                return Err(record.error("expected one record path"));
+                return Err(record.error("expected one codec path"));
             }
             cases.push((case, path));
             if content.is_empty() {

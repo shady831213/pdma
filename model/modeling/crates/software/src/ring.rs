@@ -8,7 +8,7 @@ pub use error::SoftRingError;
 pub use io::{MemoryRingIo, RegisterRingIo, RingCursorRegisters, SoftRingIo};
 
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_schema::{Decode, Encode, RecordLayout};
+use hardware_interface_schema::{Decode, Encode, SchemaCodec};
 use pdma_model_contract::ring::{Ring, RingPointers};
 
 #[derive(Debug)]
@@ -28,7 +28,7 @@ pub struct SoftRing<E> {
 
 impl<E> SoftRing<E>
 where
-    E: RecordLayout + Encode + Copy + Send + Sync,
+    E: SchemaCodec + Encode + Copy + Send + Sync,
     E::Encoded: Default + AsMut<[u8]> + AsRef<[u8]> + Decode<Decoded = E> + Send,
 {
     /// Creates an endpoint for validated ring storage.

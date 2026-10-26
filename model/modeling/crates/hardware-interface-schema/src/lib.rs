@@ -35,9 +35,9 @@ pub use hardware_interface_schema_macros::{
     bits_schema, record_schema, register_map, register_schema, union_schema,
 };
 pub use layout::{
-    RecordLayout, RegisterBank, RegisterBankError, RegisterLayout, RegisterMapLayout,
-    RegisterShape, StaticRegisterLayout, checked_align_up, checked_bank_offset,
-    checked_placement_end, inferred_align_up, inferred_field_id,
+    RegisterBank, RegisterBankError, RegisterLayout, RegisterMapLayout, RegisterShape, SchemaCodec,
+    StaticRegisterLayout, checked_align_up, checked_bank_offset, checked_placement_end,
+    inferred_align_up, inferred_field_id,
 };
 pub use record::{
     FieldDefinition, FieldSpec, RecordGraphError, RecordPlacement, RecordSpec,

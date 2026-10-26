@@ -1,5 +1,5 @@
 use core::marker::PhantomData;
-use hardware_interface_schema::RecordLayout;
+use hardware_interface_schema::SchemaCodec;
 use pdma_model_contract::ring::{Ring, RingError};
 
 /// Validated storage configuration selected by software, with no cursor state.
@@ -10,7 +10,7 @@ pub struct RingConfig<Entry> {
     entry: PhantomData<fn() -> Entry>,
 }
 
-impl<Entry: RecordLayout> RingConfig<Entry> {
+impl<Entry: SchemaCodec> RingConfig<Entry> {
     /// Checks the complete ring extent before any entry address can be computed.
     pub fn new(base: u64, capacity: u32) -> Result<Self, RingError> {
         let config = Self {
@@ -23,7 +23,7 @@ impl<Entry: RecordLayout> RingConfig<Entry> {
     }
 }
 
-impl<Entry: RecordLayout> Ring for RingConfig<Entry> {
+impl<Entry: SchemaCodec> Ring for RingConfig<Entry> {
     type Entry = Entry;
 
     fn base(&self) -> u64 {

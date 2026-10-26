@@ -1,7 +1,7 @@
 //! Shared entry addressing and pointer rules independent of memory and bus backends.
 
 use core::marker::PhantomData;
-use hardware_interface_schema::{RecordLayout, record_schema};
+use hardware_interface_schema::{SchemaCodec, record_schema};
 use pdma_model_contract::dma::{Command, Event};
 use pdma_model_contract::ring::{Ring, RingError, RingPointers};
 
@@ -13,7 +13,7 @@ impl<Entry> LayoutRing<Entry> {
     }
 }
 
-impl<Entry: RecordLayout> Ring for LayoutRing<Entry> {
+impl<Entry: SchemaCodec> Ring for LayoutRing<Entry> {
     type Entry = Entry;
 
     fn base(&self) -> u64 {

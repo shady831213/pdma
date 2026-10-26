@@ -38,7 +38,7 @@ pub(in crate::internal) enum ModernTypeDecl {
     Enum(EnumDecl),
     Bits(BitsDecl),
     BitsReference(Path),
-    Record(Path),
+    Codec(Path),
     TaggedUnion(TaggedUnionDecl),
 }
 
@@ -118,7 +118,7 @@ impl ModernTypeDecl {
             return parse_scalar_properties(input)
                 .map(|constant| Self::Scalar { scalar, constant });
         }
-        Ok(Self::Record(path))
+        Ok(Self::Codec(path))
     }
 }
 

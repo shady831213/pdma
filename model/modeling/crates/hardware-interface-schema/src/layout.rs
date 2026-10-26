@@ -6,8 +6,8 @@ pub use bank::{
     RegisterBank, RegisterBankError, RegisterShape, StaticRegisterLayout, checked_bank_offset,
 };
 
-/// Shared byte-layout contract implemented by generated records.
-pub trait RecordLayout {
+/// Composable byte codec implemented by generated records and application types.
+pub trait SchemaCodec {
     /// Owned decoded value for this layout.
     type Value: Clone + Copy + Default + Eq + PartialEq;
     /// Checked immutable view for this layout.
@@ -21,12 +21,16 @@ pub trait RecordLayout {
 
     /// Stable layout name.
     const NAME: &'static str;
-    /// Documentation of the reusable record layout.
+    /// Documentation of the reusable codec.
     const DOCUMENTATION: Documentation = Documentation::EMPTY;
-    /// Required byte alignment for this record.
+    /// Required byte alignment for this codec.
     const ALIGNMENT: usize;
-    /// Encoded byte extent of this record.
+    /// Encoded byte extent of this codec.
     const EXTENT: usize;
+    /// Optional structural metadata; opaque codecs need not describe their internals.
+    const SPEC: crate::RecordSpec =
+        crate::RecordSpec::named(Self::NAME, Self::EXTENT, Self::ALIGNMENT, &[], &[])
+            .with_documentation(Self::DOCUMENTATION);
     /// All-zero owned value.
     const ZERO: Self::Value;
 
@@ -34,6 +38,12 @@ pub trait RecordLayout {
     fn decode(bytes: &[u8]) -> Result<Self::Value, SchemaCodecError>;
     /// Encodes one owned value at the start of `bytes`.
     fn encode(bytes: &mut [u8], value: &Self::Value) -> Result<(), SchemaCodecError>;
+    /// Checks direct padding when selected as a complete untagged union case.
+    /// Ordinary record decoding does not invoke this hook. Opaque codecs own
+    /// their validation in `decode`; metadata must never infer their padding.
+    fn validate_padding(_bytes: &[u8]) -> Result<(), SchemaCodecError> {
+        Ok(())
+    }
     /// Creates a checked immutable view.
     fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError>;
     /// Creates a checked mutable view.

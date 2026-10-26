@@ -172,7 +172,7 @@ map, then encodes both generated owned-value types.
 use hardware_interface_schema::{bits_schema, record_schema, register_schema};
 # use hardware_interface_schema::{
 #     Access, BitsFieldDefinition, BitsFieldSpec, BitsLayout, BitsValueError, Endian,
-#     Decode, Encode, FieldSpec, RecordLayout, RecordSpec, RegisterCodecError, RegisterDefinition,
+#     Decode, Encode, FieldSpec, SchemaCodec, RecordSpec, RegisterCodecError, RegisterDefinition,
 #     RegisterLayout, RegisterValueError, ResetKind, ScalarKind, SchemaCodecError,
 #     SchemaMemberIdentity, SchemaLocation,
 #     inferred_align_up, inferred_field_id, read_scalar, write_scalar,
@@ -216,7 +216,7 @@ assert_eq!(register, [0xf1, 0xa5, 0x5a, 0xc3]);
 ```rust
 use hardware_interface_schema::{record_schema, register_schema};
 # use hardware_interface_schema::{
-#     Access, Decode, Encode, Endian, FieldSpec, OrderedRegisterMapSpec, RecordLayout, RecordSpec,
+#     Access, Decode, Encode, Endian, FieldSpec, OrderedRegisterMapSpec, SchemaCodec, RecordSpec,
 #     RegisterCodecError, RegisterDefinition, RegisterLayout, RegisterLayoutGeometry, RegisterMapPlacement,
 #     ResetKind, ScalarKind, SchemaCodecError, SchemaCoordinate, SchemaMemberIdentity,
 #     SchemaLocation,
@@ -293,7 +293,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 Generated record value types expose `SPEC`, offset constants, immutable/mutable
-checked views, a composable `RecordLayout`, and a generated `*Values` owned codec.
+checked views, a composable `SchemaCodec`, and a generated `*Values` owned codec.
 Explicit fixed records additionally expose stable field-ID types. Ordered maps expose
 typed placement metadata, checked nested views, and the same owned-codec surface.
 
@@ -383,7 +383,7 @@ file layout, and integration policy to the caller.
 
 ```rust
 # use hardware_interface_schema::{
-#     Decode, Encode, Endian, FieldSpec, RecordLayout, RecordSpec, ScalarKind,
+#     Decode, Encode, Endian, FieldSpec, SchemaCodec, RecordSpec, ScalarKind,
 #     SchemaCodecError, SchemaMemberIdentity, SchemaLocation, read_scalar, write_scalar,
 # };
 #[cfg(feature = "export-c-header")]
@@ -613,7 +613,7 @@ policy; ordinary record decoding remains permissive about alignment padding.
 Encoding uses temporary fixed-size storage, zeros inactive bytes, and commits
 only after the selected record encodes successfully.
 
-By default the union has no `Decode`, `Encode`, `RecordLayout`, `to_bytes`, or
+By default the union has no `Decode`, `Encode`, `SchemaCodec`, `to_bytes`, or
 `from_bytes` and needs no application codec hooks. `Packet::SPEC` describes only
 opaque storage extent and alignment. Export each case's ordinary `SPEC` alongside
 it when consumers need field accessors; no selector metadata is generated.
@@ -622,7 +622,7 @@ An optional `codec: external` clause generates mechanical adapters for an
 application-provided codec:
 
 ```rust
-use hardware_interface_schema::{Decode, Encode, SchemaCodecError, record_schema, union_schema};
+use hardware_interface_schema::{Decode, Encode, SchemaCodec, SchemaCodecError, record_schema, union_schema};
 record_schema! { pub record Small { endian: Big, fields: { value: u16 } } }
 record_schema! { pub record Large { endian: Little, fields: { value: u64 } } }
 union_schema! {
@@ -631,13 +631,27 @@ union_schema! {
         codec: external,
     }
 }
-impl Packet {
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, SchemaCodecError> {
+impl SchemaCodec for Packet {
+    type Value = Self;
+    type View<'a> = PacketView<'a>;
+    type ViewMut<'a> = PacketViewMut<'a>;
+    const NAME: &'static str = "Packet";
+    const DOCUMENTATION: hardware_interface_schema::Documentation = Self::SPEC.documentation();
+    const ALIGNMENT: usize = Self::RECORD_ALIGNMENT;
+    const EXTENT: usize = Self::RECORD_SIZE;
+    const ZERO: Self = Self::ZERO;
+    fn decode(bytes: &[u8]) -> Result<Self, SchemaCodecError> {
         // This application always interprets incoming storage as Small.
         Self::decode_variant(bytes, PacketCase::Small)
     }
-    pub fn encode_into(&self, bytes: &mut [u8]) -> Result<(), SchemaCodecError> {
-        self.encode_variant(bytes)
+    fn encode(bytes: &mut [u8], value: &Self) -> Result<(), SchemaCodecError> {
+        value.encode_variant(bytes)
+    }
+    fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError> {
+        PacketView::new(bytes)
+    }
+    fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError> {
+        PacketViewMut::new(bytes)
     }
 }
 let value = Packet::Small(Small::new(0x1234));
@@ -647,17 +661,45 @@ assert_eq!(PacketView::new(&value.to_bytes()?)?.values()?, value);
 ```
 
 The opt-in adds value `Encode`, raw `Decode`, fallible conversions in both
-directions, `RecordLayout`, value `to_bytes`, immutable-view `Decode`, both views'
-`values()`, and mutable-view `set_values(&value)`. All codec paths delegate to
-the application's inherent `from_bytes(&[u8]) -> Result<Self, SchemaCodecError>`
-and `encode_into(&self, &mut [u8]) -> Result<(), SchemaCodecError>`. Missing hooks
-fail compilation. Hook implementations can live in another module with ordinary
-Rust visibility; the views and adapters are generated at the union declaration.
+directions, value `from_bytes`, `encode_into` and `to_bytes`, immutable-view
+`Decode`, both views' `values()`, and mutable-view `set_values(&value)`.
+The application implements `SchemaCodec` directly with `Value = Self`; all
+generated codec paths call that trait's `decode` and `encode`. Missing trait
+implementations or required methods fail compilation. Implementations can live
+in another module; the views and adapters are generated at the union declaration.
+Implement `view` and `view_mut` through the generated view constructors, as above,
+and keep `decode`/`encode` independent of the generated convenience methods to
+avoid recursive calls.
 
 The schema adds no selector requirement, inference, protocol validation, or
-callback trait. Application hooks own case selection, validation, errors, and
+callback trait. Application trait implementations own case selection, validation, errors, and
 write atomicity; adapters preserve their behavior. View construction checks only
 extent and clips the borrow to the union size. `variant(case)` and
 `set_variant(&value)` remain explicit structural operations even with the opt-in,
 so they do not apply application codec policy. The example's fixed-case decoder
 needs no selector at all. Inline `tagged_union` behavior is unchanged.
+
+
+`SchemaCodec` describes complete byte-value codecs. Record fields and both
+record-backed union forms compose through that shared contract.
+A case `Case(Codec)` stores `<Codec as SchemaCodec>::Value`; a codec can be a
+handwritten struct, enum, or marker with a different value type. Implementors
+provide layout, zero, views, decode and encode through the trait, with no required
+inherent constants or methods. Generated records implement the trait automatically.
+A raw untagged union must implement `SchemaCodec` before it can be nested;
+`codec: external` only adds convenience adapters around that implementation.
+The opt-in conveniences require `Value = Self`; generic composition also supports
+manual marker codecs with a different value type without the opt-in.
+Case-selection policy remains application-owned.
+Tagged fields obtain their discriminator from their parent record as before.
+
+`SchemaCodec::SPEC` defaults to opaque extent/alignment metadata and can be
+overridden for structural export. Generated records preserve their rich metadata.
+Composers do not interpret child metadata to guess padding: the selected codec
+receives its exact extent, then the enclosing union checks only its inactive tail.
+`validate_padding` defaults to success; generated records override it to check
+their direct gaps when selected as complete untagged cases. Ordinary record
+and tagged-case decoding retain their existing gap tolerance. Nested opaque
+codecs validate their own representation through `decode`, including nonzero
+payloads. Parent encoders use temporary storage so even a child error after
+writing cannot partially modify the parent's destination.

@@ -63,14 +63,19 @@ pub(super) fn from_usize(scalar: ScalarType, value: &TokenStream) -> TokenStream
     }
 }
 
-pub(super) fn record_size_path(path: &syn::Path) -> syn::Path {
-    let mut output = path.clone();
-    if let Some(last) = output.segments.last_mut()
-        && last.ident == "record_size"
+pub(super) fn record_size_path(path: &syn::Path, facade: &TokenStream) -> TokenStream {
+    if path
+        .segments
+        .last()
+        .is_some_and(|last| last.ident == "record_size")
     {
-        last.ident = format_ident!("RECORD_SIZE");
+        let mut owner = path.clone();
+        owner.segments.pop();
+        owner.segments.pop_punct();
+        quote!(<#owner as #facade::SchemaCodec>::EXTENT)
+    } else {
+        quote!(#path)
     }
-    output
 }
 
 pub(in crate::internal) fn type_name(

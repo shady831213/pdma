@@ -1,5 +1,5 @@
 //! Protocol-aware command views must use the contract's checks.
-use hardware_interface_schema::{Decode, Encode, RecordLayout, SchemaCodecError};
+use hardware_interface_schema::{Decode, Encode, SchemaCodec, SchemaCodecError};
 use pdma_model_contract::dma::{
     Command, CommandHeader, CommandView, CommandViewMut, Opcode, TrapCommand,
 };
@@ -46,10 +46,10 @@ fn standard_helpers_use_the_external_command_codec() {
         id: u64::MAX,
     });
     // When: the bytes pass through generated adapters and normal views.
-    let value = <Command as RecordLayout>::decode(&wire).unwrap();
+    let value = <Command as SchemaCodec>::decode(&wire).unwrap();
     let view = CommandView::new(&wire).unwrap().decode().unwrap();
     let mut destination = [0xa5; 96];
-    let mut writer = <Command as RecordLayout>::view_mut(&mut destination).unwrap();
+    let mut writer = <Command as SchemaCodec>::view_mut(&mut destination).unwrap();
     writer.set_values(&value).unwrap();
     // Then: each path preserves external protocol interpretation and exact bytes.
     assert_eq!(value, expected);

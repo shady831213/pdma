@@ -1,0 +1,17 @@
+error[E0277]: the trait bound `Packet: SchemaCodec` is not satisfied
+ --> tests/ui/fail/external_union_missing_trait.rs:3:1
+  |
+3 | union_schema! { union Packet { cases: { Item(Item) }, codec: external } }
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsatisfied trait bound
+  |
+help: the trait `SchemaCodec` is not implemented for `Packet`
+ --> tests/ui/fail/external_union_missing_trait.rs:3:1
+  |
+3 | union_schema! { union Packet { cases: { Item(Item) }, codec: external } }
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `SchemaCodec` is implemented for `Item`
+ --> tests/ui/fail/external_union_missing_trait.rs:2:1
+  |
+2 | record_schema! { record Item { endian: Little, fields: { value: u32 } } }
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  = note: this error originates in the macro `union_schema` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)

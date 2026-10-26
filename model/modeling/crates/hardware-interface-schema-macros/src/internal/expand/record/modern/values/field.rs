@@ -26,7 +26,7 @@ pub(super) fn decode(
                     #facade::read_scalar(field, #facade::Endian::#endian)?
                 };),
                 |path| {
-                    let expected_path = scalar::record_size_path(path);
+                    let expected_path = scalar::record_size_path(path, facade);
                     let expected_tokens = quote!(#expected_path);
                     let expected = scalar::from_usize(*scalar, &expected_tokens);
                     quote!({
@@ -76,10 +76,10 @@ pub(super) fn decode(
                 #marker::#identity.at(#marker::#offset),
             )?
         };)),
-        ModernTypeDecl::Record(path) => Ok(quote!(let #name = {
-            let end = #marker::#offset.checked_add(#path::RECORD_SIZE).ok_or(#facade::SchemaCodecError::BufferTooShort { required: usize::MAX, actual: bytes.len() })?;
+        ModernTypeDecl::Codec(path) => Ok(quote!(let #name = {
+            let end = #marker::#offset.checked_add(<#path as #facade::SchemaCodec>::EXTENT).ok_or(#facade::SchemaCodecError::BufferTooShort { required: usize::MAX, actual: bytes.len() })?;
             let field = bytes.get(#marker::#offset..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: bytes.len() })?;
-            <#path as #facade::RecordLayout>::decode(field)
+            <#path as #facade::SchemaCodec>::decode(field)
                 .map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(#marker::#offset)))?
         };)),
         ModernTypeDecl::TaggedUnion(decl) => {
@@ -105,7 +105,7 @@ pub(super) fn encode(
             let value = constant.as_ref().map_or_else(
                 || quote!(normalized.#name),
                 |path| {
-                    let path = scalar::record_size_path(path);
+                    let path = scalar::record_size_path(path, facade);
                     let tokens = quote!(#path);
                     scalar::from_usize(*scalar, &tokens)
                 },
@@ -147,11 +147,11 @@ pub(super) fn encode(
                 #marker::#identity.at(#marker::#offset),
             )?;
         }),
-        ModernTypeDecl::Record(path) => quote!({
-            let end = #marker::#offset.checked_add(#path::RECORD_SIZE).ok_or(#facade::SchemaCodecError::BufferTooShort { required: usize::MAX, actual: encoded.len() })?;
+        ModernTypeDecl::Codec(path) => quote!({
+            let end = #marker::#offset.checked_add(<#path as #facade::SchemaCodec>::EXTENT).ok_or(#facade::SchemaCodecError::BufferTooShort { required: usize::MAX, actual: encoded.len() })?;
             let actual = encoded.len();
             let field = encoded.get_mut(#marker::#offset..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual })?;
-            <#path as #facade::RecordLayout>::encode(field, &normalized.#name)
+            <#path as #facade::SchemaCodec>::encode(field, &normalized.#name)
                 .map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(#marker::#offset)))?;
         }),
         ModernTypeDecl::TaggedUnion(_) => {

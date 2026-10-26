@@ -56,7 +56,7 @@ pub(super) fn fill_field(
                 .with_declaration_index(#declaration_index);
             output_index += 1;
         }),
-        ModernTypeDecl::Record(_) => TokenStream::new(),
+        ModernTypeDecl::Codec(_) => TokenStream::new(),
         ModernTypeDecl::TaggedUnion(union) => {
             let Some(geometry) = tagged_union_geometry(union, facade) else {
                 return TokenStream::new();

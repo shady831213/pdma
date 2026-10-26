@@ -12,9 +12,17 @@ storage never interprets an opcode; PDMA contract decoding selects the command,
 while Copy's endpoint `tagged_union` fields retain their local mode tags.
 Complete command definitions live together in the contract's operations module;
 the command module owns the top-level union, shared header and protocol codec.
-Schema's optional `codec: external` generates mechanical trait/view adapters;
-opcode interpretation and protocol checks remain in contract. See the
+Schema's optional `codec: external` generates convenience methods and trait/view
+adapters that call the application's `SchemaCodec` implementation. Command owns
+that implementation, including opcode interpretation and protocol checks. See the
 [wire layout](docs/copy-engine.md#wire-layout) and [layout decisions](docs/layout-review.md).
+
+Composition uses `SchemaCodec` for each child's value, extent, alignment and
+encoding/decoding. Generated records implement it automatically; application codecs
+and nested untagged unions can supply it without record-specific inherent methods
+or structural metadata. Each child owns its internal validation, while a union
+checks its own inactive tail. An inline tagged union still receives its tag from
+the enclosing record's codec.
 
 The [roadmap and SDMA gap comparison](docs/firmware-dma-goal.md#copy-engine-synchronization-reassessment)
 record the withdrawal of the first Signal/Wait implementation. The approved

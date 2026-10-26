@@ -44,9 +44,9 @@ pub(super) fn expand(decl: &ModernRecordDecl) -> syn::Result<TokenStream> {
             if union_decl
                 .cases
                 .first()
-                .is_some_and(|case| case.record.is_some()) =>
+                .is_some_and(|case| case.codec.is_some()) =>
         {
-            tagged_union::records::expand(decl, &field.name, union_decl, visibility, &facade)
+            tagged_union::codecs::expand(decl, &field.name, union_decl, visibility, &facade)
         }
         crate::internal::syntax::ModernTypeDecl::TaggedUnion(union_decl) => tagged_union::expand(
             decl,
@@ -58,7 +58,7 @@ pub(super) fn expand(decl: &ModernRecordDecl) -> syn::Result<TokenStream> {
         ),
         crate::internal::syntax::ModernTypeDecl::Scalar { .. }
         | crate::internal::syntax::ModernTypeDecl::BitsReference(_)
-        | crate::internal::syntax::ModernTypeDecl::Record(_) => Ok(TokenStream::new()),
+        | crate::internal::syntax::ModernTypeDecl::Codec(_) => Ok(TokenStream::new()),
     });
     let type_items = type_items.collect::<syn::Result<Vec<_>>>()?;
     let metadata = metadata::expand(decl, &plan, &facade);
@@ -70,7 +70,7 @@ pub(super) fn expand(decl: &ModernRecordDecl) -> syn::Result<TokenStream> {
         #metadata
         #values
         #views
-        impl #facade::RecordLayout for #marker {
+        impl #facade::SchemaCodec for #marker {
             type Value = #values_name;
             type View<'a> = #view_name<'a>;
             type ViewMut<'a> = #view_mut_name<'a>;
@@ -78,12 +78,16 @@ pub(super) fn expand(decl: &ModernRecordDecl) -> syn::Result<TokenStream> {
             const DOCUMENTATION: #facade::Documentation = Self::DOCUMENTATION;
             const ALIGNMENT: usize = Self::RECORD_ALIGNMENT;
             const EXTENT: usize = Self::RECORD_SIZE;
+            const SPEC: #facade::RecordSpec = Self::SPEC;
             const ZERO: Self::Value = #values_name::ZERO;
             fn decode(bytes: &[u8]) -> ::core::result::Result<Self::Value, #facade::SchemaCodecError> {
                 #values_name::from_bytes(bytes)
             }
             fn encode(bytes: &mut [u8], value: &Self::Value) -> ::core::result::Result<(), #facade::SchemaCodecError> {
                 value.encode_into(bytes)
+            }
+            fn validate_padding(bytes: &[u8]) -> ::core::result::Result<(), #facade::SchemaCodecError> {
+                #facade::record::validate_record_padding(bytes, Self::SPEC)
             }
             fn view(bytes: &[u8]) -> ::core::result::Result<Self::View<'_>, #facade::SchemaCodecError> {
                 #view_name::new(bytes)

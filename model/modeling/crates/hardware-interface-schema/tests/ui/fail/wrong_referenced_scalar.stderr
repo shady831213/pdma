@@ -1,42 +1,22 @@
-error[E0599]: no associated function or constant named `RECORD_ALIGNMENT` found for struct `Control` in the current scope
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied
+  --> tests/ui/fail/wrong_referenced_scalar.rs:10:22
+   |
+10 |     fields: { value: Control, },
+   |                      ^^^^^^^ unsatisfied trait bound
+   |
+help: the trait `SchemaCodec` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
- 3 |   register_schema! { pub register Control {
-   |   --------------------------------------- associated function or constant `RECORD_ALIGNMENT` not found for this struct
-...
- 8 |   record_schema! { pub record Bad {
-   |  _^
- 9 | |     alignment: 4, endian: Little,
-10 | |     fields: { value: Control, },
-11 | | } }
-   | |___^ associated function or constant not found in `Control`
-   |
-   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-help: you are looking for the module in `std`, not the primitive type
-   |
- 8 | std::record_schema! { pub record Bad {
-   | +++++
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: this error originates in the macro `register_schema` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0599]: no associated function or constant named `RECORD_SIZE` found for struct `Control` in the current scope
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
-   |
- 3 |   register_schema! { pub register Control {
-   |   --------------------------------------- associated function or constant `RECORD_SIZE` not found for this struct
-...
- 8 |   record_schema! { pub record Bad {
-   |  _^
- 9 | |     alignment: 4, endian: Little,
-10 | |     fields: { value: Control, },
-11 | | } }
-   | |___^ associated function or constant not found in `Control`
-   |
-   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-help: you are looking for the module in `std`, not the primitive type
-   |
- 8 | std::record_schema! { pub record Bad {
-   | +++++
-
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
@@ -45,30 +25,30 @@ error[E0277]: the trait bound `Control: RecordLayout` is not satisfied
 11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: the trait `RecordLayout` is not implemented for `Control`
+help: the trait `SchemaCodec` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
   |
 8 | record_schema! { pub record Bad {
   |                             ^^^ unsatisfied trait bound
   |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
   |
 3 | register_schema! { pub register Control {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
   |
 8 | record_schema! { pub record Bad {
@@ -86,18 +66,18 @@ note: required by a bound in `TrivialClone`
   |                                      ^^^^^^^^^^^^^ required by this bound in `TrivialClone`
   = note: this error originates in the derive macro `Clone` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
   |
 8 | record_schema! { pub record Bad {
   |                             ^^^ unsatisfied trait bound
   |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
   |
 3 | register_schema! { pub register Control {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
   |
 8 | record_schema! { pub record Bad {
@@ -114,18 +94,18 @@ note: required by a bound in `Clone`
   |                        ^^^^^ required by this bound in `Clone`
   = note: this error originates in the derive macro `Clone` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
   |
 8 | record_schema! { pub record Bad {
   |                             ^^^ unsatisfied trait bound
   |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
   |
 3 | register_schema! { pub register Control {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
   |
 8 | record_schema! { pub record Bad {
@@ -143,18 +123,18 @@ note: required by a bound in `Copy`
   |                 ^^^^^ required by this bound in `Copy`
   = note: this error originates in the derive macro `Copy` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
   |
 8 | record_schema! { pub record Bad {
   |                             ^^^ unsatisfied trait bound
   |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
   |
 3 | register_schema! { pub register Control {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
   |
 8 | record_schema! { pub record Bad {
@@ -173,18 +153,18 @@ note: required by a bound in `StructuralPartialEq`
   | |_^ required by this bound in `StructuralPartialEq`
   = note: this error originates in the derive macro `PartialEq` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
   |
 8 | record_schema! { pub record Bad {
   |                             ^^^ unsatisfied trait bound
   |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
   |
 3 | register_schema! { pub register Control {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
   |
 8 | record_schema! { pub record Bad {
@@ -201,18 +181,18 @@ note: required by a bound in `Default`
   |                          ^^^^^ required by this bound in `Default`
   = note: this error originates in the macro `register_schema` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
   |
 8 | record_schema! { pub record Bad {
   |                             ^^^ unsatisfied trait bound
   |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
   |
 3 | register_schema! { pub register Control {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
   |
 8 | record_schema! { pub record Bad {
@@ -229,7 +209,7 @@ note: required by a bound in `hardware_interface_schema::Decode::Decoded`
   |     ^^^^^^^^^^^^^ required by this bound in `Decode::Decoded`
   = note: this error originates in the macro `register_schema` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
@@ -238,12 +218,12 @@ error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
 11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
@@ -260,7 +240,7 @@ note: required by an implicit `Sized` bound in `Result`
    |                 ^ required by the implicit `Sized` requirement on this type parameter in `Result`
    = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
@@ -269,12 +249,12 @@ error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
 11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
@@ -291,18 +271,18 @@ note: required by a bound in `Encode`
    |                   ^^^^^ required by this bound in `Encode`
    = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
   |
 8 | record_schema! { pub record Bad {
   |                             ^^^ unsatisfied trait bound
   |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
   |
 3 | register_schema! { pub register Control {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
   |
 8 | record_schema! { pub record Bad {
@@ -319,18 +299,18 @@ note: required by a bound in `Encode`
   |                   ^^^^^ required by this bound in `Encode`
   = note: this error originates in the macro `register_schema` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
   |
 8 | record_schema! { pub record Bad {
   |                             ^^^ unsatisfied trait bound
   |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
   |
 3 | register_schema! { pub register Control {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
   |
 8 | record_schema! { pub record Bad {
@@ -347,7 +327,7 @@ note: required by a bound in `TryFrom`
   |                             ^^^^^ required by this bound in `TryFrom`
   = note: this error originates in the macro `register_schema` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
@@ -356,12 +336,12 @@ error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
 11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
@@ -378,18 +358,18 @@ note: required by an implicit `Sized` bound in `TryFrom`
    |                         ^ required by the implicit `Sized` requirement on this type parameter in `TryFrom`
    = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
   |
 8 | record_schema! { pub record Bad {
   |                             ^^^ unsatisfied trait bound
   |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
   |
 3 | register_schema! { pub register Control {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
   |
 8 | record_schema! { pub record Bad {
@@ -399,15 +379,15 @@ note: required because it appears within the type `Bad`
   |
 8 | record_schema! { pub record Bad {
   |                             ^^^
-  = note: required for `<Bad as RecordLayout>::Value` to implement `Copy`
-note: required by a bound in `hardware_interface_schema::RecordLayout::Value`
+  = note: required for `<Bad as SchemaCodec>::Value` to implement `Copy`
+note: required by a bound in `hardware_interface_schema::SchemaCodec::Value`
  --> src/layout.rs
   |
   |     type Value: Clone + Copy + Default + Eq + PartialEq;
-  |                         ^^^^ required by this bound in `RecordLayout::Value`
+  |                         ^^^^ required by this bound in `SchemaCodec::Value`
   = note: this error originates in the macro `register_schema` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
@@ -416,12 +396,12 @@ error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
 11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
@@ -431,31 +411,31 @@ note: required because it appears within the type `Bad`
    |
  8 | record_schema! { pub record Bad {
    |                             ^^^
-note: required by a bound in `RecordLayout`
+note: required by a bound in `SchemaCodec`
   --> src/layout.rs
    |
-   | / pub trait RecordLayout {
+   | / pub trait SchemaCodec {
    | |     /// Owned decoded value for this layout.
    | |     type Value: Clone + Copy + Default + Eq + PartialEq;
    | |     /// Checked immutable view for this layout.
 ...  |
    | |     fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError>;
    | | }
-   | |_^ required by this bound in `RecordLayout`
+   | |_^ required by this bound in `SchemaCodec`
    = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
   |
 8 | record_schema! { pub record Bad {
   |                             ^^^ unsatisfied trait bound
   |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
   |
 3 | register_schema! { pub register Control {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
   |
 8 | record_schema! { pub record Bad {
@@ -465,20 +445,20 @@ note: required because it appears within the type `Bad`
   |
 8 | record_schema! { pub record Bad {
   |                             ^^^
-note: required by a bound in `RecordLayout`
+note: required by a bound in `SchemaCodec`
  --> src/layout.rs
   |
-  | / pub trait RecordLayout {
+  | / pub trait SchemaCodec {
   | |     /// Owned decoded value for this layout.
   | |     type Value: Clone + Copy + Default + Eq + PartialEq;
   | |     /// Checked immutable view for this layout.
 ... |
   | |     fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError>;
   | | }
-  | |_^ required by this bound in `RecordLayout`
+  | |_^ required by this bound in `SchemaCodec`
   = note: this error originates in the macro `register_schema` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
@@ -487,12 +467,12 @@ error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
 11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
@@ -505,7 +485,7 @@ note: required because it appears within the type `Bad`
    = note: the return type of a function must have a statically known size
    = note: this error originates in the derive macro `Clone` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
@@ -514,12 +494,12 @@ error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
 11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
@@ -532,7 +512,7 @@ note: required because it appears within the type `Bad`
    = note: statics and constants must have a statically known size
    = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
@@ -541,12 +521,12 @@ error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
 11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
@@ -559,7 +539,7 @@ note: required because it appears within the type `Bad`
    = note: the return type of a function must have a statically known size
    = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
@@ -568,12 +548,12 @@ error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
 11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
@@ -590,46 +570,7 @@ note: required by a bound in `TryFrom`
    |                             ^^^^^ required by this bound in `TryFrom`
    = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0308]: mismatched types
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
-   |
- 8 | / record_schema! { pub record Bad {
- 9 | |     alignment: 4, endian: Little,
-10 | |     fields: { value: Control, },
-11 | | } }
-   | |   ^
-   | |   |
-   | |___expected `&RecordSpec`, found `&RegisterDefinition`
-   |     arguments to this function are incorrect
-   |
-   = note: expected reference `&'static RecordSpec`
-              found reference `&RegisterDefinition`
-note: associated function defined here
-  --> src/record/placement.rs
-   |
-   |     pub const fn new(
-   |                  ^^^
-   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied
-  --> tests/ui/fail/wrong_referenced_scalar.rs:10:22
-   |
-10 |     fields: { value: Control, },
-   |                      ^^^^^^^ unsatisfied trait bound
-   |
-help: the trait `RecordLayout` is not implemented for `Control`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-   |
- 3 | register_schema! { pub register Control {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
-   |
- 8 | record_schema! { pub record Bad {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   = note: this error originates in the macro `register_schema` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
@@ -638,19 +579,19 @@ error[E0277]: the trait bound `Control: RecordLayout` is not satisfied
 11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: the trait `RecordLayout` is not implemented for `Control`
+help: the trait `SchemaCodec` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = note: this error originates in the derive macro `Debug` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
@@ -659,19 +600,19 @@ error[E0277]: the trait bound `Control: RecordLayout` is not satisfied
 11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: the trait `RecordLayout` is not implemented for `Control`
+help: the trait `SchemaCodec` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = note: this error originates in the derive macro `PartialEq` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: `?` couldn't convert the error: `Control: RecordLayout` is not satisfied
+error[E0277]: `?` couldn't convert the error: `Control: SchemaCodec` is not satisfied
   --> tests/ui/fail/wrong_referenced_scalar.rs:11:3
    |
  8 | / record_schema! { pub record Bad {
@@ -680,16 +621,16 @@ error[E0277]: `?` couldn't convert the error: `Control: RecordLayout` is not sat
 11 | | } }
    | |   ^
    | |   |
-   | |___within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+   | |___within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
    |     this can't be annotated with `?` because it has type `Result<_, SchemaCodecError>`
    |
-note: `Control` needs to implement `RecordLayout`
+note: `Control` needs to implement `SchemaCodec`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
@@ -701,25 +642,25 @@ note: required because it appears within the type `Bad`
    |                             ^^^
    = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied
   --> tests/ui/fail/wrong_referenced_scalar.rs:10:15
    |
 10 |     fields: { value: Control, },
    |               ^^^^^ unsatisfied trait bound
    |
-help: the trait `RecordLayout` is not implemented for `Control`
+help: the trait `SchemaCodec` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = note: this error originates in the macro `register_schema` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
@@ -728,12 +669,12 @@ error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
 11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
@@ -753,7 +694,7 @@ note: required by a bound in `Ok`
    |     -- required by a bound in this tuple variant
    = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
@@ -762,12 +703,12 @@ error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
 11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
@@ -783,7 +724,7 @@ help: function arguments must have a statically known size, borrowed types alway
  8 | &record_schema! { pub record Bad {
    | +
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
@@ -792,12 +733,12 @@ error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
 11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
@@ -810,18 +751,18 @@ note: required because it appears within the type `Bad`
    = note: all local variables must have a statically known size
    = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
   |
 8 | record_schema! { pub record Bad {
   |                             ^^^ unsatisfied trait bound
   |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
   |
 3 | register_schema! { pub register Control {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
   |
 8 | record_schema! { pub record Bad {
@@ -837,7 +778,7 @@ help: function arguments must have a statically known size, borrowed types alway
 8 | record_schema! { pub record &Bad {
   |                             +
 
-error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
+error[E0277]: the trait bound `Control: SchemaCodec` is not satisfied in `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
@@ -846,12 +787,12 @@ error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `Bad`
 11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: within `Bad`, the trait `RecordLayout` is not implemented for `Control`
+help: within `Bad`, the trait `SchemaCodec` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: the trait `RecordLayout` is implemented for `Bad`
+help: the trait `SchemaCodec` is implemented for `Bad`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {

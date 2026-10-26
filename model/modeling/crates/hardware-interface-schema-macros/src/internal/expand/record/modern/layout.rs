@@ -80,14 +80,14 @@ pub(super) fn tagged_union_geometry(
     union: &TaggedUnionDecl,
     facade: &TokenStream,
 ) -> Option<TaggedUnionGeometry> {
-    if union.cases.first()?.record.is_some() {
-        let records = union
+    if union.cases.first()?.codec.is_some() {
+        let codecs = union
             .cases
             .iter()
-            .filter_map(|case| case.record.as_ref())
+            .filter_map(|case| case.codec.as_ref())
             .collect::<Vec<_>>();
-        let alignment = quote!({ let mut value = 1_usize; #(if #records::RECORD_ALIGNMENT > value { value = #records::RECORD_ALIGNMENT; })* value });
-        let extent = quote!({ let mut value = 0_usize; #(if #records::RECORD_SIZE > value { value = #records::RECORD_SIZE; })* #facade::inferred_align_up(value, #alignment) });
+        let alignment = quote!({ let mut value = 1_usize; #(assert!(<#codecs as #facade::SchemaCodec>::ALIGNMENT.is_power_of_two(), "union case alignment must be a nonzero power of two");)* #(if <#codecs as #facade::SchemaCodec>::ALIGNMENT > value { value = <#codecs as #facade::SchemaCodec>::ALIGNMENT; })* value });
+        let extent = quote!({ let mut value = 0_usize; #(if <#codecs as #facade::SchemaCodec>::EXTENT > value { value = <#codecs as #facade::SchemaCodec>::EXTENT; })* #facade::inferred_align_up(value, #alignment) });
         return Some(TaggedUnionGeometry {
             storage: TaggedUnionStorage {
                 ty: quote!(u8),
@@ -125,7 +125,7 @@ fn type_alignment(ty: &ModernTypeDecl, facade: &TokenStream) -> TokenStream {
         ModernTypeDecl::Enum(decl) => width(decl.storage),
         ModernTypeDecl::Bits(decl) => width(decl.storage),
         ModernTypeDecl::BitsReference(path) => quote!(#path::EXTENT),
-        ModernTypeDecl::Record(path) => quote!(#path::RECORD_ALIGNMENT),
+        ModernTypeDecl::Codec(path) => quote!(<#path as #facade::SchemaCodec>::ALIGNMENT),
         ModernTypeDecl::TaggedUnion(union) => tagged_union_geometry(union, facade)
             .map_or_else(|| quote!(1_usize), |geometry| geometry.storage.width),
     }
@@ -137,7 +137,7 @@ fn type_extent(ty: &ModernTypeDecl, facade: &TokenStream) -> TokenStream {
         ModernTypeDecl::Enum(decl) => width(decl.storage),
         ModernTypeDecl::Bits(decl) => width(decl.storage),
         ModernTypeDecl::BitsReference(path) => quote!(#path::EXTENT),
-        ModernTypeDecl::Record(path) => quote!(#path::RECORD_SIZE),
+        ModernTypeDecl::Codec(path) => quote!(<#path as #facade::SchemaCodec>::EXTENT),
         ModernTypeDecl::TaggedUnion(union) => tagged_union_geometry(union, facade)
             .map_or_else(|| quote!(0_usize), |geometry| geometry.extent),
     }

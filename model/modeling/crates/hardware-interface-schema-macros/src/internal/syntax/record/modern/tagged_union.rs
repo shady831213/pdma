@@ -16,7 +16,7 @@ pub(in crate::internal) struct TaggedUnionTagPath {
 pub(in crate::internal) struct TaggedUnionCaseDecl {
     pub(in crate::internal) name: Ident,
     pub(in crate::internal) fields: Vec<TaggedUnionFieldDecl>,
-    pub(in crate::internal) record: Option<Path>,
+    pub(in crate::internal) codec: Option<Path>,
 }
 
 pub(in crate::internal) struct TaggedUnionFieldDecl {
@@ -73,14 +73,14 @@ impl Parse for TaggedUnionCaseDecl {
         if input.peek(syn::token::Paren) {
             let body;
             syn::parenthesized!(body in input);
-            let record = body.parse()?;
+            let codec = body.parse()?;
             if !body.is_empty() {
-                return Err(body.error("expected one record type"));
+                return Err(body.error("expected one codec type"));
             }
             return Ok(Self {
                 name,
                 fields: Vec::new(),
-                record: Some(record),
+                codec: Some(codec),
             });
         }
         let body;
@@ -92,7 +92,7 @@ impl Parse for TaggedUnionCaseDecl {
         Ok(Self {
             name,
             fields,
-            record: None,
+            codec: None,
         })
     }
 }

@@ -9,6 +9,14 @@ pub(super) fn expand(decl: &UntaggedUnionDecl, facade: &TokenStream) -> TokenStr
     let view_mut = format_ident!("{name}ViewMut");
     quote! {
         impl #name {
+            #[doc = "Decodes through the application-provided SchemaCodec implementation."]
+            pub fn from_bytes(bytes: &[u8]) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
+                <Self as #facade::SchemaCodec>::decode(bytes)
+            }
+            #[doc = "Encodes through the application-provided SchemaCodec implementation."]
+            pub fn encode_into(&self, bytes: &mut [u8]) -> ::core::result::Result<(), #facade::SchemaCodecError> {
+                <Self as #facade::SchemaCodec>::encode(bytes, self)
+            }
             #[doc = "Encodes exact-size bytes through the application-provided codec."]
             pub fn to_bytes(self) -> ::core::result::Result<[u8; Self::RECORD_SIZE], #facade::SchemaCodecError> {
                 let mut bytes = [0_u8; Self::RECORD_SIZE];
@@ -60,28 +68,6 @@ pub(super) fn expand(decl: &UntaggedUnionDecl, facade: &TokenStream) -> TokenStr
             type Decoded = #name;
             fn decode(self) -> ::core::result::Result<Self::Decoded, #facade::SchemaCodecError> {
                 #name::from_bytes(self.bytes)
-            }
-        }
-        impl #facade::RecordLayout for #name {
-            type Value = Self;
-            type View<'a> = #view<'a>;
-            type ViewMut<'a> = #view_mut<'a>;
-            const NAME: &'static str = stringify!(#name);
-            const DOCUMENTATION: #facade::Documentation = Self::SPEC.documentation();
-            const ALIGNMENT: usize = Self::RECORD_ALIGNMENT;
-            const EXTENT: usize = Self::RECORD_SIZE;
-            const ZERO: Self = Self::ZERO;
-            fn decode(bytes: &[u8]) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
-                Self::from_bytes(bytes)
-            }
-            fn encode(bytes: &mut [u8], value: &Self) -> ::core::result::Result<(), #facade::SchemaCodecError> {
-                value.encode_into(bytes)
-            }
-            fn view(bytes: &[u8]) -> ::core::result::Result<Self::View<'_>, #facade::SchemaCodecError> {
-                #view::new(bytes)
-            }
-            fn view_mut(bytes: &mut [u8]) -> ::core::result::Result<Self::ViewMut<'_>, #facade::SchemaCodecError> {
-                #view_mut::new(bytes)
             }
         }
     }

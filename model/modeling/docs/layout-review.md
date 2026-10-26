@@ -94,17 +94,24 @@ rules in that same envelope. Before choosing it, verify that schema can express
 the discriminants, unions and generated C accessors coherently; do not add a
 handwritten PDMA codec beside schema or leak PDMA concepts into generic macros.
 
-**Implementation decision: retain 112 bytes.** The existing
+**2026-10-23 implementation decision: retain 112 bytes.** At that checkpoint the
 [union validator](../crates/hardware-interface-schema-macros/src/internal/validate/record/modern.rs)
-accepts a local enum or one nested-record enum as a tag, not a bitfield tag or a
+accepted a local enum or one nested-record enum as a tag, not a bitfield tag or a
 reference into the parent record. The
 [layout generator](../crates/hardware-interface-schema-macros/src/internal/expand/record/modern/layout.rs)
-places whole nested records; it cannot scatter Endpoint fields into Command's
+placed whole nested records; it could not scatter Endpoint fields into Command's
 header. Byte-sized tags would address the bitfield restriction but not the parent
 scope or record-placement restrictions. Reaching 96 bytes would require a broader
 schema/type redesign, or a separate wire representation and conversion layer.
 Neither is justified by this layout cleanup. Keep the existing cohesive typed
 records and generated codecs; do not impose new SG or context limits.
+
+The 2026-10-26 follow-up adds enum-bitfield union tags, documented in
+[Packed enum union tags](../crates/hardware-interface-schema/README.md#packed-enum-union-tags).
+Contiguous child records remain intentional. A body's discriminant header should
+belong to that body, keeping its decoding self-contained; parent-tag lookup and
+scattered child fields are not prerequisites for revisiting the command design.
+The schema enhancement itself leaves the PDMA descriptor encoding unchanged.
 
 The 96-byte sketch remains a possible future encoding, not an outstanding task in
 this implementation. No measured bus-throughput improvement follows from its byte

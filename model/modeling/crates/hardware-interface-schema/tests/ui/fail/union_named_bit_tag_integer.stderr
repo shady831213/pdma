@@ -1,0 +1,11 @@
+error[E0425]: cannot find type `HeaderKind` in this scope
+  --> tests/ui/fail/union_named_bit_tag_integer.rs:11:25
+   |
+11 |             flags: bits(Header),
+   |                         ^^^^^^ not found in this scope
+
+error[E0433]: cannot find type `HeaderKind` in this scope
+  --> tests/ui/fail/union_named_bit_tag_integer.rs:11:25
+   |
+11 |             flags: bits(Header),
+   |                         ^^^^^^ use of undeclared type `HeaderKind`

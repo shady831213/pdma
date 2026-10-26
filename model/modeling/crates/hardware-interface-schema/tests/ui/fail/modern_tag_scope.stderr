@@ -1,4 +1,4 @@
-error: tag root must be a record
+error: tag root must be a record or bits field
  --> tests/ui/fail/modern_tag_scope.rs:9:27
   |
 9 |                 tag: self.opcode.extra,

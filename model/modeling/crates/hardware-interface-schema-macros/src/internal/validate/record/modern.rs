@@ -67,7 +67,7 @@ fn check_union(decl: &ModernRecordDecl, union: &UnionDecl) -> syn::Result<()> {
     if union.tag.segments.len() > 2 {
         return Err(syn::Error::new(
             union.tag.span,
-            "tag path may select a local enum or one nested-record enum",
+            "tag path may select a local enum or one record/bits member",
         ));
     }
     let root = union
@@ -80,6 +80,55 @@ fn check_union(decl: &ModernRecordDecl, union: &UnionDecl) -> syn::Result<()> {
         .iter()
         .find(|field| field.name == *root)
         .ok_or_else(|| syn::Error::new(root.span(), "union tag root does not exist"))?;
+    let names = check_union_cases(decl, union)?;
+    let enumeration = match (union.tag.segments.as_slice(), &root_field.ty) {
+        ([_], ModernTypeDecl::Enum(tag)) => Some(tag),
+        ([_, member], ModernTypeDecl::Bits(bits)) => {
+            let field = bits
+                .fields
+                .iter()
+                .find(|field| field.name == *member)
+                .ok_or_else(|| {
+                    syn::Error::new(member.span(), "union tag bitfield does not exist")
+                })?;
+            Some(field.enumeration.as_ref().ok_or_else(|| {
+                syn::Error::new(member.span(), "union tag bitfield must be an enum")
+            })?)
+        }
+        ([_], _) => {
+            return Err(syn::Error::new(root.span(), "tag field must be an enum"));
+        }
+        ([_, _], ModernTypeDecl::Record(_) | ModernTypeDecl::BitsReference(_)) => None,
+        ([_, _], _) => {
+            return Err(syn::Error::new(
+                root.span(),
+                "tag root must be a record or bits field",
+            ));
+        }
+        _ => {
+            return Err(syn::Error::new(
+                union.tag.span,
+                "tag path must select one enum field",
+            ));
+        }
+    };
+    if let Some(tag) = enumeration {
+        let variants = enum_variants(tag)?;
+        let variant_names = variants
+            .iter()
+            .map(|(name, _)| name.to_string())
+            .collect::<HashSet<_>>();
+        if names != variant_names {
+            return Err(syn::Error::new(
+                union.tag.span,
+                "union cases must exactly match tag enum variants",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn check_union_cases(decl: &ModernRecordDecl, union: &UnionDecl) -> syn::Result<HashSet<String>> {
     let mut names = HashSet::new();
     let mut field_count = 0_usize;
     for case in &union.cases {
@@ -118,33 +167,5 @@ fn check_union(decl: &ModernRecordDecl, union: &UnionDecl) -> syn::Result<()> {
             "record and inline union cases cannot be mixed",
         ));
     }
-    match (union.tag.segments.len(), &root_field.ty) {
-        (1, ModernTypeDecl::Enum(tag)) => {
-            let variants = enum_variants(tag)?;
-            let variant_names = variants
-                .iter()
-                .map(|(name, _)| name.to_string())
-                .collect::<HashSet<_>>();
-            if names != variant_names {
-                return Err(syn::Error::new(
-                    union.tag.span,
-                    "union cases must exactly match tag enum variants",
-                ));
-            }
-        }
-        (1, _) => {
-            return Err(syn::Error::new(root.span(), "tag field must be an enum"));
-        }
-        (2, ModernTypeDecl::Record(_)) => {}
-        (2, _) => {
-            return Err(syn::Error::new(root.span(), "tag root must be a record"));
-        }
-        _ => {
-            return Err(syn::Error::new(
-                union.tag.span,
-                "tag path must select one enum field",
-            ));
-        }
-    }
-    Ok(())
+    Ok(names)
 }

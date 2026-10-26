@@ -1,0 +1,5 @@
+error: union tag bitfield must be an enum
+ --> tests/ui/fail/union_bit_tag_integer.rs:8:46
+  |
+8 |             payload: union { tag: self.flags.kind, cases: { Item { value: u8 } } },
+  |                                              ^^^^

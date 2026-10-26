@@ -49,12 +49,25 @@ pub(super) fn tag_info(
         .iter()
         .find(|field| field.name == *first)
         .ok_or_else(|| syn::Error::new(first.span(), "tag record does not exist"))?;
-    let ModernTypeDecl::Record(definition) = &field.ty else {
-        return Err(syn::Error::new(first.span(), "tag root must be a record"));
+    let ty = match &field.ty {
+        ModernTypeDecl::Record(definition) | ModernTypeDecl::BitsReference(definition) => {
+            let ty = scalar::suffixed_path(definition, second);
+            quote!(#ty)
+        }
+        ModernTypeDecl::Bits(_) => {
+            let owner = scalar::type_name(&record.name, first, "Values");
+            let ty = scalar::type_name(&owner, second, "");
+            quote!(#ty)
+        }
+        ModernTypeDecl::Scalar { .. } | ModernTypeDecl::Enum(_) | ModernTypeDecl::Union(_) => {
+            return Err(syn::Error::new(
+                first.span(),
+                "tag root must be a record or bits field",
+            ));
+        }
     };
-    let ty = scalar::suffixed_path(definition, second);
     Ok(TagInfo {
-        ty: quote!(#ty),
+        ty,
         access: quote!(#root.#first.#second),
     })
 }

@@ -1,0 +1,5 @@
+error: union tag bitfield does not exist
+ --> tests/ui/fail/union_bit_tag_missing.rs:8:46
+  |
+8 |             payload: union { tag: self.flags.kind, cases: { Item { value: u8 } } },
+  |                                              ^^^^

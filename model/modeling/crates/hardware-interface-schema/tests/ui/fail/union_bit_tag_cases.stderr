@@ -1,0 +1,5 @@
+error: union cases must exactly match tag enum variants
+  --> tests/ui/fail/union_bit_tag_cases.rs:10:35
+   |
+10 |             payload: union { tag: self.flags.kind, cases: { First { value: u8 } } },
+   |                                   ^^^^

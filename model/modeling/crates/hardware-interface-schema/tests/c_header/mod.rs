@@ -6,6 +6,7 @@
 pub mod support;
 
 mod descriptions;
+mod enum_bit_union;
 mod enumeration;
 mod generated_enumeration;
 mod ordered_descriptions;

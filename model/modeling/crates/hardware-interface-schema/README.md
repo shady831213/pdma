@@ -524,3 +524,55 @@ The C exporter emits nested-record OFFSET/SIZE constants, so separately exported
 branch accessors can operate on that region without handwritten layout offsets.
 With multiple inline unions in one record, raw word accessors and metadata are
 prefixed by the union field name; a single inline union retains word0/word1 names.
+
+### Packed enum union tags
+
+A union can select an enum member of an inline `bits(storage)` field or a reusable
+`bits(Name)` field with `tag: self.flags.kind`. The member must be an enum; an
+ordinary integer or boolean bitfield cannot serve as a discriminator. Cases must
+cover exactly the enum variants. Inline declarations are checked by the macro;
+referenced enum types are checked by the generated exhaustive Rust matches.
+
+```rust
+# use hardware_interface_schema::{bits_schema, record_schema, SchemaCodecError};
+# fn main() -> Result<(), SchemaCodecError> {
+bits_schema! {
+    pub bits Header(u16) {
+        ready: 0..=0,
+        kind: 4..=5 => enum { variants: { Small = 1, Large = 2 } },
+    }
+}
+record_schema! {
+    pub record Packet {
+        endian: Little,
+        fields: {
+            header: bits(Header),
+            payload: union { tag: self.header.kind,
+                cases: { Small { value: u32 }, Large { first: u32, second: u32 } },
+            },
+        },
+    }
+}
+let packet = Packet::new(
+    HeaderValues { ready: true, kind: HeaderKind::Small },
+    PacketPayloadValues::Large(PacketPayloadLargeValues { first: 7, second: 42 }),
+);
+let bytes = packet.to_bytes()?;
+assert_eq!(packet.header.kind, HeaderKind::Large);
+assert!(packet.header.ready);
+assert_eq!(Packet::from_bytes(&bytes)?, packet);
+# Ok(())
+# }
+```
+
+Owned constructors and encoders derive the discriminator from the payload while
+preserving other semantic fields in the same word. Separate unions can use
+different enum members of that word. Existing checks for unknown enum values,
+reserved bits, inactive union storage and sibling-field overflow still apply.
+The containing record supplies the word's byte order; bit ranges remain LSB0.
+
+Tag lookup remains local: `self.kind`, `self.header.kind` for a nested record enum,
+or `self.flags.kind` for a bits member. It does not traverse to a parent record or
+scatter a child record's fields. The C exporter retains its unshifted enum constants
+and raw-word load/store interface; C callers pack the control word according to
+the declared bit positions and select consistent payload bytes.

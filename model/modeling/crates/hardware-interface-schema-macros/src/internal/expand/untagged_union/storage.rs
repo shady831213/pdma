@@ -11,7 +11,7 @@ pub(super) fn expand(decl: &UntaggedUnionDecl, facade: &TokenStream) -> TokenStr
         let (mutability, getter, setter) = if mutable {
             (quote!(mut), quote!(get_mut), quote! {
                 #[doc = "Atomically replaces the union storage."]
-                pub fn set_values(&mut self, value: &#name) -> ::core::result::Result<(), #facade::SchemaCodecError> {
+                pub fn set_variant(&mut self, value: &#name) -> ::core::result::Result<(), #facade::SchemaCodecError> {
                     value.encode_variant(self.bytes)
                 }
             })
@@ -28,7 +28,7 @@ pub(super) fn expand(decl: &UntaggedUnionDecl, facade: &TokenStream) -> TokenStr
                     ::core::result::Result::Ok(Self { bytes })
                 }
                 #[doc = "Decodes the explicit caller-selected interpretation."]
-                pub fn values(&self, case: #case) -> ::core::result::Result<#name, #facade::SchemaCodecError> {
+                pub fn variant(&self, case: #case) -> ::core::result::Result<#name, #facade::SchemaCodecError> {
                     #name::decode_variant(self.bytes, case)
                 }
                 #setter

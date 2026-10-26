@@ -1,0 +1,44 @@
+error[E0599]: no method named `encode` found for enum `Packet` in the current scope
+ --> tests/ui/fail/external_union_opt_in_required.rs:5:26
+  |
+3 | union_schema! { union Packet { cases: { Item(Item) } } }
+  | ---------------------------- method `encode` not found for this enum
+4 | fn main() {
+5 |     let _ = Packet::ZERO.encode();
+  |                          ^^^^^^ method not found in `Packet`
+  |
+note: the method `encode` exists on the type `Item`
+ --> src/codec.rs
+  |
+  |     fn encode(self) -> Result<Self::Encoded, SchemaCodecError>;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  = help: items from traits can only be used if the trait is implemented and in scope
+  = note: the following traits define an item `encode`, perhaps you need to implement one of them:
+          candidate #1: `Encode`
+          candidate #2: `RecordLayout`
+          candidate #3: `RegisterLayout`
+
+error[E0599]: no method named `to_bytes` found for enum `Packet` in the current scope
+ --> tests/ui/fail/external_union_opt_in_required.rs:6:26
+  |
+3 | union_schema! { union Packet { cases: { Item(Item) } } }
+  | ---------------------------- method `to_bytes` not found for this enum
+...
+6 |     let _ = Packet::ZERO.to_bytes();
+  |                          ^^^^^^^^ method not found in `Packet`
+  |
+note: the method `to_bytes` exists on the type `Item`
+ --> tests/ui/fail/external_union_opt_in_required.rs:2:1
+  |
+2 | record_schema! { record Item { endian: Little, fields: { value: u32 } } }
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0599]: no method named `values` found for struct `PacketView<'a>` in the current scope
+ --> tests/ui/fail/external_union_opt_in_required.rs:7:47
+  |
+3 | union_schema! { union Packet { cases: { Item(Item) } } }
+  | -------------------------------------------------------- method `values` not found for this struct
+...
+7 |     let _ = PacketView::new(&[0; 4]).unwrap().values();
+  |                                               ^^^^^^ method not found in `PacketView<'_>`

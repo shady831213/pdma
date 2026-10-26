@@ -66,3 +66,32 @@ fn tagged_union_rejects_trailing_clauses() {
         assert!(parsed.is_err(), "accepted trailing clause {clause}");
     }
 }
+
+#[test]
+fn untagged_union_accepts_only_optional_external_codec() {
+    // Given the sole optional adapter clause, with either trailing-comma spelling.
+    for suffix in [", codec: external", ", codec: external,"] {
+        let source = format!("pub union Packet {{ cases: {{ A(Record) }}{suffix} }}");
+        // When parsing the explicit opt-in.
+        let parsed = syn::parse_str::<UntaggedUnionDecl>(&source);
+        // Then no selector or callback declaration is required.
+        assert!(parsed.is_ok(), "{}", parsed.err().unwrap());
+    }
+}
+
+#[test]
+fn untagged_union_rejects_malformed_codec_options() {
+    // Given unsupported, duplicated, or misplaced codec options.
+    for body in [
+        "cases: { A(Record) }, codec: inferred",
+        "cases: { A(Record) }, codec: external, codec: external",
+        "cases: { A(Record) }, codec:",
+        "cases: { A(Record) } codec: external",
+        "codec: external, cases: { A(Record) }",
+    ] {
+        // When parsing each malformed declaration.
+        let parsed = syn::parse_str::<UntaggedUnionDecl>(&format!("union Packet {{ {body} }}"));
+        // Then none silently changes the union contract.
+        assert!(parsed.is_err(), "accepted {body}");
+    }
+}

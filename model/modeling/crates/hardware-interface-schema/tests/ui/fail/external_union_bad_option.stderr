@@ -1,0 +1,5 @@
+error: expected `external` codec
+ --> tests/ui/fail/external_union_bad_option.rs:2:62
+  |
+2 | union_schema! { union Packet { cases: { Item(Item) }, codec: inferred } }
+  |                                                              ^^^^^^^^

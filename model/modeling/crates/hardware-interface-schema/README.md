@@ -601,19 +601,63 @@ assert_eq!(Packet::decode_variant(raw.as_ref(), PacketCase::Small)?, value);
 # Ok::<(), hardware_interface_schema::SchemaCodecError>(())
 ```
 
-The caller always chooses `PacketCase`; the macro never infers or reads a selector.
+The explicit decoder takes `PacketCase`; the macro never infers or reads a selector.
 `RECORD_SIZE` is the largest case extent rounded to the largest case `RECORD_ALIGNMENT`.
 `ZERO` selects the first record's semantic zero. `PacketRaw` owns unvalidated bytes
 and provides `new`, `as_bytes`, `into_bytes`, `Default`, `AsRef` and `AsMut`.
 `PacketView` and `PacketViewMut` check extent at construction and expose
-`values(case)`; the mutable view also exposes atomic `set_values(&value)`.
+`variant(case)`; the mutable view also exposes atomic `set_variant(&value)`.
 Decoding checks the selected record, its direct alignment gaps and trailing
 padding, and the union's inactive tail. Nested records keep their own padding
 policy; ordinary record decoding remains permissive about alignment padding.
 Encoding uses temporary fixed-size storage, zeros inactive bytes, and commits
 only after the selected record encodes successfully.
 
-The union has no automatic `Decode`, `Encode`, `RecordLayout` or `from_bytes`:
-protocol-aware adapters belong to the application. `Packet::SPEC` describes only
+By default the union has no `Decode`, `Encode`, `RecordLayout`, `to_bytes`, or
+`from_bytes` and needs no application codec hooks. `Packet::SPEC` describes only
 opaque storage extent and alignment. Export each case's ordinary `SPEC` alongside
 it when consumers need field accessors; no selector metadata is generated.
+
+An optional `codec: external` clause generates mechanical adapters for an
+application-provided codec:
+
+```rust
+use hardware_interface_schema::{Decode, Encode, SchemaCodecError, record_schema, union_schema};
+record_schema! { pub record Small { endian: Big, fields: { value: u16 } } }
+record_schema! { pub record Large { endian: Little, fields: { value: u64 } } }
+union_schema! {
+    pub union Packet {
+        cases: { Small(Small), Large(Large) },
+        codec: external,
+    }
+}
+impl Packet {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, SchemaCodecError> {
+        // This application always interprets incoming storage as Small.
+        Self::decode_variant(bytes, PacketCase::Small)
+    }
+    pub fn encode_into(&self, bytes: &mut [u8]) -> Result<(), SchemaCodecError> {
+        self.encode_variant(bytes)
+    }
+}
+let value = Packet::Small(Small::new(0x1234));
+assert_eq!(value.encode()?.decode()?, value);
+assert_eq!(PacketView::new(&value.to_bytes()?)?.values()?, value);
+# Ok::<(), SchemaCodecError>(())
+```
+
+The opt-in adds value `Encode`, raw `Decode`, fallible conversions in both
+directions, `RecordLayout`, value `to_bytes`, immutable-view `Decode`, both views'
+`values()`, and mutable-view `set_values(&value)`. All codec paths delegate to
+the application's inherent `from_bytes(&[u8]) -> Result<Self, SchemaCodecError>`
+and `encode_into(&self, &mut [u8]) -> Result<(), SchemaCodecError>`. Missing hooks
+fail compilation. Hook implementations can live in another module with ordinary
+Rust visibility; the views and adapters are generated at the union declaration.
+
+The schema adds no selector requirement, inference, protocol validation, or
+callback trait. Application hooks own case selection, validation, errors, and
+write atomicity; adapters preserve their behavior. View construction checks only
+extent and clips the borrow to the union size. `variant(case)` and
+`set_variant(&value)` remain explicit structural operations even with the opt-in,
+so they do not apply application codec policy. The example's fixed-case decoder
+needs no selector at all. Inline `tagged_union` behavior is unchanged.

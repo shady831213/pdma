@@ -1,6 +1,7 @@
 use crate::internal::{crate_path, syntax::UntaggedUnionDecl};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+mod external_codec;
 mod storage;
 
 pub(in crate::internal) fn run(input: TokenStream) -> TokenStream {
@@ -25,6 +26,9 @@ fn expand(decl: &UntaggedUnionDecl) -> syn::Result<TokenStream> {
         ));
     };
     let storage = storage::expand(decl, &facade);
+    let codec = decl
+        .external_codec
+        .then(|| external_codec::expand(decl, &facade));
     Ok(quote! {
         #docs
         #[doc = "Semantic value of an explicitly selected complete-record union."]
@@ -85,5 +89,6 @@ fn expand(decl: &UntaggedUnionDecl) -> syn::Result<TokenStream> {
             fn default() -> Self { Self::ZERO }
         }
         #storage
+        #codec
     })
 }

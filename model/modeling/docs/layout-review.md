@@ -271,3 +271,17 @@ claim of measured throughput improvement. No singleton-selector inference,
 implicit opcode decoding, parent-tag lookup or old compatibility wrapper belongs
 in the new generic untagged union. Tests must cover explicit variant selection,
 wrong/unknown command opcodes, truncation, inactive storage and C wire agreement.
+
+### Codec helpers versus protocol ownership
+
+A proposed union_codec! binding was discarded before commit after user review.
+An untagged union does not know which protocol information selects an interpretation,
+and some users need no selection at all. Generic schema should not require an
+opcode mapping DSL to provide useful union access.
+
+The chosen boundary keeps layout/raw storage and explicit case encode/decode
+helpers in schema. Contract owns protocol dispatch and any extra consistency
+checks. Optional mechanical trait/view adapters delegate to application-provided
+from_bytes/encode_into methods, without declaring a selector, prefix or opcode
+table in schema. Raw variant access and protocol-checked values access have
+distinct names so a normal view does not bypass application checks.

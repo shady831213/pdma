@@ -150,13 +150,13 @@ fn raw_owner_and_views_keep_case_selection_explicit() {
     // When replacing through the view.
     PacketViewMut::new(raw.as_mut())
         .unwrap()
-        .set_values(&value)
+        .set_variant(&value)
         .unwrap();
     // Then an explicitly selected immutable view decodes the same value.
     assert_eq!(
         PacketView::new(raw.as_ref())
             .unwrap()
-            .values(PacketCase::Large),
+            .variant(PacketCase::Large),
         Ok(value)
     );
     assert_eq!(raw.as_bytes(), &raw.into_bytes());

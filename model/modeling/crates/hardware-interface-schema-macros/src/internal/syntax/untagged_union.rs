@@ -9,6 +9,7 @@ pub(in crate::internal) struct UntaggedUnionDecl {
     pub visibility: Visibility,
     pub name: Ident,
     pub cases: Vec<(Ident, Path)>,
+    pub external_codec: bool,
 }
 
 impl Parse for UntaggedUnionDecl {
@@ -44,8 +45,21 @@ impl Parse for UntaggedUnionDecl {
         if cases.is_empty() {
             return Err(content.error("union requires at least one case"));
         }
+        let mut external_codec = false;
         if body.peek(Token![,]) {
             body.parse::<Token![,]>()?;
+            if !body.is_empty() {
+                reject_tag(&body)?;
+                super::key(&body, "codec")?;
+                let codec: Ident = body.parse()?;
+                if codec != "external" {
+                    return Err(syn::Error::new(codec.span(), "expected `external` codec"));
+                }
+                external_codec = true;
+                if body.peek(Token![,]) {
+                    body.parse::<Token![,]>()?;
+                }
+            }
         }
         if !body.is_empty() {
             reject_tag(&body)?;
@@ -56,6 +70,7 @@ impl Parse for UntaggedUnionDecl {
             visibility,
             name,
             cases,
+            external_codec,
         })
     }
 }

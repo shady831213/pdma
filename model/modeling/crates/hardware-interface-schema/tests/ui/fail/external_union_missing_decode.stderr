@@ -1,0 +1,22 @@
+error[E0599]: no variant, associated function, or constant named `from_bytes` found for enum `Packet` in the current scope
+ --> tests/ui/fail/external_union_missing_decode.rs:3:1
+  |
+3 | union_schema! { union Packet { cases: { Item(Item) }, codec: external } }
+  | ----------------------------^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  | |
+  | variant, associated function, or constant not found in `Packet`
+  | variant, associated function, or constant `from_bytes` not found for this enum
+  |
+note: if you're trying to build a new `Packet`, consider using `Packet::decode_variant` which returns `Result<Packet, SchemaCodecError>`
+ --> tests/ui/fail/external_union_missing_decode.rs:3:1
+  |
+3 | union_schema! { union Packet { cases: { Item(Item) }, codec: external } }
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  = help: items from traits can only be used if the trait is implemented and in scope
+  = note: the following trait defines an item `from_bytes`, perhaps you need to implement it:
+          candidate #1: `OsStrExt`
+  = note: this error originates in the macro `union_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: you are looking for the module in `std`, not the primitive type
+  |
+3 | std::union_schema! { union Packet { cases: { Item(Item) }, codec: external } }
+  | +++++

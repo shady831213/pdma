@@ -67,6 +67,7 @@ where
 
     /// Pushes one entry, or returns false without retaining it when full.
     /// Cancellation after acceptance retains the entry for `resume_push`.
+    /// Encoding rejection releases the entry without writing storage or publishing a cursor.
     pub async fn try_push<I: SoftRingIo>(
         &mut self,
         io: &I,
@@ -118,7 +119,13 @@ where
             .advance_producer(RingPointers { producer, consumer }, 1)
             .map_err(SoftRingError::Ring)?;
         if !pending.stored {
-            let encoded = pending.entry.encode().map_err(SoftRingError::Codec)?;
+            let encoded = match pending.entry.encode() {
+                Ok(encoded) => encoded,
+                Err(error) => {
+                    self.pending = None;
+                    return Err(SoftRingError::Codec(error));
+                }
+            };
             let address = self
                 .config
                 .entry(pending.cursor)

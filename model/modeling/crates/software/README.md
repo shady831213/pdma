@@ -38,6 +38,9 @@ on another CPU or outside one. Any CPU restrictions belong to the supplied
 capability, such as `CpuRegisterAccess`, or to CPU-local interrupt state.
 
 Encoding precedes producer publication; decoding precedes consumer publication.
+Encoding rejection releases the pending entry without writing its storage or
+publishing a cursor, so software can submit a corrected entry. Transport failures
+and cancellation retain publication state for `resume_push`.
 `peek` allows protocol validation before a slot is released. Retried cursor writes
 reconcile publication that already committed. Management request correlation,
 resource allocation and reset policy belong to the caller.

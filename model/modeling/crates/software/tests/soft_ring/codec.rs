@@ -38,3 +38,39 @@ async fn malformed_entry_is_not_consumed() -> Result<(), Box<dyn std::error::Err
         })
         .await
 }
+
+#[tokio::test]
+async fn rejected_command_encoding_does_not_block_later_publication()
+-> Result<(), Box<dyn std::error::Error>> {
+    use pdma_model_contract::dma::{Command, CommandHeader, Opcode, TrapCommand};
+
+    // Given: valid storage and an application command with a mismatched header.
+    let memory = SharedMemory::new();
+    memory.add_regions(&[MemoryRegion::try_new(0.into(), 256, MemoryAlignment::ONE)?])?;
+    let io = MemoryRingIo::new(&memory, 0.into(), 4.into());
+    let mut ring = SoftRing::new(RingConfig::<Command>::new(16, 2)?);
+    let malformed = Command::Trap(TrapCommand {
+        header: CommandHeader {
+            opcode: Opcode::Copy,
+        },
+        id: 17,
+    });
+    let valid = Command::Trap(TrapCommand {
+        header: CommandHeader {
+            opcode: Opcode::Trap,
+        },
+        id: 18,
+    });
+    // When: software submits an entry whose encoding is rejected before I/O.
+    let rejected = ring.try_push(&io, malformed).await;
+    // Then: nothing is published or retained, and the corrected command can proceed.
+    assert!(matches!(rejected, Err(SoftRingError::Codec(_))));
+    assert_eq!(io.read_producer().await?, 0);
+    let mut storage = [0xff; Command::RECORD_SIZE];
+    memory.read(16.into(), MemoryAlignment::ONE, &mut storage)?;
+    assert_eq!(storage, [0; Command::RECORD_SIZE]);
+    assert!(!ring.has_pending_push());
+    assert!(ring.try_push(&io, valid).await?);
+    assert_eq!(ring.peek(&io).await?, Some(valid));
+    Ok(())
+}

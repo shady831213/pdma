@@ -1,17 +1,7 @@
-use super::{Command, CommandCase, CommandHeader, CommandView, CommandViewMut, Opcode};
-use hardware_interface_schema::{Documentation, SchemaCodec, SchemaCodecError};
+use super::{Command, CommandCase, CommandHeader, Opcode};
+use hardware_interface_schema::{SchemaCodec, SchemaCodecError};
 
 impl SchemaCodec for Command {
-    type Value = Self;
-    type View<'a> = CommandView<'a>;
-    type ViewMut<'a> = CommandViewMut<'a>;
-
-    const NAME: &'static str = Self::SPEC.name();
-    const DOCUMENTATION: Documentation = Self::SPEC.documentation();
-    const ALIGNMENT: usize = Self::RECORD_ALIGNMENT;
-    const EXTENT: usize = Self::RECORD_SIZE;
-    const ZERO: Self = Self::ZERO;
-
     /// Decodes the common header and selects the complete command record.
     /// # Errors
     /// Rejects short storage, unknown opcode, reserved storage or invalid operands.
@@ -29,7 +19,6 @@ impl SchemaCodec for Command {
         };
         Self::decode_variant(bytes, case)
     }
-
     /// Writes a complete protocol-valid command to caller storage.
     /// # Errors
     /// Rejects inconsistent opcodes, invalid operands or short storage.
@@ -53,13 +42,5 @@ impl SchemaCodec for Command {
             });
         }
         value.encode_variant(bytes)
-    }
-
-    fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError> {
-        CommandView::new(bytes)
-    }
-
-    fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError> {
-        CommandViewMut::new(bytes)
     }
 }

@@ -1,25 +1,25 @@
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ the trait `SchemaCodec` is not implemented for `i32`
+  | |_____^ the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-  |                             ^^^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  |                             ^^^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -37,13 +37,13 @@ note: required by a bound in `TrivialClone`
   |                                      ^^^^^^^^^^^^^ required by this bound in `TrivialClone`
   = note: this error originates in the derive macro `Clone` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-  |                             ^^^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  |                             ^^^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -60,26 +60,26 @@ note: required by a bound in `Clone`
   |                        ^^^^^ required by this bound in `Clone`
   = note: this error originates in the derive macro `Clone` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied
  --> tests/ui/fail/record_bad_scalar.rs:3:12
   |
 3 |     value: i32,
-  |            ^^^ the trait `SchemaCodec` is not implemented for `i32`
+  |            ^^^ the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-  |                             ^^^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  |                             ^^^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -97,13 +97,13 @@ note: required by a bound in `Copy`
   |                 ^^^^^ required by this bound in `Copy`
   = note: this error originates in the derive macro `Copy` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-  |                             ^^^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  |                             ^^^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -122,13 +122,13 @@ note: required by a bound in `StructuralPartialEq`
   | |_^ required by this bound in `StructuralPartialEq`
   = note: this error originates in the derive macro `PartialEq` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-  |                             ^^^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  |                             ^^^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -145,13 +145,13 @@ note: required by a bound in `Default`
   |                          ^^^^^ required by this bound in `Default`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-  |                             ^^^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  |                             ^^^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -168,15 +168,15 @@ note: required by a bound in `hardware_interface_schema::Decode::Decoded`
   |     ^^^^^^^^^^^^^ required by this bound in `Decode::Decoded`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -193,15 +193,15 @@ note: required by an implicit `Sized` bound in `Result`
   |                 ^ required by the implicit `Sized` requirement on this type parameter in `Result`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -218,13 +218,13 @@ note: required by a bound in `Encode`
   |                   ^^^^^ required by this bound in `Encode`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-  |                             ^^^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  |                             ^^^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -241,13 +241,13 @@ note: required by a bound in `Encode`
   |                   ^^^^^ required by this bound in `Encode`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-  |                             ^^^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  |                             ^^^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -264,15 +264,15 @@ note: required by a bound in `TryFrom`
   |                             ^^^^^ required by this bound in `TryFrom`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -289,13 +289,13 @@ note: required by an implicit `Sized` bound in `TryFrom`
   |                         ^ required by the implicit `Sized` requirement on this type parameter in `TryFrom`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-  |                             ^^^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  |                             ^^^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -305,23 +305,81 @@ note: required because it appears within the type `Bad`
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   |                             ^^^
-  = note: required for `<Bad as SchemaCodec>::Value` to implement `Copy`
-note: required by a bound in `hardware_interface_schema::SchemaCodec::Value`
+  = note: required for `<Bad as SchemaLayout>::Value` to implement `Copy`
+note: required by a bound in `hardware_interface_schema::SchemaLayout::Value`
  --> src/layout.rs
   |
   |     type Value: Clone + Copy + Default + Eq + PartialEq;
-  |                         ^^^^ required by this bound in `SchemaCodec::Value`
+  |                         ^^^^ required by this bound in `SchemaLayout::Value`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:1
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
+note: required by a bound in `SchemaLayout`
+ --> src/layout.rs
+  |
+  | / pub trait SchemaLayout {
+  | |     /// Owned decoded value for this layout.
+  | |     type Value: Clone + Copy + Default + Eq + PartialEq;
+  | |     /// Checked immutable view for this layout.
+... |
+  | |     fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError>;
+  | | }
+  | |_^ required by this bound in `SchemaLayout`
+  = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
+  |
+help: the trait `SchemaLayout` is implemented for `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:1
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
+note: required by a bound in `SchemaLayout`
+ --> src/layout.rs
+  |
+  | / pub trait SchemaLayout {
+  | |     /// Owned decoded value for this layout.
+  | |     type Value: Clone + Copy + Default + Eq + PartialEq;
+  | |     /// Checked immutable view for this layout.
+... |
+  | |     fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError>;
+  | | }
+  | |_^ required by this bound in `SchemaLayout`
+  = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
+  |
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -334,54 +392,24 @@ note: required because it appears within the type `Bad`
 note: required by a bound in `SchemaCodec`
  --> src/layout.rs
   |
-  | / pub trait SchemaCodec {
-  | |     /// Owned decoded value for this layout.
-  | |     type Value: Clone + Copy + Default + Eq + PartialEq;
-  | |     /// Checked immutable view for this layout.
-... |
-  | |     fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError>;
+  | / pub trait SchemaCodec: SchemaLayout {
+  | |     /// Decodes one owned value from the start of `bytes`.
+  | |     fn decode(bytes: &[u8]) -> Result<Self::Value, SchemaCodecError>;
+  | |     /// Encodes one owned value at the start of `bytes`.
+  | |     fn encode(bytes: &mut [u8], value: &Self::Value) -> Result<(), SchemaCodecError>;
   | | }
   | |_^ required by this bound in `SchemaCodec`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
- --> tests/ui/fail/record_bad_scalar.rs:2:29
-  |
-2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-  |                             ^^^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
-  |
-help: the trait `SchemaCodec` is implemented for `Bad`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
-  |
-2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `Bad`
- --> tests/ui/fail/record_bad_scalar.rs:2:29
-  |
-2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-  |                             ^^^
-note: required by a bound in `SchemaCodec`
- --> src/layout.rs
-  |
-  | / pub trait SchemaCodec {
-  | |     /// Owned decoded value for this layout.
-  | |     type Value: Clone + Copy + Default + Eq + PartialEq;
-  | |     /// Checked immutable view for this layout.
-... |
-  | |     fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError>;
-  | | }
-  | |_^ required by this bound in `SchemaCodec`
-  = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -394,15 +422,15 @@ note: required because it appears within the type `Bad`
   = note: the return type of a function must have a statically known size
   = note: this error originates in the derive macro `Clone` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -415,15 +443,15 @@ note: required because it appears within the type `Bad`
   = note: statics and constants must have a statically known size
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -436,15 +464,15 @@ note: required because it appears within the type `Bad`
   = note: the return type of a function must have a statically known size
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -461,37 +489,37 @@ note: required by a bound in `TryFrom`
   |                             ^^^^^ required by this bound in `TryFrom`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ the trait `SchemaCodec` is not implemented for `i32`
+  | |_____^ the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   = note: this error originates in the derive macro `Debug` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ the trait `SchemaCodec` is not implemented for `i32`
+  | |_____^ the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   = note: this error originates in the derive macro `PartialEq` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: `?` couldn't convert the error: `i32: SchemaCodec` is not satisfied
+error[E0277]: `?` couldn't convert the error: `i32: SchemaLayout` is not satisfied
  --> tests/ui/fail/record_bad_scalar.rs:4:5
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -499,11 +527,11 @@ error[E0277]: `?` couldn't convert the error: `i32: SchemaCodec` is not satisfie
 4 | | } } }
   | |     ^
   | |     |
-  | |_____within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  | |_____within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |       this can't be annotated with `?` because it has type `Result<_, SchemaCodecError>`
   |
   = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -516,10 +544,10 @@ note: required because it appears within the type `Bad`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied
- --> tests/ui/fail/record_bad_scalar.rs:3:5
+ --> tests/ui/fail/record_bad_scalar.rs:3:12
   |
 3 |     value: i32,
-  |     ^^^^^ the trait `SchemaCodec` is not implemented for `i32`
+  |            ^^^ the trait `SchemaCodec` is not implemented for `i32`
   |
 help: the trait `SchemaCodec` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
@@ -528,15 +556,28 @@ help: the trait `SchemaCodec` is implemented for `Bad`
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied
+ --> tests/ui/fail/record_bad_scalar.rs:3:5
+  |
+3 |     value: i32,
+  |     ^^^^^ the trait `SchemaLayout` is not implemented for `i32`
+  |
+help: the trait `SchemaLayout` is implemented for `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:1
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -556,15 +597,15 @@ note: required by a bound in `Ok`
   |     -- required by a bound in this tuple variant
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -580,15 +621,15 @@ help: function arguments must have a statically known size, borrowed types alway
 2 | &record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | +
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -601,13 +642,13 @@ note: required because it appears within the type `Bad`
   = note: all local variables must have a statically known size
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-  |                             ^^^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  |                             ^^^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
@@ -623,15 +664,15 @@ help: function arguments must have a statically known size, borrowed types alway
 2 | record_schema! { pub record &Bad { alignment: 1, endian: Little, fields: {
   |                             +
 
-error[E0277]: the trait bound `i32: SchemaCodec` is not satisfied in `Bad`
+error[E0277]: the trait bound `i32: SchemaLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `Bad`, the trait `SchemaCodec` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `SchemaLayout` is not implemented for `i32`
   |
-help: the trait `SchemaCodec` is implemented for `Bad`
+help: the trait `SchemaLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {

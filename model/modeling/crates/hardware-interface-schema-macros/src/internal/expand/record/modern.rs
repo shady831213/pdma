@@ -70,7 +70,7 @@ pub(super) fn expand(decl: &ModernRecordDecl) -> syn::Result<TokenStream> {
         #metadata
         #values
         #views
-        impl #facade::SchemaCodec for #marker {
+        impl #facade::SchemaLayout for #marker {
             type Value = #values_name;
             type View<'a> = #view_name<'a>;
             type ViewMut<'a> = #view_mut_name<'a>;
@@ -80,12 +80,6 @@ pub(super) fn expand(decl: &ModernRecordDecl) -> syn::Result<TokenStream> {
             const EXTENT: usize = Self::RECORD_SIZE;
             const SPEC: #facade::RecordSpec = Self::SPEC;
             const ZERO: Self::Value = #values_name::ZERO;
-            fn decode(bytes: &[u8]) -> ::core::result::Result<Self::Value, #facade::SchemaCodecError> {
-                #values_name::from_bytes(bytes)
-            }
-            fn encode(bytes: &mut [u8], value: &Self::Value) -> ::core::result::Result<(), #facade::SchemaCodecError> {
-                value.encode_into(bytes)
-            }
             fn validate_padding(bytes: &[u8]) -> ::core::result::Result<(), #facade::SchemaCodecError> {
                 #facade::record::validate_record_padding(bytes, Self::SPEC)
             }
@@ -94,6 +88,14 @@ pub(super) fn expand(decl: &ModernRecordDecl) -> syn::Result<TokenStream> {
             }
             fn view_mut(bytes: &mut [u8]) -> ::core::result::Result<Self::ViewMut<'_>, #facade::SchemaCodecError> {
                 #view_mut_name::new(bytes)
+            }
+        }
+        impl #facade::SchemaCodec for #marker {
+            fn decode(bytes: &[u8]) -> ::core::result::Result<Self::Value, #facade::SchemaCodecError> {
+                #values_name::from_bytes(bytes)
+            }
+            fn encode(bytes: &mut [u8], value: &Self::Value) -> ::core::result::Result<(), #facade::SchemaCodecError> {
+                value.encode_into(bytes)
             }
         }
     })

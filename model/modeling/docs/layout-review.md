@@ -295,10 +295,10 @@ methods and field metadata despite the existing layout trait. In particular, an
 inner untagged union's opaque metadata caused valid nonzero bytes to be classified
 as padding by its parent. This prevented the promised recursive composition.
 
-`SchemaCodec` generalizes the former record-only contract: composition uses its
-associated Value, geometry, codec and view methods. Generated records provide the
-implementation; an externally implemented struct, enum or separate codec marker
-can do so without inherent schema APIs. Metadata defaults to an opaque extent,
+`SchemaLayout` and `SchemaCodec` generalize the former record-only contract:
+composition uses layout-associated Value, geometry and views plus codec methods.
+Generated records implement both; an externally implemented struct, enum or
+separate codec marker can do so without inherent schema APIs. Metadata defaults to an opaque extent,
 while generated records preserve their detailed metadata for exporters.
 
 An outer union passes exactly the selected child's extent to that codec and checks
@@ -312,11 +312,18 @@ Coverage includes multi-level nonzero nested unions, manual structs/enums and
 codec markers whose Value differs from Self, field and tagged-case composition,
 outer-tail ownership, exact child slices and independent unchanged PDMA wire bytes.
 
-### Deferred discussion: generated layout and custom codec responsibilities
+### Generated layout and custom codec responsibilities
 
-The next discussion will consider splitting `SchemaCodec` responsibilities so a
-generated untagged union can reuse its known value/view types and layout constants,
-with application code implementing only encode/decode. Handwritten types outside
-schema generation would still provide the complete layout and codec contract.
-The concrete trait split and API are not decided; this checkpoint keeps the
-current implementation unchanged.
+`SchemaLayout` owns Value/View/ViewMut, name/documentation, alignment/extent,
+structural metadata, zero, checked views and direct-padding validation.
+`SchemaCodec: SchemaLayout` contains only decode and encode. Generated records
+implement both. Every generated untagged union implements SchemaLayout, including
+raw unions without a codec; application implementations supply only the two codec
+methods. The external opt-in still adds only convenience adapters.
+
+Handwritten non-schema types implement both traits. Layout-only generic consumers
+can borrow raw union views without selecting a codec. Composition that decodes or
+encodes child values still requires SchemaCodec and supports Value distinct from
+Self. Padding remains structural: generated record layouts check direct gaps,
+opaque layouts default to no check, and application codecs validate their own
+representations. No selector inference or wire-format change accompanies the split.

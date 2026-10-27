@@ -3,46 +3,20 @@ use hardware_interface_schema::{SchemaCodec, SchemaCodecError, record_schema, un
 record_schema! { pub record Leaf { endian: Little, fields: { value: u16 } } }
 union_schema! { pub union Inner { cases: { Leaf(Leaf) }, codec: external } }
 impl SchemaCodec for Inner {
-    type Value = Self;
-    type View<'a> = InnerView<'a>;
-    type ViewMut<'a> = InnerViewMut<'a>;
-    const NAME: &'static str = "Inner";
-    const ALIGNMENT: usize = Self::RECORD_ALIGNMENT;
-    const EXTENT: usize = Self::RECORD_SIZE;
-    const ZERO: Self = Self::ZERO;
     fn decode(bytes: &[u8]) -> Result<Self, SchemaCodecError> {
         Self::decode_variant(bytes, InnerCase::Leaf)
     }
     fn encode(bytes: &mut [u8], value: &Self) -> Result<(), SchemaCodecError> {
         value.encode_variant(bytes)
     }
-    fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError> {
-        InnerView::new(bytes)
-    }
-    fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError> {
-        InnerViewMut::new(bytes)
-    }
 }
 union_schema! { pub union Middle { cases: { Inner(Inner) }, codec: external } }
 impl SchemaCodec for Middle {
-    type Value = Self;
-    type View<'a> = MiddleView<'a>;
-    type ViewMut<'a> = MiddleViewMut<'a>;
-    const NAME: &'static str = "Middle";
-    const ALIGNMENT: usize = Self::RECORD_ALIGNMENT;
-    const EXTENT: usize = Self::RECORD_SIZE;
-    const ZERO: Self = Self::ZERO;
     fn decode(bytes: &[u8]) -> Result<Self, SchemaCodecError> {
         Self::decode_variant(bytes, MiddleCase::Inner)
     }
     fn encode(bytes: &mut [u8], value: &Self) -> Result<(), SchemaCodecError> {
         value.encode_variant(bytes)
-    }
-    fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError> {
-        MiddleView::new(bytes)
-    }
-    fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError> {
-        MiddleViewMut::new(bytes)
     }
 }
 record_schema! { pub record WideLeaf { endian: Little, fields: { value: u64 } } }
@@ -61,24 +35,11 @@ fn nested_nonzero_opaque_codecs_round_trip() {
 
 union_schema! { pub union ManualSelection { cases: { Leaf(Leaf) } } }
 impl hardware_interface_schema::SchemaCodec for ManualSelection {
-    type Value = Self;
-    type View<'a> = ManualSelectionView<'a>;
-    type ViewMut<'a> = ManualSelectionViewMut<'a>;
-    const NAME: &'static str = "ManualSelection";
-    const ALIGNMENT: usize = Self::RECORD_ALIGNMENT;
-    const EXTENT: usize = Self::RECORD_SIZE;
-    const ZERO: Self = Self::ZERO;
     fn decode(bytes: &[u8]) -> Result<Self, SchemaCodecError> {
         Self::decode_variant(bytes, ManualSelectionCase::Leaf)
     }
     fn encode(bytes: &mut [u8], value: &Self) -> Result<(), SchemaCodecError> {
         value.encode_variant(bytes)
-    }
-    fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError> {
-        ManualSelectionView::new(bytes)
-    }
-    fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError> {
-        ManualSelectionViewMut::new(bytes)
     }
 }
 union_schema! { pub union ManualOuter { cases: { Selected(ManualSelection) } } }

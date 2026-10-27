@@ -4,4 +4,4 @@ error[E0046]: not all trait items implemented, missing: `encode`
 4 | impl SchemaCodec for Packet {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^ missing `encode` in implementation
   |
-  = help: implement the missing item: `fn encode(_: &mut [u8], _: &<Self as SchemaCodec>::Value) -> Result<(), SchemaCodecError> { todo!() }`
+  = help: implement the missing item: `fn encode(_: &mut [u8], _: &<Self as SchemaLayout>::Value) -> Result<(), SchemaCodecError> { todo!() }`

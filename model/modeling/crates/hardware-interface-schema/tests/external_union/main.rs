@@ -1,6 +1,6 @@
 //! Application codecs own policy for opted-in union adapters.
 use hardware_interface_schema::{
-    Decode, Encode, SchemaCodec, SchemaCodecError, record_schema, union_schema,
+    Decode, Encode, SchemaCodec, SchemaCodecError, SchemaLayout, record_schema, union_schema,
 };
 
 mod dispatch;
@@ -15,57 +15,23 @@ mod application {
     use super::*;
 
     impl SchemaCodec for Fixed {
-        type Value = Self;
-        type View<'a> = FixedView<'a>;
-        type ViewMut<'a> = FixedViewMut<'a>;
-        const NAME: &'static str = "Fixed";
-        const ALIGNMENT: usize = Self::RECORD_ALIGNMENT;
-        const EXTENT: usize = Self::RECORD_SIZE;
-        const ZERO: Self = Self::ZERO;
-
         fn decode(bytes: &[u8]) -> Result<Self, SchemaCodecError> {
             Self::decode_variant(bytes, FixedCase::Small)
         }
-
         fn encode(bytes: &mut [u8], value: &Self) -> Result<(), SchemaCodecError> {
             value.encode_variant(bytes)
-        }
-
-        fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError> {
-            FixedView::new(bytes)
-        }
-
-        fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError> {
-            FixedViewMut::new(bytes)
         }
     }
 
     impl SchemaCodec for Checked {
-        type Value = Self;
-        type View<'a> = CheckedView<'a>;
-        type ViewMut<'a> = CheckedViewMut<'a>;
-        const NAME: &'static str = "Checked";
-        const ALIGNMENT: usize = Self::RECORD_ALIGNMENT;
-        const EXTENT: usize = Self::RECORD_SIZE;
-        const ZERO: Self = Self::ZERO;
-
         fn decode(bytes: &[u8]) -> Result<Self, SchemaCodecError> {
             let value = Self::decode_variant(bytes, CheckedCase::Small)?;
             validate(&value)?;
             Ok(value)
         }
-
         fn encode(bytes: &mut [u8], value: &Self) -> Result<(), SchemaCodecError> {
             validate(value)?;
             value.encode_variant(bytes)
-        }
-
-        fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError> {
-            CheckedView::new(bytes)
-        }
-
-        fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError> {
-            CheckedViewMut::new(bytes)
         }
     }
 
@@ -108,14 +74,14 @@ fn external_fixed_case_needs_no_selector_and_keeps_natural_geometry() {
     assert_eq!(Fixed::try_from(raw), Ok(value));
     assert_eq!(FixedRaw::try_from(value), Ok(raw));
     assert_eq!(<Fixed as SchemaCodec>::decode(&expected), Ok(value));
-    assert_eq!(<Fixed as SchemaCodec>::EXTENT, 8);
-    assert_eq!(<Fixed as SchemaCodec>::ALIGNMENT, 8);
+    assert_eq!(<Fixed as SchemaLayout>::EXTENT, 8);
+    assert_eq!(<Fixed as SchemaLayout>::ALIGNMENT, 8);
     assert_eq!(
-        <Fixed as SchemaCodec>::view(&expected).unwrap().decode(),
+        <Fixed as SchemaLayout>::view(&expected).unwrap().decode(),
         Ok(value)
     );
     let mut bytes = [0xff; 10];
-    <Fixed as SchemaCodec>::view_mut(&mut bytes)
+    <Fixed as SchemaLayout>::view_mut(&mut bytes)
         .unwrap()
         .set_values(&value)
         .unwrap();

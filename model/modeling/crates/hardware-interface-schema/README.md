@@ -172,7 +172,7 @@ map, then encodes both generated owned-value types.
 use hardware_interface_schema::{bits_schema, record_schema, register_schema};
 # use hardware_interface_schema::{
 #     Access, BitsFieldDefinition, BitsFieldSpec, BitsLayout, BitsValueError, Endian,
-#     Decode, Encode, FieldSpec, SchemaCodec, RecordSpec, RegisterCodecError, RegisterDefinition,
+#     Decode, Encode, FieldSpec, SchemaCodec, SchemaLayout, RecordSpec, RegisterCodecError, RegisterDefinition,
 #     RegisterLayout, RegisterValueError, ResetKind, ScalarKind, SchemaCodecError,
 #     SchemaMemberIdentity, SchemaLocation,
 #     inferred_align_up, inferred_field_id, read_scalar, write_scalar,
@@ -632,26 +632,12 @@ union_schema! {
     }
 }
 impl SchemaCodec for Packet {
-    type Value = Self;
-    type View<'a> = PacketView<'a>;
-    type ViewMut<'a> = PacketViewMut<'a>;
-    const NAME: &'static str = "Packet";
-    const DOCUMENTATION: hardware_interface_schema::Documentation = Self::SPEC.documentation();
-    const ALIGNMENT: usize = Self::RECORD_ALIGNMENT;
-    const EXTENT: usize = Self::RECORD_SIZE;
-    const ZERO: Self = Self::ZERO;
     fn decode(bytes: &[u8]) -> Result<Self, SchemaCodecError> {
         // This application always interprets incoming storage as Small.
         Self::decode_variant(bytes, PacketCase::Small)
     }
     fn encode(bytes: &mut [u8], value: &Self) -> Result<(), SchemaCodecError> {
         value.encode_variant(bytes)
-    }
-    fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError> {
-        PacketView::new(bytes)
-    }
-    fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError> {
-        PacketViewMut::new(bytes)
     }
 }
 let value = Packet::Small(Small::new(0x1234));
@@ -663,12 +649,12 @@ assert_eq!(PacketView::new(&value.to_bytes()?)?.values()?, value);
 The opt-in adds value `Encode`, raw `Decode`, fallible conversions in both
 directions, value `from_bytes`, `encode_into` and `to_bytes`, immutable-view
 `Decode`, both views' `values()`, and mutable-view `set_values(&value)`.
-The application implements `SchemaCodec` directly with `Value = Self`; all
+The union always implements `SchemaLayout` with `Value = Self`. The application
+implements only `decode` and `encode` in `SchemaCodec`; all
 generated codec paths call that trait's `decode` and `encode`. Missing trait
 implementations or required methods fail compilation. Implementations can live
 in another module; the views and adapters are generated at the union declaration.
-Implement `view` and `view_mut` through the generated view constructors, as above,
-and keep `decode`/`encode` independent of the generated convenience methods to
+Keep `decode`/`encode` independent of the generated convenience methods to
 avoid recursive calls.
 
 The schema adds no selector requirement, inference, protocol validation, or
@@ -680,12 +666,15 @@ so they do not apply application codec policy. The example's fixed-case decoder
 needs no selector at all. Inline `tagged_union` behavior is unchanged.
 
 
-`SchemaCodec` describes complete byte-value codecs. Record fields and both
+`SchemaLayout` owns the associated value and view types, geometry, metadata, zero
+value, structural padding validation and checked view constructors. Generated
+records and untagged unions implement it, including unions without a codec.
+`SchemaCodec: SchemaLayout` adds only `decode` and `encode`. Record fields and both
 record-backed union forms compose through that shared contract.
-A case `Case(Codec)` stores `<Codec as SchemaCodec>::Value`; a codec can be a
+A case `Case(Codec)` stores `<Codec as SchemaLayout>::Value`; a codec can be a
 handwritten struct, enum, or marker with a different value type. Implementors
-provide layout, zero, views, decode and encode through the trait, with no required
-inherent constants or methods. Generated records implement the trait automatically.
+implement both traits, with no required inherent constants or methods. Generated
+records implement both traits automatically.
 A raw untagged union must implement `SchemaCodec` before it can be nested;
 `codec: external` only adds convenience adapters around that implementation.
 The opt-in conveniences require `Value = Self`; generic composition also supports
@@ -693,11 +682,11 @@ manual marker codecs with a different value type without the opt-in.
 Case-selection policy remains application-owned.
 Tagged fields obtain their discriminator from their parent record as before.
 
-`SchemaCodec::SPEC` defaults to opaque extent/alignment metadata and can be
+`SchemaLayout::SPEC` defaults to opaque extent/alignment metadata and can be
 overridden for structural export. Generated records preserve their rich metadata.
 Composers do not interpret child metadata to guess padding: the selected codec
 receives its exact extent, then the enclosing union checks only its inactive tail.
-`validate_padding` defaults to success; generated records override it to check
+`SchemaLayout::validate_padding` defaults to success; generated records override it to check
 their direct gaps when selected as complete untagged cases. Ordinary record
 and tagged-case decoding retain their existing gap tolerance. Nested opaque
 codecs validate their own representation through `decode`, including nonzero

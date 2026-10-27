@@ -6,31 +6,14 @@ record_schema! { record Byte { endian: Little, fields: { value: u8 } } }
 union_schema! { union Transformed { cases: { Byte(Byte) }, codec: external } }
 
 impl SchemaCodec for Transformed {
-    type Value = Self;
-    type View<'a> = TransformedView<'a>;
-    type ViewMut<'a> = TransformedViewMut<'a>;
-    const NAME: &'static str = "Transformed";
-    const ALIGNMENT: usize = Self::RECORD_ALIGNMENT;
-    const EXTENT: usize = Self::RECORD_SIZE;
-    const ZERO: Self = Self::ZERO;
-
     fn decode(bytes: &[u8]) -> Result<Self, SchemaCodecError> {
         let Self::Byte(mut value) = Self::decode_variant(bytes, TransformedCase::Byte)?;
         value.value ^= 0xa5;
         Ok(Self::Byte(value))
     }
-
     fn encode(bytes: &mut [u8], value: &Self) -> Result<(), SchemaCodecError> {
         let Self::Byte(value) = *value;
         Self::Byte(Byte::new(value.value ^ 0xa5)).encode_variant(bytes)
-    }
-
-    fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError> {
-        TransformedView::new(bytes)
-    }
-
-    fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError> {
-        TransformedViewMut::new(bytes)
     }
 }
 

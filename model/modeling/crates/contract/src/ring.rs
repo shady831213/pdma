@@ -1,5 +1,5 @@
 use core::fmt;
-use hardware_interface_schema::{SchemaCodec, checked_align_up};
+use hardware_interface_schema::{SchemaCodec, SchemaLayout, checked_align_up};
 
 /// Shared ring calculations; implementations own their state and I/O operations.
 ///

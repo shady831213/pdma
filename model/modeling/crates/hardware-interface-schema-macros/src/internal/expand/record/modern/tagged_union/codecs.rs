@@ -30,14 +30,14 @@ pub(in crate::internal::expand::record::modern) fn expand(
             .codec
             .as_ref()
             .ok_or_else(|| syn::Error::new(variant.span(), "expected codec case"))?;
-        declarations.push(quote!(#[doc = "Generated codec union case."] #variant(<#path as #facade::SchemaCodec>::Value)));
+        declarations.push(quote!(#[doc = "Generated codec union case."] #variant(<#path as #facade::SchemaLayout>::Value)));
         tags.push(quote!(Self::#variant(_) => #tag::#variant));
         decode.push(quote!(#tag::#variant => {
-            let extent = <#path as #facade::SchemaCodec>::EXTENT;
+            let extent = <#path as #facade::SchemaLayout>::EXTENT;
             let child = storage.get(..extent).ok_or(#facade::SchemaCodecError::BufferTooShort { required: extent, actual: storage.len() })?;
             let value = <#path as #facade::SchemaCodec>::decode(child)
                 .map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(base)))?;
-            for (index, byte) in storage.iter().enumerate().skip(<#path as #facade::SchemaCodec>::EXTENT) {
+            for (index, byte) in storage.iter().enumerate().skip(<#path as #facade::SchemaLayout>::EXTENT) {
                 if *byte != 0 {
                     return ::core::result::Result::Err(#facade::SchemaCodecError::NonZeroReserved {
                         location: #owner::#identity.at(base.saturating_add(index)), observed: u64::from(*byte),
@@ -47,7 +47,7 @@ pub(in crate::internal::expand::record::modern) fn expand(
             ::core::result::Result::Ok(Self::#variant(value))
         }));
         encode.push(quote!(Self::#variant(value) => {
-            let extent = <#path as #facade::SchemaCodec>::EXTENT;
+            let extent = <#path as #facade::SchemaLayout>::EXTENT;
             let actual = storage.len();
             let child = storage.get_mut(..extent).ok_or(#facade::SchemaCodecError::BufferTooShort { required: extent, actual })?;
             <#path as #facade::SchemaCodec>::encode(child, value)
@@ -78,7 +78,7 @@ pub(in crate::internal::expand::record::modern) fn expand(
         #visibility enum #name { #(#declarations),* }
         impl #name {
             #[doc = "First declared record case."]
-            pub const ZERO: Self = Self::#first_case(<#first_type as #facade::SchemaCodec>::ZERO);
+            pub const ZERO: Self = Self::#first_case(<#first_type as #facade::SchemaLayout>::ZERO);
             #[doc = "Aligned storage size shared by all cases."]
             pub const RECORD_SIZE: usize = #extent;
             #[doc = "Opaque union storage; case records describe the status-specific fields."]

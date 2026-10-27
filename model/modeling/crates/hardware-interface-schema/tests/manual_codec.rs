@@ -1,10 +1,12 @@
 //! Composition requires only the shared codec contract, never inherent APIs.
-use hardware_interface_schema::{SchemaCodec, SchemaCodecError, record_schema, union_schema};
+use hardware_interface_schema::{
+    SchemaCodec, SchemaCodecError, SchemaLayout, record_schema, union_schema,
+};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 /// Handwritten semantic value with no inherent schema API.
 pub struct Manual(#[doc = "Encoded scalar."] pub u16);
-impl SchemaCodec for Manual {
+impl SchemaLayout for Manual {
     type Value = Self;
     type View<'a> = &'a [u8];
     type ViewMut<'a> = &'a mut [u8];
@@ -12,19 +14,7 @@ impl SchemaCodec for Manual {
     const ALIGNMENT: usize = 2;
     const EXTENT: usize = 2;
     const ZERO: Self = Self(0);
-    fn decode(bytes: &[u8]) -> Result<Self, SchemaCodecError> {
-        let [low, high] = Self::view(bytes)? else {
-            return Err(SchemaCodecError::BufferTooShort {
-                required: 2,
-                actual: bytes.len(),
-            });
-        };
-        Ok(Self(u16::from_le_bytes([*low, *high])))
-    }
-    fn encode(bytes: &mut [u8], value: &Self) -> Result<(), SchemaCodecError> {
-        Self::view_mut(bytes)?.copy_from_slice(&value.0.to_le_bytes());
-        Ok(())
-    }
+
     fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError> {
         bytes.get(..2).ok_or(SchemaCodecError::BufferTooShort {
             required: 2,
@@ -37,6 +27,21 @@ impl SchemaCodec for Manual {
             required: 2,
             actual,
         })
+    }
+}
+impl SchemaCodec for Manual {
+    fn decode(bytes: &[u8]) -> Result<Self, SchemaCodecError> {
+        let [low, high] = Self::view(bytes)? else {
+            return Err(SchemaCodecError::BufferTooShort {
+                required: 2,
+                actual: bytes.len(),
+            });
+        };
+        Ok(Self(u16::from_le_bytes([*low, *high])))
+    }
+    fn encode(bytes: &mut [u8], value: &Self) -> Result<(), SchemaCodecError> {
+        Self::view_mut(bytes)?.copy_from_slice(&value.0.to_le_bytes());
+        Ok(())
     }
 }
 union_schema! { pub union Choice { cases: { Manual(Manual) } } }
@@ -63,7 +68,7 @@ fn handwritten_struct_nests_without_inherent_schema_members() {
 /// Codec marker with a scalar associated value.
 #[derive(Debug)]
 pub enum CheckedCodec {}
-impl SchemaCodec for CheckedCodec {
+impl SchemaLayout for CheckedCodec {
     type Value = u16;
     type View<'a> = &'a [u8];
     type ViewMut<'a> = &'a mut [u8];
@@ -71,6 +76,15 @@ impl SchemaCodec for CheckedCodec {
     const ALIGNMENT: usize = 2;
     const EXTENT: usize = 2;
     const ZERO: u16 = 0;
+
+    fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError> {
+        <Manual as SchemaLayout>::view(bytes)
+    }
+    fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError> {
+        <Manual as SchemaLayout>::view_mut(bytes)
+    }
+}
+impl SchemaCodec for CheckedCodec {
     fn decode(bytes: &[u8]) -> Result<u16, SchemaCodecError> {
         let value = <Manual as SchemaCodec>::decode(bytes)?.0;
         check(value)?;
@@ -79,12 +93,6 @@ impl SchemaCodec for CheckedCodec {
     fn encode(bytes: &mut [u8], value: &u16) -> Result<(), SchemaCodecError> {
         <Manual as SchemaCodec>::encode(bytes, &Manual(*value))?;
         check(*value)
-    }
-    fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError> {
-        <Manual as SchemaCodec>::view(bytes)
-    }
-    fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError> {
-        <Manual as SchemaCodec>::view_mut(bytes)
     }
 }
 fn check(value: u16) -> Result<(), SchemaCodecError> {
@@ -172,7 +180,7 @@ fn trait_only_field_views_and_opaque_metadata_compose() {
         .child_mut()
         .unwrap()
         .copy_from_slice(&[8, 0]);
-    let spec = <CheckedCodec as SchemaCodec>::SPEC;
+    let spec = <CheckedCodec as SchemaLayout>::SPEC;
     // Then opaque storage retains its size/name, without pretending to describe fields.
     assert_eq!(WithMarker::from_bytes(&bytes).unwrap().child, 8);
     assert_eq!(spec.name(), "CheckedCodec");

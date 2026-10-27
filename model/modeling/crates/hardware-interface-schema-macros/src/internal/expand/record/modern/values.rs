@@ -196,7 +196,7 @@ fn field_type(
             quote!(#ty)
         }
         ModernTypeDecl::BitsReference(path) => quote!(<#path as #facade::BitsLayout>::Value),
-        ModernTypeDecl::Codec(path) => quote!(<#path as #facade::SchemaCodec>::Value),
+        ModernTypeDecl::Codec(path) => quote!(<#path as #facade::SchemaLayout>::Value),
     }
     .into()
 }
@@ -222,7 +222,7 @@ fn zero_field(
         }
         ModernTypeDecl::BitsReference(path) => quote!(<#path as #facade::BitsLayout>::ZERO),
         ModernTypeDecl::Codec(path) => {
-            quote!(<#path as #facade::SchemaCodec>::ZERO)
+            quote!(<#path as #facade::SchemaLayout>::ZERO)
         }
     };
     Some(quote!(#name: #value))

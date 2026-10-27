@@ -192,3 +192,27 @@ fn largest_extent_is_rounded_to_another_cases_alignment() {
     assert_eq!(bytes, [1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0]);
     assert_eq!(Rounded::RECORD_ALIGNMENT, 8);
 }
+
+#[test]
+fn raw_union_layout_views_work_without_a_codec() {
+    use hardware_interface_schema::SchemaLayout;
+    fn layout_view<L: SchemaLayout>(bytes: &[u8]) -> Result<L::View<'_>, SchemaCodecError> {
+        L::view(bytes)
+    }
+    // Given untagged storage with no application codec implementation.
+    let bytes = [0x12, 0x34, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    // When borrowing it through a generic layout-only consumer.
+    let view = layout_view::<Packet>(&bytes).unwrap();
+    // Then selection stays explicit and mutable views clip the borrowed storage.
+    assert_eq!(
+        view.variant(PacketCase::Small),
+        Ok(Packet::Small(Small::new(0x1234)))
+    );
+    let mut destination = [0xff; 18];
+    <Packet as SchemaLayout>::view_mut(&mut destination)
+        .unwrap()
+        .set_variant(&Packet::Small(Small::new(0x1234)))
+        .unwrap();
+    assert_eq!(&destination[..16], &bytes);
+    assert_eq!(&destination[16..], &[0xff; 2]);
+}

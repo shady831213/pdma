@@ -119,10 +119,10 @@ fn getters(
         }
         ModernTypeDecl::Codec(path) => vec![quote! {
             #[doc = "Creates a checked immutable view of the nested record."]
-            pub fn #name(&self) -> ::core::result::Result<<#path as #facade::SchemaCodec>::View<'_>, #facade::SchemaCodecError> {
-                let end = #marker::#offset.saturating_add(<#path as #facade::SchemaCodec>::EXTENT);
+            pub fn #name(&self) -> ::core::result::Result<<#path as #facade::SchemaLayout>::View<'_>, #facade::SchemaCodecError> {
+                let end = #marker::#offset.saturating_add(<#path as #facade::SchemaLayout>::EXTENT);
                 let bytes = self.bytes.get(#marker::#offset..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: self.bytes.len() })?;
-                <#path as #facade::SchemaCodec>::view(bytes)
+                <#path as #facade::SchemaLayout>::view(bytes)
             }
         }],
         ModernTypeDecl::TaggedUnion(union) => {
@@ -183,11 +183,11 @@ fn setters(
             let method = format_ident!("{name}_mut");
             vec![quote! {
                 #[doc = "Creates a checked mutable view of the nested record."]
-                pub fn #method(&mut self) -> ::core::result::Result<<#path as #facade::SchemaCodec>::ViewMut<'_>, #facade::SchemaCodecError> {
-                    let end = #marker::#offset.saturating_add(<#path as #facade::SchemaCodec>::EXTENT);
+                pub fn #method(&mut self) -> ::core::result::Result<<#path as #facade::SchemaLayout>::ViewMut<'_>, #facade::SchemaCodecError> {
+                    let end = #marker::#offset.saturating_add(<#path as #facade::SchemaLayout>::EXTENT);
                     let actual = self.bytes.len();
                     let bytes = self.bytes.get_mut(#marker::#offset..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual })?;
-                    <#path as #facade::SchemaCodec>::view_mut(bytes)
+                    <#path as #facade::SchemaLayout>::view_mut(bytes)
                 }
             }]
         }

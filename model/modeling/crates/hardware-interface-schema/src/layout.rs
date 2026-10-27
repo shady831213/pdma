@@ -6,8 +6,8 @@ pub use bank::{
     RegisterBank, RegisterBankError, RegisterShape, StaticRegisterLayout, checked_bank_offset,
 };
 
-/// Composable byte codec implemented by generated records and application types.
-pub trait SchemaCodec {
+/// Byte layout, metadata and checked views independent of codec policy.
+pub trait SchemaLayout {
     /// Owned decoded value for this layout.
     type Value: Clone + Copy + Default + Eq + PartialEq;
     /// Checked immutable view for this layout.
@@ -21,23 +21,19 @@ pub trait SchemaCodec {
 
     /// Stable layout name.
     const NAME: &'static str;
-    /// Documentation of the reusable codec.
+    /// Documentation of the reusable layout.
     const DOCUMENTATION: Documentation = Documentation::EMPTY;
-    /// Required byte alignment for this codec.
+    /// Required byte alignment for this layout.
     const ALIGNMENT: usize;
-    /// Encoded byte extent of this codec.
+    /// Encoded byte extent of this layout.
     const EXTENT: usize;
-    /// Optional structural metadata; opaque codecs need not describe their internals.
+    /// Optional structural metadata; opaque layouts need not describe their internals.
     const SPEC: crate::RecordSpec =
         crate::RecordSpec::named(Self::NAME, Self::EXTENT, Self::ALIGNMENT, &[], &[])
             .with_documentation(Self::DOCUMENTATION);
     /// All-zero owned value.
     const ZERO: Self::Value;
 
-    /// Decodes one owned value from the start of `bytes`.
-    fn decode(bytes: &[u8]) -> Result<Self::Value, SchemaCodecError>;
-    /// Encodes one owned value at the start of `bytes`.
-    fn encode(bytes: &mut [u8], value: &Self::Value) -> Result<(), SchemaCodecError>;
     /// Checks direct padding when selected as a complete untagged union case.
     /// Ordinary record decoding does not invoke this hook. Opaque codecs own
     /// their validation in `decode`; metadata must never infer their padding.
@@ -48,6 +44,14 @@ pub trait SchemaCodec {
     fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError>;
     /// Creates a checked mutable view.
     fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError>;
+}
+
+/// Composable byte codec implemented by generated records and application types.
+pub trait SchemaCodec: SchemaLayout {
+    /// Decodes one owned value from the start of `bytes`.
+    fn decode(bytes: &[u8]) -> Result<Self::Value, SchemaCodecError>;
+    /// Encodes one owned value at the start of `bytes`.
+    fn encode(bytes: &mut [u8], value: &Self::Value) -> Result<(), SchemaCodecError>;
 }
 
 /// Shared byte-layout contract implemented by generated registers and register maps.

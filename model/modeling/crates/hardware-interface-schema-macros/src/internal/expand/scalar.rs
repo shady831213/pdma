@@ -72,7 +72,7 @@ pub(super) fn record_size_path(path: &syn::Path, facade: &TokenStream) -> TokenS
         let mut owner = path.clone();
         owner.segments.pop();
         owner.segments.pop_punct();
-        quote!(<#owner as #facade::SchemaCodec>::EXTENT)
+        quote!(<#owner as #facade::SchemaLayout>::EXTENT)
     } else {
         quote!(#path)
     }

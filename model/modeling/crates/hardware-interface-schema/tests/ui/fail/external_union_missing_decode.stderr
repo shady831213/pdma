@@ -4,4 +4,4 @@ error[E0046]: not all trait items implemented, missing: `decode`
 4 | impl SchemaCodec for Packet {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^ missing `decode` in implementation
   |
-  = help: implement the missing item: `fn decode(_: &[u8]) -> Result<<Self as SchemaCodec>::Value, SchemaCodecError> { todo!() }`
+  = help: implement the missing item: `fn decode(_: &[u8]) -> Result<<Self as SchemaLayout>::Value, SchemaCodecError> { todo!() }`

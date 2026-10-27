@@ -77,7 +77,7 @@ pub(super) fn decode(
             )?
         };)),
         ModernTypeDecl::Codec(path) => Ok(quote!(let #name = {
-            let end = #marker::#offset.checked_add(<#path as #facade::SchemaCodec>::EXTENT).ok_or(#facade::SchemaCodecError::BufferTooShort { required: usize::MAX, actual: bytes.len() })?;
+            let end = #marker::#offset.checked_add(<#path as #facade::SchemaLayout>::EXTENT).ok_or(#facade::SchemaCodecError::BufferTooShort { required: usize::MAX, actual: bytes.len() })?;
             let field = bytes.get(#marker::#offset..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: bytes.len() })?;
             <#path as #facade::SchemaCodec>::decode(field)
                 .map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(#marker::#offset)))?
@@ -148,7 +148,7 @@ pub(super) fn encode(
             )?;
         }),
         ModernTypeDecl::Codec(path) => quote!({
-            let end = #marker::#offset.checked_add(<#path as #facade::SchemaCodec>::EXTENT).ok_or(#facade::SchemaCodecError::BufferTooShort { required: usize::MAX, actual: encoded.len() })?;
+            let end = #marker::#offset.checked_add(<#path as #facade::SchemaLayout>::EXTENT).ok_or(#facade::SchemaCodecError::BufferTooShort { required: usize::MAX, actual: encoded.len() })?;
             let actual = encoded.len();
             let field = encoded.get_mut(#marker::#offset..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual })?;
             <#path as #facade::SchemaCodec>::encode(field, &normalized.#name)

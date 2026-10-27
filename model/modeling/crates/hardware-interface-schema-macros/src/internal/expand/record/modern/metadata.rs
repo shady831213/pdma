@@ -128,9 +128,9 @@ fn metadata_parts(
             next_id += 1;
             placements.push(quote!({
                 let id = match #facade::inferred_field_id(#id_index) { ::core::option::Option::Some(id) => id, ::core::option::Option::None => 0 };
-                #facade::RecordPlacement::new(id, #name, #marker::#offset, &<#path as #facade::SchemaCodec>::SPEC)
+                #facade::RecordPlacement::new(id, #name, #marker::#offset, &<#path as #facade::SchemaLayout>::SPEC)
                     .with_declaration_index(#declaration_index)
-                    .with_documentation((#documentation).with_fallback(<#path as #facade::SchemaCodec>::DOCUMENTATION))
+                    .with_documentation((#documentation).with_fallback(<#path as #facade::SchemaLayout>::DOCUMENTATION))
             }));
             continue;
         }

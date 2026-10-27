@@ -7,7 +7,7 @@ error[E0599]: no method named `encode` found for enum `Packet` in the current sc
 5 |     let _ = Packet::ZERO.encode();
   |                          ^^^^^^ method not found in `Packet`
   |
-note: the method `encode` exists on the type `<Item as SchemaCodec>::Value`
+note: the method `encode` exists on the type `<Item as SchemaLayout>::Value`
  --> src/codec.rs
   |
   |     fn encode(self) -> Result<Self::Encoded, SchemaCodecError>;

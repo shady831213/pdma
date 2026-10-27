@@ -17,9 +17,11 @@ adapters that call the application's `SchemaCodec` implementation. Command owns
 that implementation, including opcode interpretation and protocol checks. See the
 [wire layout](docs/copy-engine.md#wire-layout) and [layout decisions](docs/layout-review.md).
 
-Composition uses `SchemaCodec` for each child's value, extent, alignment and
-encoding/decoding. Generated records implement it automatically; application codecs
-and nested untagged unions can supply it without record-specific inherent methods
+Composition uses `SchemaLayout` for each child's value, extent, alignment and
+views, and `SchemaCodec: SchemaLayout` for encoding/decoding. Generated records
+implement both automatically; generated untagged unions provide their layout and
+need only application encode/decode methods for complete codec composition.
+Handwritten types can implement both without record-specific inherent methods
 or structural metadata. Each child owns its internal validation, while a union
 checks its own inactive tail. An inline tagged union still receives its tag from
 the enclosing record's codec.

@@ -2,7 +2,7 @@ use super::{
     TestResult, program,
     runtime::{Managed, platform::ContextPlatform},
 };
-use hardware_interface_runtime::{MemoryAddress, SharedMemory, SharedMemoryAllocator};
+use hardware_interface_memory::{MemoryAddress, SharedMemory, SharedMemoryAllocator};
 use pdma_model_contract::memory::{
     ContextAttributes, ContextAttributesAddressSpace, FunctionId, MemoryIdentity,
 };

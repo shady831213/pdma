@@ -1,4 +1,4 @@
-use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
+use hardware_interface_memory::{MemoryAccess, MemoryAlignment, SharedMemory};
 use pdma_model_contract::{
     dma::{ChannelId, ContextId, DmaAccess},
     hw_components::context::{

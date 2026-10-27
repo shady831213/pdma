@@ -1,8 +1,8 @@
 //! Scoped runtime teardown and failure propagation through the real dispatcher.
 
+use hardware_interface_irq::{InterruptEnvelope, InterruptHandler, InterruptSource};
 use hardware_interface_runtime::{
-    CpuContextError, InterruptDispatchError, InterruptEnvelope, InterruptHandler, InterruptRuntime,
-    InterruptSource, SoftwareCpu,
+    CpuContextError, InterruptDispatchError, InterruptRuntime, SoftwareCpu,
 };
 use std::{
     convert::Infallible,

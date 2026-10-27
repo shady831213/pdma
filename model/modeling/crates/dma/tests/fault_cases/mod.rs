@@ -18,8 +18,8 @@ mod termination;
 
 use self::memory::Paged;
 use crate::support::{TestResult, configure};
+use hardware_interface_memory::{MemoryAccess, MemoryAlignment, MemoryRegion, SharedMemory};
 use hardware_interface_pipeline::{Operation, StepOutcome};
-use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_dma::{Dma, Hardware};
 
 const CMD: usize = ChannelBlock::ALIGNMENT + ChannelBlock::COMMAND.offset();

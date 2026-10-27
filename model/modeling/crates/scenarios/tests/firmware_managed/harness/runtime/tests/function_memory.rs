@@ -1,6 +1,6 @@
 //! Scenario memory routing through the authoritative Function owner bank.
 use crate::harness::runtime::memory::{RouteError, RoutedMemory, SpaceError};
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use pdma_model_contract::dma::ChannelId;

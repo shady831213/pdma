@@ -1,8 +1,9 @@
 use super::error::{ConsumerError, lock};
-use hir::{
+use hardware_interface_register::{
     AccessKind, AccessOrigin, ObservationGate, RegisterAccess, RegisterObservation,
-    RegisterObserver, SharedRegisterObserver, TraceBuffer,
+    RegisterObserver, SharedRegisterObserver,
 };
+use hir::TraceBuffer;
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},

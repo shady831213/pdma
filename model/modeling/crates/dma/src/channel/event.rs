@@ -1,5 +1,5 @@
 use crate::{ChannelFatal, Error};
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::{Encode, RegisterAccessError, RegisterWindow};
 use pdma_model_contract::dma::{Event, EventRegisters};
 use pdma_model_contract::register::ReadWordValues;

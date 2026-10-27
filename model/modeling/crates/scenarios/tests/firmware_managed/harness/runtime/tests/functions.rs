@@ -1,5 +1,5 @@
 use super::{client, control::rings, *};
-use hardware_interface_runtime::{MemoryAddress, SharedMemoryAllocator};
+use hardware_interface_memory::{MemoryAddress, SharedMemoryAllocator};
 use pdma_model_contract::control::ControlResponseStatus;
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::memory::FunctionId;

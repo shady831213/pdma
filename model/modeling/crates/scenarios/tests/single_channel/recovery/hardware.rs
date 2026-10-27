@@ -2,10 +2,8 @@
 
 use super::{Scenario, software};
 use crate::harness::{TestResult, lifecycle};
-use hardware_interface_runtime::{
-    InterruptRuntime, InterruptSummary, MemoryAddress, SharedMemory, SharedMemoryAllocator,
-    SoftwareCpu,
-};
+use hardware_interface_memory::{MemoryAddress, SharedMemory, SharedMemoryAllocator};
+use hardware_interface_runtime::{InterruptRuntime, InterruptSummary, SoftwareCpu};
 use pdma_model_host::runtime::Model;
 use std::sync::Arc;
 use tokio::task::JoinError;

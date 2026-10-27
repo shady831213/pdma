@@ -9,9 +9,3 @@ error[E0432]: unresolved imports `hardware_interface_runtime::MemoryRingIo`, `ha
   |     |             |               no `RingCursorRegisters` in the root
   |     |             no `RegisterRingIo` in the root
   |     no `MemoryRingIo` in the root
-  |
-help: a similar name exists in the module
-  |
-2 -     MemoryRingIo, RegisterRingIo, RingCursorRegisters, SoftRing, SoftRingError, SoftRingIo,
-2 +     MemoryRegion, RegisterRingIo, RingCursorRegisters, SoftRing, SoftRingError, SoftRingIo,
-  |

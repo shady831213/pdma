@@ -7,10 +7,12 @@ use pdma_model_contract::dma::{
 
 mod buffers;
 
-use hardware_interface_runtime::{
-    InterruptHandler, InterruptRegistration, MemoryAccess, MemoryAddress, MemoryAlignment,
-    RegisterAccess, SharedMemoryAccess, SharedMemoryAllocator,
+use hardware_interface_irq::InterruptHandler;
+use hardware_interface_memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess, SharedMemoryAllocator,
 };
+use hardware_interface_register::RegisterAccess;
+use hardware_interface_runtime::InterruptRegistration;
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as HostError, RingConfig, Rings, runtime::Irq,
 };

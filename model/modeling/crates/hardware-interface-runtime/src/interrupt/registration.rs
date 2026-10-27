@@ -1,5 +1,6 @@
-use super::{HandlerRegistry, InterruptEnvelope, InterruptHandler};
+use super::HandlerRegistry;
 use crate::{CpuContextError, SoftwareCpu};
+use hardware_interface_irq::{InterruptEnvelope, InterruptHandler};
 use std::{error::Error, fmt};
 use tokio::sync::Mutex;
 
@@ -39,7 +40,10 @@ impl<V: fmt::Debug> Error for InterruptRegistrationError<V> {
     }
 }
 
-impl<N: InterruptEnvelope, H: InterruptHandler<N>> InterruptRegistration<'_, N, H> {
+impl<N: InterruptEnvelope, H: InterruptHandler<N>> InterruptRegistration<'_, N, H>
+where
+    N::Vector: Ord,
+{
     /// Installs a persistent ISR on the running program's CPU.
     ///
     /// On rejection the supplied handler is dropped; existing registrations stay intact.

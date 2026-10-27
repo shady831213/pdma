@@ -1,5 +1,6 @@
 use crate::harness::runtime::Host;
-use hardware_interface_runtime::{RegisterAccess, SharedMemoryAccess, SharedMemoryAllocator};
+use hardware_interface_memory::{SharedMemoryAccess, SharedMemoryAllocator};
+use hardware_interface_register::RegisterAccess;
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_software::control::ControlIsr;
 use tokio::sync::{mpsc, oneshot};

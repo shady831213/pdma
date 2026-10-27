@@ -11,9 +11,9 @@ pub mod page_fault;
 pub mod transfer;
 
 use super::runtime::{AccessError, HostBus, HostIrq, HostVector};
-use hardware_interface_runtime::{
-    InterruptRegistration, MemoryAddress, RegisterAccess, SharedMemoryAccess, SharedMemoryAllocator,
-};
+use hardware_interface_memory::{MemoryAddress, SharedMemoryAccess, SharedMemoryAllocator};
+use hardware_interface_register::RegisterAccess;
+use hardware_interface_runtime::InterruptRegistration;
 use interrupts::Handler;
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::firmware;

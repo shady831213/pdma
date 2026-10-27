@@ -1,8 +1,8 @@
 use super::support::{Fixture, response};
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
-    SoftwareCpu,
 };
+use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::control::{ControlQueue, ControlRingState};
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::{Error, Management, ManagementConfig};

@@ -9,6 +9,11 @@ publish.workspace = true
 description = "Direct and firmware-managed PDMA system scenarios"
 
 [dev-dependencies]
+proc-macro2 = "1"
+hardware-interface-memory = { version = "0.1.0", path = "../hardware-interface-memory" }
+hardware-interface-irq = { version = "0.1.0", path = "../hardware-interface-irq" }
+hardware-interface-register = { version = "0.1.0", path = "../hardware-interface-register", default-features = false }
+hardware-interface-runtime = { version = "0.1.0", path = "../hardware-interface-runtime" }
 pdma-model-software = { path = "../software" }
 trybuild = "1"
 pdma-model-contract = { path = "../contract" }
@@ -17,7 +22,6 @@ pdma-model-host = { path = "../host" }
 pdma-model-firmware = { path = "../firmware" }
 pdma-model-hw-components = { path = "../hw-components" }
 hardware-interface-pipeline = { path = "../hardware-interface-pipeline" }
-hardware-interface-runtime = { path = "../hardware-interface-runtime" }
 hardware-interface-schema = { path = "../hardware-interface-schema" }
 tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync"] }
 

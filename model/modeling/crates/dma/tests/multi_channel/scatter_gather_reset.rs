@@ -6,8 +6,8 @@ use pdma_model_contract::dma::{
 mod observed;
 
 use super::support::{TestResult, completion, configure, publish_fence, word};
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion};
 use hardware_interface_pipeline::StepOutcome;
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion};
 use observed::Observed;
 use pdma_model_dma::Dma;
 

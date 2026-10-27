@@ -2,9 +2,8 @@ use pdma_model_contract::dma::{CommandHeader, Opcode, WriteCommand};
 mod commands;
 pub(super) mod timestamp;
 pub(super) mod waiting;
-use hardware_interface_runtime::{
-    MemoryAccess, MemoryAlignment, RegisterAccess, SharedMemoryAllocator,
-};
+use hardware_interface_memory::{MemoryAccess, MemoryAlignment, SharedMemoryAllocator};
+use hardware_interface_register::RegisterAccess;
 use pdma_model_contract::dma::*;
 use pdma_model_host::{Channel, ChannelConfig, CompletionWord, RingConfig, Rings};
 
@@ -106,7 +105,7 @@ where
 
 pub(super) async fn setup<B>(
     ports: &Ports<B>,
-) -> TestResult<Vec<Channel<B, hardware_interface_runtime::SharedMemoryAccess>>>
+) -> TestResult<Vec<Channel<B, hardware_interface_memory::SharedMemoryAccess>>>
 where
     B: RegisterAccess + Clone + Send + Sync,
     B::Error: std::error::Error + Send + Sync + 'static,

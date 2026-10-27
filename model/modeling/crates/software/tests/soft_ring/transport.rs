@@ -1,6 +1,7 @@
-use hardware_interface_runtime::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
+use hardware_interface_memory::{
+    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
 };
+use hardware_interface_register::RegisterAccess;
 use std::{
     future::pending,
     sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering},

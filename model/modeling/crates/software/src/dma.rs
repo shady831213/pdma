@@ -15,7 +15,8 @@ mod rings;
 
 use crate::ring::RingConfig;
 use bus::RegisterPort;
-use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
+use hardware_interface_memory::MemoryAccess;
+use hardware_interface_register::RegisterAccess;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Event, EventRegisters,
 };

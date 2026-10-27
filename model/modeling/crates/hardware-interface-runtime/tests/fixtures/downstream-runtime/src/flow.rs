@@ -16,9 +16,9 @@ pub struct RunReport {
 }
 
 struct HappyFlow {
-    memory: hir::SharedMemory,
-    region: hir::MemoryRegion,
-    alignment: hir::MemoryAlignment,
+    memory: hardware_interface_memory::SharedMemory,
+    region: hardware_interface_memory::MemoryRegion,
+    alignment: hardware_interface_memory::MemoryAlignment,
     trace: TraceBuffer<(usize, &'static str)>,
     deliveries: usize,
 }

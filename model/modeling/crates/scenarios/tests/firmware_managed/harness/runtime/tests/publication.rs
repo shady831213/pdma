@@ -4,10 +4,10 @@ use super::{
 };
 use crate::harness::TestResult;
 use crate::harness::runtime::platform::CONTROL_CHANNEL_BASE;
-use hardware_interface_runtime::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
-    SharedMemoryAllocator,
+use hardware_interface_memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAllocator,
 };
+use hardware_interface_register::RegisterAccess;
 use hardware_interface_schema::Encode;
 use pdma_model_contract::control::{ControlResponse, ControlResponseStatus};
 use pdma_model_contract::hw_components::control::ControlRegisters;

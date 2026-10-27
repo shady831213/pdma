@@ -3,7 +3,8 @@
 pub mod support;
 
 use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
-use hardware_interface_runtime::{RegisterAccess, SoftwareCpu};
+use hardware_interface_register::RegisterAccess;
+use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::dma::{ChannelId, DmaControl};
 use pdma_model_host::DmaError as Error;
 use std::{

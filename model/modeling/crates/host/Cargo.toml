@@ -9,11 +9,13 @@ publish.workspace = true
 description = "Host management client and direct DMA runtime assembly"
 
 [dependencies]
+hardware-interface-memory = { version = "0.1.0", path = "../hardware-interface-memory" }
+hardware-interface-irq = { version = "0.1.0", path = "../hardware-interface-irq" }
+hardware-interface-register = { version = "0.1.0", path = "../hardware-interface-register", default-features = false }
 pdma-model-software = { path = "../software" }
 pdma-model-contract = { path = "../contract" }
 pdma-model-dma = { path = "../dma" }
 hardware-interface-pipeline = { path = "../hardware-interface-pipeline" }
-hardware-interface-runtime = { path = "../hardware-interface-runtime" }
 hardware-interface-schema = { path = "../hardware-interface-schema" }
 tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync", "time"] }
 
@@ -21,4 +23,5 @@ tokio = { version = "1.49", default-features = false, features = ["macros", "rt"
 workspace = true
 
 [dev-dependencies]
+hardware-interface-runtime = { version = "0.1.0", path = "../hardware-interface-runtime" }
 tokio = { version = "1.49", default-features = false, features = ["test-util", "time"] }

@@ -5,10 +5,10 @@ use pdma_model_contract::dma::{
     CopyCommandDestinationValues, CopyCommandSourceValues, EventRegisters, LinearEndpoint,
 };
 
-use hardware_interface_pipeline::{Arbitration, Operation, Stage, StepOutcome, StepResult, Then};
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
+use hardware_interface_pipeline::{Arbitration, Operation, Stage, StepOutcome, StepResult, Then};
 use pdma_model_dma::{Candidate, CommandRequest, Dma, Fetch, FetchedCommand, RoundRobin};
 use std::cell::RefCell;
 

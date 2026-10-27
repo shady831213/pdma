@@ -1,5 +1,6 @@
 use crate::{CursorBus, Item};
-use hardware_interface_runtime::{MemoryAlignment, MemoryRegion, SoftwareCpu};
+use hardware_interface_memory::{MemoryAlignment, MemoryRegion};
+use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_software::ring::{
     RegisterRingIo, RingConfig, RingCursorRegisters, SoftRing, SoftRingIo,
 };

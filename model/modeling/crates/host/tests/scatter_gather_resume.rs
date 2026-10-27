@@ -5,11 +5,12 @@ use pdma_model_contract::dma::{
     ScatterGatherEndpoint, Segment,
 };
 
-use hardware_interface_pipeline::{AsyncExecutor, Operation};
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
-    SharedMemoryAllocator, SoftwareCpu,
+    SharedMemoryAllocator,
 };
+use hardware_interface_pipeline::{AsyncExecutor, Operation};
+use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::{error::Error, sync::Arc};

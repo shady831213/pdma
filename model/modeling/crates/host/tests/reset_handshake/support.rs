@@ -5,11 +5,12 @@ use pdma_model_contract::dma::{
     CopyCommandSourceValues, LinearEndpoint,
 };
 
-use hardware_interface_pipeline::{AsyncInteractionBackend, HardwareDriver, StepOutcome};
-use hardware_interface_runtime::{
-    MemoryAddress, MemoryAlignment, MemoryRegion, RegisterAccess, SharedMemory, SharedMemoryAccess,
-    SoftwareCpu,
+use hardware_interface_memory::{
+    MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory, SharedMemoryAccess,
 };
+use hardware_interface_pipeline::{AsyncInteractionBackend, HardwareDriver, StepOutcome};
+use hardware_interface_register::RegisterAccess;
+use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_dma::{Dma, Hardware};
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::{

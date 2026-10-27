@@ -1,9 +1,7 @@
 //! Backing selection, actor execution and joined teardown belong to the harness.
 
-use hardware_interface_runtime::{
-    InterruptRuntime, InterruptSummary, MemoryAddress, SharedMemory, SharedMemoryAllocator,
-    SoftwareCpu,
-};
+use hardware_interface_memory::{MemoryAddress, SharedMemory, SharedMemoryAllocator};
+use hardware_interface_runtime::{InterruptRuntime, InterruptSummary, SoftwareCpu};
 use std::{io, sync::Arc};
 use tokio::task::JoinSet;
 

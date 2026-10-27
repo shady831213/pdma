@@ -1,7 +1,7 @@
 use crate::channel::RangeCheck;
 use crate::{ChunkInput, CopyProgress, ExecutionContext, FetchedCommand, Flow, Work};
+use hardware_interface_memory::MemoryAccess;
 use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
-use hardware_interface_runtime::MemoryAccess;
 
 /// Incrementally validates the freshly fetched descriptor exactly once.
 #[derive(Debug, Default)]

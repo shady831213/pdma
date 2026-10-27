@@ -8,7 +8,7 @@ use std::{
 #[derive(Debug)]
 pub(super) enum ConsumerError {
     Cpu(CpuContextError),
-    Gate(hir::ObservationGateError),
+    Gate(hardware_interface_register::ObservationGateError),
     RegisterShape,
     Invariant(&'static str),
 }

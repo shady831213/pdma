@@ -5,10 +5,10 @@ pub mod lifecycle;
 
 use crate::{hardware, software};
 use fault::{FaultBus, UnmappedRing};
-use hardware_interface_runtime::{
-    InterruptRuntime, InterruptSummary, MemoryAddress, SharedMemory, SharedMemoryAccess,
-    SharedMemoryAllocator, SoftwareCpu,
+use hardware_interface_memory::{
+    MemoryAddress, SharedMemory, SharedMemoryAccess, SharedMemoryAllocator,
 };
+use hardware_interface_runtime::{InterruptRuntime, InterruptSummary, SoftwareCpu};
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, CommandRegisters, EventRegisters};
 use pdma_model_host::runtime::Model;
 use std::{error::Error, sync::Arc};

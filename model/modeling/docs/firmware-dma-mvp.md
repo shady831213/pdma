@@ -22,15 +22,15 @@ The follow-up keeps the behavior while changing ownership and reusable mechanics
   under `crates/scenarios/tests/firmware_managed/harness/runtime`. Native module
   paths preserve the tests without source duplication. The extra crate is removed;
   hardware components and firmware remain independent production crates.
-- `hardware-interface-runtime::pending_interrupt` supplies split emission and
+- `hardware-interface-irq::pending_interrupt` supplies split emission and
   reception capabilities, reused by both ordinary and managed Host DMA delivery.
   This is not a new firmware communication protocol.
 - Firmware now receives management interrupts through its own `InterruptRuntime`.
   Its program registers the ISR before Ready; its CPU remains distinct from Host.
-- The framework's default-on `async-runtime` feature gates CPU/interrupt execution
-  and Tokio. DMA disables defaults and builds independently without a normal Tokio
-  dependency. Synchronous interfaces and backend implementations remain in the same
-  crate: this does not claim a strictly API-only or `no_std` package.
+- Reusable capabilities now live in separate memory, storage, register and IRQ crates.
+  DMA uses memory directly and builds without a normal Tokio dependency. Register's
+  schema integration and IRQ's Tokio pending backend are optional. Software CPU/ISR
+  scheduling remains in runtime; none of these packages claims `no_std` support.
 - A generic async shared-context wrapper was evaluated and not added. Concrete
   state projection and IRQ extraction still differ; retaining the small explicit
   mutex/wakeup adapters avoids extra hook/trait machinery. Software accesses still

@@ -1,6 +1,6 @@
 use super::support::{TestResult, configure, finish, submit, word};
+use hardware_interface_memory::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use hardware_interface_pipeline::{Arbitration, Operation, StepOutcome};
-use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, CommandRegisters};
 use pdma_model_dma::{Candidate, CommandRequest, Dma, Error, RoundRobin};
 

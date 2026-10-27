@@ -1,4 +1,4 @@
-use hardware_interface_runtime::{InterruptEnvelope, InterruptSource, PendingInterrupt};
+use hardware_interface_irq::{InterruptEnvelope, InterruptSource, PendingInterrupt};
 use pdma_model_host::runtime::Irq;
 use pdma_model_software::control::ControlIrq;
 

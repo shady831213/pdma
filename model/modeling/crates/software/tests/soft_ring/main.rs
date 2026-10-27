@@ -1,5 +1,5 @@
 //! Shared software FIFO using actual memory storage.
-use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
+use hardware_interface_memory::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use hardware_interface_schema::record_schema;
 use pdma_model_software::ring::{MemoryRingIo, RingConfig, SoftRing};
 mod boundaries;

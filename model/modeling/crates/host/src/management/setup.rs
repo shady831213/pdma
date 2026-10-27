@@ -1,6 +1,7 @@
 use super::{Management, ManagementConfig};
 use crate::Error;
-use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, RegisterAccess};
+use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_register::RegisterAccess;
 use hardware_interface_schema::Encode;
 use pdma_model_contract::control::{ControlQueue, ControlRingState};
 use pdma_model_contract::hw_components::{
@@ -59,7 +60,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             layout: ControlQueueLayout::new(rings.state).map_err(Error::Ring)?,
             interrupt,
             event_interrupt,
-            event_state: hardware_interface_runtime::MemoryAddress::new(
+            event_state: hardware_interface_memory::MemoryAddress::new(
                 rings
                     .state
                     .raw()

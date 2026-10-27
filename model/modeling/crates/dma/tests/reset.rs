@@ -6,8 +6,8 @@ use pdma_model_contract::dma::ChannelConfiguration;
 /// Shared raw-bus fixtures.
 pub mod support;
 
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_pipeline::StepOutcome;
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelRegisters, CommandRegisters, DmaAdmin, DmaControl, DmaDiscovery, EventRegisters,
 };

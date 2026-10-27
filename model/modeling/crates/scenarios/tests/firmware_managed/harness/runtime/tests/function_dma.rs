@@ -7,8 +7,8 @@ mod lifecycle;
 /// Shared hardware fixtures for Function memory tests.
 mod support;
 
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion};
 use hardware_interface_pipeline::HardwareDriver;
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, CommandRegisters, EventCode, EventRegisters, Segment,
 };

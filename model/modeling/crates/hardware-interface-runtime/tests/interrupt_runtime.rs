@@ -1,8 +1,8 @@
 //! Software registration through a CPU-bound runtime, without dispatcher assembly.
 
+use hardware_interface_irq::{InterruptEnvelope, InterruptHandler, InterruptSource};
 use hardware_interface_runtime::{
-    CpuContextError, CpuLocal, InterruptEnvelope, InterruptHandler, InterruptRegistrationError,
-    InterruptSource, SoftwareCpu,
+    CpuContextError, CpuLocal, InterruptRegistrationError, SoftwareCpu,
 };
 use std::sync::Arc;
 use tokio::sync::{oneshot, watch};

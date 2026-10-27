@@ -10,10 +10,12 @@ mod submission;
 
 use super::Scenario;
 use crate::harness::TestResult;
-use hardware_interface_runtime::{
-    InterruptHandler, InterruptRegistration, MemoryAccess, MemoryAddress, MemoryAlignment,
-    RegisterAccess, SharedMemoryAccess, SharedMemoryAllocator,
+use hardware_interface_irq::InterruptHandler;
+use hardware_interface_memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess, SharedMemoryAllocator,
 };
+use hardware_interface_register::RegisterAccess;
+use hardware_interface_runtime::InterruptRegistration;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Irq};
 use std::{convert::Infallible, error::Error};
 use tokio::sync::mpsc;

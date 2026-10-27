@@ -1,6 +1,6 @@
 use crate::{COPY_CHUNK_BYTES, Chunk, Completion, ExecutionContext, Flow, MemoryFailure, Payload};
+use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
 use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
-use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::dma::EventCode;
 
 /// Reads a concrete bounded chunk and transfers its bytes to the next stage.

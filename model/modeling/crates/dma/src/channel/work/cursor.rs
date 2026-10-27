@@ -1,4 +1,4 @@
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::Decode;
 use pdma_model_contract::dma::{
     CopyCommand, CopyCommandDestinationValues, CopyCommandSourceValues, EventCode, LinearEndpoint,

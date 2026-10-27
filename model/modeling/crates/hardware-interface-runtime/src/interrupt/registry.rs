@@ -1,4 +1,4 @@
-use super::traits::InterruptHandler;
+use hardware_interface_irq::InterruptHandler;
 use std::{collections::BTreeMap, fmt, marker::PhantomData};
 
 /// Duplicate registration result retaining the rejected handler.

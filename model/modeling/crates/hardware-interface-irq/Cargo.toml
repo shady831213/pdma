@@ -1,0 +1,28 @@
+[package]
+name = "hardware-interface-irq"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+readme = "README.md"
+include = ["src/**", "tests/**", "examples/**", "README.md", "clippy.toml", "LICENSE-MIT", "LICENSE-APACHE", "Cargo.toml"]
+description = "Independent interrupt source and handler capabilities"
+
+[features]
+default = ["tokio"]
+tokio = ["dep:tokio"]
+
+[dependencies]
+tokio = { version = "1.49", optional = true, default-features = false, features = ["sync"] }
+
+[dev-dependencies]
+tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync"] }
+
+[lints]
+workspace = true
+
+[[test]]
+name = "pending_interrupt"
+required-features = ["tokio"]

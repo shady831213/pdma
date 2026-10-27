@@ -1,9 +1,9 @@
 //! Shared-memory queue fixtures and a suspendable register transport.
 
-use hardware_interface_runtime::{
-    MemoryAccess, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
-    SharedMemoryAllocator,
+use hardware_interface_memory::{
+    MemoryAccess, MemoryAlignment, SharedMemory, SharedMemoryAccess, SharedMemoryAllocator,
 };
+use hardware_interface_register::RegisterAccess;
 use hardware_interface_schema::Decode;
 use pdma_model_contract::control::{
     ControlQueue, ControlQueueRaw, ControlRequest, ControlResponse,

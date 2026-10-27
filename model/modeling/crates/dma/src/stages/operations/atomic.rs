@@ -1,6 +1,6 @@
 use super::{Failure, Progress, access_failure, word::geometry};
 use crate::{MemoryFailure, SelectedResources};
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     AtomicAccessError, AtomicOperation, AtomicOrder, AtomicReadOrder, AtomicUpdate, MemoryAccess,
 };
 use pdma_model_contract::dma::{

@@ -10,10 +10,10 @@ use pdma_model_contract::dma::{
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{Operation, StepOutcome};
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
 };
+use hardware_interface_pipeline::{Operation, StepOutcome};
 use pdma_model_dma::{CommandRequest, Fetch};
 use std::{cell::Cell, rc::Rc};
 use support::TestResult;

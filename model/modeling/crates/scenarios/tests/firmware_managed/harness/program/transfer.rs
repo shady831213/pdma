@@ -6,9 +6,8 @@ use pdma_model_contract::dma::{
 };
 
 use super::super::runtime::{AccessError, HostBus};
-use hardware_interface_runtime::{
-    InterruptHandler, MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
-};
+use hardware_interface_irq::InterruptHandler;
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess};
 use pdma_model_host::{Channel, ChannelConfig, DmaError, RingConfig, Rings, runtime::Irq};
 use std::sync::{
     Arc,

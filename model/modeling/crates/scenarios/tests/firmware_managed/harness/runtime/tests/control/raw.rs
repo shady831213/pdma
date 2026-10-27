@@ -1,6 +1,6 @@
 use super::memory::{QueueMemory, kick};
 use super::*;
-use hardware_interface_runtime::MemoryAccess;
+use hardware_interface_memory::MemoryAccess;
 use hardware_interface_schema::{Decode, Encode};
 use pdma_model_contract::control::{ControlRequestOpcode, ControlResponseRaw};
 use pdma_model_contract::ring::Ring;

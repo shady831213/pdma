@@ -36,7 +36,7 @@ impl<M, SB> Dma<M, SB> {
         Hardware::new(pipeline, self.channels.len())
     }
 }
-impl<M: hardware_interface_runtime::MemoryAccess<SB>, SB> Dma<M, SB> {
+impl<M: hardware_interface_memory::MemoryAccess<SB>, SB> Dma<M, SB> {
     /// Builds the finite connected command admission and bounded execution graph.
     pub fn hardware(&self) -> Hardware
     where

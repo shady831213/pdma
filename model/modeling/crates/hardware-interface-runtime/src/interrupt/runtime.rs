@@ -1,9 +1,9 @@
 use super::{
-    HandlerRegistry, InterruptDispatchError, InterruptDispatcher, InterruptEnvelope,
-    InterruptHandler, InterruptRegistration, InterruptSource, InterruptSummary,
-    NoopInterruptObserver, dispatcher::run_dispatch,
+    HandlerRegistry, InterruptDispatchError, InterruptDispatcher, InterruptRegistration,
+    InterruptSummary, NoopInterruptObserver, dispatcher::run_dispatch,
 };
 use crate::SoftwareCpu;
+use hardware_interface_irq::{InterruptEnvelope, InterruptHandler, InterruptSource};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -27,9 +27,11 @@ impl<S: InterruptSource> InterruptRuntime<S> {
     /// no background tasks survive it. The registration capability cannot escape.
     ///
     /// ```compile_fail
-    /// use hardware_interface_runtime::{InterruptRuntime, InterruptSource, InterruptHandler};
+    /// use hardware_interface_runtime::{InterruptRuntime};
+    /// use hardware_interface_irq::{InterruptEnvelope, InterruptSource, InterruptHandler};
     /// async fn escape<S, H>(runtime: InterruptRuntime<S>)
-    /// where S: InterruptSource, H: InterruptHandler<S::Notification> {
+    /// where S: InterruptSource, H: InterruptHandler<S::Notification>,
+    ///       <S::Notification as InterruptEnvelope>::Vector: Ord {
     ///     let _escaped = runtime.run_main::<H, _>(async |registration| registration).await;
     /// }
     /// ```
@@ -42,6 +44,7 @@ impl<S: InterruptSource> InterruptRuntime<S> {
     >
     where
         H: InterruptHandler<S::Notification>,
+        <S::Notification as InterruptEnvelope>::Vector: Ord,
     {
         let registry = Mutex::new(HandlerRegistry::new());
         let registration = InterruptRegistration {

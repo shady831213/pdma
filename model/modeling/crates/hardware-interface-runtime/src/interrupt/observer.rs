@@ -1,4 +1,4 @@
-use super::traits::InterruptEnvelope;
+use hardware_interface_irq::InterruptEnvelope;
 use std::{error::Error, sync::Arc};
 
 /// One synchronous handler lifecycle observation.

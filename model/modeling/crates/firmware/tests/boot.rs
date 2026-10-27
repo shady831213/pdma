@@ -3,9 +3,10 @@
 pub mod platform;
 use platform::ADDRESSES;
 
+use hardware_interface_irq::pending_interrupt;
+use hardware_interface_register::RegisterAccess;
 use hardware_interface_runtime::{
-    CpuContextError, InterruptRegistrationError, InterruptRuntime, RegisterAccess, SoftwareCpu,
-    pending_interrupt,
+    CpuContextError, InterruptRegistrationError, InterruptRuntime, SoftwareCpu,
 };
 use pdma_model_software::control::{ControlIrq, ControlIsr};
 use std::{io, sync::Arc};
@@ -37,7 +38,7 @@ async fn boot_reports_management_failure() {
         .run_main::<ControlIsr, _>(async |registration| {
             pdma_model_firmware::main(
                 bus,
-                hardware_interface_runtime::SharedMemory::new(),
+                hardware_interface_memory::SharedMemory::new(),
                 registration,
                 ADDRESSES,
             )
@@ -64,7 +65,7 @@ async fn boot_requires_its_interrupt_registration_cpu() {
             SoftwareCpu::new()
                 .run_main(pdma_model_firmware::main(
                     bus,
-                    hardware_interface_runtime::SharedMemory::new(),
+                    hardware_interface_memory::SharedMemory::new(),
                     registration,
                     ADDRESSES,
                 ))

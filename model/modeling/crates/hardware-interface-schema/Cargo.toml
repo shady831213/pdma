@@ -6,10 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
+readme = "README.md"
+include = ["src/**", "tests/**", "examples/**", "README.md", "clippy.toml", "LICENSE-MIT", "LICENSE-APACHE", "Cargo.toml"]
 description = "Reusable hardware interface schema vocabulary and scalar codecs"
 
 [dependencies]
-hardware-interface-schema-macros = { path = "../hardware-interface-schema-macros" }
+hardware-interface-schema-macros = { version = "0.1.0", path = "../hardware-interface-schema-macros" }
 
 [dev-dependencies]
 trybuild = "1"

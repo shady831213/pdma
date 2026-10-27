@@ -3,8 +3,8 @@
 /// Shared hardware test fixtures.
 pub mod support;
 
+use hardware_interface_memory::{MemoryAccess, MemoryAlignment, SharedMemory};
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome, StepResult, Then};
-use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
 use pdma_model_dma::{ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy};
 use support::{TestResult, command, setup, submit};
 

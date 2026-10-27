@@ -8,10 +8,11 @@ use super::{
 };
 use crate::harness::TestResult;
 use crate::harness::runtime::platform::WINDOW_STATUS_BASE;
-use hardware_interface_runtime::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
+use hardware_interface_memory::{
+    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator,
 };
+use hardware_interface_register::RegisterAccess;
 use hardware_interface_schema::{Decode, Encode, SchemaCodecError};
 use pdma_model_contract::control::{
     ControlRequest, ControlRequestOpcode, ControlResponseRaw, ControlResponseStatus,

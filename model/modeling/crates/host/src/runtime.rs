@@ -3,11 +3,11 @@
 #[cfg(test)]
 mod tests;
 
-use hardware_interface_pipeline::{AsyncInteractionBackend, StepResult};
-use hardware_interface_runtime::{
-    InterruptEmitter, InterruptEnvelope, InterruptSource, PendingInterrupt, RegisterAccess,
-    pending_interrupt,
+use hardware_interface_irq::{
+    InterruptEmitter, InterruptEnvelope, InterruptSource, PendingInterrupt, pending_interrupt,
 };
+use hardware_interface_pipeline::{AsyncInteractionBackend, StepResult};
+use hardware_interface_register::RegisterAccess;
 use pdma_model_dma::{Dma, Error};
 use std::{convert::Infallible, sync::Arc};
 use tokio::sync::{Mutex, watch};

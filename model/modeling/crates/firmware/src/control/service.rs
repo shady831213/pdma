@@ -1,6 +1,7 @@
 use super::{channel::Channel, events::Events, monitor::Monitor, resources::Resources};
 use crate::Error;
-use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
+use hardware_interface_memory::MemoryAccess;
+use hardware_interface_register::RegisterAccess;
 use pdma_model_contract::control::{
     ControlRequest, ControlRequestOpcode, ControlResponse, ControlResponseStatus,
 };

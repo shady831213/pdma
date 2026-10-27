@@ -1,5 +1,5 @@
 use super::backend::{ADDRESS, BackendError, PagedMemory};
-use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
+use hardware_interface_memory::{MemoryAccess, MemoryAlignment, SharedMemory};
 use pdma_model_contract::{
     dma::{ChannelId, ContextId, DmaAccess},
     hw_components::context::{ContextEntryRegisters, ContextTableRegisters},

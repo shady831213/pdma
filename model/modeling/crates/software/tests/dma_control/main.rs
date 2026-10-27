@@ -2,7 +2,8 @@
 
 pub mod support;
 
-use hardware_interface_runtime::{RegisterAccess, SoftwareCpu};
+use hardware_interface_register::RegisterAccess;
+use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::dma::ChannelId;
 use std::{
     future::{Future, poll_fn},

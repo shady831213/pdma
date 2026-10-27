@@ -1,6 +1,7 @@
 use super::{Management, ManagementRequestId, transport::ring_error};
 use crate::{Error, RingConfig};
-use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, RegisterAccess};
+use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_register::RegisterAccess;
 use hardware_interface_schema::Encode;
 use pdma_model_contract::hw_components::control::ControlNotificationRegisters;
 use pdma_model_contract::{

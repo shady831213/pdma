@@ -5,11 +5,11 @@ use pdma_model_contract::dma::{
     CopyCommandDestinationValues, CopyCommandSourceValues, EventRegisters, LinearEndpoint,
 };
 
-use hardware_interface_pipeline::{HardwareDriver, StepOutcome};
-use hardware_interface_runtime::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, RegisterAccess, SharedMemory,
-    SharedMemoryAccess,
+use hardware_interface_memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory, SharedMemoryAccess,
 };
+use hardware_interface_pipeline::{HardwareDriver, StepOutcome};
+use hardware_interface_register::RegisterAccess;
 use pdma_model_dma::{Dma, Hardware};
 use std::sync::{Arc, Mutex};
 

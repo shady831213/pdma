@@ -4,7 +4,7 @@ use pdma_model_contract::dma::{
 };
 
 use super::*;
-use hardware_interface_runtime::MemoryAccess;
+use hardware_interface_memory::MemoryAccess;
 use pdma_model_contract::memory::{
     ContextAttributes, ContextAttributesAddressSpace, MemoryIdentity,
 };

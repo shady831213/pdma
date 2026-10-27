@@ -9,6 +9,10 @@ members = [
     "crates/scenarios",
     "crates/hardware-interface-pipeline",
     "crates/hardware-interface-runtime",
+    "crates/hardware-interface-memory",
+    "crates/hardware-interface-storage",
+    "crates/hardware-interface-register",
+    "crates/hardware-interface-irq",
     "crates/hardware-interface-schema",
     "crates/hardware-interface-schema-macros",
 ]

@@ -1,5 +1,5 @@
 use super::support::{EVENT_PRODUCER, Rig, TestResult, fence, target};
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     AtomicCommand, AtomicCommandOperandsAddValues, AtomicCommandOperandsAndValues,
     AtomicCommandOperandsCompareExchangeValues, AtomicCommandOperandsExchangeValues,

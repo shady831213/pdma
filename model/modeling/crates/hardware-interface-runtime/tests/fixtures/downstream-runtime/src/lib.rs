@@ -17,7 +17,7 @@
 //! Synchronous infallible observation cannot be replaced with fallible or async callbacks:
 //!
 //! ```compile_fail
-//! use hir::{RegisterObservation, RegisterObserver};
+//! use hardware_interface_register::{RegisterObservation, RegisterObserver};
 //! struct Fallible;
 //! impl RegisterObserver for Fallible {
 //!     fn observe(&self, _: RegisterObservation) -> Result<(), ()> { Ok(()) }
@@ -25,7 +25,8 @@
 //! ```
 //!
 //! ```compile_fail
-//! use hir::{InterruptEnvelope, InterruptLifecycleEvent, InterruptLifecycleObserver};
+//! use hardware_interface_irq::{InterruptEnvelope};
+//! use hir::{InterruptLifecycleEvent, InterruptLifecycleObserver};
 //! struct Notice;
 //! impl InterruptEnvelope for Notice { type Vector = u8; fn vector(&self) -> u8 { 1 } }
 //! struct Asynchronous;

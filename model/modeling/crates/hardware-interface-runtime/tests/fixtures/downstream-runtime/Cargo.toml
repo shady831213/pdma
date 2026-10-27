@@ -9,6 +9,9 @@ publish = false
 resolver = "3"
 
 [dependencies]
+hardware-interface-irq = { version = "0.1.0", path = "../../../../hardware-interface-irq" }
+hardware-interface-register = { version = "0.1.0", path = "../../../../hardware-interface-register" }
+hardware-interface-memory = { version = "0.1.0", path = "../../../../hardware-interface-memory" }
 hir = { package = "hardware-interface-runtime", path = "../../.." }
 tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync"] }
 

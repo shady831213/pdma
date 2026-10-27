@@ -7,8 +7,8 @@ use pdma_model_contract::dma::{
 
 /// Shared raw-bus test fixtures.
 pub mod support;
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_pipeline::{Stage, StepOutcome};
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use support::{TestResult, read_word, setup, submit};
 const EVENT_PRODUCER: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
     + pdma_model_contract::dma::ChannelBlock::EVENT.offset()

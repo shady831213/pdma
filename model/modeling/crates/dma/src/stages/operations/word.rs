@@ -1,6 +1,6 @@
 use super::{Failure, Progress, access_failure};
 use crate::{MemoryFailure, SelectedResources};
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     EventCode, TimestampCommand, WaitCommand, WaitCommandComparison, WordTarget, WordTargetWidth,
     WordWrite,

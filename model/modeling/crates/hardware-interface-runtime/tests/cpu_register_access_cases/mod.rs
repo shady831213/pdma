@@ -1,7 +1,8 @@
+use hardware_interface_register::RegisterAccess;
 mod fixture;
 
 use fixture::{Registers, poll_once};
-use hardware_interface_runtime::{CpuAccessError, CpuContextError, RegisterAccess, SoftwareCpu};
+use hardware_interface_runtime::{CpuAccessError, CpuContextError, SoftwareCpu};
 use std::{error::Error, io};
 
 #[tokio::test]

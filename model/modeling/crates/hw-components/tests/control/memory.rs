@@ -1,5 +1,5 @@
 use crate::support::{ADDRESS, Spaces};
-use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
+use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::hw_components::control::ControlConfiguration;
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_contract::memory::FunctionId;

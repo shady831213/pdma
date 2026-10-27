@@ -3,9 +3,9 @@
 mod tests;
 
 use crate::harness::TestResult;
+use hardware_interface_memory::MemoryAccess;
+use hardware_interface_memory::SharedMemoryAccess;
 use hardware_interface_pipeline::{AsyncExecutor, AsyncRunError, HardwareDriver};
-use hardware_interface_runtime::MemoryAccess;
-use hardware_interface_runtime::SharedMemoryAccess;
 use pdma_model_dma::{BuildError, Dma, Hardware};
 use pdma_model_host::runtime::Model;
 

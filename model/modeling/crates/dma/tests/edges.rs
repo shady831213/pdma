@@ -9,7 +9,7 @@ use pdma_model_contract::dma::{
 /// Shared channel integration fixtures.
 pub mod support;
 
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_dma::{ChannelFatal, Dma, Error};
 use support::{TestResult, command, read_word, run, setup, submit};
 

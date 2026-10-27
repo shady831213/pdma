@@ -1,6 +1,6 @@
 use super::monitor::Monitor;
 use crate::Error;
-use hardware_interface_runtime::RegisterAccess;
+use hardware_interface_register::RegisterAccess;
 use pdma_model_contract::control::{ControlRequest, ControlResponse, ControlResponseStatus};
 mod maintenance;
 pub(super) use maintenance::Pending;

@@ -5,13 +5,14 @@ use pdma_model_contract::dma::{
     DmaFatalCode, Event, Opcode, TrapCommand,
 };
 
+use hardware_interface_memory::{
+    MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAccess, SharedMemoryAllocator,
+};
 use hardware_interface_pipeline::{
     AsyncExecutor, AsyncInteractionBackend, HardwareDriver, StepOutcome,
 };
-use hardware_interface_runtime::{
-    MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
-    SharedMemoryAllocator, SoftwareCpu,
-};
+use hardware_interface_register::RegisterAccess;
+use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;

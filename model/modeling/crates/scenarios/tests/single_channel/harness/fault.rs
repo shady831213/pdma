@@ -1,9 +1,9 @@
 //! Test-only mapping fault selected by a ring's programmed base register.
 
-use hardware_interface_runtime::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, RegisterAccess,
-    SharedMemoryAccess,
+use hardware_interface_memory::{
+    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
+use hardware_interface_register::RegisterAccess;
 use std::sync::{Arc, Mutex};
 
 /// Memory view rejecting writes to the first entry of a software-configured ring.

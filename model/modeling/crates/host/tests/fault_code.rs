@@ -1,9 +1,10 @@
 //! Host decoding rejects unknown channel fault encodings.
 
-use hardware_interface_runtime::{
-    MemoryAddress, RegisterAccess, SharedMemory, SharedMemoryAccess, SharedMemoryAllocator,
-    SoftwareCpu,
+use hardware_interface_memory::{
+    MemoryAddress, SharedMemory, SharedMemoryAccess, SharedMemoryAllocator,
 };
+use hardware_interface_register::RegisterAccess;
+use hardware_interface_runtime::SoftwareCpu;
 use hardware_interface_schema::RegisterCodecError;
 use pdma_model_contract::dma::ChannelRecovery;
 use pdma_model_contract::dma::ChannelRegisters;

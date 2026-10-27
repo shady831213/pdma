@@ -8,8 +8,8 @@ use pdma_model_contract::dma::{
 /// Shared hardware fixtures.
 pub mod support;
 
+use hardware_interface_memory::{MemoryAccess, MemoryAlignment, SharedMemory};
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome, StepResult, Then};
-use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
 use pdma_model_dma::{
     Chunk, Completion, ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy,
 };

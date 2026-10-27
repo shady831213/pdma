@@ -2,9 +2,9 @@ use super::{
     error::{InterruptDispatchError, InterruptJoinError},
     observer::{InterruptLifecycleEvent, SharedInterruptObserver},
     registry::{FrozenHandlerRegistry, HandlerRegistry},
-    traits::{InterruptEnvelope, InterruptHandler, InterruptSource},
 };
 use crate::SoftwareCpu;
+use hardware_interface_irq::{InterruptEnvelope, InterruptHandler, InterruptSource};
 use std::{fmt, sync::Arc};
 use tokio::{
     sync::{Mutex, watch},
@@ -126,6 +126,7 @@ impl InterruptDispatcher {
     >
     where
         S: InterruptSource,
+        <S::Notification as InterruptEnvelope>::Vector: Ord,
         H: InterruptHandler<S::Notification>,
     {
         let registry = Mutex::new(registry.into_registry());
@@ -149,6 +150,7 @@ impl InterruptDispatcher {
     >
     where
         S: InterruptSource,
+        <S::Notification as InterruptEnvelope>::Vector: Ord,
         H: InterruptHandler<S::Notification> + 'static,
     {
         let (shutdown, receiver) = Self::shutdown_channel();
@@ -173,6 +175,7 @@ pub(super) async fn run_dispatch<S, H>(
 >
 where
     S: InterruptSource,
+    <S::Notification as InterruptEnvelope>::Vector: Ord,
     H: InterruptHandler<S::Notification>,
 {
     let mut deliveries = 0usize;

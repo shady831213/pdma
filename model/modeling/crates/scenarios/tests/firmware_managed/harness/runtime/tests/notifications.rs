@@ -7,9 +7,9 @@ use super::{
     },
 };
 use crate::harness::TestResult;
-use hardware_interface_runtime::{
-    InterruptHandler, MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory,
-    SharedMemoryAllocator,
+use hardware_interface_irq::InterruptHandler;
+use hardware_interface_memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAllocator,
 };
 use hardware_interface_schema::{Decode, Encode};
 use pdma_model_contract::control::{

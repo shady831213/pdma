@@ -6,9 +6,10 @@ use crate::harness::{
     },
     runtime::{Host, HostBus, ManagementBus},
 };
-use hardware_interface_runtime::{
-    MemoryAddress, RegisterAccess, SharedMemory, SharedMemoryAccess, SharedMemoryAllocator,
+use hardware_interface_memory::{
+    MemoryAddress, SharedMemory, SharedMemoryAccess, SharedMemoryAllocator,
 };
+use hardware_interface_register::RegisterAccess;
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::hw_components::control::ControlConfiguration;
 use pdma_model_contract::hw_components::control::ControlRegisters;

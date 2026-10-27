@@ -1,6 +1,6 @@
 use super::PlatformConfigError;
 use crate::harness::runtime::platform::MemoryRequest;
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     AtomicAccessError, AtomicOperation, MemoryAccess, MemoryAddress, MemoryAlignment,
 };
 use pdma_model_contract::memory::{ContextAttributes, FunctionId, MemoryIdentity};

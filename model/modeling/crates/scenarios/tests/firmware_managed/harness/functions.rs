@@ -1,6 +1,6 @@
 //! Scoped execution of independent Function software programs.
 use super::{TestResult, program, runtime::Managed};
-use hardware_interface_runtime::{MemoryAddress, SharedMemory, SharedMemoryAllocator};
+use hardware_interface_memory::{MemoryAddress, SharedMemory, SharedMemoryAllocator};
 use pdma_model_contract::memory::FunctionId;
 use program::functions::{Assignment, Grant};
 use std::{sync::Arc, time::Duration};

@@ -3,7 +3,8 @@ use crate::harness::runtime::platform::{
     FIRMWARE_STATUS_BASE, WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE,
 };
 
-use hardware_interface_runtime::{RegisterAccess, SharedMemory, SharedMemoryAccess};
+use hardware_interface_memory::{SharedMemory, SharedMemoryAccess};
+use hardware_interface_register::RegisterAccess;
 use std::sync::Arc;
 
 use super::{AccessError, Managed};

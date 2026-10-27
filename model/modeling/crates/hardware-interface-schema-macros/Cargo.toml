@@ -6,6 +6,8 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
+readme = "README.md"
+include = ["src/**", "tests/**", "examples/**", "README.md", "clippy.toml", "LICENSE-MIT", "LICENSE-APACHE", "Cargo.toml"]
 description = "Procedural macro implementation crate for hardware-interface-schema"
 
 [lib]

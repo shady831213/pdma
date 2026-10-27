@@ -1,7 +1,7 @@
 use crate::channel::CopyState;
 use crate::{COPY_CHUNK_BYTES, Error, ExecutionContext, Work};
+use hardware_interface_memory::MemoryAddress;
 use hardware_interface_pipeline::{StepOutcome, StepResult};
-use hardware_interface_runtime::MemoryAddress;
 use pdma_model_contract::dma::{ChannelId, Command, ContextId};
 use std::convert::Infallible;
 

@@ -8,7 +8,7 @@ use pdma_model_contract::dma::{
 /// Shared hardware test fixtures.
 pub mod support;
 
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use support::{TestResult, run, setup, submit};
 
 fn segments(memory: &SharedMemory, entries: &[Segment]) -> TestResult {

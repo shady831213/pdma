@@ -5,11 +5,12 @@ use pdma_model_contract::dma::{
     LinearEndpoint,
 };
 
-use hardware_interface_pipeline::{AsyncExecutor, Operation};
-use hardware_interface_runtime::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
-    SharedMemoryAllocator, SoftwareCpu,
+use hardware_interface_memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAllocator,
 };
+use hardware_interface_pipeline::{AsyncExecutor, Operation};
+use hardware_interface_register::RegisterAccess;
+use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;

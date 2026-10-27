@@ -1,6 +1,6 @@
 use super::ContextTable;
 use crate::windows::ChannelWindows;
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     AtomicAccessError, AtomicOperation, MemoryAccess, MemoryAddress, MemoryAlignment,
 };
 use pdma_model_contract::dma::{ChannelId, ContextId, DmaAccess};

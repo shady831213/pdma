@@ -1,5 +1,5 @@
 use super::support::{CAUSE, EVENT_PRODUCER, Rig, TestResult, fence, target};
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelInterrupts, ChannelRecovery, ChannelRegisters, Command, CommandHeader,
     FillCommand, FillCommandWidth, Opcode, TrapCommand, WaitCommand, WaitCommandComparison,

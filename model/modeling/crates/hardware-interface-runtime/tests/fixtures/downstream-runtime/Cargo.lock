@@ -6,6 +6,9 @@ version = 4
 name = "downstream-runtime"
 version = "0.1.0"
 dependencies = [
+ "hardware-interface-irq",
+ "hardware-interface-memory",
+ "hardware-interface-register",
  "hardware-interface-runtime",
  "tokio",
 ]
@@ -17,10 +20,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
-name = "hardware-interface-runtime"
+name = "hardware-interface-irq"
+version = "0.1.0"
+dependencies = [
+ "tokio",
+]
+
+[[package]]
+name = "hardware-interface-memory"
+version = "0.1.0"
+dependencies = [
+ "hardware-interface-storage",
+]
+
+[[package]]
+name = "hardware-interface-register"
 version = "0.1.0"
 dependencies = [
  "hardware-interface-schema",
+ "hardware-interface-storage",
+]
+
+[[package]]
+name = "hardware-interface-runtime"
+version = "0.1.0"
+dependencies = [
+ "hardware-interface-irq",
+ "hardware-interface-register",
  "tokio",
 ]
 
@@ -40,6 +66,10 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "hardware-interface-storage"
+version = "0.1.0"
 
 [[package]]
 name = "hashbrown"

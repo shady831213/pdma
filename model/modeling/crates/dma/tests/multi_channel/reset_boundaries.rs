@@ -6,10 +6,10 @@ use pdma_model_contract::dma::{
 mod observed;
 
 use super::support::{TestResult, completion, configure, publish_fence, submit, word};
-use hardware_interface_pipeline::StepOutcome;
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
+use hardware_interface_pipeline::StepOutcome;
 use observed::Observed;
 use pdma_model_dma::Dma;
 use std::cell::Cell;

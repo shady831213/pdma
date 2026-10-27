@@ -8,8 +8,8 @@ use pdma_model_contract::dma::{
 /// Shared raw-bus fixtures.
 pub mod support;
 
+use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
 use hardware_interface_pipeline::{Operation, StepOutcome};
-use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_dma::COPY_CHUNK_BYTES;
 use support::{TestResult, command, read_word, setup, submit};
 

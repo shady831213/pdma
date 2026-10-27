@@ -1,6 +1,6 @@
 use crate::{ChunkInput, CommandRequest, Dma, Error, ExecutionContext, Fetch, Flow, Retire};
+use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome, StepResult};
-use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, Command, CommandRegisters};
 use std::{cell::Cell, convert::Infallible, rc::Rc};
 

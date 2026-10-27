@@ -1,7 +1,7 @@
 use super::{Notice, Observer, RecordingHandler, ToyError, freeze, noop, registry};
+use hardware_interface_irq::{InterruptHandler, InterruptSource};
 use hardware_interface_runtime::{
-    HandlerRegistry, InterruptDispatcher, InterruptHandler, InterruptShutdown, InterruptSource,
-    SharedInterruptObserver, SoftwareCpu,
+    HandlerRegistry, InterruptDispatcher, InterruptShutdown, SharedInterruptObserver, SoftwareCpu,
 };
 use std::{
     convert::Infallible,

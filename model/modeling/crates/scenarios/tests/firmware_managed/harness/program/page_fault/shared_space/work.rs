@@ -2,7 +2,7 @@ use pdma_model_contract::dma::{CopyCommandDestinationValues, LinearEndpoint};
 
 use super::*;
 use crate::harness::page_fault::platform::FaultHandler;
-use hardware_interface_runtime::MemoryAddress;
+use hardware_interface_memory::MemoryAddress;
 
 pub(super) struct Work<M> {
     pub channel: ChannelId,

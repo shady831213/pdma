@@ -1,6 +1,7 @@
 use super::{Management, ManagementRequestId, Submission, transport::ring_error};
 use crate::Error;
-use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
+use hardware_interface_memory::MemoryAccess;
+use hardware_interface_register::RegisterAccess;
 use pdma_model_contract::control::{ControlRequest, ControlRequestOpcode};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::memory::FunctionId;

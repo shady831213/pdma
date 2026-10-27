@@ -4,8 +4,8 @@ use pdma_model_contract::dma::{
     EventRegisters, FenceCommand, LinearEndpoint, Opcode,
 };
 
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_dma::Dma;
 /// Test harness error propagation.
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;

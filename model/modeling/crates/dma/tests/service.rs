@@ -7,8 +7,8 @@ mod service {
     mod retained;
 }
 
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_pipeline::StepOutcome;
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{ChannelBlock, ChannelRegisters, CommandRegisters, EventRegisters};
 use pdma_model_dma::Error;
 use support::{TestResult, chunk_pipeline, command, read_word, setup, submit};

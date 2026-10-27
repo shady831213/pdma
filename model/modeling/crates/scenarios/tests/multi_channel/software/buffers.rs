@@ -3,7 +3,7 @@ use pdma_model_contract::dma::{
     LinearEndpoint,
 };
 
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess, SharedMemoryAllocator,
 };
 use pdma_model_host::{ChannelConfig, RingConfig, Rings};

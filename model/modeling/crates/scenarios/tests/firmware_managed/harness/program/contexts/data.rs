@@ -5,9 +5,7 @@ use pdma_model_contract::dma::{
 
 use super::{Ports, Spaces, TestResult};
 use crate::harness::program::buffers::Driver;
-use hardware_interface_runtime::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
-};
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess};
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings};
 use pdma_model_software::dma::ChannelControl;
 

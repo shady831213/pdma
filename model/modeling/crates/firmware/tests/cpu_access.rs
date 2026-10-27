@@ -3,10 +3,10 @@
 pub mod platform;
 use platform::ADDRESSES;
 
-use hardware_interface_runtime::{
-    CpuAccessError, CpuContextError, InterruptRuntime, RegisterAccess, SharedMemory, SoftwareCpu,
-    pending_interrupt,
-};
+use hardware_interface_irq::pending_interrupt;
+use hardware_interface_memory::SharedMemory;
+use hardware_interface_register::RegisterAccess;
+use hardware_interface_runtime::{CpuAccessError, CpuContextError, InterruptRuntime, SoftwareCpu};
 use pdma_model_software::control::{ControlIrq, ControlIsr};
 use std::{
     future::{Future, poll_fn},

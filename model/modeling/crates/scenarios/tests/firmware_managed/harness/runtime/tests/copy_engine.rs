@@ -2,10 +2,9 @@ mod program;
 mod timestamp;
 
 use super::{Managed, client, control::rings};
+use hardware_interface_memory::{SharedMemory, SharedMemoryAllocator};
 use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
-use hardware_interface_runtime::{
-    InterruptRuntime, SharedMemory, SharedMemoryAllocator, SoftwareCpu,
-};
+use hardware_interface_runtime::{InterruptRuntime, SoftwareCpu};
 use pdma_model_contract::{
     dma::{CapabilitiesValues, ChannelId, EventCode},
     memory::FunctionId,

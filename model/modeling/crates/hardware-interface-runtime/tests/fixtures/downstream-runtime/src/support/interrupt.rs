@@ -1,7 +1,8 @@
 use super::error::{ConsumerError, CpuCounts, lock};
+use hardware_interface_irq::{InterruptEnvelope, InterruptHandler, InterruptSource};
 use hir::{
-    CpuLocal, InterruptEnvelope, InterruptHandler, InterruptLifecycleEvent,
-    InterruptLifecycleObserver, InterruptSource, SharedInterruptObserver, TraceBuffer,
+    CpuLocal, InterruptLifecycleEvent, InterruptLifecycleObserver, SharedInterruptObserver,
+    TraceBuffer,
 };
 use std::{
     collections::VecDeque,

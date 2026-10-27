@@ -1,6 +1,6 @@
 //! Hardware identity translation over a Function-tagged downstream memory port.
 
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use pdma_model_contract::dma::ChannelId;
@@ -15,7 +15,7 @@ const CHANNEL: ChannelId = ChannelId::new(0);
 
 #[test]
 fn atomic_forwarding_preserves_backend_failures_and_unsupported() {
-    use hardware_interface_runtime::{AtomicAccessError, AtomicOperation, AtomicWriteOrder};
+    use hardware_interface_memory::{AtomicAccessError, AtomicOperation, AtomicWriteOrder};
     // Given: a channel backed by real memory, plus a backend without atomic support.
     let spaces = Spaces::new().unwrap();
     let windows = ChannelWindows::new(1, 0, u32::try_from(BASE).unwrap()).unwrap();
@@ -201,7 +201,7 @@ fn later_requests_observe_reassigned_owner_without_cached_identity() -> TestResu
 
 #[test]
 fn atomic_requests_observe_reassigned_owner_without_cached_identity() -> TestResult {
-    use hardware_interface_runtime::{AtomicOperation, AtomicWriteOrder};
+    use hardware_interface_memory::{AtomicOperation, AtomicWriteOrder};
     // Given: a closed channel and a platform mapper observing its authorized owner.
     let spaces = Spaces::new()?;
     let backing = spaces.0.first().ok_or("missing backing")?;

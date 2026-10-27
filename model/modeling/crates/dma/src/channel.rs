@@ -78,7 +78,7 @@ impl Channel {
         );
     }
 
-    pub(crate) fn report<M: hardware_interface_runtime::MemoryAccess>(
+    pub(crate) fn report<M: hardware_interface_memory::MemoryAccess>(
         &mut self,
         work: crate::Work,
         event: &pdma_model_contract::dma::Event,

@@ -5,7 +5,7 @@ use pdma_model_contract::dma::{
 const PF: FunctionId = FunctionId::new(0);
 
 use super::*;
-use hardware_interface_runtime::{MemoryAccess, MemoryAccessError};
+use hardware_interface_memory::{MemoryAccess, MemoryAccessError};
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::{Channel, ChannelConfig, Rings};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};

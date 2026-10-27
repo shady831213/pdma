@@ -1,7 +1,6 @@
 use super::{Notice, ToyError, ToySource, freeze, noop};
-use hardware_interface_runtime::{
-    HandlerRegistry, InterruptDispatcher, InterruptHandler, SoftwareCpu,
-};
+use hardware_interface_irq::InterruptHandler;
+use hardware_interface_runtime::{HandlerRegistry, InterruptDispatcher, SoftwareCpu};
 use std::sync::{Arc, Mutex};
 
 struct First(Arc<Mutex<Vec<&'static str>>>);

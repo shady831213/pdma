@@ -1,9 +1,9 @@
 //! Selected reset preserves every other channel's retained hardware work.
 
-use hardware_interface_pipeline::StepOutcome;
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
+use hardware_interface_pipeline::StepOutcome;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, CommandRegisters, DmaControl, DmaRegisters, EventRegisters,
 };

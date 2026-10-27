@@ -2,10 +2,12 @@
 use pdma_model_contract::hw_components::control::ControlConfiguration;
 const CONTROL_CHANNEL_BASE: u32 = 0x3000;
 
-use hardware_interface_runtime::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
-    SharedMemoryAllocator, SoftwareCpu,
+use hardware_interface_memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAccess,
+    SharedMemoryAllocator,
 };
+use hardware_interface_register::RegisterAccess;
+use hardware_interface_runtime::SoftwareCpu;
 use hardware_interface_schema::Decode;
 use pdma_model_contract::control::{ControlQueue, ControlQueueRaw};
 use pdma_model_contract::hw_components::control::ControlRegisters;

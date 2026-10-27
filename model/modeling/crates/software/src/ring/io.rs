@@ -1,4 +1,5 @@
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess};
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_register::RegisterAccess;
 
 /// Borrowed cursor transport and entry memory for a software ring.
 pub trait SoftRingIo: Sync {

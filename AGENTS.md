@@ -18,10 +18,14 @@ Do not restore their compatibility interfaces without a user request.
 Active work is under `model/modeling`; read its `AGENTS.md`.
 Its Cargo workspace contains the core `contract`, `dma` and `host` crates, the
 managed MVP's `hw-components` and `firmware`, shared PDMA `software`, system scenarios,
-and four reusable building blocks:
+and eight reusable building blocks:
 
 - `hardware-interface-pipeline`
-- `hardware-interface-runtime`
+- `hardware-interface-runtime` (software CPU and ISR execution)
+- `hardware-interface-memory`
+- `hardware-interface-storage`
+- `hardware-interface-register`
+- `hardware-interface-irq`
 - `hardware-interface-schema`
 - `hardware-interface-schema-macros`
 
@@ -38,8 +42,9 @@ milestone before broader feature work. The implemented split is `dma`, `hw-compo
 and `firmware`, with concrete wiring in `scenarios/tests/firmware_managed/harness`.
 The standalone managed-runtime crate was removed after user review. Ordinary and
 managed transports share the framework's split pending-interrupt capabilities.
-DMA disables the framework's default async-runtime feature; its standalone normal
-dependency tree has no Tokio. This is not a separate memory-only interface crate.
+DMA depends on the standalone memory crate; its normal dependency tree has no Tokio.
+The runtime now owns only software CPU/ISR execution, progress notifications and tracing.
+IRQ primitives are independent; register transport works without its optional schema feature.
 The managed assembly has independently firmware-managed channel windows, independent boot status,
 and separate in-memory control command/response rings with bootstrap and bidirectional
 doorbell registers. Host and firmware share `software::ring::SoftRing`; doorbell waits

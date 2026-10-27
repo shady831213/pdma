@@ -1,5 +1,6 @@
 use crate::Error;
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess};
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_register::RegisterAccess;
 use hardware_interface_schema::Decode;
 use pdma_model_contract::control::{
     ControlQueue, ControlRequest, ControlResponse, ControlRingState, ControlRingStateRaw,

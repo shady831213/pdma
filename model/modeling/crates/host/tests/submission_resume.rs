@@ -5,10 +5,11 @@ use pdma_model_contract::dma::{
     CopyCommandSourceValues, Event, LinearEndpoint,
 };
 
-use hardware_interface_runtime::{
-    MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
-    SharedMemoryAllocator, SoftwareCpu,
+use hardware_interface_memory::{
+    MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAccess, SharedMemoryAllocator,
 };
+use hardware_interface_register::RegisterAccess;
+use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_dma::Dma;
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,

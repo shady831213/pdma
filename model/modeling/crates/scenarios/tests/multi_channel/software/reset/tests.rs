@@ -1,7 +1,8 @@
-use hardware_interface_runtime::{
-    InterruptRuntime, MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment,
-    MemoryRegion, SharedMemory, SharedMemoryAllocator, SoftwareCpu,
+use hardware_interface_memory::{
+    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
+    SharedMemoryAllocator,
 };
+use hardware_interface_runtime::{InterruptRuntime, SoftwareCpu};
 use std::sync::Arc;
 
 use super::{Buffers, Ports, wait_boundary};

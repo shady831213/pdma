@@ -1,4 +1,4 @@
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     MemoryAccess, MemoryAlignment, SharedMemoryAccess, SharedMemoryAllocator,
 };
 use pdma_model_contract::dma::Segment;

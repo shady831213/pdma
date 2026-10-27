@@ -1,6 +1,7 @@
+use hardware_interface_irq::{InterruptEnvelope, InterruptHandler, InterruptSource};
 use hardware_interface_runtime::{
-    FrozenHandlerRegistry, HandlerRegistry, InterruptEnvelope, InterruptHandler,
-    InterruptLifecycleEvent, InterruptLifecycleObserver, InterruptSource, TraceBuffer,
+    FrozenHandlerRegistry, HandlerRegistry, InterruptLifecycleEvent, InterruptLifecycleObserver,
+    TraceBuffer,
 };
 use std::{
     collections::VecDeque,

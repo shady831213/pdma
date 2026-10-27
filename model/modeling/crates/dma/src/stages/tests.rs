@@ -7,10 +7,10 @@ use pdma_model_contract::dma::{
 use crate::Dma;
 use hardware_interface_pipeline::StepOutcome;
 
-use hardware_interface_pipeline::Operation;
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
+use hardware_interface_pipeline::Operation;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 

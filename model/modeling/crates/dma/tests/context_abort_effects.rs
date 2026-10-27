@@ -6,10 +6,10 @@ use pdma_model_contract::dma::{
     EventRegisters, ScatterGatherEndpoint, Segment,
 };
 
-use hardware_interface_pipeline::StepOutcome;
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
+use hardware_interface_pipeline::StepOutcome;
 use pdma_model_dma::{Dma, Hardware};
 use std::cell::RefCell;
 

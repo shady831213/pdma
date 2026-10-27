@@ -1,5 +1,5 @@
 use super::{acquire, support::*};
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::control::{
     ControlEvent, ControlEventKind, ControlQueue, ControlRingState,
 };

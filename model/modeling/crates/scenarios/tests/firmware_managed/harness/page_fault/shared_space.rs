@@ -7,7 +7,7 @@ use crate::harness::{
     TestResult, program,
     runtime::{Managed, platform::ContextPlatform},
 };
-use hardware_interface_runtime::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_memory::{SharedMemory, SharedMemoryAllocator};
 use pdma_model_contract::memory::{ContextAttributes, FunctionId, MemoryIdentity};
 pub use program::page_fault::shared_space::{Lifecycle, Outcome};
 use std::{sync::Arc, time::Duration};

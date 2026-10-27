@@ -9,8 +9,8 @@ use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::ring::RingError;
 
 impl<
-    B: hardware_interface_runtime::RegisterAccess + Sync,
-    M: hardware_interface_runtime::MemoryAccess + Sync,
+    B: hardware_interface_register::RegisterAccess + Sync,
+    M: hardware_interface_memory::MemoryAccess + Sync,
 > super::Service<'_, B, M>
 {
     pub(super) async fn dispatch(
@@ -60,7 +60,7 @@ impl<
     }
 }
 
-impl<B: hardware_interface_runtime::RegisterAccess + Sync, M: Sync> super::Service<'_, B, M> {
+impl<B: hardware_interface_register::RegisterAccess + Sync, M: Sync> super::Service<'_, B, M> {
     pub(super) async fn execute<E>(
         &self,
         resources: &mut Resources,

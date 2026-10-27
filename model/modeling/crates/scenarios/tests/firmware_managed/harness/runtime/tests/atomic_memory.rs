@@ -1,5 +1,5 @@
 use crate::harness::runtime::memory::{FunctionSpaces, RouteError, RoutedMemory};
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     AtomicAccessError, AtomicOperation, AtomicWriteOrder, MemoryAccess, MemoryAddress,
     MemoryAlignment, MemoryRegion, SharedMemory,
 };
@@ -175,7 +175,7 @@ fn atomic_contexts_isolate_pasid_zero_and_deny_foreign_owner_before_modification
     assert_eq!(changed, Ok(55));
     let rejection = || {
         AtomicAccessError::Access(
-            RouteError::<hardware_interface_runtime::MemoryAccessError>::Context(
+            RouteError::<hardware_interface_memory::MemoryAccessError>::Context(
                 MemoryError::OwnerMismatch {
                     context: ContextId::new(2),
                     owner: FunctionId::new(0),

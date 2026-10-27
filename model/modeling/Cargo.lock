@@ -15,6 +15,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
+name = "hardware-interface-irq"
+version = "0.1.0"
+dependencies = [
+ "tokio",
+]
+
+[[package]]
+name = "hardware-interface-memory"
+version = "0.1.0"
+dependencies = [
+ "hardware-interface-storage",
+]
+
+[[package]]
 name = "hardware-interface-pipeline"
 version = "0.1.0"
 dependencies = [
@@ -22,10 +36,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "hardware-interface-register"
+version = "0.1.0"
+dependencies = [
+ "hardware-interface-memory",
+ "hardware-interface-schema",
+ "hardware-interface-storage",
+]
+
+[[package]]
 name = "hardware-interface-runtime"
 version = "0.1.0"
 dependencies = [
- "hardware-interface-schema",
+ "hardware-interface-irq",
+ "hardware-interface-register",
  "tokio",
 ]
 
@@ -46,6 +70,10 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "hardware-interface-storage"
+version = "0.1.0"
 
 [[package]]
 name = "hashbrown"
@@ -86,8 +114,8 @@ dependencies = [
 name = "pdma-model-dma"
 version = "0.1.0"
 dependencies = [
+ "hardware-interface-memory",
  "hardware-interface-pipeline",
- "hardware-interface-runtime",
  "hardware-interface-schema",
  "pdma-model-contract",
 ]
@@ -96,6 +124,9 @@ dependencies = [
 name = "pdma-model-firmware"
 version = "0.1.0"
 dependencies = [
+ "hardware-interface-irq",
+ "hardware-interface-memory",
+ "hardware-interface-register",
  "hardware-interface-runtime",
  "hardware-interface-schema",
  "pdma-model-contract",
@@ -107,7 +138,10 @@ dependencies = [
 name = "pdma-model-host"
 version = "0.1.0"
 dependencies = [
+ "hardware-interface-irq",
+ "hardware-interface-memory",
  "hardware-interface-pipeline",
+ "hardware-interface-register",
  "hardware-interface-runtime",
  "hardware-interface-schema",
  "pdma-model-contract",
@@ -120,8 +154,8 @@ dependencies = [
 name = "pdma-model-hw-components"
 version = "0.1.0"
 dependencies = [
+ "hardware-interface-memory",
  "hardware-interface-pipeline",
- "hardware-interface-runtime",
  "hardware-interface-schema",
  "pdma-model-contract",
  "pdma-model-dma",
@@ -131,7 +165,10 @@ dependencies = [
 name = "pdma-model-scenarios"
 version = "0.1.0"
 dependencies = [
+ "hardware-interface-irq",
+ "hardware-interface-memory",
  "hardware-interface-pipeline",
+ "hardware-interface-register",
  "hardware-interface-runtime",
  "hardware-interface-schema",
  "pdma-model-contract",
@@ -140,6 +177,7 @@ dependencies = [
  "pdma-model-host",
  "pdma-model-hw-components",
  "pdma-model-software",
+ "proc-macro2",
  "tokio",
  "trybuild",
 ]
@@ -148,7 +186,10 @@ dependencies = [
 name = "pdma-model-software"
 version = "0.1.0"
 dependencies = [
+ "hardware-interface-irq",
+ "hardware-interface-memory",
  "hardware-interface-pipeline",
+ "hardware-interface-register",
  "hardware-interface-runtime",
  "hardware-interface-schema",
  "pdma-model-contract",

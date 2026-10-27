@@ -9,7 +9,7 @@ use pdma_model_contract::dma::{
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use support::{TestResult, command, read_word, run, setup, submit};
 
 const CONTROL: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
@@ -20,8 +20,8 @@ const EVENT: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
     + pdma_model_contract::dma::ChannelBlock::EVENT.offset();
 
 fn append(
-    device: &mut pdma_model_dma::Dma<hardware_interface_runtime::SharedMemory>,
-    memory: &hardware_interface_runtime::SharedMemory,
+    device: &mut pdma_model_dma::Dma<hardware_interface_memory::SharedMemory>,
+    memory: &hardware_interface_memory::SharedMemory,
     index: u32,
     input: Command,
 ) -> TestResult {

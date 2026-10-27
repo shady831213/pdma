@@ -6,11 +6,12 @@ use pdma_model_contract::dma::{
     LinearEndpoint, Opcode, TrapCommand, WordTarget, WordTargetWidth, WordWrite,
 };
 
-use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
-use hardware_interface_runtime::{
-    InterruptSource, MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory,
-    SharedMemoryAllocator, SoftwareCpu,
+use hardware_interface_irq::InterruptSource;
+use hardware_interface_memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAllocator,
 };
+use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
+use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
@@ -210,7 +211,7 @@ mod channel {
 }
 
 async fn until_irq(
-    model: Model<hardware_interface_runtime::SharedMemoryAccess>,
+    model: Model<hardware_interface_memory::SharedMemoryAccess>,
     hardware: &mut pdma_model_dma::Hardware,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let executor = AsyncExecutor::new(model.clone());

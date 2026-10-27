@@ -1,6 +1,6 @@
 use super::{TestResult, add, fence, rig, target};
 use crate::command_operations::support::{CAUSE, EVENT_PRODUCER};
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelRecovery, ChannelRegisters, Command, CommandHeader, CommandRegisters,
     DmaAdmin, DmaDiscovery, FillCommand, FillCommandWidth, Opcode, SemaphoreCommand,

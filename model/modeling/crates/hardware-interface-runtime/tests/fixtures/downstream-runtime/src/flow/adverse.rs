@@ -1,6 +1,6 @@
 use super::{FlowResult, byte_hash, require};
 use crate::run_adverse_dispatch;
-use hir::{
+use hardware_interface_memory::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 

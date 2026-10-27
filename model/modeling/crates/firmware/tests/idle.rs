@@ -3,9 +3,10 @@
 pub mod platform;
 use platform::ADDRESSES;
 
-use hardware_interface_runtime::{
-    InterruptRuntime, RegisterAccess, SharedMemory, SoftwareCpu, pending_interrupt,
-};
+use hardware_interface_irq::pending_interrupt;
+use hardware_interface_memory::SharedMemory;
+use hardware_interface_register::RegisterAccess;
+use hardware_interface_runtime::{InterruptRuntime, SoftwareCpu};
 use pdma_model_contract::hw_components::control::{ControlConfiguration, ControlRegisters};
 use pdma_model_software::control::{ControlIrq, ControlIsr};
 use std::{

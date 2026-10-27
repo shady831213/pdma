@@ -1,6 +1,6 @@
 use super::*;
 use crate::harness::runtime::memory::SpaceError;
-use hardware_interface_runtime::MemoryAccessError;
+use hardware_interface_memory::MemoryAccessError;
 
 struct Ordinary(SharedMemory);
 

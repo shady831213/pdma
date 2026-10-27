@@ -7,11 +7,13 @@ use pdma_model_contract::dma::{
 
 mod instances;
 
-use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
-use hardware_interface_runtime::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
-    SharedMemoryAllocator, SoftwareCpu,
+use hardware_interface_memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAccess,
+    SharedMemoryAllocator,
 };
+use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
+use hardware_interface_register::RegisterAccess;
+use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_dma::Dma;
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,

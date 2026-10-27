@@ -581,12 +581,13 @@ contain cases, acceptance assertions and the harness for concrete system assembl
 external provisioning, startup, fault injection and teardown. Test-specific Host
 programs remain test support; reusable Host driver behavior belongs in `host`.
 The harness must not implement firmware initialization or hardware behavior.
-Both transports reuse the framework's pending-interrupt component. The framework's
-default-on `async-runtime` feature isolates Tokio/CPU/interrupt dependencies from
-the synchronous APIs used by DMA. A generic shared-context wrapper was evaluated
-but not introduced: model-specific projection and IRQ extraction still belong at
-the consumer, and the remaining mutex/wakeup mechanics do not justify extra hooks
-or traits. A memory-only package split remains undecided, not a current requirement.
+Both transports reuse the independent IRQ crate's pending-interrupt component.
+Memory and closure storage are separate synchronous packages; DMA no longer depends
+on software runtime. Register transport is independent of optional schema images,
+and software CPU/ISR scheduling stays in runtime. See [reusable library boundaries](reusable-libraries.md).
+A generic shared-context wrapper was evaluated but not introduced: model-specific
+projection and IRQ extraction still belong at the consumer, and remaining mutex/wakeup
+mechanics do not justify extra hooks or traits.
 
 ## Management MMIO
 

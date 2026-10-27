@@ -1,5 +1,8 @@
 # PDMA functional model
 
+The reusable libraries and their extraction boundaries are documented in
+[reusable libraries](docs/reusable-libraries.md).
+
 The [system specification](docs/spec.md) includes hardware and firmware requirements,
 Host/platform obligations, and explicit model-to-RTL verification boundaries.
 [Managed fatal/events](docs/fatal-events.md) specifies the PF event ring and explicit
@@ -86,7 +89,7 @@ byte-access capabilities, without memory ownership or allocation authority.
 Memory backends select their own `MemoryAccess::Error`. Runtime adapters preserve
 that type; DMA alone classifies it through `MemoryFailure` for hardware handling.
 Routing failures belong to hw-components, and software retains the original
-backend errors. New platform error categories need no generic runtime change.
+backend errors. New platform error categories need no generic memory-library change.
 
 ## Read the implementation
 
@@ -116,7 +119,7 @@ backend errors. New platform error categories need no generic runtime change.
 | `crates/host/src/firmware.rs` | Host boot polling with distinct firmware failure and software timeout outcomes. |
 | `crates/firmware/src/lib.rs` | Async boot and serial control service; resource sequencing in its native child modules. |
 | `crates/scenarios/tests/firmware_managed/harness/runtime.rs` | Managed-system assembly with native submodules for concrete transports and scoped actor execution. |
-| `crates/hardware-interface-runtime/src/interrupt/pending.rs` | Shared coalesced notification source with separate emission and claim capabilities. |
+| `crates/hardware-interface-irq/src/pending.rs` | Shared coalesced notification source with separate emission and claim capabilities. |
 | `crates/contract/src/ring.rs` | PDMA ring geometry, shared pointer rules and errors. |
 | `crates/software/src/ring.rs` | Shared PDMA software ring configuration and operations over borrowed MMIO or memory cursors. |
 | `crates/hardware-interface-runtime/src/notifications.rs` | Coalesced progress hints independent of interrupt dispatch. |

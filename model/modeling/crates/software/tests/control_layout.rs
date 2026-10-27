@@ -1,6 +1,6 @@
 //! Shared control queue address validation and cursor access.
 
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory, SharedMemoryAccess,
 };
 use pdma_model_contract::control::{ControlQueue, ControlRingState};

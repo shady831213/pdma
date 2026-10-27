@@ -49,7 +49,7 @@ impl Stage<ExecutionContext<'_, SharedMemory>> for InterruptedChunk {
 struct CommandTail {
     calls: Rc<Cell<usize>>,
     memory: SharedMemory,
-    final_address: hardware_interface_runtime::MemoryAddress,
+    final_address: hardware_interface_memory::MemoryAddress,
 }
 
 impl Stage<ExecutionContext<'_, SharedMemory>> for CommandTail {

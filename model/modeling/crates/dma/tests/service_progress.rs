@@ -12,7 +12,7 @@ use hardware_interface_pipeline::{Operation, StepOutcome};
 mod service_progress {
     mod pending_tail;
 }
-use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
+use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_dma::COPY_CHUNK_BYTES;
 use support::{TestResult, command, read_word, setup, submit};
 

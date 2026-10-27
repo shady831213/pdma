@@ -1,8 +1,8 @@
 use super::support::{
     Fixture, TestResult, WINDOWS, advance, bytes, command, configure, publish, setup,
 };
+use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_pipeline::HardwareDriver;
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::dma::{
     CopyCommandDestinationValues, CopyCommandSourceValues, LinearEndpoint,

@@ -1,5 +1,5 @@
 use super::support::{CAUSE, EVENT_PRODUCER, Rig, TestResult, fence, target};
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     AtomicAccessError, AtomicOperation, MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory,
 };
 use pdma_model_contract::dma::{

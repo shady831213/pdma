@@ -18,7 +18,11 @@ layouts, and ABI compatibility are not requirements for this model.
 | Crate | Responsibility |
 | --- | --- |
 | hardware-interface-pipeline | Typed stages, generic gathering/distribution, composition, and driving policies. |
-| hardware-interface-runtime | Memory backends, register access/observation, CPU-local state, interrupt dispatch, and trace storage. |
+| hardware-interface-runtime | CPU-local state, software main/ISR execution, progress notifications and trace storage. |
+| hardware-interface-memory | Byte memory access, opaque sideband, backend errors, atomics, backing and allocation. |
+| hardware-interface-storage | Closure-scoped local and shared storage policies. |
+| hardware-interface-register | Register transports and ordered observation; optional schema-backed image/bus support. |
+| hardware-interface-irq | Source/claim/handler capabilities and optional Tokio pending-interrupt backend. |
 | hardware-interface-schema | Runtime-neutral record/register schemas, metadata, access, and exporters. |
 | hardware-interface-schema-macros | Schema code generation and compile-time validation. |
 
@@ -161,11 +165,15 @@ Bindings remain stable until reset completes; no live rebind or shadow owner tab
 Independent spaces may use identical addresses. This adds no PASID/IOMMU translation,
 Function reset/FLR or external transaction semantics.
 
-The generic runtime's default `async-runtime` feature gates CPU/interrupt execution
-and its Tokio dependency. DMA selects `default-features = false`; synchronous
-memory/backend APIs stay available and unchanged. hw-components also disables default
-features when using the synchronous MemoryAccess traits. Verify both normal dependency
-trees independently because workspace feature unification can enable async support.
+DMA and hw-components depend on the standalone memory crate rather than software runtime.
+Verify their normal dependency trees independently: neither may acquire Tokio through
+workspace feature unification. Memory depends only on closure storage; storage has no
+normal dependencies. IRQ traits work without Tokio or software CPU scheduling; its
+optional `tokio` feature supplies pending interrupts. Register transport/observation
+works without schema; its `schema` feature adds generated image/bus integration.
+Runtime contains modeled CPU/main/ISR execution and depends on register transport and
+IRQ traits, without memory or schema dependencies. Do not restore moved API reexports
+as a compatibility umbrella. CpuOwner and synchronization guards remain private.
 Both concrete transports use `pending_interrupt`: hardware-side adapters hold the
 emitter, software dispatch holds the source. Keep causes, masking, routing policy
 and hardware-step wakeup decisions out of that generic component.

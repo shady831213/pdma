@@ -1,5 +1,5 @@
 use super::{CpuContextError, CpuOwner, SoftwareCpu};
-use crate::RegisterAccess;
+use hardware_interface_register::RegisterAccess;
 use std::{error::Error, fmt};
 
 /// CPU ownership or underlying register-access failure.

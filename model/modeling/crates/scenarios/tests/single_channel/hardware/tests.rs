@@ -1,10 +1,9 @@
 //! Assembly must keep serving after the software observes its first completion.
 
 use crate::{harness::TestResult, software};
+use hardware_interface_memory::{MemoryAddress, SharedMemory, SharedMemoryAllocator};
 use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
-use hardware_interface_runtime::{
-    InterruptRuntime, MemoryAddress, SharedMemory, SharedMemoryAllocator, SoftwareCpu,
-};
+use hardware_interface_runtime::{InterruptRuntime, SoftwareCpu};
 use pdma_model_host::runtime::Model;
 use std::sync::Arc;
 use tokio::task::JoinSet;

@@ -1,4 +1,4 @@
-use hardware_interface_runtime::RegisterAccess;
+use hardware_interface_register::RegisterAccess;
 use std::{
     future::{Future, poll_fn},
     io,

@@ -37,6 +37,10 @@ fn framework_normal_dependencies_remain_model_independent() -> Result<(), Box<dy
         "hardware-interface-schema-macros",
         "hardware-interface-runtime",
         "hardware-interface-pipeline",
+        "hardware-interface-memory",
+        "hardware-interface-storage",
+        "hardware-interface-register",
+        "hardware-interface-irq",
     ] {
         // When: Cargo resolves its actual transitive normal dependencies.
         let dependencies = dependencies(package)?;
@@ -76,7 +80,59 @@ fn shared_software_depends_on_contract_not_host_firmware_or_dma() -> Result<(), 
     Ok(())
 }
 
+#[test]
+fn standalone_capabilities_do_not_require_unrelated_runtime_policy() -> Result<(), Box<dyn Error>> {
+    // Given: each independent capability with optional integrations disabled.
+    for (package, forbidden) in [
+        (
+            "hardware-interface-memory",
+            &[
+                "tokio",
+                "hardware-interface-schema",
+                "hardware-interface-register",
+                "hardware-interface-runtime",
+            ][..],
+        ),
+        (
+            "hardware-interface-irq",
+            &[
+                "tokio",
+                "hardware-interface-register",
+                "hardware-interface-runtime",
+            ][..],
+        ),
+        (
+            "hardware-interface-register",
+            &[
+                "tokio",
+                "hardware-interface-schema",
+                "hardware-interface-memory",
+                "hardware-interface-runtime",
+            ][..],
+        ),
+        (
+            "hardware-interface-runtime",
+            &["hardware-interface-schema", "hardware-interface-memory"][..],
+        ),
+    ] {
+        // When: Cargo resolves normal dependencies without workspace feature unification.
+        let resolved = dependency_tree(package, "--no-default-features")?;
+        // Then: selecting one capability does not import unrelated model or execution policy.
+        for dependency in forbidden {
+            assert!(
+                !resolved.contains(*dependency),
+                "{package} depends on {dependency}"
+            );
+        }
+    }
+    Ok(())
+}
+
 fn dependencies(package: &str) -> Result<BTreeSet<String>, Box<dyn Error>> {
+    dependency_tree(package, "--all-features")
+}
+
+fn dependency_tree(package: &str, features: &str) -> Result<BTreeSet<String>, Box<dyn Error>> {
     let output = Command::new(env!("CARGO"))
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .args([
@@ -88,7 +144,7 @@ fn dependencies(package: &str) -> Result<BTreeSet<String>, Box<dyn Error>> {
             "normal",
             "--prefix",
             "none",
-            "--all-features",
+            features,
         ])
         .output()?;
     if !output.status.success() {

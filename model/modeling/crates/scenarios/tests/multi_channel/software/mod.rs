@@ -5,10 +5,10 @@ use pdma_model_contract::dma::{ChannelId, CommandHeader, DmaRegisters, Opcode, T
 mod buffers;
 mod reset;
 
-use hardware_interface_runtime::{
-    InterruptHandler, InterruptRegistration, MemoryAddress, RegisterAccess, SharedMemoryAccess,
-    SharedMemoryAllocator,
-};
+use hardware_interface_irq::InterruptHandler;
+use hardware_interface_memory::{MemoryAddress, SharedMemoryAccess, SharedMemoryAllocator};
+use hardware_interface_register::RegisterAccess;
+use hardware_interface_runtime::InterruptRegistration;
 use pdma_model_host::{Channel, runtime::Irq};
 use std::{convert::Infallible, error::Error};
 use tokio::sync::mpsc;

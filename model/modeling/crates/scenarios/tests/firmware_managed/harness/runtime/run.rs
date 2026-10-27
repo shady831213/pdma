@@ -1,6 +1,6 @@
 use super::{Driver, Managed, ManagementBus, RunError};
+use hardware_interface_memory::MemoryAccess;
 use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
-use hardware_interface_runtime::MemoryAccess;
 use pdma_model_hw_components::control::MemoryError;
 use std::{convert::Infallible, future::Future, sync::Arc};
 

@@ -1,6 +1,6 @@
 use super::Channel;
 use super::Error;
-use hardware_interface_runtime::RegisterAccess;
+use hardware_interface_register::RegisterAccess;
 use pdma_model_contract::dma::{
     ChannelFatalCode, ChannelIrqCauseValues, ChannelIrqMaskValues, DmaFatalCode,
 };

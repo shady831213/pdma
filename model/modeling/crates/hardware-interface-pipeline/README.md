@@ -147,3 +147,13 @@ Context guards never escape synchronous interaction closures. Software interrupt
 device wakeup policy, memory ownership, lifecycle rules, and application scheduling
 remain with their existing owners. Infinite hardware activity is driven externally
 through finite services; fan itself is a finite invocation mechanism.
+
+## Standalone example
+
+Run `cargo run --example two_stage -p hardware-interface-pipeline` to compose a
+byte-widening stage with a little-endian encoder. The first external step accepts
+the value; the second delivers the encoded bytes. Both stages use only the public
+pipeline API and the standard library.
+
+Package names are provisional and publication remains disabled. Licensed under
+MIT OR Apache-2.0, at your option; see LICENSE-MIT and LICENSE-APACHE.

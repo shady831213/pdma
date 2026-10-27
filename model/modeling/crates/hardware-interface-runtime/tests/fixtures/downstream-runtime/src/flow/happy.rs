@@ -1,6 +1,9 @@
 use super::{FlowError, FlowResult, HappyFlow, require};
 use crate::{run_happy_dispatch, run_register};
-use hir::{MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory, TraceBuffer};
+use hardware_interface_memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
+};
+use hir::TraceBuffer;
 
 pub(super) async fn run() -> FlowResult<HappyFlow> {
     let trace = TraceBuffer::<(usize, &'static str)>::new();

@@ -7,7 +7,7 @@ use super::{
     control::{ring, rings},
     *,
 };
-use hardware_interface_runtime::{
+use hardware_interface_memory::{
     MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAllocator,
 };
 use pdma_model_contract::{

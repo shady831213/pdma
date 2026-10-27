@@ -1,8 +1,7 @@
 //! Delivery from a pending source through the owning software CPU.
 
-use hardware_interface_runtime::{
-    CpuContextError, CpuLocal, InterruptEnvelope, InterruptHandler, InterruptRuntime, SoftwareCpu,
-};
+use hardware_interface_irq::{InterruptEnvelope, InterruptHandler};
+use hardware_interface_runtime::{CpuContextError, CpuLocal, InterruptRuntime, SoftwareCpu};
 use std::sync::Arc;
 use tokio::sync::oneshot;
 
@@ -39,7 +38,7 @@ async fn pending_source_delivers_through_the_owning_cpu_runtime() {
     // Given: a real pending source and CPU-local handler state.
     let cpu = Arc::new(SoftwareCpu::new());
     let calls = cpu.local(0);
-    let (emitter, source) = hardware_interface_runtime::pending_interrupt(Notice(7));
+    let (emitter, source) = hardware_interface_irq::pending_interrupt(Notice(7));
     let runtime = InterruptRuntime::new(Arc::clone(&cpu), source);
     // When: software registers its handler and hardware raises a notification.
     let (vector, summary) = runtime

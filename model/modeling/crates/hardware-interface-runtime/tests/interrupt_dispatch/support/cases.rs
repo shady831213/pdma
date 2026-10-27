@@ -1,7 +1,7 @@
 use super::{Notice, Observer, RecordingHandler, ToyError, ToySource, freeze, noop, registry};
+use hardware_interface_irq::InterruptHandler;
 use hardware_interface_runtime::{
-    HandlerRegistry, InterruptDispatcher, InterruptHandler, SharedInterruptObserver, SoftwareCpu,
-    TraceBuffer,
+    HandlerRegistry, InterruptDispatcher, SharedInterruptObserver, SoftwareCpu, TraceBuffer,
 };
 use std::sync::{Arc, Mutex};
 

@@ -15,7 +15,7 @@ pub mod support;
 
 #[test]
 fn active_copy_fatal_stops_next_memory_access_and_reset_retires_old_work() -> support::TestResult {
-    use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+    use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 
     // Given: the first chunk of an accepted two-chunk command is externally visible.
     let (mut dma, memory) = support::setup(0x1100, 2)?;

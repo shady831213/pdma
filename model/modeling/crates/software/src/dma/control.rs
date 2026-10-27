@@ -2,7 +2,7 @@ use super::{
     CHANNEL, Error,
     registers::{read_word, write},
 };
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::register::RegisterAccess;
 use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::ChannelRecovery;
 use pdma_model_contract::dma::{

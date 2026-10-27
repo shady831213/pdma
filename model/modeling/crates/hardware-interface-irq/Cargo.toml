@@ -10,6 +10,9 @@ readme = "README.md"
 include = ["src/**", "tests/**", "examples/**", "README.md", "clippy.toml", "LICENSE-MIT", "LICENSE-APACHE", "Cargo.toml"]
 description = "Independent interrupt source and handler capabilities"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [features]
 default = ["tokio"]
 tokio = ["dep:tokio"]
@@ -24,5 +27,9 @@ tokio = { version = "1.49", default-features = false, features = ["macros", "rt"
 workspace = true
 
 [[test]]
-name = "pending_interrupt"
+name = "interrupt_wire"
+required-features = ["tokio"]
+
+[[example]]
+name = "first_interrupt"
 required-features = ["tokio"]

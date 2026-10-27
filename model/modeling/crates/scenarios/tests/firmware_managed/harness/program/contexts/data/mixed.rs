@@ -102,8 +102,8 @@ impl Mixed {
             return Err("active command did not finish before Fence".into());
         }
         Ok((
-            memory.read_typed(self.target, MemoryAlignment::ONE)?,
-            memory.read_typed(self.peer, MemoryAlignment::ONE)?,
+            memory.read_buffer(self.target, MemoryAlignment::ONE)?,
+            memory.read_buffer(self.peer, MemoryAlignment::ONE)?,
         ))
     }
 }

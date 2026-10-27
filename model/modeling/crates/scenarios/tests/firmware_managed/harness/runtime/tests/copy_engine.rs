@@ -2,9 +2,9 @@ mod program;
 mod timestamp;
 
 use super::{Managed, client, control::rings};
-use hardware_interface_memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
 use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
-use hardware_interface_runtime::{InterruptRuntime, SoftwareCpu};
+use hardware_interface_software::{InterruptRuntime, SoftwareEnv};
 use pdma_model_contract::{
     dma::{CapabilitiesValues, ChannelId, EventCode},
     memory::FunctionId,
@@ -56,7 +56,7 @@ async fn direct_commands_release_wait_for_peer_and_publish_fence() -> TestResult
         )?;
         let mut hardware = dma.hardware();
         let model = Model::new(dma);
-        let runtime = InterruptRuntime::new(Arc::new(SoftwareCpu::new()), model.clone());
+        let runtime = InterruptRuntime::new(Arc::new(SoftwareEnv::new()), model.clone());
         let executor = AsyncExecutor::new(model.clone());
         let mut driver = HardwareDriver::new();
         // When: one channel waits and its peer publishes the dependency.
@@ -133,7 +133,7 @@ async fn reset_retires_wait_without_publishing_cancelled_fence() -> TestResult {
     let dma = Dma::new(allocator.memory_access(), 2)?;
     let mut hardware = dma.hardware();
     let model = Model::new(dma);
-    let runtime = InterruptRuntime::new(Arc::new(SoftwareCpu::new()), model.clone());
+    let runtime = InterruptRuntime::new(Arc::new(SoftwareEnv::new()), model.clone());
     let executor = AsyncExecutor::new(model.clone());
     let mut driver = HardwareDriver::new();
     // When: software observes peer progress and resets the waiting channel.

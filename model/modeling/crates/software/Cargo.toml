@@ -9,10 +9,9 @@ publish.workspace = true
 description = "Shared PDMA software drivers and rings for Host and firmware"
 
 [dependencies]
-hardware-interface-memory = { version = "0.1.0", path = "../hardware-interface-memory" }
 hardware-interface-irq = { version = "0.1.0", path = "../hardware-interface-irq" }
-hardware-interface-register = { version = "0.1.0", path = "../hardware-interface-register", default-features = false }
-hardware-interface-runtime = { version = "0.1.0", path = "../hardware-interface-runtime" }
+hardware-interface-io = { version = "0.1.0", path = "../hardware-interface-io", default-features = false }
+hardware-interface-software = { version = "0.1.0", path = "../hardware-interface-software" }
 tokio = { version = "1.49", default-features = false, features = ["rt"] }
 pdma-model-contract = { path = "../contract" }
 hardware-interface-schema = { path = "../hardware-interface-schema" }

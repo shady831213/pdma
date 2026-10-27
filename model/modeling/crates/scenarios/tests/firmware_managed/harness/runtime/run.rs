@@ -1,5 +1,5 @@
 use super::{Driver, Managed, ManagementBus, RunError};
-use hardware_interface_memory::MemoryAccess;
+use hardware_interface_io::memory::MemoryAccess;
 use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
 use pdma_model_hw_components::control::MemoryError;
 use std::{convert::Infallible, future::Future, sync::Arc};
@@ -20,7 +20,7 @@ where
     ) -> Result<Infallible, RunError<MemoryError<super::memory::SpaceError<M::Error>>>> {
         let addresses = self.shared.addresses;
         let management = self
-            .firmware_cpu
+            .firmware_env
             .bind_registers(ManagementBus(Arc::clone(&self.shared)));
         let firmware = Box::pin(async {
             self.firmware_runtime

@@ -1,20 +1,22 @@
 //! Register buses and resident DMA fixtures for control tests.
 
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelConfiguration, ChannelId, ChannelRegisters, Command, CommandRegisters,
     CopyCommandDestinationValues, CopyCommandSourceValues, EventRegisters, LinearEndpoint,
 };
 
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory, SharedMemoryAccess,
+use hardware_interface_io::memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
+use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_pipeline::{HardwareDriver, StepOutcome};
-use hardware_interface_register::RegisterAccess;
 use pdma_model_dma::{Dma, Hardware};
 use std::sync::{Arc, Mutex};
 
-type Driver = HardwareDriver<Hardware, Dma<SharedMemoryAccess>>;
-pub(super) struct Bus(pub(super) Mutex<Dma<SharedMemoryAccess>>);
+type Driver = HardwareDriver<Hardware, Dma<SharedMemoryAccess<(), MemoryAccessError>>>;
+pub(super) struct Bus(pub(super) Mutex<Dma<SharedMemoryAccess<(), MemoryAccessError>>>);
 pub(super) struct Relocated(pub(super) Bus);
 
 impl Bus {
@@ -42,7 +44,7 @@ impl Bus {
                     + ChannelConfiguration::RING_CONTEXT.offset(),
                 &37_u32.to_le_bytes(),
             )?;
-            dma.memory.write_typed(
+            dma.memory.write_buffer(
                 MemoryAddress::new(0x1000),
                 MemoryAlignment::ONE,
                 &Command::Copy(pdma_model_contract::dma::CopyCommand {

@@ -9,7 +9,8 @@ use pdma_model_contract::dma::{
 /// Shared channel integration fixtures.
 pub mod support;
 
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
+use hardware_interface_io::memory::SharedMemory;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_dma::{ChannelFatal, Dma, Error};
 use support::{TestResult, command, read_word, run, setup, submit};
 
@@ -227,7 +228,7 @@ fn zero_length_skips_payload_and_longer_copy_reports_inaccessible_source() -> Te
         run(&mut device)?;
         // Then
         if let Some(code) = status {
-            let bytes = memory.read_typed::<pdma_model_contract::dma::EventRaw>(
+            let bytes = memory.read_buffer::<pdma_model_contract::dma::EventRaw>(
                 0x1100.into(),
                 MemoryAlignment::ONE,
             )?;
@@ -269,7 +270,7 @@ fn rings_reuse_slots_in_order_after_wrap() -> TestResult {
         )?;
         device.write(PRODUCER, &(cursor + 1).to_le_bytes())?;
         run(&mut device)?;
-        copied.push(memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?);
+        copied.push(memory.read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?);
         assert!(!device.take_interrupt());
     }
     // Then

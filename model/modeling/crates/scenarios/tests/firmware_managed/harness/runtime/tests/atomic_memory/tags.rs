@@ -1,6 +1,7 @@
 use super::*;
 use crate::harness::runtime::{memory::SpaceError, platform::MemoryRequest};
-use hardware_interface_memory::{AtomicReadOrder, MemoryAccessError};
+use hardware_interface_io::memory::AtomicReadOrder;
+use hardware_interface_io::memory::MemoryAccessError;
 
 #[derive(Clone)]
 struct Tagged {
@@ -159,7 +160,7 @@ fn atomic_binding_retains_source_tags_and_failure_before_modification() {
     assert_eq!(loaded, Ok(17));
     assert_eq!(
         backing
-            .read_typed::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)
+            .read_buffer::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)
             .unwrap(),
         17_u64.to_le_bytes()
     );

@@ -1,6 +1,5 @@
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
-};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccessError, SharedMemory};
 use pdma_model_dma::MemoryFailure;
 use std::cell::{Cell, RefCell};
 

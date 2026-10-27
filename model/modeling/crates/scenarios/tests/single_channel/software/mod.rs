@@ -1,5 +1,6 @@
 //! The complete software program and its persistent interrupt handler.
 
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelFatalCode, ChannelId, Command, CommandHeader, CopyCommand, Event, FenceCommand, Opcode,
     Segment, TrapCommand, WordTarget, WordTargetWidth, WordWrite,
@@ -7,12 +8,13 @@ use pdma_model_contract::dma::{
 
 mod buffers;
 
-use hardware_interface_irq::InterruptHandler;
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess, SharedMemoryAllocator,
+use hardware_interface_io::memory::SharedMemoryAllocator;
+use hardware_interface_io::memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::InterruptRegistration;
+use hardware_interface_io::register::RegisterAccess;
+use hardware_interface_irq::InterruptHandler;
+use hardware_interface_software::InterruptRegistration;
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as HostError, RingConfig, Rings, runtime::Irq,
 };
@@ -58,7 +60,7 @@ pub struct Ports<'a, B> {
     /// Register bus, without access to device internals.
     pub bus: B,
     /// Software memory access supplied by the platform.
-    pub memory: SharedMemoryAccess,
+    pub memory: SharedMemoryAccess<(), MemoryAccessError>,
     /// Allocation service over the platform's backing memory.
     pub allocator: SharedMemoryAllocator,
     /// CPU-bound ISR registration supplied by the runtime.
@@ -81,9 +83,9 @@ pub struct Outcome {
 /// Persistent software owner of event consumption and IRQ masking.
 #[derive(Debug)]
 pub struct CompletionHandler<B> {
-    channel: Channel<B, SharedMemoryAccess>,
+    channel: Channel<B, SharedMemoryAccess<(), MemoryAccessError>>,
     completion: Option<oneshot::Sender<Completion>>,
-    memory: SharedMemoryAccess,
+    memory: SharedMemoryAccess<(), MemoryAccessError>,
     fence: MemoryAddress,
 }
 

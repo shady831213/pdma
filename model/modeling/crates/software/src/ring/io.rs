@@ -1,5 +1,5 @@
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::register::RegisterAccess;
 
 /// Borrowed cursor transport and entry memory for a software ring.
 pub trait SoftRingIo: Sync {
@@ -46,12 +46,12 @@ impl<M: MemoryAccess + Sync> SoftRingIo for MemoryRingIo<'_, M> {
     }
     async fn read_producer(&self) -> Result<u32, Self::Error> {
         self.memory
-            .read_typed(self.producer, MemoryAlignment::ONE)
+            .read_buffer(self.producer, MemoryAlignment::ONE)
             .map(u32::from_le_bytes)
     }
     async fn read_consumer(&self) -> Result<u32, Self::Error> {
         self.memory
-            .read_typed(self.consumer, MemoryAlignment::ONE)
+            .read_buffer(self.consumer, MemoryAlignment::ONE)
             .map(u32::from_le_bytes)
     }
     async fn write_producer(&self, value: u32) -> Result<(), Self::Error> {

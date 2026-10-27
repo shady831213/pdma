@@ -1,4 +1,5 @@
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment, SharedMemory};
+use hardware_interface_io::memory::SharedMemory;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::{
     dma::{ChannelId, ContextId, DmaAccess},
     hw_components::context::{
@@ -92,7 +93,7 @@ fn platform_reports_distinguish_channels_sharing_function_and_pasid() {
         port.write_with_sideband(&access, ADDRESS, MemoryAlignment::ONE, &payload)
             .unwrap();
         assert_eq!(
-            port.read_typed_with_sideband::<[u8; 4]>(&access, ADDRESS, MemoryAlignment::ONE)
+            port.read_buffer_with_sideband::<[u8; 4]>(&access, ADDRESS, MemoryAlignment::ONE)
                 .unwrap(),
             payload
         );

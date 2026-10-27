@@ -9,7 +9,7 @@ use pdma_model_contract::dma::{
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use support::{TestResult, command, read_word, run, setup, submit};
 
 const CONTROL: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
@@ -20,8 +20,8 @@ const EVENT: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
     + pdma_model_contract::dma::ChannelBlock::EVENT.offset();
 
 fn append(
-    device: &mut pdma_model_dma::Dma<hardware_interface_memory::SharedMemory>,
-    memory: &hardware_interface_memory::SharedMemory,
+    device: &mut pdma_model_dma::Dma<hardware_interface_io::memory::SharedMemory>,
+    memory: &hardware_interface_io::memory::SharedMemory,
     index: u32,
     input: Command,
 ) -> TestResult {
@@ -99,7 +99,7 @@ fn successful_copy_is_silent() -> TestResult {
     run(&mut device)?;
     // Then: payload changes, but no success event or implicit interrupt exists.
     assert_eq!(
-        memory.read_typed::<[u8; 4]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 4]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
         *b"copy"
     );
     assert!(!device.take_interrupt());

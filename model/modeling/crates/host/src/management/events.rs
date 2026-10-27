@@ -1,7 +1,7 @@
 use super::{Management, ManagementRequestId, transport::ring_error};
 use crate::{Error, RingConfig};
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_schema::Encode;
 use pdma_model_contract::hw_components::control::ControlNotificationRegisters;
 use pdma_model_contract::{
@@ -86,7 +86,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             consumer: 0,
         };
         self.memory
-            .write_typed(
+            .write_buffer(
                 self.event_state,
                 MemoryAlignment::ONE,
                 &state.encode().map_err(Error::Codec)?,

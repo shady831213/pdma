@@ -7,9 +7,8 @@ use pdma_model_contract::dma::{
 use crate::Dma;
 use hardware_interface_pipeline::StepOutcome;
 
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
 use hardware_interface_pipeline::Operation;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -129,7 +128,7 @@ fn publication_refreshes_stored_causes_without_irq_stage_or_mmio_read() -> TestR
         assert_eq!(channel.registers.values.irq.cause.raw(), 5);
         let bytes = dma
             .memory
-            .read_typed::<pdma_model_contract::dma::EventRaw>(
+            .read_buffer::<pdma_model_contract::dma::EventRaw>(
                 0x1100.into(),
                 MemoryAlignment::ONE,
             )?;
@@ -220,7 +219,7 @@ fn successful_copy_does_not_require_event_capacity() -> TestResult {
     // Then
     let copied = dma
         .memory
-        .read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?;
+        .read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?;
     assert_eq!(copied, [1, 3, 5, 7]);
     let channel = dma.channels.first().ok_or("channel")?;
     assert_eq!(channel.event.pointers().producer, 2);

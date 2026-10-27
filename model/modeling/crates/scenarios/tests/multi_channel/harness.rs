@@ -1,7 +1,8 @@
 //! Backing selection, actor execution and joined teardown belong to the harness.
 
-use hardware_interface_memory::{MemoryAddress, SharedMemory, SharedMemoryAllocator};
-use hardware_interface_runtime::{InterruptRuntime, InterruptSummary, SoftwareCpu};
+use hardware_interface_io::memory::MemoryAddress;
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_software::{InterruptRuntime, InterruptSummary, SoftwareEnv};
 use std::{io, sync::Arc};
 use tokio::task::JoinSet;
 
@@ -19,7 +20,7 @@ pub(super) async fn run(scenario: Scenario) -> TestResult<Report> {
     let allocator = SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(0x1000));
     let memory = allocator.memory_access();
     let (model, hardware) = hardware::assemble(memory.clone())?;
-    let runtime = InterruptRuntime::new(Arc::new(SoftwareCpu::new()), model.clone());
+    let runtime = InterruptRuntime::new(Arc::new(SoftwareEnv::new()), model.clone());
     let mut workers = JoinSet::new();
     workers.spawn(hardware::drive(model.clone(), hardware));
     assert!(storage.regions()?.is_empty());

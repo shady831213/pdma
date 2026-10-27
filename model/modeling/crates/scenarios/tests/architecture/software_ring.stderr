@@ -1,0 +1,11 @@
+error[E0432]: unresolved imports `hardware_interface_software::MemoryRingIo`, `hardware_interface_software::RegisterRingIo`, `hardware_interface_software::RingCursorRegisters`, `hardware_interface_software::SoftRing`, `hardware_interface_software::SoftRingError`, `hardware_interface_software::SoftRingIo`
+ --> tests/architecture/software_ring.rs:2:5
+  |
+2 |     MemoryRingIo, RegisterRingIo, RingCursorRegisters, SoftRing, SoftRingError, SoftRingIo,
+  |     ^^^^^^^^^^^^  ^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^  ^^^^^^^^  ^^^^^^^^^^^^^  ^^^^^^^^^^ no `SoftRingIo` in the root
+  |     |             |               |                    |         |
+  |     |             |               |                    |         no `SoftRingError` in the root
+  |     |             |               |                    no `SoftRing` in the root
+  |     |             |               no `RingCursorRegisters` in the root
+  |     |             no `RegisterRingIo` in the root
+  |     no `MemoryRingIo` in the root

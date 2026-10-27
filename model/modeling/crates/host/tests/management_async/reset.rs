@@ -1,5 +1,5 @@
 use super::support::{Fixture, response};
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_contract::control::ControlRequestOpcode;
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::memory::FunctionId;
@@ -10,7 +10,7 @@ use pdma_model_software::ring::SoftRing;
 async fn reset_submission_correlates_the_selected_channel() {
     // Given: a real memory-backed management queue.
     let fixture = Fixture::new().unwrap();
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             let mut client = fixture.setup().await.unwrap();
             let mut commands = SoftRing::new(fixture.rings.command);
@@ -42,7 +42,7 @@ async fn reset_submission_correlates_the_selected_channel() {
 async fn reset_completion_preserves_request_identity() {
     // Given: a published reset for a selected channel.
     let fixture = Fixture::new().unwrap();
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             let mut client = fixture.setup().await.unwrap();
             let mut commands = SoftRing::new(fixture.rings.command);

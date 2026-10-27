@@ -4,7 +4,7 @@ mod hardware;
 mod software;
 
 use crate::harness::TestResult;
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::dma::{ChannelFatalCode, Event, EventCode};
 use pdma_model_contract::dma::{ErrorInfo, EventInfoValues};
 

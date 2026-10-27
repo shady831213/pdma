@@ -1,15 +1,15 @@
 //! Submission continuity across modeled CPU changes.
 
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     Command, CommandRegisters, CopyCommandDestinationValues, CopyCommandSourceValues, Event,
     LinearEndpoint,
 };
 
-use hardware_interface_memory::{
-    MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAccess, SharedMemoryAllocator,
-};
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_io::memory::{MemoryAddress, MemoryAlignment, SharedMemoryAccess};
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_io::register::RegisterAccess;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::{
@@ -19,7 +19,7 @@ use std::sync::{
 use tokio::sync::Notify;
 
 struct DelayedBus {
-    model: Model<SharedMemoryAccess>,
+    model: Model<SharedMemoryAccess<(), MemoryAccessError>>,
     delay: Arc<AtomicBool>,
     paused: Arc<Notify>,
     resume: Arc<Notify>,
@@ -74,8 +74,8 @@ async fn suspended_submission_completes_on_another_cpu() -> Result<(), Box<dyn s
         paused: Arc::clone(&paused),
         resume: Arc::clone(&resume),
     };
-    let owner = SoftwareCpu::new();
-    let other = SoftwareCpu::new();
+    let owner = SoftwareEnv::new();
+    let other = SoftwareEnv::new();
     let mut channel = owner
         .run_main(Channel::setup(
             bus,

@@ -1,4 +1,8 @@
 //! Generates C comments from schema declaration descriptions.
+//!
+//! Run: `cargo run -p hardware-interface-schema --features export-c-header --example documented_schema`.
+//! Definitions describe reusable types; placements may supply context-specific
+//! descriptions. These annotations change documentation, not the wire layout.
 
 use std::io::{self, Write};
 
@@ -42,6 +46,8 @@ register_map! {
     pub map Channel {
         alignment: 4,
         placements: [
+            // This placement overrides the type's short description. Its omitted
+            // long description still inherits "Only bit zero is writable."
             #[short_description = "Command processing enable"]
             pub enable: Enable,
         ],
@@ -49,6 +55,8 @@ register_map! {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Resolve metadata once, then export to an injected sink. No output files are
+    // created: this program writes the resulting headers to standard output.
     let mut sink = InMemoryArtifactSink::new();
     RecordCHeaderExporter::new("request.h", "copy")
         .export(&CopyRequest::SPEC.resolve()?, &mut sink)?;

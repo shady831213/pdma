@@ -1,6 +1,6 @@
 use super::super::{BuildError, PlatformConfigError, platform};
 use super::Managed;
-use hardware_interface_memory::SharedMemory;
+use hardware_interface_io::memory::SharedMemory;
 use pdma_model_firmware::Configuration;
 use std::error::Error;
 

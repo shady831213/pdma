@@ -1,4 +1,4 @@
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::register::RegisterAccess;
 use pdma_model_contract::dma::{ChannelBlock, CommandRegisters, EventRegisters};
 use std::error::Error;
 

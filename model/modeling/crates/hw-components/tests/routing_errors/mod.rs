@@ -2,7 +2,7 @@ mod backend;
 mod context;
 
 use backend::{ADDRESS, BackendError, PagedMemory};
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::{
     dma::ChannelId,
     memory::{ContextAttributes, FunctionId, MemoryIdentity},
@@ -54,7 +54,7 @@ fn window_preserves_missing_page_and_rejects_unowned_channel_before_backend() {
     assert_eq!(
         memory
             .backing
-            .read_typed::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)
+            .read_buffer::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)
             .unwrap(),
         [13; 4]
     );
@@ -94,14 +94,14 @@ fn control_preserves_custom_errors_and_uses_its_fixed_manager_after_repair() {
     assert_eq!(
         memory
             .backing
-            .read_typed::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)
+            .read_buffer::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)
             .unwrap(),
         [13; 4]
     );
     memory.present.set(true);
     port.write(ADDRESS, MemoryAlignment::ONE, &[44; 4]).unwrap();
     assert_eq!(
-        port.read_typed::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)
+        port.read_buffer::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)
             .unwrap(),
         [44; 4]
     );

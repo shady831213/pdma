@@ -1,15 +1,15 @@
 //! Retained Host publication through the shared software ring endpoint.
 
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, Command, CommandRegisters, CopyCommandDestinationValues,
     CopyCommandSourceValues, Event, LinearEndpoint,
 };
 
-use hardware_interface_memory::{
-    MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAccess, SharedMemoryAllocator,
-};
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_io::memory::{MemoryAddress, MemoryAlignment, SharedMemoryAccess};
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_io::register::RegisterAccess;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_dma::Dma;
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
@@ -24,7 +24,7 @@ use std::{
 };
 
 struct CommitBus {
-    model: Model<SharedMemoryAccess>,
+    model: Model<SharedMemoryAccess<(), MemoryAccessError>>,
     pause: Arc<AtomicBool>,
     commits: Arc<AtomicUsize>,
 }
@@ -73,7 +73,7 @@ async fn cancelled_committed_submission_resumes_without_republication()
         pause: Arc::clone(&pause),
         commits: Arc::clone(&commits),
     };
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     let mut channel = cpu
         .run_main(Channel::setup(
             bus,

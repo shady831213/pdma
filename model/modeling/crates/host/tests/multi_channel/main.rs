@@ -1,5 +1,6 @@
 //! Host channel discovery and independent reset boundaries.
 
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelId, Command, CommandHeader, DmaRegisters, Event, FenceCommand, Opcode, WordTarget,
     WordTargetWidth, WordWrite,
@@ -7,13 +8,13 @@ use pdma_model_contract::dma::{
 
 mod instances;
 
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAccess,
-    SharedMemoryAllocator,
+use hardware_interface_io::memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_dma::Dma;
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
@@ -58,7 +59,7 @@ fn config(allocator: &SharedMemoryAllocator, index: usize) -> TestResult<Channel
 }
 
 struct ObservedBus {
-    model: Model<SharedMemoryAccess>,
+    model: Model<SharedMemoryAccess<(), MemoryAccessError>>,
     available: u32,
     reads: Arc<AtomicUsize>,
     writes: Arc<AtomicUsize>,
@@ -88,7 +89,7 @@ async fn discovery_rejects_unavailable_channels_before_any_configuration_write()
     let allocator = allocator();
     let memory = allocator.memory_access();
     let model = Model::new(Dma::new(memory.clone(), 3)?);
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     for index in [2, 3, usize::MAX] {
         let writes = Arc::new(AtomicUsize::new(0));
         let bus = ObservedBus {
@@ -145,7 +146,7 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
     let mut hardware = device.hardware();
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let model = Model::new(device);
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     cpu.run_main(async {
         let mut channels = Vec::new();
         let mut completions = Vec::new();
@@ -186,7 +187,7 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
                         .await?,
                     Ok(StepOutcome::InProgress)
                 ));
-                completed = memory.read_typed(completion, MemoryAlignment::try_new(8)?)?;
+                completed = memory.read_buffer(completion, MemoryAlignment::try_new(8)?)?;
                 if completed == expected {
                     break;
                 }
@@ -195,7 +196,7 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
             assert_eq!(channel.event().await?, None);
         }
         assert_eq!(
-            memory.read_typed::<[u8; 8]>(
+            memory.read_buffer::<[u8; 8]>(
                 *completions.first().ok_or("completion missing")?,
                 MemoryAlignment::try_new(8)?
             )?,
@@ -212,7 +213,7 @@ async fn channel_count_is_read_only_and_survives_both_reset_scopes() -> TestResu
     let allocator = allocator();
     let memory = allocator.memory_access();
     let model = Model::new(Dma::new(memory.clone(), 3)?);
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     let mut bytes = [0; 4];
     model.read(u32::try_from(COUNT)?, &mut bytes).await?;
     assert_eq!(u32::from_le_bytes(bytes), 3);

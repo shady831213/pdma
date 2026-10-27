@@ -7,6 +7,11 @@ pub use bank::{
 };
 
 /// Byte layout, metadata and checked views independent of codec policy.
+///
+/// Generated records and untagged unions implement this trait. Use it when only
+/// geometry or views are needed; require [`SchemaCodec`] when an owned value must
+/// be selected and decoded. An untagged union has a layout even when the application
+/// has not supplied a rule for choosing its active variant.
 pub trait SchemaLayout {
     /// Owned decoded value for this layout.
     type Value: Clone + Copy + Default + Eq + PartialEq;
@@ -47,10 +52,29 @@ pub trait SchemaLayout {
 }
 
 /// Composable byte codec implemented by generated records and application types.
+///
+/// The layout already supplies the value type, geometry and views. Generated
+/// records implement both traits. For an untagged union, implement only `decode`
+/// and `encode` here using its generated variant helpers and the application's
+/// selection rule. Nested codecs then compose through the same trait; schema does
+/// not infer protocol tags from arbitrary bytes.
+///
+/// A custom Rust type may also participate by implementing [`SchemaLayout`] first.
+/// Errors should retain [`SchemaCodecError`]'s location information so enclosing
+/// codecs can report failures relative to the composed layout.
 pub trait SchemaCodec: SchemaLayout {
     /// Decodes one owned value from the start of `bytes`.
+    ///
+    /// # Errors
+    /// Returns [`SchemaCodecError`] when bytes are insufficient or rejected by the
+    /// codec's scalar, variant-selection or value-validation rules.
     fn decode(bytes: &[u8]) -> Result<Self::Value, SchemaCodecError>;
     /// Encodes one owned value at the start of `bytes`.
+    ///
+    /// # Errors
+    /// Returns [`SchemaCodecError`] for an insufficient destination or a value
+    /// rejected by the codec. A custom implementation defines its failure effects;
+    /// callers must not infer transactional writes from this trait alone.
     fn encode(bytes: &mut [u8], value: &Self::Value) -> Result<(), SchemaCodecError>;
 }
 

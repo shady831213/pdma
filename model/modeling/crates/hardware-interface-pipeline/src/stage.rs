@@ -19,6 +19,12 @@ pub trait Stage<C>: Sized {
     /// Structural failure terminating this operation.
     type Error;
     /// Advances one invocation through bounded hardware work.
+    ///
+    /// # Errors
+    /// The outer [`crate::RunError`] is a driving failure and preserves the
+    /// accepted continuation. An inner `Complete(Err(error))` terminates the
+    /// invocation with the stage's domain error. Callers must distinguish these
+    /// layers before deciding whether to retry or release application resources.
     fn step(
         &mut self,
         context: &mut C,

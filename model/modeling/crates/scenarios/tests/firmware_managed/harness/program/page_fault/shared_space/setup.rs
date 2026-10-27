@@ -1,3 +1,4 @@
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     CopyCommandDestinationValues, CopyCommandSourceValues, LinearEndpoint,
 };
@@ -53,7 +54,7 @@ pub(super) async fn parked<M: Send>(driver: &mut Driver<M>) -> TestResult {
 pub(super) async fn completed<M: Send>(
     driver: &mut Driver<M>,
     (memory, fence): (
-        &hardware_interface_memory::SharedMemoryAccess,
+        &hardware_interface_io::memory::SharedMemoryAccess<(), MemoryAccessError>,
         pdma_model_software::dma::CompletionWord,
     ),
 ) -> TestResult<u64> {
@@ -74,7 +75,7 @@ pub(super) async fn completed<M: Send>(
 pub(super) struct Session<M> {
     pub manager: pdma_model_host::Management<
         crate::harness::runtime::HostBus<M>,
-        hardware_interface_memory::SharedMemoryAccess,
+        hardware_interface_io::memory::SharedMemoryAccess<(), MemoryAccessError>,
     >,
     pub channels: [ChannelId; 2],
     pub ring_context: ContextId,
@@ -145,7 +146,7 @@ pub(super) fn requests(
     payload: &Space,
     context: ContextId,
     data: &[u8],
-) -> TestResult<(Command, [hardware_interface_memory::MemoryAddress; 2])> {
+) -> TestResult<(Command, [hardware_interface_io::memory::MemoryAddress; 2])> {
     let length = u64::try_from(data.len())?;
     let source = payload
         .allocator

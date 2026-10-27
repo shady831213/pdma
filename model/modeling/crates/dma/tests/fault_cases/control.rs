@@ -139,7 +139,7 @@ fn resume_does_not_enable_a_disabled_channel_or_clear_device_fatal() -> TestResu
             device
                 .memory
                 .memory
-                .read_typed::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
+                .read_buffer::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
             *b"c-----"
         );
         if !fatal {

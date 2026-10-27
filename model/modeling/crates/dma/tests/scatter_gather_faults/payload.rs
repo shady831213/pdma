@@ -88,7 +88,7 @@ fn payload_fault_reports_written_prefix_without_rollback() -> TestResult {
             }
         );
         assert_eq!(
-            &memory.read_typed::<[u8; 8]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
+            &memory.read_buffer::<[u8; 8]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
             b"abc-----"
         );
         assert!(device.irq());

@@ -72,7 +72,7 @@ fn resumed_write_uses_the_same_custom_completion_tail_as_healthy_write() -> Test
             device
                 .memory
                 .memory
-                .read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+                .read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
             *b"tail"
         );
     }

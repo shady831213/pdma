@@ -1,8 +1,9 @@
 //! Shared control queue address validation and cursor access.
 
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory, SharedMemoryAccess,
+use hardware_interface_io::memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
+use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
 use pdma_model_contract::control::{ControlQueue, ControlRingState};
 use pdma_model_contract::ring::RingError;
 use pdma_model_software::ring::SoftRingIo;
@@ -50,7 +51,7 @@ async fn shared_layout_targets_each_independent_memory_cursor()
     ] {
         let address = MemoryAddress::new(0x1000 + u64::try_from(ring + field)?);
         assert_eq!(
-            access.read_typed::<[u8; 4]>(address, MemoryAlignment::ONE)?,
+            access.read_buffer::<[u8; 4]>(address, MemoryAlignment::ONE)?,
             expected.to_le_bytes()
         );
     }

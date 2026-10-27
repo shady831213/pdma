@@ -1,5 +1,6 @@
 use super::backend::{ADDRESS, BackendError, PagedMemory};
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment, SharedMemory};
+use hardware_interface_io::memory::SharedMemory;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::{
     dma::{ChannelId, ContextId, DmaAccess},
     hw_components::context::{ContextEntryRegisters, ContextTableRegisters},
@@ -72,7 +73,7 @@ fn authorized_context_retains_page_fault_address_without_mutating_storage() {
     assert_eq!(
         memory
             .backing
-            .read_typed::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)
+            .read_buffer::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)
             .unwrap(),
         [13; 4]
     );
@@ -80,7 +81,7 @@ fn authorized_context_retains_page_fault_address_without_mutating_storage() {
     port.write_with_sideband(&access, ADDRESS, MemoryAlignment::ONE, &[44; 4])
         .unwrap();
     assert_eq!(
-        port.read_typed_with_sideband::<[u8; 4]>(&access, ADDRESS, MemoryAlignment::ONE)
+        port.read_buffer_with_sideband::<[u8; 4]>(&access, ADDRESS, MemoryAlignment::ONE)
             .unwrap(),
         [44; 4]
     );
@@ -152,7 +153,7 @@ fn foreign_invalid_and_unowned_context_routes_fail_before_backend_access() {
     assert_eq!(
         memory
             .backing
-            .read_typed::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)
+            .read_buffer::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)
             .unwrap(),
         [13; 4]
     );

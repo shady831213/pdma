@@ -1,8 +1,7 @@
 //! Scenario memory routing through the authoritative Function owner bank.
 use crate::harness::runtime::memory::{RouteError, RoutedMemory, SpaceError};
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_contract::memory::{ContextAttributes, FunctionId, MemoryIdentity};
@@ -38,18 +37,18 @@ fn closed_window_retains_memory_binding_until_reset_and_reassignment() -> TestRe
     let context = dma.channel_context(ChannelId::new(0))?;
     let bytes = context
         .memory
-        .read_typed::<[u8; 4]>(MemoryAddress::new(0x1000), MemoryAlignment::ONE)?;
+        .read_buffer::<[u8; 4]>(MemoryAddress::new(0x1000), MemoryAlignment::ONE)?;
     context
         .memory
-        .write_typed(MemoryAddress::new(0x1000), MemoryAlignment::ONE, &[0x33; 4])?;
+        .write_buffer(MemoryAddress::new(0x1000), MemoryAlignment::ONE, &[0x33; 4])?;
     // Then: closure neither revokes the old memory port nor falls back to Function zero.
     assert_eq!(bytes, [0x22; 4]);
     assert_eq!(
-        first.read_typed::<[u8; 4]>(MemoryAddress::new(0x1000), MemoryAlignment::ONE)?,
+        first.read_buffer::<[u8; 4]>(MemoryAddress::new(0x1000), MemoryAlignment::ONE)?,
         [0x11; 4]
     );
     assert_eq!(
-        second.read_typed::<[u8; 4]>(MemoryAddress::new(0x1000), MemoryAlignment::ONE)?,
+        second.read_buffer::<[u8; 4]>(MemoryAddress::new(0x1000), MemoryAlignment::ONE)?,
         [0x33; 4]
     );
     Ok(())
@@ -99,7 +98,7 @@ fn missing_function_binding_never_falls_back_to_another_space() -> TestResult {
     }
     assert_eq!(bytes, [0xa5; 4]);
     assert_eq!(
-        memory.read_typed::<[u8; 4]>(address, MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 4]>(address, MemoryAlignment::ONE)?,
         [0x11; 4]
     );
     Ok(())
@@ -109,6 +108,6 @@ fn space(bytes: [u8; 4]) -> Result<SharedMemory, Box<dyn std::error::Error>> {
     let memory = SharedMemory::new();
     let address = MemoryAddress::new(0x1000);
     memory.add_regions(&[MemoryRegion::try_new(address, 4, MemoryAlignment::ONE)?])?;
-    memory.write_typed(address, MemoryAlignment::ONE, &bytes)?;
+    memory.write_buffer(address, MemoryAlignment::ONE, &bytes)?;
     Ok(memory)
 }

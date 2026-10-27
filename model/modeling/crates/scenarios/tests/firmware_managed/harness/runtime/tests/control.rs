@@ -1,6 +1,7 @@
 use super::client;
 use super::*;
-use hardware_interface_memory::{MemoryAddress, MemoryAlignment, SharedMemoryAllocator};
+use hardware_interface_io::memory::SharedMemoryAllocator;
+use hardware_interface_io::memory::{MemoryAddress, MemoryAlignment};
 use pdma_model_contract::control::{
     ControlQueue, ControlRequest, ControlResponse, ControlResponseStatus,
 };

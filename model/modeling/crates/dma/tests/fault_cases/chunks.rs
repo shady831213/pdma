@@ -80,7 +80,7 @@ fn chunked_transform(fault: bool) -> TestResult {
                     && device
                         .memory
                         .memory
-                        .read_typed::<[u8; 1]>(0x1a57.into(), MemoryAlignment::ONE)?
+                        .read_buffer::<[u8; 1]>(0x1a57.into(), MemoryAlignment::ONE)?
                         == [!0x5a]
             {
                 break;

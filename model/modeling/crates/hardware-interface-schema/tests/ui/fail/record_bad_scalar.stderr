@@ -394,8 +394,9 @@ note: required by a bound in `SchemaCodec`
   |
   | / pub trait SchemaCodec: SchemaLayout {
   | |     /// Decodes one owned value from the start of `bytes`.
-  | |     fn decode(bytes: &[u8]) -> Result<Self::Value, SchemaCodecError>;
-  | |     /// Encodes one owned value at the start of `bytes`.
+  | |     ///
+  | |     /// # Errors
+... |
   | |     fn encode(bytes: &mut [u8], value: &Self::Value) -> Result<(), SchemaCodecError>;
   | | }
   | |_^ required by this bound in `SchemaCodec`

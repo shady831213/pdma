@@ -5,7 +5,7 @@ use pdma_model_contract::dma::{CopyCommandSourceValues, LinearEndpoint};
 /// Shared DMA bus and memory fixtures.
 pub mod support;
 
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_pipeline::StepOutcome;
 use pdma_model_contract::dma::{ChannelId, CommandRegisters, ContextId};
 use support::{TestResult, command, setup, submit};

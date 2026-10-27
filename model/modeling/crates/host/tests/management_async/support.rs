@@ -1,9 +1,9 @@
 //! Shared-memory queue fixtures and a suspendable register transport.
 
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAlignment, SharedMemory, SharedMemoryAccess, SharedMemoryAllocator,
-};
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::memory::MemoryAccessError;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment, SharedMemoryAccess};
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_schema::Decode;
 use pdma_model_contract::control::{
     ControlQueue, ControlQueueRaw, ControlRequest, ControlResponse,
@@ -46,7 +46,7 @@ impl RegisterAccess for &Bus {
 
 pub(super) struct Fixture {
     pub bus: Bus,
-    pub memory: SharedMemoryAccess,
+    pub memory: SharedMemoryAccess<(), MemoryAccessError>,
     pub rings: ManagementRings,
     pub event: InterruptEvent,
 }
@@ -70,7 +70,10 @@ impl Fixture {
 
     pub(super) async fn setup(
         &self,
-    ) -> Result<Management<&Bus, SharedMemoryAccess>, pdma_model_host::Error<Infallible>> {
+    ) -> Result<
+        Management<&Bus, SharedMemoryAccess<(), MemoryAccessError>>,
+        pdma_model_host::Error<Infallible>,
+    > {
         Management::setup(
             &self.bus,
             self.memory.clone(),
@@ -93,7 +96,7 @@ impl Fixture {
     pub(super) fn state(&self) -> Result<ControlQueue, Box<dyn std::error::Error>> {
         Ok(self
             .memory
-            .read_typed::<ControlQueueRaw>(self.rings.state, MemoryAlignment::ONE)?
+            .read_buffer::<ControlQueueRaw>(self.rings.state, MemoryAlignment::ONE)?
             .decode()?)
     }
 

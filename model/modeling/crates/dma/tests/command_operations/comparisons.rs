@@ -1,5 +1,5 @@
 use super::support::{Rig, TestResult, fence, target};
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     Command, CommandHeader, Opcode, WaitCommand, WaitCommandComparison as Compare, WordTargetWidth,
 };

@@ -18,13 +18,11 @@ Do not restore their compatibility interfaces without a user request.
 Active work is under `model/modeling`; read its `AGENTS.md`.
 Its Cargo workspace contains the core `contract`, `dma` and `host` crates, the
 managed MVP's `hw-components` and `firmware`, shared PDMA `software`, system scenarios,
-and eight reusable building blocks:
+and six reusable building blocks:
 
 - `hardware-interface-pipeline`
-- `hardware-interface-runtime` (software CPU and ISR execution)
-- `hardware-interface-memory`
-- `hardware-interface-storage`
-- `hardware-interface-register`
+- `hardware-interface-software` (SoftwareEnv and main/ISR execution)
+- `hardware-interface-io`
 - `hardware-interface-irq`
 - `hardware-interface-schema`
 - `hardware-interface-schema-macros`
@@ -42,9 +40,14 @@ milestone before broader feature work. The implemented split is `dma`, `hw-compo
 and `firmware`, with concrete wiring in `scenarios/tests/firmware_managed/harness`.
 The standalone managed-runtime crate was removed after user review. Ordinary and
 managed transports share the framework's split pending-interrupt capabilities.
-DMA depends on the standalone memory crate; its normal dependency tree has no Tokio.
-The runtime now owns only software CPU/ISR execution, progress notifications and tracing.
-IRQ primitives are independent; register transport works without its optional schema feature.
+DMA consumes IO memory capabilities; built-in error classification retains a concrete
+memory error conversion. Its normal dependency tree has no Tokio. The software crate
+owns SoftwareEnv, main/ISR execution, progress notifications and tracing. IO owns
+memory/register access, supplied byte backing/allocation and public `memory::storage`
+policies in one crate, with no schema dependency. Custom IO implementations remain
+independent of the supplied backing types.
+Hardware owns schema register windows and their effects. IO uses only std; no
+separate memory or storage package remains. IRQ primitives are independent.
 The managed assembly has independently firmware-managed channel windows, independent boot status,
 and separate in-memory control command/response rings with bootstrap and bidirectional
 doorbell registers. Host and firmware share `software::ring::SoftRing`; doorbell waits

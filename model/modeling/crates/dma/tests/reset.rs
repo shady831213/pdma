@@ -6,7 +6,7 @@ use pdma_model_contract::dma::ChannelConfiguration;
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_pipeline::StepOutcome;
 use pdma_model_contract::dma::{
     ChannelRegisters, CommandRegisters, DmaAdmin, DmaControl, DmaDiscovery, EventRegisters,
@@ -62,7 +62,7 @@ fn reset_invalidates_a_retained_copy_without_rolling_back_memory() -> TestResult
     // Then: stale work is discarded and external memory remains intact.
     assert_eq!(read_word(&mut device, reset)?, 0);
     assert_eq!(
-        memory.read_typed::<[u8; 4]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 4]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
         *b"keep"
     );
     assert_eq!(
@@ -231,7 +231,7 @@ fn reset_copy(reset: usize) -> TestResult {
     }
     support::assert_no_event(&mut device)?;
     assert_eq!(
-        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
         [7; 4]
     );
     Ok(())

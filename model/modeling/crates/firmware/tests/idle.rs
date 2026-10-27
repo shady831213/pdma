@@ -3,10 +3,10 @@
 pub mod platform;
 use platform::ADDRESSES;
 
-use hardware_interface_irq::pending_interrupt;
-use hardware_interface_memory::SharedMemory;
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::{InterruptRuntime, SoftwareCpu};
+use hardware_interface_io::memory::SharedMemory;
+use hardware_interface_io::register::RegisterAccess;
+use hardware_interface_irq::interrupt_wire;
+use hardware_interface_software::{InterruptRuntime, SoftwareEnv};
 use pdma_model_contract::hw_components::control::{ControlConfiguration, ControlRegisters};
 use pdma_model_software::control::{ControlIrq, ControlIsr};
 use std::{
@@ -47,8 +47,8 @@ impl RegisterAccess for &DisabledBus {
 async fn disabled_control_waits_without_repeated_register_reads() {
     // Given: boot succeeds but Host has not activated the queue.
     let bus = DisabledBus::default();
-    let (_, source) = pending_interrupt(ControlIrq);
-    let cpu = Arc::new(SoftwareCpu::new());
+    let (_, source) = interrupt_wire(ControlIrq);
+    let cpu = Arc::new(SoftwareEnv::new());
     let bound = cpu.bind_registers(&bus);
     let runtime = InterruptRuntime::new(cpu, source);
     let mut program = std::pin::pin!(runtime.run_main::<ControlIsr, _>(async |registration| {

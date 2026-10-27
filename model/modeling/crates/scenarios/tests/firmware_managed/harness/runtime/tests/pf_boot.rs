@@ -6,10 +6,10 @@ use crate::harness::{
     },
     runtime::{Host, HostBus, ManagementBus},
 };
-use hardware_interface_memory::{
-    MemoryAddress, SharedMemory, SharedMemoryAccess, SharedMemoryAllocator,
-};
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::memory::MemoryAccessError;
+use hardware_interface_io::memory::{MemoryAddress, SharedMemoryAccess};
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_io::register::RegisterAccess;
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::hw_components::control::ControlConfiguration;
 use pdma_model_contract::hw_components::control::ControlRegisters;
@@ -21,11 +21,9 @@ use pdma_model_host::Error;
 use std::{pin::pin, sync::Arc, task::Poll, time::Duration};
 use tokio::sync::oneshot;
 
-fn platform() -> (
-    Managed<SharedMemoryAccess>,
-    Host<SharedMemoryAccess>,
-    SharedMemoryAllocator,
-) {
+type TestMemory = SharedMemoryAccess<(), MemoryAccessError>;
+
+fn platform() -> (Managed<TestMemory>, Host<TestMemory>, SharedMemoryAllocator) {
     let allocator =
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
     let (system, mut hosts) = Managed::with_functions(allocator.memory_access(), 2, 3).unwrap();
@@ -48,7 +46,7 @@ fn assignments() -> ([Assignment; 2], [Grant; 2]) {
     ([first, second], [a, b])
 }
 
-async fn control_config(bus: &HostBus<SharedMemoryAccess>) -> (u64, u32) {
+async fn control_config(bus: &HostBus<TestMemory>) -> (u64, u32) {
     let mut bootstrap = [0; 8];
     let mut enable = [0; 4];
     bus.read(bus.addresses().control, &mut bootstrap)
@@ -114,7 +112,7 @@ async fn pf_reports_real_firmware_boot_failure_without_configuring_management() 
     // Given: real firmware publishes Failed for an invalid target namespace.
     let (system, host, allocator) = platform();
     let bus = system
-        .firmware_cpu
+        .firmware_env
         .bind_registers(ManagementBus(Arc::clone(&system.shared)));
     let mut firmware = pin!(system.firmware_runtime.run_main(async |registration| {
         pdma_model_firmware::main(

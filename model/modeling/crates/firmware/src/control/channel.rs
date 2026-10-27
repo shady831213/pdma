@@ -1,6 +1,6 @@
 use crate::Error;
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_schema::Decode;
 use pdma_model_contract::control::{
     ControlQueue, ControlRequest, ControlResponse, ControlRingState, ControlRingStateRaw,
@@ -176,7 +176,7 @@ fn read_state<M: MemoryAccess, E>(
         .checked_add(u64::try_from(offset).map_err(|_| Error::Ring(RingError::Geometry))?)
         .ok_or(Error::Ring(RingError::Geometry))?;
     memory
-        .read_typed::<ControlRingStateRaw>(MemoryAddress::new(address), MemoryAlignment::ONE)
+        .read_buffer::<ControlRingStateRaw>(MemoryAddress::new(address), MemoryAlignment::ONE)
         .map_err(Error::Memory)?
         .decode()
         .map_err(Error::Codec)

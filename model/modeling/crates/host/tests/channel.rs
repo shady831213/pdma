@@ -1,17 +1,17 @@
 //! End-to-end host submission and interrupt notification behavior.
 
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelFatalCode, Command, CommandHeader, CopyCommandDestinationValues,
     CopyCommandSourceValues, ErrorInfo, Event, EventCode, EventInfoValues, FenceCommand,
     LinearEndpoint, Opcode, TrapCommand, WordTarget, WordTargetWidth, WordWrite,
 };
 
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
 use hardware_interface_irq::InterruptSource;
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAllocator,
-};
 use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
@@ -43,7 +43,7 @@ async fn malformed_event_is_not_consumed_before_explicit_decode_succeeds()
     let device = Dma::new(memory.clone(), 1)?;
     let mut hardware = device.hardware();
     let model = Model::new(device);
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     let mut channel = cpu
         .run_main(Channel::setup(
             model.clone(),
@@ -134,7 +134,7 @@ async fn copy_fence_then_trap_exposes_completion_and_payload()
     let device = Dma::new(memory.clone(), 1)?;
     let mut hardware = device.hardware();
     let mut model = Model::new(device);
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     let mut channel = cpu
         .run_main(Channel::setup(
             model.clone(),
@@ -194,7 +194,7 @@ async fn copy_fence_then_trap_exposes_completion_and_payload()
     // Then: Fence, payload and claimed notification agree.
     assert_eq!(event, None);
     assert_eq!(
-        memory.read_typed::<[u8; 8]>(completion, alignment)?,
+        memory.read_buffer::<[u8; 8]>(completion, alignment)?,
         7_u64.to_le_bytes()
     );
     let mut copied = [0; 8];
@@ -211,7 +211,7 @@ mod channel {
 }
 
 async fn until_irq(
-    model: Model<hardware_interface_memory::SharedMemoryAccess>,
+    model: Model<hardware_interface_io::memory::SharedMemoryAccess<(), MemoryAccessError>>,
     hardware: &mut pdma_model_dma::Hardware,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let executor = AsyncExecutor::new(model.clone());

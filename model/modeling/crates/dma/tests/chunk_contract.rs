@@ -3,7 +3,8 @@
 /// Shared hardware test fixtures.
 pub mod support;
 
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment, SharedMemory};
+use hardware_interface_io::memory::SharedMemory;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome, StepResult, Then};
 use pdma_model_dma::{ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy};
 use support::{TestResult, command, setup, submit};
@@ -60,7 +61,7 @@ fn transform_can_modify_only_the_active_chunk_and_cannot_forge_its_length() -> T
     // Then: the public slice cannot resize hardware scratch or change completion length.
     assert!(operation.is_complete());
     assert_eq!(
-        memory.read_typed::<[u8; 6]>(0x12ff.into(), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 6]>(0x12ff.into(), MemoryAlignment::ONE)?,
         [0xaa, 0x5a, 0x5a, 0x5a, 0x5a, 0xaa]
     );
     Ok(())

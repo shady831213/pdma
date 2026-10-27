@@ -18,7 +18,8 @@ mod termination;
 
 use self::memory::Paged;
 use crate::support::{TestResult, configure};
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment, MemoryRegion, SharedMemory};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
 use hardware_interface_pipeline::{Operation, StepOutcome};
 use pdma_model_dma::{Dma, Hardware};
 
@@ -143,7 +144,7 @@ fn event(device: &Dma<Paged>) -> TestResult<Event> {
     let raw = device
         .memory
         .memory
-        .read_typed::<EventRaw>(0x1100.into(), MemoryAlignment::ONE)?;
+        .read_buffer::<EventRaw>(0x1100.into(), MemoryAlignment::ONE)?;
     Ok(Event::from_bytes(raw.as_ref())?)
 }
 
@@ -172,7 +173,7 @@ fn completed(device: &mut Fixture, value: u64) -> TestResult {
         Ok(u64::from_le_bytes(
             dma.memory
                 .memory
-                .read_typed::<[u8; 8]>(0x1ff0.into(), MemoryAlignment::ONE)?,
+                .read_buffer::<[u8; 8]>(0x1ff0.into(), MemoryAlignment::ONE)?,
         ) == value)
     })?;
     assert_eq!(

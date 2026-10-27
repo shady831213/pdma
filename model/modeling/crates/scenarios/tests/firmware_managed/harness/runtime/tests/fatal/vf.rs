@@ -1,6 +1,8 @@
 use crate::harness::runtime::Host;
-use hardware_interface_memory::{SharedMemoryAccess, SharedMemoryAllocator};
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::memory::MemoryAccessError;
+use hardware_interface_io::memory::SharedMemoryAccess;
+use hardware_interface_io::memory::SharedMemoryAllocator;
+use hardware_interface_io::register::RegisterAccess;
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_software::control::ControlIsr;
 use tokio::sync::{mpsc, oneshot};
@@ -14,7 +16,7 @@ pub(super) struct Messages {
 }
 
 pub(super) async fn run(
-    host: Host<SharedMemoryAccess>,
+    host: Host<SharedMemoryAccess<(), MemoryAccessError>>,
     allocator: SharedMemoryAllocator,
     mut messages: Messages,
 ) -> usize {

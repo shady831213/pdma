@@ -1,5 +1,5 @@
 use super::{Handler, HostVector, Ports, TestResult, buffers};
-use hardware_interface_memory::SharedMemoryAllocator;
+use hardware_interface_io::memory::SharedMemoryAllocator;
 use pdma_model_contract::control::{ControlResponse, ControlResponseStatus};
 use pdma_model_contract::dma::{ContextId, Event};
 use pdma_model_contract::memory::FunctionId;

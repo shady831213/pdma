@@ -1,6 +1,6 @@
 use super::support::{Fixture, pending_once, response};
 use hardware_interface_irq::InterruptHandler;
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::Error;
 use pdma_model_software::{control::ControlIrq, ring::SoftRing};
@@ -13,7 +13,7 @@ use std::{
 #[tokio::test]
 async fn cancelled_submission_retains_identity_and_publishes_only_once() {
     let fixture = Fixture::new().unwrap();
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             // Given: the request doorbell suspends after memory publication.
             let mut client = fixture.setup().await.unwrap();
@@ -47,7 +47,7 @@ async fn cancelled_submission_retains_identity_and_publishes_only_once() {
 #[tokio::test]
 async fn cancelled_space_notification_retains_consumed_response() {
     let fixture = Fixture::new().unwrap();
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             // Given: the response-space doorbell suspends after consumption.
             let mut client = fixture.setup().await.unwrap();
@@ -89,7 +89,7 @@ async fn cancelled_space_notification_retains_consumed_response() {
 #[tokio::test]
 async fn waiting_response_can_complete_on_another_cpu() {
     let fixture = Fixture::new().unwrap();
-    let first = SoftwareCpu::new();
+    let first = SoftwareEnv::new();
     let mut client = first.run_main(fixture.setup()).await.unwrap();
     let id = first
         .run_main(client.submit_acquire(FunctionId::new(0)))
@@ -114,7 +114,7 @@ async fn waiting_response_can_complete_on_another_cpu() {
         })
         .await;
     // When: another CPU continues the same software operation.
-    let result = SoftwareCpu::new().run_main(future).await.unwrap();
+    let result = SoftwareEnv::new().run_main(future).await.unwrap();
     // Then: the matching completion is consumed once.
     assert_eq!(result, response(id.raw(), 0));
     assert_eq!(fixture.state().unwrap().response.consumer, 1);
@@ -135,7 +135,7 @@ async fn management_setup_needs_no_modeled_cpu_context() {
 #[tokio::test]
 async fn next_response_wakes_from_isr_and_wait_pending_recovers_submission() {
     let fixture = Fixture::new().unwrap();
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             // Given: a cancelled submission with one real command already visible.
             let mut client = fixture.setup().await.unwrap();

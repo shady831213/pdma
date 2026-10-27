@@ -1,10 +1,12 @@
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelId, Command, CopyCommandDestinationValues, CopyCommandSourceValues, Event,
     LinearEndpoint,
 };
 
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess, SharedMemoryAllocator,
+use hardware_interface_io::memory::SharedMemoryAllocator;
+use hardware_interface_io::memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
 use pdma_model_host::{ChannelConfig, RingConfig, Rings};
 
@@ -84,7 +86,7 @@ impl Buffers {
 
     pub(super) fn byte_matches(
         &self,
-        memory: &SharedMemoryAccess,
+        memory: &SharedMemoryAccess<(), MemoryAccessError>,
         offset: usize,
     ) -> TestResult<bool> {
         let address = self
@@ -96,7 +98,10 @@ impl Buffers {
         Ok(byte == [self.value])
     }
 
-    pub(super) fn snapshot(&self, memory: &SharedMemoryAccess) -> TestResult<Vec<u8>> {
+    pub(super) fn snapshot(
+        &self,
+        memory: &SharedMemoryAccess<(), MemoryAccessError>,
+    ) -> TestResult<Vec<u8>> {
         let mut bytes = vec![0; self.length * 2];
         memory.read(self.destination, MemoryAlignment::ONE, &mut bytes)?;
         Ok(bytes)

@@ -10,7 +10,7 @@ mod hardware_lifecycle {
     mod stages;
 
     use crate::support::{TestResult, command, read_word, setup, submit};
-    use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
+    use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
     use hardware_interface_pipeline::{HardwareDriver, Operation, StepOutcome, Then};
     use pdma_model_contract::dma::{
         ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, ContextId, DmaAdmin,
@@ -225,7 +225,7 @@ mod hardware_lifecycle {
                     assert_eq!((event.id, event.code), (fresh.id(), EventCode::ReadError));
                 } else {
                     assert_eq!(
-                        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+                        memory.read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
                         [9; 4]
                     );
                 }

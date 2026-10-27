@@ -4,8 +4,8 @@ use pdma_model_contract::dma::{
 };
 
 use super::{Ports, TestResult, setup};
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::register::RegisterAccess;
 use pdma_model_host::CompletionWord;
 
 pub(in super::super) async fn run<B>(ports: Ports<B>, payload: &[u8; 16]) -> TestResult<[u64; 2]>

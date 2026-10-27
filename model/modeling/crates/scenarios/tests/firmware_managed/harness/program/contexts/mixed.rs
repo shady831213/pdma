@@ -1,6 +1,7 @@
 use super::{Spaces, TestResult, Transfer};
 use crate::harness::runtime::HostBus;
-use hardware_interface_memory::SharedMemoryAccess;
+use hardware_interface_io::memory::MemoryAccessError;
+use hardware_interface_io::memory::SharedMemoryAccess;
 use pdma_model_contract::control::ControlResponseStatus;
 use pdma_model_contract::dma::{ContextId, Event};
 use pdma_model_contract::memory::FunctionId;
@@ -17,7 +18,10 @@ pub struct MixedOutcome {
 }
 
 pub(super) async fn run(
-    management: &mut Management<HostBus<SharedMemoryAccess>, SharedMemoryAccess>,
+    management: &mut Management<
+        HostBus<SharedMemoryAccess<(), MemoryAccessError>>,
+        SharedMemoryAccess<(), MemoryAccessError>,
+    >,
     transfer: &mut Transfer,
     (spaces, contexts): (&Spaces, [ContextId; 4]),
 ) -> TestResult<Vec<MixedOutcome>> {

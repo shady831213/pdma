@@ -8,7 +8,8 @@ use pdma_model_contract::dma::{
 /// Shared hardware fixtures.
 pub mod support;
 
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment, SharedMemory};
+use hardware_interface_io::memory::SharedMemory;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome, StepResult, Then};
 use pdma_model_dma::{
     Chunk, Completion, ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy,
@@ -178,7 +179,7 @@ fn standalone_chunk_graph_publishes_the_actual_read_failure() -> TestResult {
         )?,
         1
     );
-    let raw: EventRaw = memory.read_typed(0x1100.into(), MemoryAlignment::ONE)?;
+    let raw: EventRaw = memory.read_buffer(0x1100.into(), MemoryAlignment::ONE)?;
     let event = Event::from_bytes(raw.as_ref())?;
     assert_eq!(
         (event.id, event.code, event.bytes_completed()),
@@ -236,7 +237,7 @@ fn check(
     );
     assert_eq!((chunks.get().0, payloads.get().0), expected_counts);
     if let Some(code) = expected_status {
-        let raw: EventRaw = memory.read_typed(0x1100.into(), MemoryAlignment::ONE)?;
+        let raw: EventRaw = memory.read_buffer(0x1100.into(), MemoryAlignment::ONE)?;
         let event = Event::from_bytes(raw.as_ref())?;
         assert_eq!(
             (event.id, event.code, event.bytes_completed()),
@@ -244,7 +245,7 @@ fn check(
         );
     }
     assert_eq!(
-        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
         [0xaa; 4]
     );
     assert_eq!(dma.irq(), expected_status.is_some());

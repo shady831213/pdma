@@ -7,7 +7,8 @@ mod lifecycle;
 /// Shared hardware fixtures for Function memory tests.
 mod support;
 
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion};
+use hardware_interface_io::memory::MemoryRegion;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_pipeline::HardwareDriver;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, CommandRegisters, EventCode, EventRegisters, Segment,
@@ -32,13 +33,13 @@ fn command_lists_payload_and_response_use_the_same_channel_owner() -> TestResult
     for (index, memory) in spaces.iter().enumerate() {
         let source = 0x1200 + u64::try_from(index)? * 0x40;
         let destination = 0x1300 + u64::try_from(index)? * 0x40;
-        memory.write_typed(
+        memory.write_buffer(
             MemoryAddress::new(source),
             MemoryAlignment::ONE,
             &[u8::try_from(index)? + 0x31; 8],
         )?;
         for (base, address) in [(0x1400, source), (0x1500, destination)] {
-            memory.write_typed(
+            memory.write_buffer(
                 MemoryAddress::new(base),
                 MemoryAlignment::ONE,
                 &Segment { address, length: 8 }.to_bytes()?,
@@ -105,7 +106,7 @@ fn another_functions_mapping_cannot_satisfy_a_dma_access() -> TestResult {
             256,
             MemoryAlignment::ONE,
         )?])?;
-        peer.write_typed(
+        peer.write_buffer(
             MemoryAddress::new(0x4000),
             MemoryAlignment::ONE,
             &[0xa5; 256],

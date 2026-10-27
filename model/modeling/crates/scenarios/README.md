@@ -120,7 +120,7 @@ Paths below are relative to `tests/single_channel/`.
 | `software/buffers.rs` | Build either endpoint from its requested buffer layout. | Software allocates and initializes byte-aligned payload spans and aligned, schema-encoded SG lists. |
 | `harness/mod.rs` | Select backing and allocation service, drive hardware, run software and collect results. | Owns actor cleanup; does not allocate application buffers or construct a handler registry. |
 | `harness/fault.rs` | Reject a ring write through a test-only memory view. | Observes the actual software-programmed base through a forwarding bus; no fixed buffer addresses or allocation-order assumptions. |
-| `hardware-interface-runtime::InterruptRuntime` | Run the program and dispatch interrupts on its CPU. | Owns the handler table, CPU context and dispatch lifetime. |
+| `hardware-interface-software::InterruptRuntime` | Run the program and dispatch interrupts on its CPU. | Owns the handler table, CPU context and dispatch lifetime. |
 
 The harness makes the execution boundary explicit:
 

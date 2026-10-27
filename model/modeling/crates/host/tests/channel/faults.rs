@@ -24,7 +24,7 @@ async fn fault_interrupt_arrives_when_event_write_is_unmapped()
     let device = Dma::new(memory.clone(), 1)?;
     let mut hardware = device.hardware();
     let mut model = Model::new(device);
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     let mut channel = cpu
         .run_main(Channel::setup(
             model.clone(),

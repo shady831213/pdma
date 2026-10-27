@@ -1,11 +1,11 @@
 //! Host decoding rejects unknown channel fault encodings.
 
-use hardware_interface_memory::{
-    MemoryAddress, SharedMemory, SharedMemoryAccess, SharedMemoryAllocator,
-};
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_io::memory::MemoryAccessError;
+use hardware_interface_io::memory::{MemoryAddress, SharedMemoryAccess};
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_schema::RegisterCodecError;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_contract::dma::ChannelRecovery;
 use pdma_model_contract::dma::ChannelRegisters;
 use pdma_model_dma::Dma;
@@ -14,7 +14,7 @@ use pdma_model_host::{
 };
 use std::sync::Arc;
 
-struct CorruptFaultBus(Model<SharedMemoryAccess>);
+struct CorruptFaultBus(Model<SharedMemoryAccess<(), MemoryAccessError>>);
 
 impl RegisterAccess for CorruptFaultBus {
     type Error = pdma_model_dma::Error;
@@ -50,7 +50,7 @@ async fn unknown_fault_is_a_codec_error() -> Result<(), Box<dyn std::error::Erro
         command: RingConfig::new(0x1000, 1)?,
         event: RingConfig::new(0x2000, 1)?,
     };
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     cpu.run_main(async {
         let channel = Channel::setup(
             bus,

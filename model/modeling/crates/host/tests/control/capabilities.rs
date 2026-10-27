@@ -1,8 +1,8 @@
 use super::{
     Channel, ChannelConfig, ChannelIrqMaskValues, ChannelRegisters, DmaFatalCode, Model,
-    RegisterAccess, SoftwareCpu, fixture,
+    RegisterAccess, SoftwareEnv, fixture,
 };
-use hardware_interface_runtime::{CpuAccessError, CpuContextError};
+use hardware_interface_software::{EnvAccessError, EnvContextError};
 use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::{ChannelBlock, ChannelId};
 use pdma_model_host::DmaError;
@@ -12,8 +12,8 @@ async fn control_operations_can_run_on_another_cpu() -> Result<(), Box<dyn std::
     // Given: a driver created on one CPU over an unrestricted register transport.
     let (device, memory, rings) = fixture()?;
     let model = Model::new(device);
-    let first = SoftwareCpu::new();
-    let other = SoftwareCpu::new();
+    let first = SoftwareEnv::new();
+    let other = SoftwareEnv::new();
     let channel = first
         .run_main(Channel::setup(
             model.clone(),
@@ -56,7 +56,7 @@ async fn cpu_specific_bus_still_enforces_its_own_context() -> Result<(), Box<dyn
     // Given: assembly deliberately supplies a CPU-specific register capability.
     let (device, memory, rings) = fixture()?;
     let model = Model::new(device);
-    let owner = SoftwareCpu::new();
+    let owner = SoftwareEnv::new();
     let channel = owner
         .run_main(Channel::setup(
             owner.bind_registers(model.clone()),
@@ -68,14 +68,14 @@ async fn cpu_specific_bus_still_enforces_its_own_context() -> Result<(), Box<dyn
         ))
         .await?;
     // When: another CPU calls the ordinary driver through that capability.
-    let result = SoftwareCpu::new()
+    let result = SoftwareEnv::new()
         .run_main(channel.set_irq_mask(ChannelIrqMaskValues::new(3)))
         .await;
     // Then: the bus rejects access before the register changes.
     assert!(matches!(
         result,
-        Err(DmaError::Bus(CpuAccessError::Cpu(
-            CpuContextError::Mismatch
+        Err(DmaError::Bus(EnvAccessError::Env(
+            EnvContextError::Mismatch
         )))
     ));
     let mut mask = [0; 4];

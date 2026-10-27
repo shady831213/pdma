@@ -1,4 +1,4 @@
-#![doc = "Runtime-neutral contracts for explicitly stepped hardware-interface pipelines."]
+#![doc = include_str!("../README.md")]
 mod backend;
 mod combinators;
 mod executor;

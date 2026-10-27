@@ -1,6 +1,7 @@
 use crate::{CursorBus, Item};
-use hardware_interface_memory::{MemoryAlignment, MemoryRegion, SharedMemory};
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_io::memory::MemoryAlignment;
+use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_contract::ring::RingError;
 use pdma_model_software::ring::{
     MemoryRingIo, RegisterRingIo, RingConfig, RingCursorRegisters, SoftRing, SoftRingError,
@@ -20,7 +21,7 @@ async fn empty_query_reads_only_cursors_and_handles_wrap() -> TestResult {
     let memory = SharedMemory::new();
     memory.add_regions(&[MemoryRegion::try_new(0.into(), 8, MemoryAlignment::ONE)?])?;
     let io = MemoryRingIo::new(&memory, 0.into(), 4.into());
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             let ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?);
             for (producer, consumer, empty) in [
@@ -50,7 +51,7 @@ async fn empty_query_rejects_invalid_snapshots() -> TestResult {
     let memory = SharedMemory::new();
     memory.add_regions(&[MemoryRegion::try_new(0.into(), 8, MemoryAlignment::ONE)?])?;
     let io = MemoryRingIo::new(&memory, 0.into(), 4.into());
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             let ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?);
             for (producer, consumer) in [(3, 0), (0, 1)] {
@@ -83,7 +84,7 @@ async fn empty_query_completes_outside_cpu_after_a_suspended_read() -> TestResul
             consumer: 4,
         },
     );
-    let owner = SoftwareCpu::new();
+    let owner = SoftwareEnv::new();
     let config = RingConfig::<Item>::new(16, 2)?;
     let ring = owner.run_main(async { SoftRing::new(config) }).await;
     bus.pause_read.store(true, Ordering::SeqCst);
@@ -116,7 +117,7 @@ async fn cancelled_empty_query_leaves_the_ring_usable() -> TestResult {
             consumer: 4,
         },
     );
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             let ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?);
             bus.pause_read.store(true, Ordering::SeqCst);

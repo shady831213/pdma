@@ -1,7 +1,7 @@
 //! Host observation of the firmware boot lifecycle.
 
 use crate::Error;
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::register::RegisterAccess;
 use pdma_model_contract::hw_components::firmware::{
     FirmwareBootState, FirmwareBootValues, FirmwareRegisters,
 };

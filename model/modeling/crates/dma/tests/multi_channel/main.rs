@@ -1,8 +1,7 @@
 //! Selected reset preserves every other channel's retained hardware work.
 
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
 use hardware_interface_pipeline::StepOutcome;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, CommandRegisters, DmaControl, DmaRegisters, EventRegisters,
@@ -147,7 +146,7 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
     let mut committed = false;
     for _ in 0..256 {
         let _ = operation.step(&mut hardware, &mut device)?;
-        if memory.read_typed::<[u8; 1]>(MemoryAddress::new(0x1400), MemoryAlignment::ONE)? == [7] {
+        if memory.read_buffer::<[u8; 1]>(MemoryAddress::new(0x1400), MemoryAlignment::ONE)? == [7] {
             committed = true;
             break;
         }
@@ -190,7 +189,7 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
     assert!(!device.take_interrupt());
     assert!(!device.take_interrupt());
     assert_eq!(
-        memory.read_typed::<[u8; 1]>(MemoryAddress::new(0x1500), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 1]>(MemoryAddress::new(0x1500), MemoryAlignment::ONE)?,
         [0]
     );
     assert_eq!(

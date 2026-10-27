@@ -3,9 +3,9 @@ use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::ChannelInterrupts;
 mod cooperative;
 mod notifications;
-use hardware_interface_memory::SharedMemory;
+use hardware_interface_io::memory::SharedMemory;
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
-use hardware_interface_register::RegisterAccess;
 use pdma_model_contract::dma::{ChannelRegisters, CommandRegisters, EventRegisters};
 use pdma_model_dma::{ChannelFatal, Dma, Error};
 

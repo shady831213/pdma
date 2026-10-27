@@ -1,8 +1,9 @@
 //! Scoped assembly for the three-channel lifecycle scenario.
 
 use super::{TestResult, program, runtime::Managed};
-use hardware_interface_memory::{MemoryAddress, SharedMemory, SharedMemoryAllocator};
-use hardware_interface_runtime::InterruptSummary;
+use hardware_interface_io::memory::MemoryAddress;
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_software::InterruptSummary;
 use std::{io, sync::Arc};
 
 #[derive(Debug)]

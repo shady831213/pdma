@@ -1,6 +1,6 @@
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAlignment, SharedMemoryAccess, SharedMemoryAllocator,
-};
+use hardware_interface_io::memory::MemoryAccessError;
+use hardware_interface_io::memory::SharedMemoryAllocator;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment, SharedMemoryAccess};
 use pdma_model_contract::dma::Segment;
 use pdma_model_contract::dma::{CopyCommandSourceValues, LinearEndpoint, ScatterGatherEndpoint};
 use std::{error::Error, io};
@@ -14,7 +14,7 @@ pub(super) struct Buffer {
 
 pub(super) struct Builder<'a> {
     pub(super) allocator: &'a SharedMemoryAllocator,
-    pub(super) memory: &'a SharedMemoryAccess,
+    pub(super) memory: &'a SharedMemoryAccess<(), MemoryAccessError>,
 }
 
 impl Builder<'_> {

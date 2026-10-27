@@ -2,8 +2,9 @@
 
 use super::{Scenario, software};
 use crate::harness::{TestResult, lifecycle};
-use hardware_interface_memory::{MemoryAddress, SharedMemory, SharedMemoryAllocator};
-use hardware_interface_runtime::{InterruptRuntime, InterruptSummary, SoftwareCpu};
+use hardware_interface_io::memory::MemoryAddress;
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_software::{InterruptRuntime, InterruptSummary, SoftwareEnv};
 use pdma_model_host::runtime::Model;
 use std::sync::Arc;
 use tokio::task::JoinError;
@@ -22,7 +23,7 @@ pub(super) async fn run(scenario: Scenario, payload: &[u8]) -> TestResult<Report
     let memory = allocator.memory_access();
     let (device, hardware) = crate::hardware::assemble(memory.clone())?;
     let model = Model::new(device);
-    let runtime = InterruptRuntime::new(Arc::new(SoftwareCpu::new()), model.clone());
+    let runtime = InterruptRuntime::new(Arc::new(SoftwareEnv::new()), model.clone());
     assert!(storage.regions()?.is_empty());
     let execution = runtime.run_main(async |interrupts| {
         software::main(

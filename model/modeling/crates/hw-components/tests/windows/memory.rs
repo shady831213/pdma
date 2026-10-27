@@ -1,8 +1,7 @@
 //! Hardware identity translation over a Function-tagged downstream memory port.
 
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccessError, MemoryRegion, SharedMemory};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_contract::memory::FunctionId;
@@ -15,7 +14,7 @@ const CHANNEL: ChannelId = ChannelId::new(0);
 
 #[test]
 fn atomic_forwarding_preserves_backend_failures_and_unsupported() {
-    use hardware_interface_memory::{AtomicAccessError, AtomicOperation, AtomicWriteOrder};
+    use hardware_interface_io::memory::{AtomicAccessError, AtomicOperation, AtomicWriteOrder};
     // Given: a channel backed by real memory, plus a backend without atomic support.
     let spaces = Spaces::new().unwrap();
     let windows = ChannelWindows::new(1, 0, u32::try_from(BASE).unwrap()).unwrap();
@@ -61,7 +60,7 @@ fn atomic_forwarding_preserves_backend_failures_and_unsupported() {
     assert_eq!(unsupported, Err(AtomicAccessError::Unsupported));
     assert_eq!(
         backing
-            .read_typed::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)
+            .read_buffer::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)
             .unwrap(),
         7_u64.to_le_bytes()
     );
@@ -145,8 +144,8 @@ fn channel_access_uses_owner_for_validation_raw_and_typed_io() -> TestResult {
     // When: channel zero accesses the second Function through the hardware view.
     port.validate_with_sideband(&CHANNEL, ADDRESS, MemoryAlignment::ONE, 16)?;
     let before =
-        port.read_typed_with_sideband::<[u8; 4]>(&CHANNEL, ADDRESS, MemoryAlignment::ONE)?;
-    port.write_typed_with_sideband(&CHANNEL, ADDRESS, MemoryAlignment::ONE, &[7; 4])?;
+        port.read_buffer_with_sideband::<[u8; 4]>(&CHANNEL, ADDRESS, MemoryAlignment::ONE)?;
+    port.write_buffer_with_sideband(&CHANNEL, ADDRESS, MemoryAlignment::ONE, &[7; 4])?;
     let mut after = [0; 4];
     port.read_with_sideband(&CHANNEL, ADDRESS, MemoryAlignment::ONE, &mut after)?;
     // Then: only the configured Function's bytes change, even through an erased downstream.
@@ -155,7 +154,7 @@ fn channel_access_uses_owner_for_validation_raw_and_typed_io() -> TestResult {
     assert_eq!(
         spaces
             .get(FunctionId::new(0), ADDRESS)?
-            .read_typed::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)?,
+            .read_buffer::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)?,
         [1; 4]
     );
     Ok(())
@@ -172,7 +171,7 @@ fn closing_host_access_retains_owner_for_old_memory_requests() -> TestResult {
     windows.management_write(BASE, &0_u32.to_le_bytes())?;
     let bytes = windows
         .memory(&spaces)
-        .read_typed_with_sideband::<[u8; 4]>(&CHANNEL, ADDRESS, MemoryAlignment::ONE)?;
+        .read_buffer_with_sideband::<[u8; 4]>(&CHANNEL, ADDRESS, MemoryAlignment::ONE)?;
     // Then: memory still uses the retained owner, rather than rejecting or falling back to PF.
     assert_eq!(bytes, [2; 4]);
     Ok(())
@@ -186,14 +185,14 @@ fn later_requests_observe_reassigned_owner_without_cached_identity() -> TestResu
     assert_eq!(
         windows
             .memory(&spaces)
-            .read_typed_with_sideband::<[u8; 4]>(&CHANNEL, ADDRESS, MemoryAlignment::ONE)?,
+            .read_buffer_with_sideband::<[u8; 4]>(&CHANNEL, ADDRESS, MemoryAlignment::ONE)?,
         [1; 4]
     );
     // When: firmware assigns the already-idle channel to Function one.
     windows.management_write(BASE + WindowControl::OWNER.offset(), &1_u32.to_le_bytes())?;
     let bytes = windows
         .memory(&spaces)
-        .read_typed_with_sideband::<[u8; 4]>(&CHANNEL, ADDRESS, MemoryAlignment::ONE)?;
+        .read_buffer_with_sideband::<[u8; 4]>(&CHANNEL, ADDRESS, MemoryAlignment::ONE)?;
     // Then: subsequent requests use the new register value.
     assert_eq!(bytes, [2; 4]);
     Ok(())
@@ -201,7 +200,7 @@ fn later_requests_observe_reassigned_owner_without_cached_identity() -> TestResu
 
 #[test]
 fn atomic_requests_observe_reassigned_owner_without_cached_identity() -> TestResult {
-    use hardware_interface_memory::{AtomicOperation, AtomicWriteOrder};
+    use hardware_interface_io::memory::{AtomicOperation, AtomicWriteOrder};
     // Given: a closed channel and a platform mapper observing its authorized owner.
     let spaces = Spaces::new()?;
     let backing = spaces.0.first().ok_or("missing backing")?;
@@ -240,7 +239,7 @@ fn atomic_requests_observe_reassigned_owner_without_cached_identity() -> TestRes
         vec![FunctionId::new(0), FunctionId::new(1)]
     );
     assert_eq!(
-        backing.read_typed::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)?,
+        backing.read_buffer::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)?,
         9_u64.to_le_bytes()
     );
     Ok(())
@@ -279,7 +278,7 @@ fn invalid_channel_and_downstream_errors_preserve_buffers() -> TestResult {
     assert_eq!(
         spaces
             .get(FunctionId::new(0), ADDRESS)?
-            .read_typed::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)?,
+            .read_buffer::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)?,
         [1; 4]
     );
     Ok(())

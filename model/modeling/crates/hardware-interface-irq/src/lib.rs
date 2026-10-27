@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 #![doc = include_str!("../README.md")]
 
-#[cfg(feature = "tokio")]
-mod pending;
 mod traits;
-
 #[cfg(feature = "tokio")]
-pub use pending::{InterruptEmitter, PendingInterrupt, pending_interrupt};
+mod wire;
+
 pub use traits::{InterruptEnvelope, InterruptHandler, InterruptSource};
+#[cfg(feature = "tokio")]
+pub use wire::{InterruptEmitter, InterruptReceiver, interrupt_wire};

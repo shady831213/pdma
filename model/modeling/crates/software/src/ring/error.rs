@@ -1,4 +1,4 @@
-use hardware_interface_memory::MemoryAccessError;
+use hardware_interface_io::memory::MemoryAccessError;
 use hardware_interface_schema::SchemaCodecError;
 use pdma_model_contract::ring::RingError;
 use std::{error::Error, fmt};

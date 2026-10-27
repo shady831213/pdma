@@ -5,7 +5,8 @@ use pdma_model_contract::dma::{
 const PF: FunctionId = FunctionId::new(0);
 
 use super::*;
-use hardware_interface_memory::{MemoryAccess, MemoryAccessError};
+use hardware_interface_io::memory::MemoryAccess;
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::{Channel, ChannelConfig, Rings};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -14,7 +15,7 @@ const LENGTH: usize = 65_536;
 
 #[derive(Clone)]
 struct ObservedMemory {
-    memory: SharedMemoryAccess,
+    memory: SharedMemoryAccess<(), MemoryAccessError>,
     destination: Arc<AtomicU64>,
     writes: Arc<AtomicUsize>,
 }
@@ -205,7 +206,10 @@ fn copy(id: u64, (source, destination): (MemoryAddress, MemoryAddress), length: 
 }
 
 async fn complete(
-    channel: &mut Channel<super::super::super::HostBus<ObservedMemory>, SharedMemoryAccess>,
+    channel: &mut Channel<
+        super::super::super::HostBus<ObservedMemory>,
+        SharedMemoryAccess<(), MemoryAccessError>,
+    >,
     allocator: &SharedMemoryAllocator,
 ) {
     let address = allocator

@@ -2,8 +2,8 @@ use super::Error;
 use super::{COMMAND, EVENT, bus::RegisterPort};
 use crate::ring::RingConfig;
 use crate::ring::{RingCursorRegisters, SoftRing};
-use hardware_interface_memory::MemoryAccess;
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::memory::MemoryAccess;
+use hardware_interface_io::register::RegisterAccess;
 use pdma_model_contract::dma::{Command, CommandRegisters, Event, EventRegisters};
 
 #[derive(Debug)]

@@ -1,7 +1,7 @@
 //! Management work is awakened by the software ISR, not by MMIO transport.
 
-use hardware_interface_irq::pending_interrupt;
-use hardware_interface_runtime::{InterruptDispatchError, InterruptRuntime, SoftwareCpu};
+use hardware_interface_irq::interrupt_wire;
+use hardware_interface_software::{InterruptDispatchError, InterruptRuntime, SoftwareEnv};
 use pdma_model_software::control::{ControlIrq, ControlIsr, InterruptEvent};
 use std::{
     future::{Future, pending, poll_fn},
@@ -13,8 +13,8 @@ use std::{
 #[tokio::test]
 async fn coalesced_interrupts_wake_the_registered_software_task() {
     // Given: one management interrupt source and a software program registering its ISR.
-    let (emitter, source) = pending_interrupt(ControlIrq);
-    let runtime = InterruptRuntime::new(Arc::new(SoftwareCpu::new()), source);
+    let (emitter, source) = interrupt_wire(ControlIrq);
+    let runtime = InterruptRuntime::new(Arc::new(SoftwareEnv::new()), source);
     let ((), summary) = runtime
         .run_main::<ControlIsr, _>(async |registration| {
             let event = InterruptEvent::new();
@@ -47,10 +47,10 @@ async fn coalesced_interrupts_wake_the_registered_software_task() {
 #[tokio::test]
 async fn missing_handler_is_a_dispatch_error_not_a_direct_wakeup() {
     // Given: a raised management interrupt with no registered software ISR.
-    let (emitter, source) = pending_interrupt(ControlIrq);
+    let (emitter, source) = interrupt_wire(ControlIrq);
     emitter.raise();
     // When: a software program waits without installing its handler.
-    let result = InterruptRuntime::new(Arc::new(SoftwareCpu::new()), source)
+    let result = InterruptRuntime::new(Arc::new(SoftwareEnv::new()), source)
         .run_main::<ControlIsr, _>(async |_| pending::<()>().await)
         .await;
     // Then: the dispatcher reports the missing vector rather than bypassing software.

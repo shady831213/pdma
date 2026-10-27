@@ -5,15 +5,15 @@ use pdma_model_contract::dma::{
 
 use super::{
     AsyncExecutor, Channel, ChannelConfig, ChannelRegisters, Command, DmaControl, DmaFatalCode,
-    Model, RegisterAccess, SoftwareCpu, fixture,
+    Model, RegisterAccess, SoftwareEnv, fixture,
 };
 
 #[tokio::test]
 async fn reset_operations_can_run_on_another_cpu() -> Result<(), Box<dyn std::error::Error>> {
     for whole_dma in [false, true] {
         // Given: a driver created on one CPU and independently driven reset hardware.
-        let owner = SoftwareCpu::new();
-        let other = SoftwareCpu::new();
+        let owner = SoftwareEnv::new();
+        let other = SoftwareEnv::new();
         let (device, memory, rings) = fixture()?;
         let model = Model::new(device);
         let channel = owner
@@ -64,7 +64,7 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
     let executor = AsyncExecutor::new(model.clone());
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let software = async {
-        let cpu = SoftwareCpu::new();
+        let cpu = SoftwareEnv::new();
         let mut channel = cpu
             .run_main(Channel::setup(
                 model.clone(),
@@ -144,7 +144,7 @@ async fn device_reset_leaves_disabled_hardware_for_fresh_setup()
     // Given: enabled device and channel interrupt gates.
     let (device, memory, rings) = fixture()?;
     let model = Model::new(device);
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     let channel = cpu
         .run_main(Channel::setup(
             model.clone(),

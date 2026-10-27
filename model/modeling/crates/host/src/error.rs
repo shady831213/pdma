@@ -1,4 +1,4 @@
-use hardware_interface_memory::MemoryAccessError;
+use hardware_interface_io::memory::MemoryAccessError;
 use hardware_interface_schema::{RegisterCodecError, SchemaCodecError};
 use pdma_model_contract::control::ControlResponseStatus;
 use pdma_model_contract::hw_components::firmware::FirmwareBootError;

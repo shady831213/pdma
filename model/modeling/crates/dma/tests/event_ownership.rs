@@ -6,7 +6,7 @@ use pdma_model_contract::dma::{CopyCommandSourceValues, LinearEndpoint};
 #[doc = "Shared memory and MMIO fixtures."]
 pub mod support;
 
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome, Then};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Event, EventCode, EventRegisters,

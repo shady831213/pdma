@@ -4,7 +4,7 @@ use pdma_model_contract::dma::{
     EventRegisters, FenceCommand, LinearEndpoint, Opcode,
 };
 
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
 use pdma_model_dma::Dma;
 /// Test harness error propagation.
@@ -160,7 +160,7 @@ pub fn completion<M: MemoryAccess>(device: &Dma<M>, index: usize) -> TestResult<
 where
     M::Error: std::error::Error + 'static,
 {
-    let bytes = device.memory.read_typed::<[u8; 8]>(
+    let bytes = device.memory.read_buffer::<[u8; 8]>(
         MemoryAddress::new(0x1f00 + u64::try_from(index)? * 0x1000),
         MemoryAlignment::ONE,
     )?;

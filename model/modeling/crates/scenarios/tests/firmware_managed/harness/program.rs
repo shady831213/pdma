@@ -11,9 +11,11 @@ pub mod page_fault;
 pub mod transfer;
 
 use super::runtime::{AccessError, HostBus, HostIrq, HostVector};
-use hardware_interface_memory::{MemoryAddress, SharedMemoryAccess, SharedMemoryAllocator};
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::InterruptRegistration;
+use hardware_interface_io::memory::MemoryAccessError;
+use hardware_interface_io::memory::SharedMemoryAllocator;
+use hardware_interface_io::memory::{MemoryAddress, SharedMemoryAccess};
+use hardware_interface_io::register::RegisterAccess;
+use hardware_interface_software::InterruptRegistration;
 use interrupts::Handler;
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::firmware;
@@ -31,9 +33,9 @@ pub enum Input<'a> {
     StopAfterReady,
 }
 
-pub(super) struct Ports<'a, M = SharedMemoryAccess> {
+pub(super) struct Ports<'a, M = SharedMemoryAccess<(), MemoryAccessError>> {
     pub(super) bus: HostBus<M>,
-    pub(super) memory: SharedMemoryAccess,
+    pub(super) memory: SharedMemoryAccess<(), MemoryAccessError>,
     pub(super) allocator: SharedMemoryAllocator,
     pub(super) interrupts: InterruptRegistration<'a, HostIrq, Handler>,
 }
@@ -134,7 +136,7 @@ pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outco
 }
 
 async fn channel_address(
-    bus: &HostBus<SharedMemoryAccess>,
+    bus: &HostBus<SharedMemoryAccess<(), MemoryAccessError>>,
     id: pdma_model_contract::dma::ChannelId,
 ) -> TestResult<u32> {
     let mut count = [0; 4];

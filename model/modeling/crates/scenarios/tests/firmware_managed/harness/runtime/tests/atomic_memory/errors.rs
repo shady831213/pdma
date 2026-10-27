@@ -1,6 +1,6 @@
 use super::*;
 use crate::harness::runtime::memory::SpaceError;
-use hardware_interface_memory::MemoryAccessError;
+use hardware_interface_io::memory::MemoryAccessError;
 
 struct Ordinary(SharedMemory);
 
@@ -68,7 +68,7 @@ fn authorized_atomic_requests_preserve_unsupported_through_managed_path() {
     assert_eq!(result64, Err(AtomicAccessError::Unsupported));
     assert_eq!(
         backing
-            .read_typed::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)
+            .read_buffer::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)
             .unwrap(),
         31_u64.to_le_bytes()
     );
@@ -116,7 +116,7 @@ fn atomic_requests_reject_missing_space_without_fallback_or_modification() {
     assert_eq!(result64, Err(error()));
     assert_eq!(
         backing
-            .read_typed::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)
+            .read_buffer::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)
             .unwrap(),
         41_u64.to_le_bytes()
     );

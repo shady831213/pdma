@@ -9,9 +9,8 @@ publish.workspace = true
 description = "Async software for the managed DMA configuration"
 
 [dependencies]
-hardware-interface-memory = { version = "0.1.0", path = "../hardware-interface-memory" }
-hardware-interface-register = { version = "0.1.0", path = "../hardware-interface-register", default-features = false }
-hardware-interface-runtime = { version = "0.1.0", path = "../hardware-interface-runtime" }
+hardware-interface-io = { version = "0.1.0", path = "../hardware-interface-io", default-features = false }
+hardware-interface-software = { version = "0.1.0", path = "../hardware-interface-software" }
 pdma-model-software = { path = "../software" }
 pdma-model-contract = { path = "../contract" }
 hardware-interface-schema = { path = "../hardware-interface-schema" }

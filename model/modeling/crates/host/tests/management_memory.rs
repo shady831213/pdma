@@ -1,14 +1,15 @@
 //! Management bootstrap publishes shared state before its first doorbell.
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::hw_components::control::ControlConfiguration;
 const CONTROL_CHANNEL_BASE: u32 = 0x3000;
 
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAccess,
-    SharedMemoryAllocator,
+use hardware_interface_io::memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_schema::Decode;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_contract::control::{ControlQueue, ControlQueueRaw};
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_contract::memory::FunctionId;
@@ -20,7 +21,7 @@ use std::{
 };
 
 struct Bus {
-    memory: SharedMemoryAccess,
+    memory: SharedMemoryAccess<(), MemoryAccessError>,
     state: MemoryAddress,
     writes: Mutex<Vec<u32>>,
     enabled: bool,
@@ -43,7 +44,7 @@ impl RegisterAccess for &Bus {
     async fn write(&self, address: u32, _: &[u8]) -> Result<(), Self::Error> {
         let state = self
             .memory
-            .read_typed::<ControlQueueRaw>(self.state, MemoryAlignment::ONE)
+            .read_buffer::<ControlQueueRaw>(self.state, MemoryAlignment::ONE)
             .map_err(io::Error::other)?
             .decode()
             .map_err(io::Error::other)?;
@@ -83,7 +84,7 @@ async fn descriptor_is_in_memory_before_bootstrap_enable_and_request_doorbell() 
         enabled: false,
     };
     // When: the Host sets up its management endpoint on its software CPU.
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             let _client = Management::setup(
                 &bus,
@@ -149,7 +150,7 @@ async fn repeated_setup_cannot_reinitialize_live_shared_cursors() {
         enabled: true,
     };
     // When: software attempts another setup against the live channel.
-    let result = SoftwareCpu::new()
+    let result = SoftwareEnv::new()
         .run_main(Management::setup(
             &bus,
             memory.clone(),
@@ -203,7 +204,7 @@ async fn nonempty_or_invalid_control_cursors_reject_a_new_request()
         writes: Mutex::new(Vec::new()),
         enabled: false,
     };
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             let mut client = Management::setup(
                 &bus,

@@ -12,7 +12,7 @@ use hardware_interface_pipeline::{Operation, StepOutcome};
 mod service_progress {
     mod pending_tail;
 }
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_dma::COPY_CHUNK_BYTES;
 use support::{TestResult, command, read_word, setup, submit};
 
@@ -91,7 +91,7 @@ fn reset_between_chunks_retires_retained_progress() -> TestResult {
         if let StepOutcome::Complete(result) = operation.step(&mut hardware, &mut device)? {
             result?;
         }
-        if memory.read_typed::<[u8; 1]>(0x1800.into(), MemoryAlignment::ONE)? == [0x5a] {
+        if memory.read_buffer::<[u8; 1]>(0x1800.into(), MemoryAlignment::ONE)? == [0x5a] {
             committed = true;
             break;
         }
@@ -158,7 +158,7 @@ fn reset_at_every_chunk_boundary_retires_without_more_writes() -> TestResult {
             if let StepOutcome::Complete(result) = next.step(&mut hardware, &mut device)? {
                 result?;
             }
-            if memory.read_typed::<[u8; 1]>(0x1800.into(), MemoryAlignment::ONE)? == [0x5a] {
+            if memory.read_buffer::<[u8; 1]>(0x1800.into(), MemoryAlignment::ONE)? == [0x5a] {
                 committed = true;
                 break;
             }

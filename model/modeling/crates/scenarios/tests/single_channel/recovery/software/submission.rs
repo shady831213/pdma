@@ -1,7 +1,8 @@
 use super::*;
+use hardware_interface_io::memory::MemoryAccessError;
 
 pub(super) async fn initial<B>(
-    channel: &mut Channel<B, SharedMemoryAccess>,
+    channel: &mut Channel<B, SharedMemoryAccess<(), MemoryAccessError>>,
     scenario: Scenario,
     (request, fence): (CopyCommand, pdma_model_software::dma::CompletionWord),
 ) -> TestResult

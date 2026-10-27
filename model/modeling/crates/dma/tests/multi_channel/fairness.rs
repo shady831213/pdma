@@ -4,9 +4,8 @@ use pdma_model_contract::dma::{
 };
 
 use super::support::{TestResult, completion, configure, submit, word};
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
 use hardware_interface_pipeline::StepOutcome;
 use pdma_model_dma::Dma;
 

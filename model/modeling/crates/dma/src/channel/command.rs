@@ -1,5 +1,5 @@
 use crate::{ChannelFatal, Error};
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::{Decode, RegisterAccessError, RegisterWindow};
 use pdma_model_contract::dma::{Command, CommandRaw, CommandRegisters};
 use pdma_model_contract::register::ReadWordValues;
@@ -94,7 +94,7 @@ impl CommandRing {
                 .map_err(|_| ChannelFatal::CommandRead)?,
         );
         let raw = memory
-            .read_typed::<CommandRaw>(address, MemoryAlignment::ONE)
+            .read_buffer::<CommandRaw>(address, MemoryAlignment::ONE)
             .map_err(|_| ChannelFatal::CommandRead)?;
         let command = raw.decode().map_err(|_| ChannelFatal::CommandRead)?;
         Ok(Some(command))

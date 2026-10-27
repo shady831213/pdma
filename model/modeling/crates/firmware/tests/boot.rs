@@ -3,10 +3,10 @@
 pub mod platform;
 use platform::ADDRESSES;
 
-use hardware_interface_irq::pending_interrupt;
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::{
-    CpuContextError, InterruptRegistrationError, InterruptRuntime, SoftwareCpu,
+use hardware_interface_io::register::RegisterAccess;
+use hardware_interface_irq::interrupt_wire;
+use hardware_interface_software::{
+    EnvContextError, InterruptRegistrationError, InterruptRuntime, SoftwareEnv,
 };
 use pdma_model_software::control::{ControlIrq, ControlIsr};
 use std::{io, sync::Arc};
@@ -29,8 +29,8 @@ impl RegisterAccess for FailedBus {
 #[tokio::test]
 async fn boot_reports_management_failure() {
     // Given: a software CPU and an unavailable management transport.
-    let (_, source) = pending_interrupt(ControlIrq);
-    let cpu = Arc::new(SoftwareCpu::new());
+    let (_, source) = interrupt_wire(ControlIrq);
+    let cpu = Arc::new(SoftwareEnv::new());
     let bus = cpu.bind_registers(FailedBus);
     let runtime = InterruptRuntime::new(cpu, source);
     // When: firmware attempts initialization.
@@ -38,7 +38,7 @@ async fn boot_reports_management_failure() {
         .run_main::<ControlIsr, _>(async |registration| {
             pdma_model_firmware::main(
                 bus,
-                hardware_interface_memory::SharedMemory::new(),
+                hardware_interface_io::memory::SharedMemory::new(),
                 registration,
                 ADDRESSES,
             )
@@ -55,17 +55,17 @@ async fn boot_reports_management_failure() {
 #[tokio::test]
 async fn boot_requires_its_interrupt_registration_cpu() {
     // Given: firmware receives registration from a different software CPU.
-    let (_, source) = pending_interrupt(ControlIrq);
-    let cpu = Arc::new(SoftwareCpu::new());
+    let (_, source) = interrupt_wire(ControlIrq);
+    let cpu = Arc::new(SoftwareEnv::new());
     let bus = cpu.bind_registers(FailedBus);
     let runtime = InterruptRuntime::new(cpu, source);
     // When: the program starts.
     let result = runtime
         .run_main::<ControlIsr, _>(async |registration| {
-            SoftwareCpu::new()
+            SoftwareEnv::new()
                 .run_main(pdma_model_firmware::main(
                     bus,
-                    hardware_interface_memory::SharedMemory::new(),
+                    hardware_interface_io::memory::SharedMemory::new(),
                     registration,
                     ADDRESSES,
                 ))
@@ -77,7 +77,7 @@ async fn boot_requires_its_interrupt_registration_cpu() {
         result,
         Ok((
             Err(pdma_model_firmware::Error::Registration(
-                InterruptRegistrationError::Cpu(CpuContextError::Mismatch)
+                InterruptRegistrationError::Env(EnvContextError::Mismatch)
             )),
             _
         ))

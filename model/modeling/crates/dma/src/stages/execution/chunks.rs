@@ -1,5 +1,5 @@
 use crate::{Chunk, ChunkInput, ExecutionContext, Flow};
-use hardware_interface_memory::{BoundMemory, MemoryAccess};
+use hardware_interface_io::memory::{BoundMemory, MemoryAccess};
 use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use pdma_model_contract::dma::{ContextId, DmaAccess};
 

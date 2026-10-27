@@ -2,9 +2,9 @@
 
 pub mod support;
 
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_contract::dma::{ChannelId, DmaControl};
 use pdma_model_host::DmaError as Error;
 use std::{
@@ -19,7 +19,7 @@ async fn reset_stays_pending_after_write_acknowledgement() -> Result<(), Box<dyn
 {
     // Given: accepted work remains resident while the pipeline is suspended.
     for whole_device in [false, true] {
-        let cpu = SoftwareCpu::new();
+        let cpu = SoftwareEnv::new();
         let fixture = fixture(&cpu).await?;
         let channel = fixture.channel;
         let reset = async move {
@@ -47,7 +47,7 @@ async fn reset_stays_pending_after_write_acknowledgement() -> Result<(), Box<dyn
 async fn reset_read_failure_is_returned_to_software() -> Result<(), Box<dyn std::error::Error>> {
     // Given: reset writes succeed but subsequent status reads fail.
     for whole_device in [false, true] {
-        let cpu = SoftwareCpu::new();
+        let cpu = SoftwareEnv::new();
         let fixture = fixture(&cpu).await?;
         let channel = fixture.channel;
         fixture.fail.store(true, Ordering::SeqCst);
@@ -75,8 +75,8 @@ async fn reset_wait_can_migrate_but_still_requires_hardware_completion()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: a reset future suspended after its owning CPU requested reset.
     for whole_device in [false, true] {
-        let owner = SoftwareCpu::new();
-        let other = SoftwareCpu::new();
+        let owner = SoftwareEnv::new();
+        let other = SoftwareEnv::new();
         let mut fixture = fixture(&owner).await?;
         let channel = fixture.channel;
         let model = fixture.model;
@@ -120,7 +120,7 @@ async fn cancelling_reset_wait_preserves_hardware_request() -> Result<(), Box<dy
 {
     // Given: reset was accepted and hardware has not run cleanup.
     for whole_device in [false, true] {
-        let cpu = SoftwareCpu::new();
+        let cpu = SoftwareEnv::new();
         let fixture = fixture(&cpu).await?;
         let channel = fixture.channel;
         let model = fixture.model;
@@ -162,7 +162,7 @@ async fn reset_completes_only_after_hardware_clears_its_scope()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: software is waiting while the requested reset scope remains busy.
     for whole_device in [false, true] {
-        let cpu = SoftwareCpu::new();
+        let cpu = SoftwareEnv::new();
         let mut fixture = fixture(&cpu).await?;
         let channel = fixture.channel;
         let model = fixture.model;

@@ -1,8 +1,8 @@
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-    SharedMemoryAllocator,
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{
+    MemoryAccessError, MemoryRegion, SharedMemory, SharedMemoryAllocator,
 };
-use hardware_interface_runtime::{InterruptRuntime, SoftwareCpu};
+use hardware_interface_software::{InterruptRuntime, SoftwareEnv};
 use std::sync::Arc;
 
 use super::{Buffers, Ports, wait_boundary};
@@ -39,7 +39,7 @@ impl Fixture {
     async fn wait(&self, scenario: Scenario) -> TestResult<Option<(u32, u32)>> {
         let memory = Arc::clone(&self.readable).into();
         let (model, _stage) = hardware::assemble(memory)?;
-        let runtime = InterruptRuntime::new(Arc::new(SoftwareCpu::new()), model.clone());
+        let runtime = InterruptRuntime::new(Arc::new(SoftwareEnv::new()), model.clone());
         let execution = runtime.run_main(async |interrupts| {
             let ports = Ports {
                 bus: model.clone(),

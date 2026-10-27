@@ -3,10 +3,10 @@
 pub mod platform;
 use platform::ADDRESSES;
 
-use hardware_interface_irq::pending_interrupt;
-use hardware_interface_memory::SharedMemory;
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::{CpuAccessError, CpuContextError, InterruptRuntime, SoftwareCpu};
+use hardware_interface_io::memory::SharedMemory;
+use hardware_interface_io::register::RegisterAccess;
+use hardware_interface_irq::interrupt_wire;
+use hardware_interface_software::{EnvAccessError, EnvContextError, InterruptRuntime, SoftwareEnv};
 use pdma_model_software::control::{ControlIrq, ControlIsr};
 use std::{
     future::{Future, poll_fn},
@@ -65,9 +65,9 @@ impl RegisterAccess for &SuspendedBus {
 async fn rejects_migrated_access(pause_at: u32, committed: usize) -> TestResult {
     // Given: firmware suspended before a boot MMIO side effect on its assigned CPU.
     let bus = SuspendedBus::new(pause_at);
-    let cpu = Arc::new(SoftwareCpu::new());
+    let cpu = Arc::new(SoftwareEnv::new());
     let bound = cpu.bind_registers(&bus);
-    let (_, source) = pending_interrupt(ControlIrq);
+    let (_, source) = interrupt_wire(ControlIrq);
     let runtime = InterruptRuntime::new(Arc::clone(&cpu), source);
     let (result, _) = runtime
         .run_main::<ControlIsr, _>(async |registration| {
@@ -84,15 +84,15 @@ async fn rejects_migrated_access(pause_at: u32, committed: usize) -> TestResult 
             );
             assert_eq!(bus.writes.load(Ordering::SeqCst), committed);
             // When: a different modeled CPU polls that same firmware future.
-            SoftwareCpu::new().run_main(firmware).await
+            SoftwareEnv::new().run_main(firmware).await
         })
         .await?;
     // Then: the access capability rejects it without committing another write or boot report.
     assert!(
         matches!(
             result,
-            Err(pdma_model_firmware::Error::Bus(CpuAccessError::Cpu(
-                CpuContextError::Mismatch
+            Err(pdma_model_firmware::Error::Bus(EnvAccessError::Env(
+                EnvContextError::Mismatch
             )))
         ),
         "{result:?}"
@@ -116,9 +116,9 @@ async fn migrated_ready_write_is_rejected_by_the_runtime_port() -> TestResult {
 async fn runtime_reestablishes_the_firmware_cpu_on_every_poll() -> TestResult {
     // Given: firmware whose Ready publication suspends once.
     let bus = SuspendedBus::new(ADDRESSES.firmware);
-    let cpu = Arc::new(SoftwareCpu::new());
+    let cpu = Arc::new(SoftwareEnv::new());
     let bound = cpu.bind_registers(&bus);
-    let (_, source) = pending_interrupt(ControlIrq);
+    let (_, source) = interrupt_wire(ControlIrq);
     let runtime = InterruptRuntime::new(cpu, source);
     let mut running = std::pin::pin!(runtime.run_main::<ControlIsr, _>(async |registration| {
         pdma_model_firmware::main(bound, SharedMemory::new(), registration, ADDRESSES).await
@@ -130,7 +130,7 @@ async fn runtime_reestablishes_the_firmware_cpu_on_every_poll() -> TestResult {
     );
     // When: an outer caller with another CPU context drives the complete runtime again.
     assert!(
-        SoftwareCpu::new()
+        SoftwareEnv::new()
             .run_main(poll_fn(|cx| Poll::Ready(running.as_mut().poll(cx))))
             .await
             .is_pending()

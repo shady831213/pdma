@@ -1,7 +1,7 @@
 use super::{Completion, Management, transport::ring_error};
 use crate::Error;
-use hardware_interface_memory::MemoryAccess;
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::memory::MemoryAccess;
+use hardware_interface_io::register::RegisterAccess;
 use pdma_model_contract::control::{ControlRequestOpcode, ControlResponse};
 
 impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {

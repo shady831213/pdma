@@ -9,8 +9,9 @@ procedural-macro implementation crate.
 
 ## What it owns
 
-Schemas are descriptive. A record uses only `u8`, `u16`, `u32`, or `u64` fields with an
-explicit `Little` or `Big` byte order. Fields may leave gaps. Register declarations
+Schemas are descriptive. Scalar fields use `u8`, `u16`, `u32`, or `u64` with an
+explicit `Little` or `Big` byte order. Records also compose bits, enums, nested
+layouts and unions; layout geometry may introduce padding. Register declarations
 carry typed IDs, width, alignment, access, reset, and writable-mask metadata. Maps place
 registers or nested maps in one declaration-ordered layout.
 
@@ -472,9 +473,9 @@ to the PDMA hardware and software, not this schema library.
 
 The resulting layer boundary is deliberate: this crate owns schema descriptors,
 codecs, checked views and generated-value register windows.
-`hardware-interface-runtime` supplies storage backends and bus/observation algorithms,
-`hardware-interface-pipeline`
-supplies interaction drive policies, and the PDMA device supplies register command,
+`hardware-interface-io` supplies access interfaces, byte-memory models and register
+observation; `hardware-interface-software` supplies main/ISR execution.
+`hardware-interface-pipeline` supplies interaction drive policies, and the PDMA device supplies register command,
 DMA, reset and IRQ effects.
 
 ### Record-backed union cases

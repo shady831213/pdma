@@ -1,4 +1,5 @@
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment, MemoryRegion, SharedMemory};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
 use pdma_model_software::ring::{MemoryRingIo, SoftRingIo};
 
 #[tokio::test]
@@ -18,11 +19,11 @@ async fn cursor_accesses_fit_separate_four_byte_regions() -> Result<(), Box<dyn 
     assert_eq!(io.read_consumer().await?, 0x1020_3040);
     assert_eq!(io.read_producer().await?, 0x5060_7080);
     assert_eq!(
-        memory.read_typed::<[u8; 4]>(0.into(), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 4]>(0.into(), MemoryAlignment::ONE)?,
         [0x80, 0x70, 0x60, 0x50]
     );
     assert_eq!(
-        memory.read_typed::<[u8; 4]>(4.into(), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 4]>(4.into(), MemoryAlignment::ONE)?,
         [0x40, 0x30, 0x20, 0x10]
     );
     Ok(())

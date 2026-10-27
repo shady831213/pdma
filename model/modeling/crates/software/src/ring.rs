@@ -7,7 +7,7 @@ pub use config::RingConfig;
 pub use error::SoftRingError;
 pub use io::{MemoryRingIo, RegisterRingIo, RingCursorRegisters, SoftRingIo};
 
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::{Decode, Encode, SchemaCodec};
 use pdma_model_contract::ring::{Ring, RingPointers};
 
@@ -165,7 +165,7 @@ where
             .map_err(SoftRingError::Ring)?;
         let encoded: E::Encoded = io
             .memory()
-            .read_typed(MemoryAddress::new(address), MemoryAlignment::ONE)
+            .read_buffer(MemoryAddress::new(address), MemoryAlignment::ONE)
             .map_err(SoftRingError::Memory)?;
         let entry = encoded.decode().map_err(SoftRingError::Codec)?;
         self.cached = Some((pointers.consumer, entry));

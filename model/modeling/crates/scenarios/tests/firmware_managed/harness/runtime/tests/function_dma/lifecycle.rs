@@ -1,7 +1,7 @@
 use super::support::{
     Fixture, TestResult, WINDOWS, advance, bytes, command, configure, publish, setup,
 };
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_pipeline::HardwareDriver;
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::dma::{
@@ -17,12 +17,12 @@ fn reset_before_regrant_prevents_old_work_from_entering_the_new_space() -> TestR
         spaces: [old, new],
         windows,
     } = setup()?;
-    old.write_typed(
+    old.write_buffer(
         MemoryAddress::new(0x1600),
         MemoryAlignment::ONE,
         &[0x6d; 1024],
     )?;
-    new.write_typed(
+    new.write_buffer(
         MemoryAddress::new(0x1b00),
         MemoryAlignment::ONE,
         &[0xa5; 1024],
@@ -71,7 +71,7 @@ fn reset_before_regrant_prevents_old_work_from_entering_the_new_space() -> TestR
             WINDOWS + WindowControl::OWNER.offset(),
             &1_u32.to_le_bytes(),
         )?;
-    new.write_typed(
+    new.write_buffer(
         MemoryAddress::new(0x1200),
         MemoryAlignment::ONE,
         b"new-work",

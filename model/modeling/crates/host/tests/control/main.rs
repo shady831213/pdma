@@ -1,18 +1,18 @@
 //! Host interrupt controls and explicit reset recovery.
 
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelInterrupts, ChannelIrqMaskValues, ChannelRegisters, Command, CommandHeader, DmaControl,
     DmaFatalCode, Event, Opcode, TrapCommand,
 };
 
-use hardware_interface_memory::{
-    MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAccess, SharedMemoryAllocator,
-};
+use hardware_interface_io::memory::{MemoryAddress, MemoryAlignment, SharedMemoryAccess};
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_pipeline::{
     AsyncExecutor, AsyncInteractionBackend, HardwareDriver, StepOutcome,
 };
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
@@ -20,8 +20,9 @@ use std::sync::Arc;
 mod capabilities;
 mod reset;
 
-fn fixture()
--> Result<(Dma<SharedMemoryAccess>, SharedMemoryAccess, Rings), Box<dyn std::error::Error>> {
+type TestMemory = SharedMemoryAccess<(), MemoryAccessError>;
+
+fn fixture() -> Result<(Dma<TestMemory>, TestMemory, Rings), Box<dyn std::error::Error>> {
     let allocator =
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
     let memory = allocator.memory_access();
@@ -54,7 +55,7 @@ async fn setup_preserves_the_device_interrupt_mask() -> Result<(), Box<dyn std::
     // Given: device interrupts are masked before any channel is configured.
     let (device, memory, rings) = fixture()?;
     let model = Model::new(device);
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     // When: software configures a channel.
     let _channel = cpu
         .run_main(Channel::setup(
@@ -88,7 +89,7 @@ async fn software_explicitly_enables_device_and_channel_interrupts()
     // Given: disabled hardware and a software CPU.
     let (device, memory, rings) = fixture()?;
     let model = Model::new(device);
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     // When: software programs the channel.
     let channel = cpu
         .run_main(Channel::setup(
@@ -125,7 +126,7 @@ async fn masked_trap_cause_remains_visible_without_unmask_catch_up()
     let (device, memory, rings) = fixture()?;
     let mut hardware = device.hardware();
     let model = Model::new(device);
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     let mut channel = cpu
         .run_main(Channel::setup(
             model.clone(),
@@ -181,7 +182,7 @@ async fn dma_fatal_is_visible_after_unmask_without_replaying_notification()
     // Given: software has masked the independent device-fatal gate.
     let (device, memory, rings) = fixture()?;
     let model = Model::new(device);
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     let channel = cpu
         .run_main(Channel::setup(
             model.clone(),

@@ -1,13 +1,16 @@
 //! Software allocation, submission and interrupt-driven Fence observation.
 
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelId, Command, CommandHeader, CopyCommandDestinationValues, CopyCommandSourceValues,
     Event, LinearEndpoint, Opcode, TrapCommand,
 };
 
 use super::super::runtime::{AccessError, HostBus};
+use hardware_interface_io::memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
+};
 use hardware_interface_irq::InterruptHandler;
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess};
 use pdma_model_host::{Channel, ChannelConfig, DmaError, RingConfig, Rings, runtime::Irq};
 use std::sync::{
     Arc,
@@ -20,9 +23,12 @@ use super::{Ports, TestResult};
 /// Persistent Host owner of error events and Fence observation.
 #[derive(Debug)]
 pub struct Handler {
-    channel: Channel<HostBus<SharedMemoryAccess>, SharedMemoryAccess>,
+    channel: Channel<
+        HostBus<SharedMemoryAccess<(), MemoryAccessError>>,
+        SharedMemoryAccess<(), MemoryAccessError>,
+    >,
     completed: Option<oneshot::Sender<Result<u64, String>>>,
-    memory: SharedMemoryAccess,
+    memory: SharedMemoryAccess<(), MemoryAccessError>,
     fence: pdma_model_software::dma::CompletionWord,
     deliveries: Arc<AtomicUsize>,
 }

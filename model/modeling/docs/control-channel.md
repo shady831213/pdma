@@ -26,7 +26,7 @@ Ready. Host waits for Ready before setting up queues. Ready means firmware can s
 requests, not that Host can access DMA.
 
 The managed harness supplies firmware with a register port bound by
-`SoftwareCpu::bind_registers`. Runtime checks CPU ownership before every underlying
+`SoftwareEnv::bind_registers`. Runtime checks CPU ownership before every underlying
 access poll, including resumed accesses. Firmware main performs ordinary register
 operations and ISR registration; it does not capture CPU identity or wrap its
 business flow in CPU scopes. Ordinary shared drivers impose no additional CPU
@@ -248,7 +248,7 @@ Run from `model/modeling`:
 
 ```sh
 cargo test -p pdma-model-software --test soft_ring
-cargo test -p hardware-interface-runtime --test notifications
+cargo test -p hardware-interface-software --test notifications
 cargo test -p pdma-model-host --test management_memory
 cargo test -p pdma-model-firmware
 cargo test -p pdma-model-hw-components --test components control::

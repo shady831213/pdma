@@ -1,5 +1,5 @@
 use super::{acquire, support::*};
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::control::{
     ControlEvent, ControlEventKind, ControlQueue, ControlRingState,
 };
@@ -157,7 +157,7 @@ async fn fatal_closes_window_and_publishes_event_with_full_response_ring() -> Te
         )?,
         1
     );
-    let bytes = memory.read_typed::<[u8; 8]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?;
+    let bytes = memory.read_buffer::<[u8; 8]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?;
     assert_eq!(
         ControlEvent::from_bytes(&bytes)?,
         ControlEvent {

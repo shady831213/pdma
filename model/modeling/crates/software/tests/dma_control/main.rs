@@ -2,8 +2,8 @@
 
 pub mod support;
 
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_io::register::RegisterAccess;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_contract::dma::ChannelId;
 use std::{
     future::{Future, poll_fn},
@@ -41,7 +41,7 @@ async fn relocated_discovery_routes_data_admin_and_global_controls()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: a two-channel DMA aperture at a nonzero bus address.
     let bus = Relocated(Bus::new()?);
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             let control = pdma_model_software::dma::ChannelControl::discover_at(
                 &bus,
@@ -86,7 +86,7 @@ async fn reset_status_query_does_not_wait_or_reset_peer() -> Result<(), Box<dyn 
 {
     // Given: channel one has requested reset on a real two-channel DMA core.
     let (bus, mut hardware, mut driver) = Bus::resident()?;
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             let control =
                 pdma_model_software::dma::ChannelControl::discover(&bus, ChannelId::new(1)).await?;
@@ -109,7 +109,7 @@ async fn register_only_reset_waits_for_hardware_and_preserves_other_channel()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: firmware has a register bus without allocating either DMA ring.
     let (bus, mut hardware, mut driver) = Bus::resident()?;
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     let control = cpu
         .run_main(pdma_model_software::dma::ChannelControl::discover(
             &bus,
@@ -139,7 +139,7 @@ async fn cancelling_register_only_reset_does_not_fake_drain()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: firmware has no ring owner to consume during reset.
     let (bus, mut hardware, mut driver) = Bus::resident()?;
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     let control = cpu
         .run_main(pdma_model_software::dma::ChannelControl::discover(
             &bus,
@@ -168,8 +168,8 @@ async fn cancelling_register_only_reset_does_not_fake_drain()
 async fn register_only_reset_completes_on_another_cpu() -> Result<(), Box<dyn std::error::Error>> {
     // Given: a reset wait suspended on the first CPU.
     let (bus, mut hardware, mut driver) = Bus::resident()?;
-    let owner = SoftwareCpu::new();
-    let other = SoftwareCpu::new();
+    let owner = SoftwareEnv::new();
+    let other = SoftwareEnv::new();
     let control = owner
         .run_main(pdma_model_software::dma::ChannelControl::discover(
             &bus,

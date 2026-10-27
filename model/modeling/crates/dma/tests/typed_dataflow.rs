@@ -2,7 +2,7 @@
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_dma::{CheckRanges, CommandRequest, Fetch, PrepareChunk, ReadCopy, WriteCopy};
@@ -48,7 +48,7 @@ fn stage_outputs_carry_descriptor_addresses_bytes_and_completion() -> TestResult
     );
     support::assert_no_event(&mut dma)?;
     assert_eq!(
-        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
         *b"WXYZ"
     );
     Ok(())

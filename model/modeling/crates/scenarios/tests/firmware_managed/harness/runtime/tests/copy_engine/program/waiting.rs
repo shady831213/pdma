@@ -1,11 +1,12 @@
 use super::{Ports, TestResult, setup};
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::memory::MemoryAccessError;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::dma::*;
 use pdma_model_contract::dma::{CommandHeader, Opcode, WaitCommand};
 use pdma_model_host::{CompletionWord, runtime::Model};
 
 pub(in super::super) async fn run(
-    ports: Ports<Model<hardware_interface_memory::SharedMemoryAccess>>,
+    ports: Ports<Model<hardware_interface_io::memory::SharedMemoryAccess<(), MemoryAccessError>>>,
 ) -> TestResult {
     let memory = ports.allocator.memory_access();
     let mut channels = setup(&ports).await?;

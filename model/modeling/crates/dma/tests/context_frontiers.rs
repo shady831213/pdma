@@ -3,7 +3,7 @@
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, CommandRegisters, ContextId, EventRegisters,
 };

@@ -9,7 +9,7 @@ publish.workspace = true
 description = "PDMA access windows, contexts and management interface hardware"
 
 [dependencies]
-hardware-interface-memory = { version = "0.1.0", path = "../hardware-interface-memory" }
+hardware-interface-io = { version = "0.1.0", path = "../hardware-interface-io" }
 hardware-interface-schema = { path = "../hardware-interface-schema" }
 pdma-model-contract = { path = "../contract" }
 pdma-model-dma = { path = "../dma" }

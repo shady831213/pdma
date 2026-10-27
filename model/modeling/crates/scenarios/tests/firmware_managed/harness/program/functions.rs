@@ -1,6 +1,6 @@
 //! PF lifecycle management and VF data-path software.
 use super::{Handler, HostVector, Ports, TestResult, buffers, transfer};
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::firmware;

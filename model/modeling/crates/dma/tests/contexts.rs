@@ -6,9 +6,8 @@ use pdma_model_contract::dma::{
     Segment,
 };
 
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccessError, MemoryRegion, SharedMemory};
 use pdma_model_dma::Dma;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;

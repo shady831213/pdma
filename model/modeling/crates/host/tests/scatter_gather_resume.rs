@@ -5,12 +5,10 @@ use pdma_model_contract::dma::{
     ScatterGatherEndpoint, Segment,
 };
 
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
-    SharedMemoryAllocator,
-};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccessError, SharedMemory, SharedMemoryAllocator};
 use hardware_interface_pipeline::{AsyncExecutor, Operation};
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::{error::Error, sync::Arc};
@@ -77,7 +75,7 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
     let device = Dma::new(memory.clone(), 1)?;
     let mut hardware = device.hardware();
     let model = Model::new(device);
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     let mut channel = cpu
         .run_main(Channel::setup(
             model.clone(),

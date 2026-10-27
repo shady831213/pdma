@@ -1,5 +1,6 @@
 use super::{CursorBus, Item};
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion};
+use hardware_interface_io::memory::MemoryRegion;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_software::ring::{
     RegisterRingIo, RingConfig, RingCursorRegisters, SoftRing, SoftRingError,
 };
@@ -93,7 +94,7 @@ async fn entry_failure_retains_backend_details_and_source() -> Result<(), Box<dy
     );
     assert_eq!(
         bus.memory
-            .read_typed::<[u8; 4]>(0.into(), MemoryAlignment::ONE)?,
+            .read_buffer::<[u8; 4]>(0.into(), MemoryAlignment::ONE)?,
         [0; 4]
     );
     assert!(ring.has_pending_push());

@@ -1,6 +1,7 @@
 use super::{ChannelTag, platform::TaggedRequest};
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
+use hardware_interface_io::memory::MemoryAccessError;
+use hardware_interface_io::memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
 use pdma_model_contract::memory::MemoryIdentity;
 use std::{
@@ -101,7 +102,7 @@ impl PageTable {
 
 #[derive(Debug)]
 pub(super) struct Paged {
-    pub memory: SharedMemoryAccess,
+    pub memory: SharedMemoryAccess<(), MemoryAccessError>,
     pub pages: PageTable,
     pub reports: mpsc::Sender<FaultReport>,
 }

@@ -1,4 +1,4 @@
-use hardware_interface_irq::{InterruptEnvelope, InterruptSource, PendingInterrupt};
+use hardware_interface_irq::{InterruptEnvelope, InterruptReceiver, InterruptSource};
 use pdma_model_host::runtime::Irq;
 use pdma_model_software::control::ControlIrq;
 
@@ -39,9 +39,9 @@ impl InterruptEnvelope for HostIrq {
 /// Independent DMA, response and event pending destinations sharing the canonical Host dispatcher.
 #[derive(Debug)]
 pub struct HostInterrupts {
-    pub(super) dma: PendingInterrupt<HostIrq>,
-    pub(super) control: Option<PendingInterrupt<HostIrq>>,
-    pub(super) event: Option<PendingInterrupt<HostIrq>>,
+    pub(super) dma: InterruptReceiver<HostIrq>,
+    pub(super) control: Option<InterruptReceiver<HostIrq>>,
+    pub(super) event: Option<InterruptReceiver<HostIrq>>,
     pub(super) next: HostVector,
 }
 
@@ -93,7 +93,7 @@ impl InterruptSource for HostInterrupts {
 }
 
 async fn wait(
-    (vector, source): (HostVector, Option<&PendingInterrupt<HostIrq>>),
+    (vector, source): (HostVector, Option<&InterruptReceiver<HostIrq>>),
 ) -> Result<HostVector, tokio::sync::watch::error::RecvError> {
     match source {
         Some(source) => {

@@ -1,5 +1,5 @@
 use super::{FunctionSpaces, SpaceError};
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_hw_components::control::ControlChannel;
 use std::sync::{Arc, Mutex};
 

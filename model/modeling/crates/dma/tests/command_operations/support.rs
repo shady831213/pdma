@@ -1,6 +1,5 @@
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
 use hardware_interface_pipeline::HardwareDriver;
 use pdma_model_contract::dma::{
     CapabilitiesValues, ChannelBlock, ChannelConfiguration, ChannelId, ChannelInterrupts,

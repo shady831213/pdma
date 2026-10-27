@@ -15,8 +15,8 @@ call error, never a stage result. There are no wait tokens or readiness interfac
 The input slot is the ownership handshake. Taking its value accepts the request;
 a busy stage leaves a new offer untouched. It can continue accepted work with an
 empty slot, and does not accept a replacement on the step completing that work.
-An idle stage with no offer returns InProgress without effects. For a stage whose
-Input is Option<T>, outer None means no offer and Some(None) is an offered domain
+An idle stage with no offer returns `InProgress` without effects. For a stage whose
+Input is `Option<T>`, outer `None` means no offer and `Some(None)` is an offered domain
 bubble. Completion leaves the stage ready for a subsequent request.
 
 The stage instance is the continuation. Only `step` advances it; the framework
@@ -33,9 +33,9 @@ A call error does not establish hardware completion: the operation and hardware
 retain their continuation for subsequent driving. Dropping a driving future is
 not a domain reset or a permission to reuse resources held by unfinished work.
 
-`Then<A,B,V>` buffers the upstream result V for downstream and returns InProgress;
+`Then<A,B,V>` buffers the upstream result V for downstream and returns `InProgress`;
 downstream runs on a later step. While downstream is active, the upstream input
-slot is backpressured. A child returning InProgress retains its own state.
+slot is backpressured. A child returning `InProgress` retains its own state.
 The edge type V is inferred by construction and checked against both ports.
 `MapError` converts application errors without converting call errors.
 Independent hardware units belong in the application's top-level assembly and

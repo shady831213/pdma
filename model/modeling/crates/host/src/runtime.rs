@@ -3,11 +3,11 @@
 #[cfg(test)]
 mod tests;
 
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_irq::{
-    InterruptEmitter, InterruptEnvelope, InterruptSource, PendingInterrupt, pending_interrupt,
+    InterruptEmitter, InterruptEnvelope, InterruptReceiver, InterruptSource, interrupt_wire,
 };
 use hardware_interface_pipeline::{AsyncInteractionBackend, StepResult};
-use hardware_interface_register::RegisterAccess;
 use pdma_model_dma::{Dma, Error};
 use std::{convert::Infallible, sync::Arc};
 use tokio::sync::{Mutex, watch};
@@ -17,7 +17,7 @@ use tokio::sync::{Mutex, watch};
 pub struct Model<M> {
     device: Arc<Mutex<Dma<M>>>,
     emitter: InterruptEmitter,
-    pending: PendingInterrupt<Irq>,
+    pending: InterruptReceiver<Irq>,
 }
 
 impl<M> Clone for Model<M> {
@@ -33,7 +33,7 @@ impl<M> Clone for Model<M> {
 impl<M> Model<M> {
     /// Wraps externally assembled hardware without selecting its memory backend.
     pub fn new(mut device: Dma<M>) -> Self {
-        let (emitter, pending) = pending_interrupt(Irq);
+        let (emitter, pending) = interrupt_wire(Irq);
         if device.take_interrupt() {
             emitter.raise();
         }

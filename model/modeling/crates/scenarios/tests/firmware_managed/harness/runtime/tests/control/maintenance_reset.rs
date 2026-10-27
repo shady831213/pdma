@@ -1,10 +1,11 @@
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     Command, CommandRegisters, ContextId, CopyCommandDestinationValues, CopyCommandSourceValues,
     Event, LinearEndpoint,
 };
 
 use super::*;
-use hardware_interface_memory::MemoryAccess;
+use hardware_interface_io::memory::MemoryAccess;
 use pdma_model_contract::memory::{
     ContextAttributes, ContextAttributesAddressSpace, MemoryIdentity,
 };
@@ -111,7 +112,7 @@ async fn pending_drain_and_reset_complete_with_independent_results() {
 }
 
 async fn submit_copy(
-    bus: crate::harness::runtime::HostBus<SharedMemoryAccess>,
+    bus: crate::harness::runtime::HostBus<SharedMemoryAccess<(), MemoryAccessError>>,
     allocator: &SharedMemoryAllocator,
     (id, payload): (ChannelId, ContextId),
 ) -> crate::harness::TestResult<(MemoryAddress, Vec<u8>)> {

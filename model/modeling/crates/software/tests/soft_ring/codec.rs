@@ -1,6 +1,7 @@
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment, MemoryRegion, SharedMemory};
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
 use hardware_interface_schema::record_schema;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_software::ring::{MemoryRingIo, RingConfig, SoftRing, SoftRingError, SoftRingIo};
 
 record_schema! {
@@ -23,7 +24,7 @@ async fn malformed_entry_is_not_consumed() -> Result<(), Box<dyn std::error::Err
     let io = MemoryRingIo::new(&memory, 0.into(), 4.into());
     memory.write(16.into(), MemoryAlignment::ONE, &7u32.to_le_bytes())?;
     io.write_producer(1).await?;
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             let mut ring = SoftRing::new(RingConfig::<Tagged>::new(16, 2)?);
             // When: decoding fails and the caller tries to consume.

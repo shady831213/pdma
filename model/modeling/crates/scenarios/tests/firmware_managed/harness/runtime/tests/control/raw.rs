@@ -1,6 +1,6 @@
 use super::memory::{QueueMemory, kick};
 use super::*;
-use hardware_interface_memory::MemoryAccess;
+use hardware_interface_io::memory::MemoryAccess;
 use hardware_interface_schema::{Decode, Encode};
 use pdma_model_contract::control::{ControlRequestOpcode, ControlResponseRaw};
 use pdma_model_contract::ring::Ring;
@@ -31,7 +31,7 @@ async fn acquisition_selects_channel_instead_of_using_ignored_request_field() {
         };
         // When: a request with a nonzero ignored acquisition field is published.
         memory
-            .write_typed(
+            .write_buffer(
                 MemoryAddress::new(rings.command.entry(0).unwrap()),
                 MemoryAlignment::ONE,
                 &request.encode().unwrap(),
@@ -42,7 +42,7 @@ async fn acquisition_selects_channel_instead_of_using_ignored_request_field() {
         kick(&host.bus).await.unwrap();
         queue.wait_response(&interrupt.response, 1).await.unwrap();
         let response = memory
-            .read_typed::<ControlResponseRaw>(
+            .read_buffer::<ControlResponseRaw>(
                 MemoryAddress::new(rings.response.entry(0).unwrap()),
                 MemoryAlignment::ONE,
             )

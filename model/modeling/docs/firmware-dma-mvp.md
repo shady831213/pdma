@@ -22,15 +22,15 @@ The follow-up keeps the behavior while changing ownership and reusable mechanics
   under `crates/scenarios/tests/firmware_managed/harness/runtime`. Native module
   paths preserve the tests without source duplication. The extra crate is removed;
   hardware components and firmware remain independent production crates.
-- `hardware-interface-irq::pending_interrupt` supplies split emission and
+- `hardware-interface-irq::interrupt_wire` supplies split emission and
   reception capabilities, reused by both ordinary and managed Host DMA delivery.
   This is not a new firmware communication protocol.
 - Firmware now receives management interrupts through its own `InterruptRuntime`.
   Its program registers the ISR before Ready; its CPU remains distinct from Host.
-- Reusable capabilities now live in separate memory, storage, register and IRQ crates.
-  DMA uses memory directly and builds without a normal Tokio dependency. Register's
-  schema integration and IRQ's Tokio pending backend are optional. Software CPU/ISR
-  scheduling remains in runtime; none of these packages claims `no_std` support.
+- IO groups memory/register interfaces, supplied byte backing and shared-state storage
+  in one std-only crate. DMA consumes its memory capability without a normal Tokio
+  dependency. IRQ's Tokio pending backend is optional; SoftwareEnv/main/ISR execution
+  belongs to the software crate. None of these packages claims `no_std` support.
 - A generic async shared-context wrapper was evaluated and not added. Concrete
   state projection and IRQ extraction still differ; retaining the small explicit
   mutex/wakeup adapters avoids extra hook/trait machinery. Software accesses still
@@ -87,7 +87,7 @@ must not make them depend on firmware or `hw-components`.
 
 ## Runtime and access boundaries
 
-- Host and firmware have independent `SoftwareCpu` instances and capability views.
+- Host and firmware have independent `SoftwareEnv` instances and capability views.
   Both use `InterruptRuntime` for their independent interrupt inputs.
   Reuse existing implementations and the async executor.
 - Host and firmware receive different port sets. Host cannot access window-control
@@ -201,11 +201,12 @@ From `model/modeling`:
 ```sh
 cargo test -p pdma-model-hw-components
 cargo test -p pdma-model-firmware
-cargo test -p hardware-interface-runtime --test pending_interrupt --test pending_interrupt_delivery
+cargo test -p hardware-interface-irq --test interrupt_wire
+cargo test -p hardware-interface-software --test interrupt_wire_delivery
 cargo test -p pdma-model-scenarios --test firmware_managed
 cargo check -p pdma-model-dma --lib
 cargo tree -p pdma-model-dma --edges normal
-cargo test -p hardware-interface-runtime --no-default-features
+cargo test -p hardware-interface-software --no-default-features
 cargo test --workspace --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```

@@ -1,6 +1,7 @@
 use crate::{CursorBus, Item};
-use hardware_interface_memory::{MemoryAlignment, MemoryRegion};
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_io::memory::MemoryAlignment;
+use hardware_interface_io::memory::MemoryRegion;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_software::ring::{
     RegisterRingIo, RingConfig, RingCursorRegisters, SoftRing, SoftRingIo,
 };
@@ -25,7 +26,7 @@ async fn cancelled_consume_before_commit_retains_entry() -> Result<(), Box<dyn s
             consumer: 4,
         },
     );
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             let mut ring = SoftRing::new(RingConfig::<Item>::new(16, 1)?);
             ring.try_push(&io, Item { value: 29 }).await?;

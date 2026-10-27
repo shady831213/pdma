@@ -1,12 +1,13 @@
 //! Host-owned concurrent management and real DMA lifecycle exercise.
 
 use super::buffers;
+use hardware_interface_io::memory::MemoryAccessError;
 
 use super::{Handler, HostVector, Ports, TestResult};
 use crate::harness::runtime::{AccessError, HostBus};
 use buffers::Transfer;
-use hardware_interface_memory::SharedMemoryAccess;
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::memory::SharedMemoryAccess;
+use hardware_interface_io::register::RegisterAccess;
 use pdma_model_contract::control::ControlResponse;
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::memory::FunctionId;
@@ -133,7 +134,10 @@ async fn probe(ports: &Ports<'_>, id: ChannelId) -> TestResult<Result<(), Access
 }
 
 async fn release_all(
-    management: &mut Management<HostBus<SharedMemoryAccess>, SharedMemoryAccess>,
+    management: &mut Management<
+        HostBus<SharedMemoryAccess<(), MemoryAccessError>>,
+        SharedMemoryAccess<(), MemoryAccessError>,
+    >,
     channels: [u32; 3],
 ) -> TestResult<Vec<(u64, ControlResponse)>> {
     let mut requests = Vec::new();
@@ -160,7 +164,9 @@ async fn release_all(
     Ok(responses)
 }
 
-async fn statuses(bus: &HostBus<SharedMemoryAccess>) -> TestResult<[u32; 3]> {
+async fn statuses(
+    bus: &HostBus<SharedMemoryAccess<(), MemoryAccessError>>,
+) -> TestResult<[u32; 3]> {
     let mut final_status = [0; 3];
     for (index, status) in final_status.iter_mut().enumerate() {
         let mut bytes = [0; 4];

@@ -1,5 +1,5 @@
 use crate::ring::SoftRingError;
-use hardware_interface_memory::MemoryAccessError;
+use hardware_interface_io::memory::MemoryAccessError;
 use hardware_interface_schema::{RegisterCodecError, SchemaCodecError};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::ring::RingError;

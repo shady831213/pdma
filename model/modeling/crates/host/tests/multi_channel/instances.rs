@@ -1,10 +1,11 @@
 use super::{
     Arc, AtomicUsize, COUNT, Channel, ChannelId, Dma, Error, Model, Ordering, RegisterAccess,
-    SharedMemoryAccess, SoftwareCpu, TestResult, allocator, config,
+    SharedMemoryAccess, SoftwareEnv, TestResult, allocator, config,
 };
+use hardware_interface_io::memory::MemoryAccessError;
 
 struct CountWrites {
-    model: Model<SharedMemoryAccess>,
+    model: Model<SharedMemoryAccess<(), MemoryAccessError>>,
     writes: Arc<AtomicUsize>,
 }
 
@@ -31,7 +32,7 @@ async fn setup_uses_each_instances_discovered_channel_range() -> TestResult {
         (5, Model::new(Dma::new(memory.clone(), 5)?)),
         (1021, Model::new(Dma::new(memory.clone(), 1021)?)),
     ];
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     cpu.run_main(async {
         for (count, model) in instances {
             // When: software discovers each instance and selects its last valid channel.
@@ -76,7 +77,7 @@ async fn instance_channel_counts_survive_channel_and_device_resets() -> TestResu
         (1, Model::new(Dma::new(memory.clone(), 1)?)),
         (5, Model::new(Dma::new(memory.clone(), 5)?)),
     ];
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     for (count, model) in instances {
         cpu.run_main(async {
             let config = config(&allocator, count - 1)?;

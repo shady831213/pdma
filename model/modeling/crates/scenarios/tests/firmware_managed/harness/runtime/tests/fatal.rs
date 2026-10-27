@@ -1,3 +1,4 @@
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     CopyCommandDestinationValues, CopyCommandSourceValues, LinearEndpoint,
 };
@@ -7,9 +8,8 @@ use super::{
     control::{ring, rings},
     *,
 };
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAllocator,
-};
+use hardware_interface_io::memory::SharedMemoryAllocator;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::{
     control::{ControlEvent, ControlEventKind, ControlResponseStatus},
     dma::{ChannelId, Command, Event},
@@ -132,7 +132,7 @@ async fn recovery(overflow: bool) {
 }
 
 async fn copy(
-    bus: &super::super::HostBus<SharedMemoryAccess>,
+    bus: &super::super::HostBus<SharedMemoryAccess<(), MemoryAccessError>>,
     allocator: &SharedMemoryAllocator,
     id: ChannelId,
 ) {
@@ -196,14 +196,17 @@ async fn copy(
 
     assert_eq!(
         memory
-            .read_typed::<[u8; 8]>(destination, MemoryAlignment::ONE)
+            .read_buffer::<[u8; 8]>(destination, MemoryAlignment::ONE)
             .unwrap(),
         *b"recovery"
     );
 }
 
 async fn reset_dma(
-    client: &mut Management<super::super::HostBus<SharedMemoryAccess>, SharedMemoryAccess>,
+    client: &mut Management<
+        super::super::HostBus<SharedMemoryAccess<(), MemoryAccessError>>,
+        SharedMemoryAccess<(), MemoryAccessError>,
+    >,
 ) {
     let request = client.submit_reset_dma().await.unwrap();
     let result = client.next_response().await.unwrap();
@@ -220,7 +223,10 @@ async fn check_closed(checks: &mpsc::Sender<oneshot::Sender<()>>) {
 }
 
 async fn recover_events(
-    management: &mut Management<super::super::HostBus<SharedMemoryAccess>, SharedMemoryAccess>,
+    management: &mut Management<
+        super::super::HostBus<SharedMemoryAccess<(), MemoryAccessError>>,
+        SharedMemoryAccess<(), MemoryAccessError>,
+    >,
     event: pdma_model_host::RingConfig<ControlEvent>,
     trigger: &mpsc::Sender<()>,
 ) {

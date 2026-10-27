@@ -7,7 +7,7 @@ mod service {
     mod retained;
 }
 
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_pipeline::StepOutcome;
 use pdma_model_contract::dma::{ChannelBlock, ChannelRegisters, CommandRegisters, EventRegisters};
 use pdma_model_dma::Error;
@@ -44,7 +44,7 @@ fn custom_service_publishes_completion() -> TestResult {
             operation.step(&mut hardware, &mut device)?,
             StepOutcome::InProgress
         ));
-        if memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)? == [3, 1, 4, 1] {
+        if memory.read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)? == [3, 1, 4, 1] {
             completed = true;
             break;
         }

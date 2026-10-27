@@ -1,16 +1,18 @@
 use super::super::{HostIrq, HostVector, Managed, ManagementBus};
 use super::control::memory::{kick, poll_once};
 use crate::harness::runtime::platform::CONTROL_CHANNEL_BASE;
+use hardware_interface_io::memory::MemoryAccessError;
+use hardware_interface_io::memory::SharedMemory;
+use hardware_interface_io::memory::SharedMemoryAccess;
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_irq::{InterruptEnvelope, InterruptHandler, InterruptSource};
-use hardware_interface_memory::{SharedMemory, SharedMemoryAccess};
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::{CpuContextError, CpuLocal, InterruptDispatchError};
+use hardware_interface_software::{EnvContextError, EnvLocal, InterruptDispatchError};
 use pdma_model_contract::hw_components::control::ControlNotificationRegisters;
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_software::control::{ControlIrq, ControlIsr, InterruptEvent};
 use std::{convert::Infallible, future::pending, pin::pin, sync::Arc};
 
-fn memory() -> SharedMemoryAccess {
+fn memory() -> SharedMemoryAccess<(), MemoryAccessError> {
     SharedMemoryAccess::from(Arc::new(SharedMemory::new()))
 }
 
@@ -77,11 +79,10 @@ async fn repeated_response_doorbells_before_wait_coalesce_into_one_isr() {
 async fn simultaneous_dma_control_and_event_pending_survive_cancelled_wait_and_are_fair() {
     // Given: separate pending bits with both destinations raised.
     let (dma, dma_source) =
-        hardware_interface_irq::pending_interrupt(HostIrq::Dma(pdma_model_host::runtime::Irq));
+        hardware_interface_irq::interrupt_wire(HostIrq::Dma(pdma_model_host::runtime::Irq));
     let (control, control_source) =
-        hardware_interface_irq::pending_interrupt(HostIrq::Control(ControlIrq));
-    let (event, event_source) =
-        hardware_interface_irq::pending_interrupt(HostIrq::Event(ControlIrq));
+        hardware_interface_irq::interrupt_wire(HostIrq::Control(ControlIrq));
+    let (event, event_source) = hardware_interface_irq::interrupt_wire(HostIrq::Event(ControlIrq));
     let mut source = super::super::HostInterrupts {
         dma: dma_source,
         control: Some(control_source),
@@ -124,8 +125,8 @@ async fn simultaneous_dma_control_and_event_pending_survive_cancelled_wait_and_a
 }
 
 struct OwnershipHandler {
-    firmware: CpuLocal<u32>,
-    host: CpuLocal<u32>,
+    firmware: EnvLocal<u32>,
+    host: EnvLocal<u32>,
     event: ControlIsr,
 }
 
@@ -169,19 +170,19 @@ impl InterruptHandler<ControlIrq> for OwnershipHandler {
             self.host.with(|count| {
                 *count += 1;
             }),
-            Err(CpuContextError::Mismatch)
+            Err(EnvContextError::Mismatch)
         );
         self.event.handle(irq).await
     }
 }
 
 #[tokio::test]
-async fn request_doorbell_isr_runs_on_firmware_cpu() {
+async fn request_doorbell_isr_runs_on_firmware_env() {
     // Given: the actual Host and firmware runtimes from one managed assembly.
     let (system, host) = Managed::new(memory()).unwrap();
     let (owner, _) = host
         .runtime
-        .run_main::<ControlIsr, _>(async |_| CpuLocal::capture_active(0).unwrap())
+        .run_main::<ControlIsr, _>(async |_| EnvLocal::capture_active(0).unwrap())
         .await
         .unwrap();
     // When: a request doorbell is dispatched on firmware's runtime.
@@ -194,7 +195,7 @@ async fn request_doorbell_isr_runs_on_firmware_cpu() {
                 .register(
                     (),
                     OwnershipHandler {
-                        firmware: CpuLocal::capture_active(0).unwrap(),
+                        firmware: EnvLocal::capture_active(0).unwrap(),
                         host: owner,
                         event: event.handler(),
                     },

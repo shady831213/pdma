@@ -39,7 +39,7 @@ fn sg_resume_preserves_progress_and_cached_destination_bytes() -> TestResult {
             device
                 .memory
                 .memory
-                .read_typed::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
+                .read_buffer::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
             *b"c-----"
         );
         // When: repair is delayed across one explicit retry and source bytes then change.
@@ -73,14 +73,14 @@ fn sg_resume_preserves_progress_and_cached_destination_bytes() -> TestResult {
             device
                 .memory
                 .memory
-                .read_typed::<[u8; 2]>(0x1300.into(), MemoryAlignment::ONE)?,
+                .read_buffer::<[u8; 2]>(0x1300.into(), MemoryAlignment::ONE)?,
             *b"ZZ"
         );
         assert_eq!(
             device
                 .memory
                 .memory
-                .read_typed::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
+                .read_buffer::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
             if write { *b"cdefgh" } else { *b"c12345" }
         );
         assert_eq!(fault_status(&mut device)?, 0);
@@ -138,7 +138,7 @@ fn repair_and_zero_resume_do_not_retry_or_admit_later_same_channel_work() -> Tes
         device
             .memory
             .memory
-            .read_typed::<[u8; 3]>(0x1600.into(), MemoryAlignment::ONE)?,
+            .read_buffer::<[u8; 3]>(0x1600.into(), MemoryAlignment::ONE)?,
         [0; 3]
     );
     assert!(!device.take_interrupt());
@@ -152,7 +152,7 @@ fn repair_and_zero_resume_do_not_retry_or_admit_later_same_channel_work() -> Tes
         device
             .memory
             .memory
-            .read_typed::<[u8; 3]>(0x1600.into(), MemoryAlignment::ONE)?,
+            .read_buffer::<[u8; 3]>(0x1600.into(), MemoryAlignment::ONE)?,
         *b"abc"
     );
     Ok(())
@@ -196,7 +196,7 @@ fn mixed_endpoint_resumption_keeps_each_stream_cursor() -> TestResult {
                 device
                     .memory
                     .memory
-                    .read_typed::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
+                    .read_buffer::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
                 *b"cdefgh"
             );
         } else {
@@ -204,7 +204,7 @@ fn mixed_endpoint_resumption_keeps_each_stream_cursor() -> TestResult {
                 device
                     .memory
                     .memory
-                    .read_typed::<[u8; 8]>(0x1600.into(), MemoryAlignment::ONE)?,
+                    .read_buffer::<[u8; 8]>(0x1600.into(), MemoryAlignment::ONE)?,
                 *b"abcdefgh"
             );
         }

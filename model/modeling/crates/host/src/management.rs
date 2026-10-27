@@ -6,8 +6,8 @@ mod setup;
 mod transport;
 
 use crate::{Error, RingConfig};
-use hardware_interface_memory::{MemoryAccess, MemoryAddress};
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress};
+use hardware_interface_io::register::RegisterAccess;
 use pdma_model_contract::control::{
     ControlEvent, ControlRequest, ControlRequestOpcode, ControlResponse, ControlResponseStatus,
 };

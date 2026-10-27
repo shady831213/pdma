@@ -3,8 +3,9 @@
 mod tests;
 
 use crate::harness::TestResult;
-use hardware_interface_memory::MemoryAccess;
-use hardware_interface_memory::SharedMemoryAccess;
+use hardware_interface_io::memory::MemoryAccess;
+use hardware_interface_io::memory::MemoryAccessError;
+use hardware_interface_io::memory::SharedMemoryAccess;
 use hardware_interface_pipeline::{AsyncExecutor, AsyncRunError, HardwareDriver};
 use pdma_model_dma::{BuildError, Dma, Hardware};
 use pdma_model_host::runtime::Model;
@@ -19,7 +20,10 @@ where
     Ok((device, hardware))
 }
 
-pub(crate) async fn drive(model: Model<SharedMemoryAccess>, mut hardware: Hardware) -> TestResult {
+pub(crate) async fn drive(
+    model: Model<SharedMemoryAccess<(), MemoryAccessError>>,
+    mut hardware: Hardware,
+) -> TestResult {
     let executor = AsyncExecutor::new(model);
     match executor
         .drive(&mut hardware, &mut HardwareDriver::new())

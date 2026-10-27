@@ -1,4 +1,4 @@
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 
 use crate::{Scenario, TestResult, harness};
 

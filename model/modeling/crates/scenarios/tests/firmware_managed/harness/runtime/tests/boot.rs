@@ -1,6 +1,6 @@
 use super::*;
 use crate::harness::runtime::platform::FIRMWARE_STATUS_BASE;
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_host::{Error, firmware};
 use std::{pin::pin, task::Poll, time::Duration};
 
@@ -55,7 +55,7 @@ async fn firmware_reports_initialization_failure_to_host_through_hardware() {
     let (system, host) =
         Managed::new(SharedMemoryAccess::from(Arc::new(SharedMemory::new()))).unwrap();
     let bus = RejectWindow(super::super::ManagementBus(Arc::clone(&system.shared)));
-    let bus = system.firmware_cpu.bind_registers(bus);
+    let bus = system.firmware_env.bind_registers(bus);
     let mut running = pin!(system.firmware_runtime.run_main(async |registration| {
         pdma_model_firmware::main(
             bus,
@@ -69,7 +69,7 @@ async fn firmware_reports_initialization_failure_to_host_through_hardware() {
     let outcome = std::future::poll_fn(|cx| Poll::Ready(running.as_mut().poll(cx))).await;
     // Then: it stays quiescent and Host reads its reported failure, not a supervisor error.
     assert!(outcome.is_pending());
-    let result = SoftwareCpu::new()
+    let result = SoftwareEnv::new()
         .run_main(firmware::wait_ready(
             &host.bus,
             host.bus.addresses().firmware,

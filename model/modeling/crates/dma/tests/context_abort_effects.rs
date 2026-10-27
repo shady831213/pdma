@@ -6,9 +6,8 @@ use pdma_model_contract::dma::{
     EventRegisters, ScatterGatherEndpoint, Segment,
 };
 
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccessError, MemoryRegion, SharedMemory};
 use hardware_interface_pipeline::StepOutcome;
 use pdma_model_dma::{Dma, Hardware};
 use std::cell::RefCell;
@@ -150,7 +149,7 @@ fn retired_copy_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
             StepOutcome::InProgress
         ));
     }
-    let copied: [u8; 4] = memory.read_typed(0x1700.into(), MemoryAlignment::ONE)?;
+    let copied: [u8; 4] = memory.read_buffer(0x1700.into(), MemoryAlignment::ONE)?;
     assert_eq!(copied, [1, 3, 5, 7]);
     {
         let accesses = dma.memory.accesses.borrow();

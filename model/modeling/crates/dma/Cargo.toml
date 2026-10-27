@@ -9,7 +9,7 @@ publish.workspace = true
 description = "Multi-channel DMA hardware with a shared staged execution engine"
 
 [dependencies]
-hardware-interface-memory = { version = "0.1.0", path = "../hardware-interface-memory" }
+hardware-interface-io = { version = "0.1.0", path = "../hardware-interface-io" }
 pdma-model-contract = { path = "../contract" }
 hardware-interface-pipeline = { path = "../hardware-interface-pipeline" }
 hardware-interface-schema = { path = "../hardware-interface-schema" }

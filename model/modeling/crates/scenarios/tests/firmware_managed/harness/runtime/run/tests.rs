@@ -2,9 +2,9 @@ use super::super::AccessError;
 use super::super::HostIrq;
 use super::*;
 use crate::harness::runtime::platform::WINDOW_STATUS_BASE;
-use hardware_interface_irq::{InterruptHandler, pending_interrupt};
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::{InterruptRuntime, SoftwareCpu};
+use hardware_interface_io::register::RegisterAccess;
+use hardware_interface_irq::{InterruptHandler, interrupt_wire};
+use hardware_interface_software::{InterruptRuntime, SoftwareEnv};
 use pdma_model_software::control::ControlIrq;
 use std::{future::pending, pin::pin, task::Poll};
 
@@ -23,20 +23,20 @@ impl InterruptHandler<HostIrq> for TestHandler {
 #[tokio::test]
 async fn assembled_host_and_firmware_have_distinct_cpu_ownership() {
     // Given: the two actual CPU environments created by the managed assembler.
-    let memory = hardware_interface_memory::SharedMemoryAccess::from(Arc::new(
-        hardware_interface_memory::SharedMemory::new(),
+    let memory = hardware_interface_io::memory::SharedMemoryAccess::from(Arc::new(
+        hardware_interface_io::memory::SharedMemory::new(),
     ));
     let (system, host) = Managed::new(memory).unwrap();
     let (owner, _) = host
         .runtime
         .run_main::<TestHandler, _>(async |_| {
-            hardware_interface_runtime::CpuLocal::capture_active(0_u32).unwrap()
+            hardware_interface_software::EnvLocal::capture_active(0_u32).unwrap()
         })
         .await
         .unwrap();
     // When: firmware tries to use a Host-owned capability.
     let result = system
-        .firmware_cpu
+        .firmware_env
         .run_main(async {
             owner.with(|value| {
                 *value += 1;
@@ -46,7 +46,7 @@ async fn assembled_host_and_firmware_have_distinct_cpu_ownership() {
     // Then: sharing the async executor did not merge the software CPU identities.
     assert_eq!(
         result,
-        Err(hardware_interface_runtime::CpuContextError::Mismatch)
+        Err(hardware_interface_software::EnvContextError::Mismatch)
     );
 }
 
@@ -83,14 +83,14 @@ async fn initialization_error_drops_other_scoped_actors() {
         result
     };
     let firmware = Box::pin(async {
-        let (_, source) = pending_interrupt(ControlIrq);
-        let cpu = Arc::new(SoftwareCpu::new());
+        let (_, source) = interrupt_wire(ControlIrq);
+        let cpu = Arc::new(SoftwareEnv::new());
         let bus = cpu.bind_registers(FailedManagement);
         InterruptRuntime::new(cpu, source)
             .run_main(async |registration| {
                 pdma_model_firmware::main(
                     bus,
-                    hardware_interface_memory::SharedMemory::new(),
+                    hardware_interface_io::memory::SharedMemory::new(),
                     registration,
                     crate::harness::runtime::platform::ADDRESSES,
                 )
@@ -112,7 +112,7 @@ async fn initialization_error_drops_other_scoped_actors() {
     assert!(matches!(
         result,
         Err(RunError::Firmware(pdma_model_firmware::Error::Bus(
-            hardware_interface_runtime::CpuAccessError::Access(AccessError::Unmapped)
+            hardware_interface_software::EnvAccessError::Access(AccessError::Unmapped)
         )))
     ));
     assert_eq!(Arc::strong_count(&hardware_owned), 1);
@@ -122,13 +122,13 @@ async fn initialization_error_drops_other_scoped_actors() {
 #[tokio::test]
 async fn cancellation_drops_running_hardware_and_firmware() {
     // Given: firmware initialized a real system and all actor futures remain scoped.
-    let memory = hardware_interface_memory::SharedMemoryAccess::from(Arc::new(
-        hardware_interface_memory::SharedMemory::new(),
+    let memory = hardware_interface_io::memory::SharedMemoryAccess::from(Arc::new(
+        hardware_interface_io::memory::SharedMemory::new(),
     ));
     let (system, host) = Managed::new(memory).unwrap();
     let retained = Arc::clone(&system.shared);
     let host_bus = host.bus;
-    let firmware_cpu = Arc::clone(&system.firmware_cpu);
+    let firmware_env = Arc::clone(&system.firmware_env);
     {
         let mut running = pin!(system.run());
         let state = std::future::poll_fn(|cx| Poll::Ready(running.as_mut().poll(cx))).await;
@@ -140,5 +140,5 @@ async fn cancellation_drops_running_hardware_and_firmware() {
     }
     // Then: only the explicitly retained probe and Host bus own the hardware.
     assert_eq!(Arc::strong_count(&retained), 2);
-    assert_eq!(Arc::strong_count(&firmware_cpu), 1);
+    assert_eq!(Arc::strong_count(&firmware_env), 1);
 }

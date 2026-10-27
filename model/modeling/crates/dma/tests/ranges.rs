@@ -7,7 +7,7 @@ use pdma_model_contract::dma::{
 /// Shared hardware fixtures.
 pub mod support;
 
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::dma::{ErrorInfo, EventInfoValues};
 use pdma_model_contract::dma::{Event, EventCode, Segment};
 use support::{TestResult, command, run, setup, submit};
@@ -25,7 +25,7 @@ fn selected_ranges_skip_unused_sg_prefix_and_clip_last_segment() -> TestResult {
             offset: 2,
         });
     crate::support::copy_mut(&mut request)?.copy_length = 4;
-    memory.add_regions(&[hardware_interface_memory::MemoryRegion::try_new(
+    memory.add_regions(&[hardware_interface_io::memory::MemoryRegion::try_new(
         0x3000.into(),
         32,
         MemoryAlignment::ONE,
@@ -60,7 +60,7 @@ fn selected_ranges_skip_unused_sg_prefix_and_clip_last_segment() -> TestResult {
     run(&mut dma)?;
     // Then: neither unused prefix metadata nor bytes beyond the selected range are accessed.
     assert_eq!(
-        memory.read_typed::<[u8; 8]>(0x1300.into(), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 8]>(0x1300.into(), MemoryAlignment::ONE)?,
         *b"--bcde--"
     );
     support::assert_no_event(&mut dma)?;
@@ -130,7 +130,7 @@ fn invalid_selected_positions_and_ranges_fail_before_payload_writes() -> TestRes
         submit(&mut dma, &memory, request)?;
         run(&mut dma)?;
         // Then: a typed stopping result reports no committed bytes and the destination is intact.
-        let raw = memory.read_typed::<pdma_model_contract::dma::EventRaw>(
+        let raw = memory.read_buffer::<pdma_model_contract::dma::EventRaw>(
             0x1100.into(),
             MemoryAlignment::ONE,
         )?;
@@ -147,7 +147,7 @@ fn invalid_selected_positions_and_ranges_fail_before_payload_writes() -> TestRes
             }
         );
         assert_eq!(
-            memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+            memory.read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
             *b"keep"
         );
     }
@@ -196,7 +196,7 @@ fn segment_end_start_skips_empty_entries_without_reading_unused_suffix() -> Test
     run(&mut dma)?;
     // Then: empty and exhausted entries need no payload address; unused entries are not fetched.
     assert_eq!(
-        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
         [b'a', b'b', b'c', 0]
     );
     support::assert_no_event(&mut dma)?;

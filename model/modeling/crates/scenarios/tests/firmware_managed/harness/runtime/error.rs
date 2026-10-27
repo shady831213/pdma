@@ -73,17 +73,17 @@ impl std::error::Error for BuildError {
 
 /// Failure of a supervised hardware or firmware actor.
 #[derive(Debug)]
-pub enum RunError<E = hardware_interface_memory::MemoryAccessError> {
+pub enum RunError<E = hardware_interface_io::memory::MemoryAccessError> {
     /// Firmware boot or control service failed.
     Firmware(
         pdma_model_firmware::Error<
-            hardware_interface_runtime::CpuAccessError<super::AccessError>,
+            hardware_interface_software::EnvAccessError<super::AccessError>,
             E,
         >,
     ),
     /// Firmware interrupt delivery failed.
     FirmwareInterrupt(
-        hardware_interface_runtime::InterruptDispatchError<
+        hardware_interface_software::InterruptDispatchError<
             (),
             tokio::sync::watch::error::RecvError,
             Infallible,

@@ -1,5 +1,5 @@
 use super::{acquire, support::*};
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::hw_components::control::ControlNotificationRegisters;
 use pdma_model_contract::{
     control::{ControlQueue, ControlResponseStatus, ControlRingState},
@@ -80,7 +80,7 @@ async fn event_full_access_failure_and_bad_cursors_stop_publication_without_retr
         );
         assert_eq!(read_word(&memory, producer)?, initial);
         assert_eq!(
-            memory.read_typed::<[u8; 8]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
+            memory.read_buffer::<[u8; 8]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
             [0xa5; 8]
         );
         publish(&memory, acquire(1), 1)?;

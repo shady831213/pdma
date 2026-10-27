@@ -1,12 +1,11 @@
 use pdma_model_contract::hw_components::control::ControlConfiguration;
 pub(super) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
-use hardware_interface_irq::{InterruptEmitter, PendingInterrupt, pending_interrupt};
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-};
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::{CpuAccessError, InterruptRuntime, SoftwareCpu};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
+use hardware_interface_io::register::RegisterAccess;
+use hardware_interface_irq::{InterruptEmitter, InterruptReceiver, interrupt_wire};
 use hardware_interface_schema::{Decode, Encode};
+use hardware_interface_software::{EnvAccessError, InterruptRuntime, SoftwareEnv};
 use pdma_model_contract::control::{
     ControlQueue, ControlRequest, ControlResponse, ControlResponseRaw, ControlRingState,
 };
@@ -37,12 +36,12 @@ pub(super) struct Bus {
     pub(super) registers: Mutex<BTreeMap<u32, Vec<u8>>>,
     pub(super) writes: Mutex<Vec<(u32, Vec<u8>)>>,
     pub(super) notification: InterruptEmitter,
-    source: PendingInterrupt<ControlIrq>,
+    source: InterruptReceiver<ControlIrq>,
 }
 
 impl Default for Bus {
     fn default() -> Self {
-        let (notification, source) = pending_interrupt(ControlIrq);
+        let (notification, source) = interrupt_wire(ControlIrq);
         Self {
             registers: Mutex::default(),
             writes: Mutex::default(),
@@ -55,7 +54,7 @@ impl Default for Bus {
 pub(super) async fn run(
     bus: &Bus,
     memory: SharedMemory,
-) -> Result<std::convert::Infallible, pdma_model_firmware::Error<CpuAccessError<io::Error>>> {
+) -> Result<std::convert::Infallible, pdma_model_firmware::Error<EnvAccessError<io::Error>>> {
     run_at(bus, memory, ADDRESSES).await
 }
 
@@ -63,8 +62,8 @@ pub(super) async fn run_at(
     bus: &Bus,
     memory: SharedMemory,
     addresses: ManagementAddresses,
-) -> Result<std::convert::Infallible, pdma_model_firmware::Error<CpuAccessError<io::Error>>> {
-    let cpu = Arc::new(SoftwareCpu::new());
+) -> Result<std::convert::Infallible, pdma_model_firmware::Error<EnvAccessError<io::Error>>> {
+    let cpu = Arc::new(SoftwareEnv::new());
     let bound = cpu.bind_registers(bus);
     let runtime = InterruptRuntime::new(cpu, bus.source.clone());
     let (result, _) = runtime
@@ -73,7 +72,7 @@ pub(super) async fn run_at(
         })
         .await
         .map_err(|error| {
-            pdma_model_firmware::Error::Bus(CpuAccessError::Access(io::Error::other(error)))
+            pdma_model_firmware::Error::Bus(EnvAccessError::Access(io::Error::other(error)))
         })?;
     result
 }
@@ -161,7 +160,7 @@ pub(super) fn fixture() -> TestResult<(Bus, SharedMemory)> {
             consumer: 0,
         },
     };
-    memory.write_typed(
+    memory.write_buffer(
         MemoryAddress::new(QUEUE),
         MemoryAlignment::ONE,
         &queue.encode()?,
@@ -179,14 +178,14 @@ pub(super) fn write_word(memory: &SharedMemory, offset: usize, word: u32) -> Tes
 }
 
 pub(super) fn read_word(memory: &SharedMemory, offset: usize) -> TestResult<u32> {
-    Ok(u32::from_le_bytes(memory.read_typed(
+    Ok(u32::from_le_bytes(memory.read_buffer(
         MemoryAddress::new(QUEUE + u64::try_from(offset)?),
         MemoryAlignment::ONE,
     )?))
 }
 
 pub(super) fn publish(memory: &SharedMemory, request: ControlRequest, producer: u32) -> TestResult {
-    memory.write_typed(
+    memory.write_buffer(
         MemoryAddress::new(COMMAND),
         MemoryAlignment::ONE,
         &request.encode()?,
@@ -201,7 +200,7 @@ pub(super) fn publish(memory: &SharedMemory, request: ControlRequest, producer: 
 
 pub(super) fn response(memory: &SharedMemory) -> TestResult<ControlResponse> {
     Ok(memory
-        .read_typed::<ControlResponseRaw>(MemoryAddress::new(RESPONSE), MemoryAlignment::ONE)?
+        .read_buffer::<ControlResponseRaw>(MemoryAddress::new(RESPONSE), MemoryAlignment::ONE)?
         .decode()?)
 }
 

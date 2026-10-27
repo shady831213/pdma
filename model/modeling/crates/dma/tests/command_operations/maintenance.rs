@@ -1,5 +1,5 @@
 use super::support::{EVENT_PRODUCER, Rig, TestResult, target};
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelId, Command, CommandHeader, ContextId, DmaAdmin, DmaDiscovery, Opcode, WaitCommand,
     WaitCommandComparison, WordTarget,

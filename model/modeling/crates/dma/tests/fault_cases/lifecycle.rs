@@ -45,7 +45,7 @@ fn reset_discards_parked_work_and_clears_fault_status() -> TestResult {
         device
             .memory
             .memory
-            .read_typed::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
+            .read_buffer::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
         *b"c-----"
     );
     assert!(!device.take_interrupt());
@@ -121,7 +121,7 @@ fn abort_of_running_task_discards_it_only_when_payload_fault_parks_it() -> TestR
         device
             .memory
             .memory
-            .read_typed::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
+            .read_buffer::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
         *b"c-----"
     );
     assert!(!device.take_interrupt());

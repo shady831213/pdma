@@ -18,10 +18,8 @@ layouts, and ABI compatibility are not requirements for this model.
 | Crate | Responsibility |
 | --- | --- |
 | hardware-interface-pipeline | Typed stages, generic gathering/distribution, composition, and driving policies. |
-| hardware-interface-runtime | CPU-local state, software main/ISR execution, progress notifications and trace storage. |
-| hardware-interface-memory | Byte memory access, opaque sideband, backend errors, atomics, backing and allocation. |
-| hardware-interface-storage | Closure-scoped local and shared storage policies. |
-| hardware-interface-register | Register transports and ordered observation; optional schema-backed image/bus support. |
+| hardware-interface-software | SoftwareEnv, environment-local state, main/ISR execution, progress hints and tracing. |
+| hardware-interface-io | Memory/register interfaces, supplied byte backing/allocation, shared-state storage and observation. |
 | hardware-interface-irq | Source/claim/handler capabilities and optional Tokio pending-interrupt backend. |
 | hardware-interface-schema | Runtime-neutral record/register schemas, metadata, access, and exporters. |
 | hardware-interface-schema-macros | Schema code generation and compile-time validation. |
@@ -48,8 +46,8 @@ software handlers or CPU state. Software calls the runtime-supplied ISR registra
 capability; CPU validation, handler tables and dispatcher lifecycle belong to the
 runtime. Do not expose registry freezing, startup handoff channels or dispatcher tasks
 to the software program. `host::runtime` owns PDMA transport, separate from the host
-channel driver; generic CPU/interrupt mechanics stay in `hardware-interface-runtime`.
-`CpuOwner` is runtime-private. Software entrypoints and ordinary drivers must not
+channel driver; generic CPU/interrupt mechanics stay in `hardware-interface-software`.
+`EnvOwner` is runtime-private. Software entrypoints and ordinary drivers must not
 capture CPU ownership tokens or bind their state to the CPU that created them.
 Management clients, rings and DMA drivers follow normal Rust ownership and borrowing;
 their retained operations may continue on another CPU when the supplied capabilities
@@ -165,16 +163,21 @@ Bindings remain stable until reset completes; no live rebind or shadow owner tab
 Independent spaces may use identical addresses. This adds no PASID/IOMMU translation,
 Function reset/FLR or external transaction semantics.
 
-DMA and hw-components depend on the standalone memory crate rather than software runtime.
-Verify their normal dependency trees independently: neither may acquire Tokio through
-workspace feature unification. Memory depends only on closure storage; storage has no
-normal dependencies. IRQ traits work without Tokio or software CPU scheduling; its
-optional `tokio` feature supplies pending interrupts. Register transport/observation
-works without schema; its `schema` feature adds generated image/bus integration.
-Runtime contains modeled CPU/main/ISR execution and depends on register transport and
-IRQ traits, without memory or schema dependencies. Do not restore moved API reexports
-as a compatibility umbrella. CpuOwner and synchronization guards remain private.
-Both concrete transports use `pending_interrupt`: hardware-side adapters hold the
+DMA and hw-components consume IO memory capabilities rather than software execution.
+Built-in backing error classification is explicit; neither normal dependency tree may
+acquire Tokio through workspace feature unification. IO uses only std; local observation
+owns its Rc/RefCell state without using the supplied memory model. IO's `memory`
+module contains both access contracts and supplied backing, plus `memory::storage`
+for closure-scoped generic state. No separate memory/storage package, schema feature
+or register-image abstraction is needed. Hardware composes schema register windows
+and owns access side effects. Custom MemoryAccess implementations need not use a
+supplied backing, allocator or storage policy.
+IRQ traits work without Tokio or software-environment scheduling; its optional `tokio`
+feature supplies pending interrupts. The software crate owns SoftwareEnv/main/ISR
+execution and depends on IO and IRQ traits, without schema normal dependencies.
+Do not restore moved API reexports as a compatibility umbrella. EnvOwner and
+synchronization guards remain private.
+Both concrete transports use `interrupt_wire`: hardware-side adapters hold the
 emitter, software dispatch holds the source. Keep causes, masking, routing policy
 and hardware-step wakeup decisions out of that generic component.
 
@@ -367,12 +370,12 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   PDMA entry geometry and pointer rules are protocol, even with an `Entry` parameter.
   `software::ring` owns `RingConfig`, `SoftRing` and their cursor I/O adapters;
   host retains its `RingConfig` reexport. Host and firmware share this PDMA software
-  crate, whose normal dependencies are contract, generic runtime and schema, never host, firmware
+  crate, whose normal dependencies include contract, IO, software execution and schema, never host, firmware
   or DMA. Its `dma` module also owns the shared queue driver and register-only
   `ChannelControl`; firmware uses the latter for reset without owning DMA rings.
-  Generic schema/runtime expose no ring protocol or ring types and have no
-  normal dependency on PDMA crates. Transport, CPU and notification mechanics stay
-  in the generic runtime. `SoftRing` supplies exclusively borrowed software operations with
+  Generic libraries expose no ring protocol or ring types and have no normal dependency
+  on PDMA crates. Transport stays in IO; software-environment execution and progress
+  hints stay in the software library. `SoftRing` supplies exclusively borrowed software operations with
   borrowed MMIO or memory cursors. Host/device
   keep side-specific memory/MMIO access and publish pointers only after successful
   entry access. Do not introduce a shadow cursor store or duplicate ring arithmetic.

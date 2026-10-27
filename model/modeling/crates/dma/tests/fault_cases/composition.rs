@@ -107,7 +107,7 @@ fn transformed_resume(replace_service: bool) -> TestResult {
         device
             .memory
             .memory
-            .read_typed::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
+            .read_buffer::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
         b"cdefgh".map(|byte| !byte)
     );
     assert_eq!(

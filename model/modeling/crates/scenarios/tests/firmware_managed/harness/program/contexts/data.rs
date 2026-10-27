@@ -1,3 +1,4 @@
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelId, Command, ContextId, CopyCommandDestinationValues, CopyCommandSourceValues, Event,
     LinearEndpoint, ScatterGatherEndpoint, Segment,
@@ -5,7 +6,9 @@ use pdma_model_contract::dma::{
 
 use super::{Ports, Spaces, TestResult};
 use crate::harness::program::buffers::Driver;
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess};
+use hardware_interface_io::memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
+};
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings};
 use pdma_model_software::dma::ChannelControl;
 
@@ -18,7 +21,7 @@ pub(super) struct Transfer {
     command: Command,
     destination: MemoryAddress,
     fence: pdma_model_software::dma::CompletionWord,
-    memory: SharedMemoryAccess,
+    memory: SharedMemoryAccess<(), MemoryAccessError>,
     pub same_address: bool,
 }
 
@@ -44,7 +47,7 @@ impl Transfer {
             u64::try_from(Segment::RECORD_SIZE)?,
             MemoryAlignment::try_new(8)?,
         )?;
-        spaces.lists.memory_access().write_typed(
+        spaces.lists.memory_access().write_buffer(
             list,
             MemoryAlignment::try_new(8)?,
             &Segment {
@@ -151,7 +154,10 @@ impl Transfer {
         }
     }
 
-    pub(super) fn bytes(&self, memory: &SharedMemoryAccess) -> TestResult<Vec<u8>> {
+    pub(super) fn bytes(
+        &self,
+        memory: &SharedMemoryAccess<(), MemoryAccessError>,
+    ) -> TestResult<Vec<u8>> {
         let mut bytes = vec![0; PAYLOAD.len()];
         memory.read(self.destination, MemoryAlignment::ONE, &mut bytes)?;
         Ok(bytes)

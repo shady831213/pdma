@@ -1,8 +1,8 @@
 //! Host boot polling outcomes.
 const FIRMWARE_STATUS_BASE: u32 = 0x4000;
 
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_io::register::RegisterAccess;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_host::{Error, firmware};
 use std::{io, time::Duration};
 
@@ -28,7 +28,7 @@ async fn ready_allows_host_to_continue() {
     // Given: firmware has published Ready.
     let bus = StatusBus(1);
     // When: Host waits through its owning CPU.
-    let result = SoftwareCpu::new()
+    let result = SoftwareEnv::new()
         .run_main(firmware::wait_ready(
             &bus,
             FIRMWARE_STATUS_BASE,
@@ -44,7 +44,7 @@ async fn failed_reports_the_firmware_error_code() {
     // Given: firmware reports a window initialization failure.
     let bus = StatusBus(2 | (1 << 16));
     // When: Host waits for readiness.
-    let result = SoftwareCpu::new()
+    let result = SoftwareEnv::new()
         .run_main(firmware::wait_ready(
             &bus,
             FIRMWARE_STATUS_BASE,
@@ -66,7 +66,7 @@ async fn booting_does_not_mean_ready_and_host_can_time_out() {
     let bus = StatusBus(0);
     // When: the Host's deadline expires, using virtual time.
     let waiting = async {
-        SoftwareCpu::new()
+        SoftwareEnv::new()
             .run_main(firmware::wait_ready(
                 &bus,
                 FIRMWARE_STATUS_BASE,
@@ -88,7 +88,7 @@ async fn invalid_firmware_state_is_rejected() {
     // Given: an invalid state encoding from the register boundary.
     let bus = StatusBus(3);
     // When: Host decodes the report.
-    let result = SoftwareCpu::new()
+    let result = SoftwareEnv::new()
         .run_main(firmware::wait_ready(
             &bus,
             FIRMWARE_STATUS_BASE,

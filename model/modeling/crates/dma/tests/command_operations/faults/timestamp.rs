@@ -120,7 +120,7 @@ fn timestamp_samples_execution_time_not_fetch_time() -> TestResult {
 
 #[test]
 fn timestamp_rejections_stop_without_publishing_success() -> TestResult {
-    use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
+    use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
     use pdma_model_contract::dma::{Event, EventCode};
     // Given: absent source, invalid destination geometry, or an inaccessible target.
     for (address, source, code) in [
@@ -152,7 +152,7 @@ fn timestamp_rejections_stop_without_publishing_success() -> TestResult {
 
 #[test]
 fn fence_access_error_still_stops_instead_of_parking() -> TestResult {
-    use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
+    use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
     use pdma_model_contract::dma::{Event, EventCode};
     // Given: a Fence destination outside the backing memory, not a repairable fault.
     let mut rig = rig(0xa000)?;

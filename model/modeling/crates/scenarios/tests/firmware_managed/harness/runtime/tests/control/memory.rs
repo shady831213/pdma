@@ -1,8 +1,11 @@
 use super::super::AccessError;
 use crate::harness::TestResult;
 use crate::harness::runtime::platform::CONTROL_CHANNEL_BASE;
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess};
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::memory::MemoryAccessError;
+use hardware_interface_io::memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
+};
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_schema::Decode;
 use pdma_model_contract::control::{ControlQueue, ControlQueueRaw, ControlRingState};
 use pdma_model_contract::hw_components::control::ControlRegisters;
@@ -13,13 +16,13 @@ use std::{
 };
 
 pub(in super::super) struct QueueMemory<'a> {
-    memory: &'a SharedMemoryAccess,
+    memory: &'a SharedMemoryAccess<(), MemoryAccessError>,
     state: MemoryAddress,
 }
 
 impl<'a> QueueMemory<'a> {
     pub(in super::super) const fn new(
-        memory: &'a SharedMemoryAccess,
+        memory: &'a SharedMemoryAccess<(), MemoryAccessError>,
         state: MemoryAddress,
     ) -> Self {
         Self { memory, state }
@@ -28,7 +31,7 @@ impl<'a> QueueMemory<'a> {
     pub(in super::super) fn read(&self) -> TestResult<ControlQueue> {
         Ok(self
             .memory
-            .read_typed::<ControlQueueRaw>(self.state, MemoryAlignment::ONE)?
+            .read_buffer::<ControlQueueRaw>(self.state, MemoryAlignment::ONE)?
             .decode()?)
     }
 

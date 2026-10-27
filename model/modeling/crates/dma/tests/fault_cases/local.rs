@@ -91,7 +91,7 @@ fn checkpoint(write: bool) -> TestResult {
     assert_eq!(
         dma.memory
             .memory
-            .read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+            .read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
         if write { *b"WXYZ" } else { *b"abcd" }
     );
     assert_eq!(

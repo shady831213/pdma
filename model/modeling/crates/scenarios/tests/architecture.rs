@@ -26,7 +26,7 @@ fn frameworks_do_not_expose_pdma_ring_apis() {
     // When: the real compiler resolves those public API paths.
     // Then: both misplaced API surfaces are unavailable.
     cases.compile_fail("tests/architecture/schema_ring.rs");
-    cases.compile_fail("tests/architecture/runtime_ring.rs");
+    cases.compile_fail("tests/architecture/software_ring.rs");
 }
 
 #[test]
@@ -35,11 +35,9 @@ fn framework_normal_dependencies_remain_model_independent() -> Result<(), Box<dy
     for package in [
         "hardware-interface-schema",
         "hardware-interface-schema-macros",
-        "hardware-interface-runtime",
+        "hardware-interface-software",
         "hardware-interface-pipeline",
-        "hardware-interface-memory",
-        "hardware-interface-storage",
-        "hardware-interface-register",
+        "hardware-interface-io",
         "hardware-interface-irq",
     ] {
         // When: Cargo resolves its actual transitive normal dependencies.
@@ -60,9 +58,9 @@ fn shared_software_depends_on_contract_not_host_firmware_or_dma() -> Result<(), 
     // Given: the common PDMA software implementation used by both software domains.
     // When: Cargo resolves its normal dependency graph.
     let dependencies = dependencies("pdma-model-software")?;
-    // Then: it uses contract/runtime without depending on either consumer or hardware.
+    // Then: it uses contract and software execution without either consumer or hardware.
     assert!(dependencies.contains("pdma-model-contract"));
-    assert!(dependencies.contains("hardware-interface-runtime"));
+    assert!(dependencies.contains("hardware-interface-software"));
     for forbidden in [
         "pdma-model-host",
         "pdma-model-firmware",
@@ -83,40 +81,40 @@ fn shared_software_depends_on_contract_not_host_firmware_or_dma() -> Result<(), 
 #[test]
 fn standalone_capabilities_do_not_require_unrelated_runtime_policy() -> Result<(), Box<dyn Error>> {
     // Given: each independent capability with optional integrations disabled.
-    for (package, forbidden) in [
-        (
-            "hardware-interface-memory",
-            &[
-                "tokio",
-                "hardware-interface-schema",
-                "hardware-interface-register",
-                "hardware-interface-runtime",
-            ][..],
-        ),
+    for (package, required, forbidden) in [
         (
             "hardware-interface-irq",
+            &[][..],
             &[
                 "tokio",
-                "hardware-interface-register",
-                "hardware-interface-runtime",
+                "hardware-interface-io",
+                "hardware-interface-software",
             ][..],
         ),
         (
-            "hardware-interface-register",
+            "hardware-interface-io",
+            &[][..],
             &[
                 "tokio",
                 "hardware-interface-schema",
-                "hardware-interface-memory",
-                "hardware-interface-runtime",
+                "hardware-interface-software",
             ][..],
         ),
         (
-            "hardware-interface-runtime",
-            &["hardware-interface-schema", "hardware-interface-memory"][..],
+            "hardware-interface-software",
+            &["hardware-interface-io", "hardware-interface-irq", "tokio"][..],
+            &["hardware-interface-schema"][..],
         ),
     ] {
         // When: Cargo resolves normal dependencies without workspace feature unification.
         let resolved = dependency_tree(package, "--no-default-features")?;
+        // Software execution consumes IO/IRQ; the IO package itself remains std-only.
+        for dependency in required {
+            assert!(
+                resolved.contains(*dependency),
+                "{package} omits {dependency}"
+            );
+        }
         // Then: selecting one capability does not import unrelated model or execution policy.
         for dependency in forbidden {
             assert!(

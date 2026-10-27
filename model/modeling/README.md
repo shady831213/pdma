@@ -71,12 +71,12 @@ cargo test -p pdma-model-scenarios --test firmware_managed -- --nocapture
 
 The system tests run all four linear/SG endpoint combinations, unequal segment
 boundaries, multi-chunk and zero-total transfers, plus event-ring write faults. They use
-real memory access, the same composed device pipeline, a software CPU, and the
+real memory access, the same composed device pipeline, a software environment, and the
 existing interrupt dispatcher. Worker construction/join belongs to the harness;
 case modules own inputs and acceptance assertions. Buffer allocation, payload initialization,
 software setup, submission, handler registration
 and completion waiting run inside one
-`InterruptRuntime::run_main` per case, which uses `SoftwareCpu` internally. A channel is transferred once into its persistent
+`InterruptRuntime::run_main` per case, which uses `SoftwareEnv` internally. A channel is transferred once into its persistent
 IRQ handler, rather than repeatedly moved through shared optional state.
 
 Runtime-owned memory installs regions through one atomic `add_regions(&regions)` call.
@@ -119,10 +119,10 @@ backend errors. New platform error categories need no generic memory-library cha
 | `crates/host/src/firmware.rs` | Host boot polling with distinct firmware failure and software timeout outcomes. |
 | `crates/firmware/src/lib.rs` | Async boot and serial control service; resource sequencing in its native child modules. |
 | `crates/scenarios/tests/firmware_managed/harness/runtime.rs` | Managed-system assembly with native submodules for concrete transports and scoped actor execution. |
-| `crates/hardware-interface-irq/src/pending.rs` | Shared coalesced notification source with separate emission and claim capabilities. |
+| `crates/hardware-interface-irq/src/wire.rs` | Shared coalesced notification source with separate emission and claim capabilities. |
 | `crates/contract/src/ring.rs` | PDMA ring geometry, shared pointer rules and errors. |
 | `crates/software/src/ring.rs` | Shared PDMA software ring configuration and operations over borrowed MMIO or memory cursors. |
-| `crates/hardware-interface-runtime/src/notifications.rs` | Coalesced progress hints independent of interrupt dispatch. |
+| `crates/hardware-interface-software/src/notifications.rs` | Coalesced progress hints independent of interrupt dispatch. |
 | `crates/contract/src/bin/pdma-abi-header.rs` | Current C11 header generation through schema exporters. |
 | `crates/dma/src/channel.rs` | Channel registers, rings, IRQ and private accepted-work state. |
 | `crates/dma/src/channel/mmio.rs` | Generated block routing and software-write effects. |
@@ -146,7 +146,7 @@ backend errors. New platform error categories need no generic memory-library cha
 | `crates/host/src/runtime.rs` | PDMA transport: async context access, cooperative yielding and pending notification delivery. |
 | `crates/software/src/dma/control.rs` | Shared discovery, fatal, IRQ and register-only reset access. |
 | `crates/dma/src/reset.rs` | Reset completion after affected channel-owned work retires. |
-| `crates/hardware-interface-runtime/src/interrupt/runtime.rs` | CPU-bound software execution, ISR registration and dispatcher lifetime. |
+| `crates/hardware-interface-software/src/interrupt/runtime.rs` | Environment-bound software execution, ISR registration and dispatcher lifetime. |
 | `crates/scenarios/tests/single_channel/main.rs` | Test suite entry and module declarations. |
 | `crates/scenarios/tests/single_channel/cases/` | Linear, scatter/gather and fault cases, with acceptance assertions. |
 | `crates/scenarios/tests/single_channel/harness/` | Platform provisioning, fault injection and actor driving/cleanup. |
@@ -338,7 +338,7 @@ in `software::ring` from `pdma-model-software`; host reexports it as `host::Ring
 `RingPointers` is a temporary snapshot acquired by the caller, not cached state.
 The trait neither performs I/O nor requires `push`/`pop` methods.
 
-Entry I/O uses the schema-independent `MemoryAccess::read_typed`/`write_typed`
+Entry I/O uses the schema-independent `MemoryAccess::read_buffer`/`write_buffer`
 defaults on generated raw-byte owners. Ring operations explicitly decode/encode
 semantic records, then publish pointers only after successful access and decoding.
 

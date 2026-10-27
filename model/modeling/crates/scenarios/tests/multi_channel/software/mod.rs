@@ -1,14 +1,16 @@
 //! Software owns allocation, shared IRQ draining and channel reset through the bus.
 
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{ChannelId, CommandHeader, DmaRegisters, Opcode, TrapCommand};
 
 mod buffers;
 mod reset;
 
+use hardware_interface_io::memory::SharedMemoryAllocator;
+use hardware_interface_io::memory::{MemoryAddress, SharedMemoryAccess};
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_irq::InterruptHandler;
-use hardware_interface_memory::{MemoryAddress, SharedMemoryAccess, SharedMemoryAllocator};
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::InterruptRegistration;
+use hardware_interface_software::InterruptRegistration;
 use pdma_model_host::{Channel, runtime::Irq};
 use std::{convert::Infallible, error::Error};
 use tokio::sync::mpsc;
@@ -18,7 +20,7 @@ use buffers::Buffers;
 
 pub(super) struct Ports<'a, B> {
     pub(super) bus: B,
-    pub(super) memory: SharedMemoryAccess,
+    pub(super) memory: SharedMemoryAccess<(), MemoryAccessError>,
     pub(super) allocator: SharedMemoryAllocator,
     pub(super) interrupts: InterruptRegistration<'a, Irq, Handler>,
 }
@@ -165,7 +167,10 @@ async fn configure<B>(
     ports: &Ports<'_, B>,
     scenario: Scenario,
     initial_count: u32,
-) -> TestResult<(Vec<Buffers>, Vec<Channel<B, SharedMemoryAccess>>)>
+) -> TestResult<(
+    Vec<Buffers>,
+    Vec<Channel<B, SharedMemoryAccess<(), MemoryAccessError>>>,
+)>
 where
     B: RegisterAccess + Clone + Send + Sync,
     B::Error: Error + Send + Sync + 'static,

@@ -6,7 +6,8 @@ mod command_tail;
 /// Shared raw-bus test fixtures.
 pub mod support;
 
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
+use hardware_interface_io::memory::SharedMemory;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_pipeline::{
     HardwareDriver, Operation, Stage, StepOutcome, StepResult, Then,
 };
@@ -65,7 +66,7 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
             driver.step(&mut hardware, &mut device)?,
             StepOutcome::InProgress
         );
-        if memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)? == [255, 254, 253, 0]
+        if memory.read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)? == [255, 254, 253, 0]
         {
             break;
         }
@@ -142,7 +143,7 @@ fn failed_read_consumes_its_transient_state_without_repeating_the_event() -> Tes
         )?,
         1
     );
-    let raw: EventRaw = memory.read_typed(0x1100.into(), MemoryAlignment::ONE)?;
+    let raw: EventRaw = memory.read_buffer(0x1100.into(), MemoryAlignment::ONE)?;
     let event = Event::from_bytes(raw.as_ref())?;
     assert_eq!(
         (event.id, event.code, event.bytes_completed()),

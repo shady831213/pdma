@@ -66,7 +66,7 @@ impl<M> Host<M> {
                 shared,
                 function,
             },
-            runtime: InterruptRuntime::new(Arc::new(SoftwareCpu::new()), source),
+            runtime: InterruptRuntime::new(Arc::new(SoftwareEnv::new()), source),
         }
     }
 }

@@ -4,7 +4,7 @@ pub(super) mod operand;
 mod word;
 
 use crate::{Completion, ExecutionContext, FetchedCommand, Flow, MemoryFailure};
-use hardware_interface_memory::MemoryAccess;
+use hardware_interface_io::memory::MemoryAccess;
 use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
 use pdma_model_contract::dma::{Event, EventCode};
 

@@ -1,5 +1,6 @@
 //! Complete CPU-local programs: allocation, ISR registration, draining and reset.
 
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelFatalCode, ChannelId, ChannelIrqCauseValues, ChannelIrqMaskValues, Command,
     CommandHeader, CopyCommand, CopyCommandDestinationValues, CopyCommandSourceValues, Event,
@@ -10,19 +11,20 @@ mod submission;
 
 use super::Scenario;
 use crate::harness::TestResult;
-use hardware_interface_irq::InterruptHandler;
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess, SharedMemoryAllocator,
+use hardware_interface_io::memory::SharedMemoryAllocator;
+use hardware_interface_io::memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::InterruptRegistration;
+use hardware_interface_io::register::RegisterAccess;
+use hardware_interface_irq::InterruptHandler;
+use hardware_interface_software::InterruptRegistration;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Irq};
 use std::{convert::Infallible, error::Error};
 use tokio::sync::mpsc;
 
 pub(super) struct Ports<'a, B> {
     pub(super) bus: B,
-    pub(super) memory: SharedMemoryAccess,
+    pub(super) memory: SharedMemoryAccess<(), MemoryAccessError>,
     pub(super) allocator: SharedMemoryAllocator,
     pub(super) interrupts: InterruptRegistration<'a, Irq, Handler>,
 }
@@ -38,7 +40,7 @@ pub(super) struct Outcome {
 impl Outcome {
     async fn wait_and_drain<B>(
         &mut self,
-        channel: &mut Channel<B, SharedMemoryAccess>,
+        channel: &mut Channel<B, SharedMemoryAccess<(), MemoryAccessError>>,
         notifications: &mut mpsc::Receiver<()>,
     ) -> TestResult
     where

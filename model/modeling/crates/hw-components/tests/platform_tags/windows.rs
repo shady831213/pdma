@@ -3,7 +3,7 @@ use super::{
     backend::{ADDRESS, Error},
     tag,
 };
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::{
     dma::ChannelId,
     memory::{ContextAttributes, MemoryIdentity},
@@ -39,7 +39,7 @@ fn platform_tags_distinguish_same_function_channels_without_context_table() {
         port.write_with_sideband(&channel, ADDRESS, MemoryAlignment::ONE, &payload)
             .unwrap();
         assert_eq!(
-            port.read_typed_with_sideband::<[u8; 4]>(&channel, ADDRESS, MemoryAlignment::ONE)
+            port.read_buffer_with_sideband::<[u8; 4]>(&channel, ADDRESS, MemoryAlignment::ONE)
                 .unwrap(),
             payload
         );

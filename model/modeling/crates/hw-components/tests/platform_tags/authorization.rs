@@ -3,7 +3,7 @@ use super::{
     backend::{ADDRESS, Error},
     configured_table, sideband,
 };
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::{
     dma::{ChannelId, ContextId, DmaAccess},
     memory::FunctionId,
@@ -14,7 +14,7 @@ use std::cell::Cell;
 
 #[test]
 fn atomic_context_authorization_precedes_unsupported_backend() {
-    use hardware_interface_memory::{AtomicAccessError, AtomicOperation, AtomicReadOrder};
+    use hardware_interface_io::memory::{AtomicAccessError, AtomicOperation, AtomicReadOrder};
     // Given: valid and foreign contexts over a backend without atomic support.
     let windows = ChannelWindows::new(2, 0, 0x10000).unwrap();
     let table = configured_table(&windows).unwrap();
@@ -121,7 +121,7 @@ fn rejected_context_accesses_never_call_platform_mapper_or_backend() {
     assert_eq!(
         backend
             .backing
-            .read_typed::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)
+            .read_buffer::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)
             .unwrap(),
         [0; 4]
     );
@@ -159,7 +159,7 @@ fn custom_sideband_preserves_typed_page_fault_errors_for_all_operations() {
     assert_eq!(
         backend
             .backing
-            .read_typed::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)
+            .read_buffer::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)
             .unwrap(),
         [0; 4]
     );

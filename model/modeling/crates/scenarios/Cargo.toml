@@ -10,10 +10,9 @@ description = "Direct and firmware-managed PDMA system scenarios"
 
 [dev-dependencies]
 proc-macro2 = "1"
-hardware-interface-memory = { version = "0.1.0", path = "../hardware-interface-memory" }
 hardware-interface-irq = { version = "0.1.0", path = "../hardware-interface-irq" }
-hardware-interface-register = { version = "0.1.0", path = "../hardware-interface-register", default-features = false }
-hardware-interface-runtime = { version = "0.1.0", path = "../hardware-interface-runtime" }
+hardware-interface-io = { version = "0.1.0", path = "../hardware-interface-io", default-features = false }
+hardware-interface-software = { version = "0.1.0", path = "../hardware-interface-software" }
 pdma-model-software = { path = "../software" }
 trybuild = "1"
 pdma-model-contract = { path = "../contract" }

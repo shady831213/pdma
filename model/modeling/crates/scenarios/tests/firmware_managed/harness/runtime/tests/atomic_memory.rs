@@ -1,8 +1,9 @@
 use crate::harness::runtime::memory::{FunctionSpaces, RouteError, RoutedMemory};
-use hardware_interface_memory::{
+use hardware_interface_io::memory::{
     AtomicAccessError, AtomicOperation, AtomicWriteOrder, MemoryAccess, MemoryAddress,
-    MemoryAlignment, MemoryRegion, SharedMemory,
+    MemoryAlignment,
 };
+use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
 use pdma_model_contract::{
     dma::{ChannelId, ContextId, DmaAccess},
     hw_components::{
@@ -78,13 +79,13 @@ fn atomic_words_use_retained_owner_when_window_is_closed() {
     assert_eq!(old64, Ok(33));
     assert_eq!(
         first
-            .read_typed::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)
+            .read_buffer::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)
             .unwrap(),
         11_u64.to_le_bytes()
     );
     assert_eq!(
         second
-            .read_typed::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)
+            .read_buffer::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)
             .unwrap(),
         44_u64.to_le_bytes()
     );
@@ -175,7 +176,7 @@ fn atomic_contexts_isolate_pasid_zero_and_deny_foreign_owner_before_modification
     assert_eq!(changed, Ok(55));
     let rejection = || {
         AtomicAccessError::Access(
-            RouteError::<hardware_interface_memory::MemoryAccessError>::Context(
+            RouteError::<hardware_interface_io::memory::MemoryAccessError>::Context(
                 MemoryError::OwnerMismatch {
                     context: ContextId::new(2),
                     owner: FunctionId::new(0),
@@ -188,7 +189,7 @@ fn atomic_contexts_isolate_pasid_zero_and_deny_foreign_owner_before_modification
     for (memory, value) in memories.iter().zip([11_u64, 99, 33]) {
         assert_eq!(
             memory
-                .read_typed::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)
+                .read_buffer::<[u8; 8]>(ADDRESS, MemoryAlignment::ONE)
                 .unwrap(),
             value.to_le_bytes()
         );

@@ -5,12 +5,11 @@ use pdma_model_contract::dma::{
     LinearEndpoint,
 };
 
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAllocator,
-};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_pipeline::{AsyncExecutor, Operation};
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
@@ -49,7 +48,7 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
     let device = Dma::new(memory.clone(), 1)?;
     let mut stage = device.hardware();
     let model = Model::new(device);
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     let mut channel = cpu
         .run_main(Channel::setup(
             model.clone(),
@@ -100,7 +99,7 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
     }
     assert_eq!(cpu.run_main(channel.event()).await?, None);
     assert_eq!(
-        memory.read_typed::<[u8; 8]>(destination, alignment)?,
+        memory.read_buffer::<[u8; 8]>(destination, alignment)?,
         [0; 8]
     );
     assert!(executor.run(&mut stage, &mut operation).await.is_ok());

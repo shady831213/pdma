@@ -5,10 +5,9 @@ pub mod lifecycle;
 
 use crate::{hardware, software};
 use fault::{FaultBus, UnmappedRing};
-use hardware_interface_memory::{
-    MemoryAddress, SharedMemory, SharedMemoryAccess, SharedMemoryAllocator,
-};
-use hardware_interface_runtime::{InterruptRuntime, InterruptSummary, SoftwareCpu};
+use hardware_interface_io::memory::{MemoryAddress, SharedMemoryAccess};
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_software::{InterruptRuntime, InterruptSummary, SoftwareEnv};
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, CommandRegisters, EventRegisters};
 use pdma_model_host::runtime::Model;
 use std::{error::Error, sync::Arc};
@@ -78,7 +77,7 @@ pub async fn run(injection: FaultInjection, input: software::Input<'_>) -> TestR
         base_register,
         memory: faulted,
     };
-    let cpu = Arc::new(SoftwareCpu::new());
+    let cpu = Arc::new(SoftwareEnv::new());
     assert!(
         storage.regions()?.is_empty(),
         "buffers must be allocated by the running software"

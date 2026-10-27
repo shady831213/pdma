@@ -1,16 +1,16 @@
 //! Reset-handshake fixtures with suspended accepted DMA work.
 
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, Command, CommandRegisters, CopyCommandDestinationValues,
     CopyCommandSourceValues, LinearEndpoint,
 };
 
-use hardware_interface_memory::{
-    MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory, SharedMemoryAccess,
-};
+use hardware_interface_io::memory::{MemoryAddress, MemoryAlignment, SharedMemoryAccess};
+use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_pipeline::{AsyncInteractionBackend, HardwareDriver, StepOutcome};
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_dma::{Dma, Hardware};
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::{
@@ -19,7 +19,7 @@ use std::sync::{
 };
 
 pub(super) struct ReadFailureBus {
-    model: Model<SharedMemoryAccess>,
+    model: Model<SharedMemoryAccess<(), MemoryAccessError>>,
     fail: Arc<AtomicBool>,
 }
 
@@ -39,14 +39,14 @@ impl RegisterAccess for ReadFailureBus {
 }
 
 pub(super) struct Fixture {
-    pub(super) channel: Channel<ReadFailureBus, SharedMemoryAccess>,
-    pub(super) model: Model<SharedMemoryAccess>,
+    pub(super) channel: Channel<ReadFailureBus, SharedMemoryAccess<(), MemoryAccessError>>,
+    pub(super) model: Model<SharedMemoryAccess<(), MemoryAccessError>>,
     pub(super) fail: Arc<AtomicBool>,
     pub(super) hardware: Hardware,
-    pub(super) driver: HardwareDriver<Hardware, Dma<SharedMemoryAccess>>,
+    pub(super) driver: HardwareDriver<Hardware, Dma<SharedMemoryAccess<(), MemoryAccessError>>>,
 }
 
-pub(super) async fn fixture(cpu: &SoftwareCpu) -> Result<Fixture, Box<dyn std::error::Error>> {
+pub(super) async fn fixture(cpu: &SoftwareEnv) -> Result<Fixture, Box<dyn std::error::Error>> {
     let storage = Arc::new(SharedMemory::new());
     storage.add_regions(&[MemoryRegion::try_new(
         MemoryAddress::new(0x1000),

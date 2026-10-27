@@ -16,6 +16,9 @@ hardware-interface-schema-macros = { version = "0.1.0", path = "../hardware-inte
 [dev-dependencies]
 trybuild = "1"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [features]
 default = []
 export-c-header = []

@@ -8,7 +8,8 @@ use pdma_model_contract::dma::{
 /// Shared hardware test fixtures.
 pub mod support;
 
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
+use hardware_interface_io::memory::SharedMemory;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use support::{TestResult, run, setup, submit};
 
 fn segments(memory: &SharedMemory, entries: &[Segment]) -> TestResult {
@@ -25,7 +26,7 @@ fn segments(memory: &SharedMemory, entries: &[Segment]) -> TestResult {
 fn event(memory: &SharedMemory) -> Result<Event, Box<dyn std::error::Error>> {
     Ok(Event::from_bytes(
         memory
-            .read_typed::<EventRaw>(MemoryAddress::new(0x1100), MemoryAlignment::ONE)?
+            .read_buffer::<EventRaw>(MemoryAddress::new(0x1100), MemoryAlignment::ONE)?
             .as_ref(),
     )?)
 }
@@ -74,7 +75,7 @@ fn insufficient_selected_range_leaves_payload_untouched() -> TestResult {
         }
     );
     assert_eq!(
-        &memory.read_typed::<[u8; 5]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
+        &memory.read_buffer::<[u8; 5]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
         b"guard"
     );
     Ok(())
@@ -129,7 +130,7 @@ fn list_errors_and_length_overflow_precede_payload_writes() -> TestResult {
             }
         );
         assert_eq!(
-            &memory.read_typed::<[u8; 4]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
+            &memory.read_buffer::<[u8; 4]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
             b"keep"
         );
     }

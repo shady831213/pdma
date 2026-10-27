@@ -9,8 +9,9 @@ pub mod page_fault;
 pub mod program;
 pub mod runtime;
 
-use hardware_interface_memory::{MemoryAddress, SharedMemory, SharedMemoryAllocator};
-use hardware_interface_runtime::InterruptSummary;
+use hardware_interface_io::memory::MemoryAddress;
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_software::InterruptSummary;
 use runtime::Managed;
 use std::{error::Error, io, sync::Arc};
 

@@ -157,10 +157,10 @@ where
             control: Arc::clone(&control),
             spaces,
         };
-        let (to_firmware, firmware_source) = pending_interrupt(ControlIrq);
-        let (to_host, control_source) = pending_interrupt(HostIrq::Control(ControlIrq));
+        let (to_firmware, firmware_source) = interrupt_wire(ControlIrq);
+        let (to_host, control_source) = interrupt_wire(HostIrq::Control(ControlIrq));
         let mut control_source = Some(control_source);
-        let (to_events, event_source) = pending_interrupt(HostIrq::Event(ControlIrq));
+        let (to_events, event_source) = interrupt_wire(HostIrq::Event(ControlIrq));
         let mut event_source = Some(event_source);
         let mut destinations = Vec::new();
         let mut sources = Vec::new();
@@ -169,7 +169,7 @@ where
                 u32::try_from(index)
                     .map_err(|_| BuildError::Platform(PlatformConfigError::FunctionCount))?,
             );
-            let (interrupt, dma_source) = pending_interrupt(HostIrq::Dma(Irq));
+            let (interrupt, dma_source) = interrupt_wire(HostIrq::Dma(Irq));
             destinations.push(interrupt);
             sources.push((
                 function,
@@ -209,13 +209,13 @@ where
             .into_iter()
             .map(|(function, source)| Host::new(Arc::clone(&shared), function, source))
             .collect();
-        let firmware_cpu = Arc::new(SoftwareCpu::new());
+        let firmware_env = Arc::new(SoftwareEnv::new());
         Ok((
             Self {
                 shared,
                 hardware,
-                firmware_runtime: InterruptRuntime::new(Arc::clone(&firmware_cpu), firmware_source),
-                firmware_cpu,
+                firmware_runtime: InterruptRuntime::new(Arc::clone(&firmware_env), firmware_source),
+                firmware_env,
                 firmware_memory,
                 function_count,
             },

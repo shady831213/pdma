@@ -8,7 +8,8 @@ use pdma_model_contract::dma::{
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment, SharedMemory};
+use hardware_interface_io::memory::SharedMemory;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
 use pdma_model_dma::{CheckRanges, CommandAdmission, CommandRequest, Dma, Error, Fetch, Retire};
 use support::TestResult;
@@ -103,11 +104,11 @@ fn reject_wait(admission: CommandAdmission) -> TestResult {
     support::assert_no_event(&mut dma)?;
     assert!(!dma.irq());
     assert_eq!(
-        memory.read_typed::<[u8; 4]>(0x1200.into(), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 4]>(0x1200.into(), MemoryAlignment::ONE)?,
         *b"abcd"
     );
     assert_eq!(
-        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
         *b"----"
     );
     assert_recovered(&mut dma, &memory)
@@ -128,7 +129,7 @@ fn assert_recovered(dma: &mut Dma<SharedMemory>, memory: &SharedMemory) -> TestR
     )?;
     support::run(dma)?;
     assert_eq!(
-        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
         *b"abcd"
     );
     let reset = DmaDiscovery::EXTENT + DmaAdmin::CHANNELS_OFFSET;

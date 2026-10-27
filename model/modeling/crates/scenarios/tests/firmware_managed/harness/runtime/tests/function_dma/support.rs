@@ -5,9 +5,8 @@ use pdma_model_contract::dma::{
 };
 
 use crate::harness::runtime::memory::RoutedMemory;
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
 use hardware_interface_pipeline::{HardwareDriver, StepOutcome};
 use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_dma::Dma;
@@ -97,7 +96,7 @@ pub(super) fn publish(
     memory: &SharedMemory,
     (id, command): (ChannelId, Command),
 ) -> TestResult {
-    memory.write_typed(
+    memory.write_buffer(
         MemoryAddress::new(0x1000),
         MemoryAlignment::ONE,
         &command.to_bytes()?,
@@ -158,7 +157,7 @@ pub(super) fn advance(
 
 /// Decodes the first software-visible completion.
 pub(super) fn response(memory: &SharedMemory) -> TestResult<Event> {
-    let bytes = memory.read_typed::<pdma_model_contract::dma::EventRaw>(
+    let bytes = memory.read_buffer::<pdma_model_contract::dma::EventRaw>(
         MemoryAddress::new(0x1100),
         MemoryAlignment::ONE,
     )?;

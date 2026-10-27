@@ -6,7 +6,8 @@ use pdma_model_contract::dma::{
 use crate::{Dma, Error, PrepareChunk, ReadCopy, WriteCopy};
 mod collection;
 mod identity;
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment, MemoryRegion, SharedMemory};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
 use hardware_interface_pipeline::{Operation, StepOutcome, Then};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;

@@ -4,10 +4,9 @@ use super::{
 };
 use crate::harness::TestResult;
 use crate::harness::runtime::platform::CONTROL_CHANNEL_BASE;
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAllocator,
-};
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_schema::Encode;
 use pdma_model_contract::control::{ControlResponse, ControlResponseStatus};
 use pdma_model_contract::hw_components::control::ControlRegisters;
@@ -132,7 +131,7 @@ async fn cancellation_case(response_ack: bool, moment: Moment) -> TestResult {
                 status: ControlResponseStatus::NoResources,
                 channel: 7,
             };
-            memory.write_typed(
+            memory.write_buffer(
                 MemoryAddress::new(storage.response.entry(0)?),
                 MemoryAlignment::ONE,
                 &replacement.encode()?,

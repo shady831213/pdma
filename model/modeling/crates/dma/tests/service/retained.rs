@@ -2,7 +2,8 @@ use crate::{
     RESET,
     support::{TestResult, command, read_word, setup, submit},
 };
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment, SharedMemory};
+use hardware_interface_io::memory::SharedMemory;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use hardware_interface_pipeline::{Operation, RunError, StepOutcome, Then};
 use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{
@@ -75,7 +76,7 @@ fn reset_waits_for_retained_data_to_reach_retirement_without_old_effects() -> Te
         assert_eq!(result, StepOutcome::Complete(Err(Error::Reset)));
         assert_eq!(read_word(&mut device, RESET)?, 0);
         assert_eq!(
-            memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+            memory.read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
             [0xaa; 4]
         );
     }
@@ -116,7 +117,7 @@ fn stale_payload_is_rejected_before_effects_and_recovers_after_reset() -> TestRe
     };
     assert_eq!(rejected.status(), Err(Error::Reset));
     assert_eq!(
-        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
         [0; 4]
     );
     assert_eq!(
@@ -141,7 +142,7 @@ fn stale_payload_is_rejected_before_effects_and_recovers_after_reset() -> TestRe
     crate::support::run(&mut device)?;
     // Then: the new descriptor completes normally and retains its own identity and payload.
     assert_eq!(
-        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
         [1, 2, 3, 4]
     );
     crate::support::assert_no_event(&mut device)?;
@@ -189,7 +190,7 @@ fn completed_old_retirement_cannot_affect_a_newer_accepted_command() -> TestResu
     );
     // Then: the current command completes with its own identity and bytes.
     assert_eq!(
-        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
         [1, 2, 3, 4]
     );
     crate::support::assert_no_event(&mut device)?;

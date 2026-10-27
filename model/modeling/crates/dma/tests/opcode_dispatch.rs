@@ -10,9 +10,8 @@ use pdma_model_contract::dma::{
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
-};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccessError, SharedMemory};
 use hardware_interface_pipeline::{Operation, StepOutcome};
 use pdma_model_dma::{CommandRequest, Fetch};
 use std::{cell::Cell, rc::Rc};
@@ -179,7 +178,7 @@ fn fill_retains_one_invocation_and_backpressures_successor_between_chunks() -> T
             if let StepOutcome::Complete(result) = operation.step(&mut hardware, &mut dma)? {
                 result?;
             }
-            if memory.read_typed::<[u8; 1]>(
+            if memory.read_buffer::<[u8; 1]>(
                 (0x1400 + u64::try_from(prefix - 1)?).into(),
                 MemoryAlignment::ONE,
             )? == [0x5a]
@@ -199,7 +198,7 @@ fn fill_retains_one_invocation_and_backpressures_successor_between_chunks() -> T
             1
         );
         assert_eq!(
-            memory.read_typed::<[u8; 4]>(0x1900.into(), MemoryAlignment::ONE)?,
+            memory.read_buffer::<[u8; 4]>(0x1900.into(), MemoryAlignment::ONE)?,
             [0; 4]
         );
         memory.write(
@@ -227,7 +226,7 @@ fn fill_retains_one_invocation_and_backpressures_successor_between_chunks() -> T
     );
     support::run(&mut dma)?;
     assert_eq!(
-        memory.read_typed::<[u8; 4]>(0x1900.into(), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 4]>(0x1900.into(), MemoryAlignment::ONE)?,
         7_u32.to_le_bytes()
     );
     support::assert_no_event(&mut dma)?;

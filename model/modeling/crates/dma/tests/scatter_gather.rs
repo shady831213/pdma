@@ -8,7 +8,8 @@ use pdma_model_contract::dma::{
 /// Shared hardware test fixtures.
 pub mod support;
 
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
+use hardware_interface_io::memory::SharedMemory;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use support::{TestResult, run, setup, submit};
 
 fn write_segments(memory: &SharedMemory, base: u64, segments: &[Segment]) -> TestResult {
@@ -208,7 +209,7 @@ fn overlapping_segments_follow_execution_order() -> TestResult {
     run(&mut device)?;
     // Then: the later read observes the earlier write, not a whole-stream snapshot.
     assert_eq!(
-        &memory.read_typed::<[u8; 6]>(MemoryAddress::new(0x1200), MemoryAlignment::ONE)?,
+        &memory.read_buffer::<[u8; 6]>(MemoryAddress::new(0x1200), MemoryAlignment::ONE)?,
         b"ababab"
     );
     support::assert_no_event(&mut device)?;

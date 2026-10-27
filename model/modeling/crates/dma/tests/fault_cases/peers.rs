@@ -106,7 +106,7 @@ fn peer_channel_completes_while_faulted_channel_stays_parked() -> TestResult {
             device
                 .memory
                 .memory
-                .read_typed::<[u8; 8]>(0x1fe8.into(), MemoryAlignment::ONE)?,
+                .read_buffer::<[u8; 8]>(0x1fe8.into(), MemoryAlignment::ONE)?,
         ) == 99
         {
             break;
@@ -127,7 +127,7 @@ fn peer_channel_completes_while_faulted_channel_stays_parked() -> TestResult {
         device
             .memory
             .memory
-            .read_typed::<[u8; 3]>(0x1600.into(), MemoryAlignment::ONE)?,
+            .read_buffer::<[u8; 3]>(0x1600.into(), MemoryAlignment::ONE)?,
         *b"abc"
     );
     assert_eq!(
@@ -135,7 +135,7 @@ fn peer_channel_completes_while_faulted_channel_stays_parked() -> TestResult {
             device
                 .memory
                 .memory
-                .read_typed::<[u8; 8]>(0x1fe8.into(), MemoryAlignment::ONE)?
+                .read_buffer::<[u8; 8]>(0x1fe8.into(), MemoryAlignment::ONE)?
         ),
         peer.id()
     );
@@ -197,7 +197,7 @@ fn parked_reset_finishes_while_an_accepted_peer_is_disabled() -> TestResult {
             device
                 .memory
                 .memory
-                .read_typed::<[u8; 8]>(0x1fe8.into(), MemoryAlignment::ONE)?,
+                .read_buffer::<[u8; 8]>(0x1fe8.into(), MemoryAlignment::ONE)?,
         ) == 99
         {
             break;
@@ -213,7 +213,7 @@ fn parked_reset_finishes_while_an_accepted_peer_is_disabled() -> TestResult {
             device
                 .memory
                 .memory
-                .read_typed::<[u8; 8]>(0x1fe8.into(), MemoryAlignment::ONE)?
+                .read_buffer::<[u8; 8]>(0x1fe8.into(), MemoryAlignment::ONE)?
         ),
         99
     );

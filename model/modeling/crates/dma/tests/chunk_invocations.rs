@@ -8,7 +8,7 @@ use pdma_model_contract::dma::{
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use hardware_interface_pipeline::{Operation, StepOutcome};
 use pdma_model_dma::COPY_CHUNK_BYTES;
 use support::{TestResult, command, read_word, setup, submit};
@@ -50,7 +50,7 @@ fn command_continuation_preserves_descriptor_and_backpressure_between_chunks() -
                 result?;
             }
             let address = 0x1800 + u64::try_from(expected_prefix - 1)?;
-            if memory.read_typed::<[u8; 1]>(address.into(), MemoryAlignment::ONE)? == [0x5a] {
+            if memory.read_buffer::<[u8; 1]>(address.into(), MemoryAlignment::ONE)? == [0x5a] {
                 break;
             }
         }

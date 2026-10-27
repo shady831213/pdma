@@ -8,7 +8,7 @@ use pdma_model_contract::dma::{
 /// Shared raw-bus test fixtures.
 pub mod support;
 
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_dma::ChannelFatal;
 use support::{TestResult, command, read_word, run, setup, submit};
 
@@ -164,7 +164,7 @@ fn successive_successes_reuse_command_slots_without_event_consumption() -> TestR
         2
     );
     assert_eq!(
-        memory.read_typed::<[u8; 4]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
+        memory.read_buffer::<[u8; 4]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
         [2; 4]
     );
     support::assert_no_event(&mut device)?;

@@ -1,7 +1,6 @@
 use super::support::{TestResult, configure, submit, word};
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
 use hardware_interface_pipeline::StepOutcome;
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, CommandRegisters, EventRegisters};
 use pdma_model_dma::Dma;
@@ -34,7 +33,7 @@ fn arbiter_accepts_no_peer_command_until_selected_command_finishes() -> TestResu
             operation.step(&mut hardware, &mut device)?,
             StepOutcome::InProgress
         ));
-        if memory.read_typed::<[u8; 1]>(MemoryAddress::new(0x1400), MemoryAlignment::ONE)? == [7] {
+        if memory.read_buffer::<[u8; 1]>(MemoryAddress::new(0x1400), MemoryAlignment::ONE)? == [7] {
             first_write = true;
             break;
         }

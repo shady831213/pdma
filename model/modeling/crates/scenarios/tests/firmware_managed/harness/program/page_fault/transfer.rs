@@ -5,7 +5,7 @@ use pdma_model_contract::dma::{
 
 use super::super::buffers::Driver;
 use super::{Grant, Input, Ports, Space, TestResult};
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings};
 use pdma_model_software::dma::ChannelControl;
 

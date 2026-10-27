@@ -256,7 +256,7 @@ not current APIs. The following chapter's implementation status and
 | Dependency gating | `dma/src/stages/candidate.rs` only offers fetch/resume candidates | No Wait after withdrawal. Define comparison, width, context, lifetime and peer progress before implementation. |
 | Ordered completion writeback | `dma/src/stages/responses.rs`; `dma/src/channel/response.rs` | Add Fence; replace the DMA response ring with an error event ring, not mandatory success records. Preserve diagnostics and an independent reporting-failure outlet. |
 | Completion versus interrupt | Channel response publication and IOC/non-empty IRQ causes | Add independent Trap; remove response-consumption-dependent IOC bookkeeping and success-response backpressure. Specify event notification and fatal fallback separately. |
-| Multi-writer atomic update | `hardware-interface-runtime/src/atomic.rs` and storage tests | Add Atomic and counting SEM with authorized managed forwarding. Model indivisible operations; RTL selects unsupported, exclusive or native-atomic implementation. |
+| Multi-writer atomic update | `hardware-interface-software/src/atomic.rs` and storage tests | Add Atomic and counting SEM with authorized managed forwarding. Model indivisible operations; RTL selects unsupported, exclusive or native-atomic implementation. |
 | Visibility and ordering | `docs/spec.md` RTL handoff and `docs/reset.md`; synchronous memory calls | Need a precise producer/consumer visibility contract and a model boundary to verify it. Do not equate Rust mutex ordering with platform coherence. |
 | Queue/engine relationship | `dma/src/stages/data_path.rs`; retained work in Channel | One shared engine and fixed channels are intentional. Wait peer progress must be proven; oversubscription is not required. |
 | Fault and reset | `dma/src/reset.rs`; `dma/src/maintenance/progress.rs`; fault/reset scenarios | Existing ownership and replay boundaries are usable. Define faulting synchronization accesses and committed-update checkpoints when new operations are chosen. |
@@ -582,9 +582,11 @@ external provisioning, startup, fault injection and teardown. Test-specific Host
 programs remain test support; reusable Host driver behavior belongs in `host`.
 The harness must not implement firmware initialization or hardware behavior.
 Both transports reuse the independent IRQ crate's pending-interrupt component.
-Memory and closure storage are separate synchronous packages; DMA no longer depends
-on software runtime. Register transport is independent of optional schema images,
-and software CPU/ISR scheduling stays in runtime. See [reusable library boundaries](reusable-libraries.md).
+Memory interfaces, supplied backing and closure storage share the std-only IO package;
+DMA consumes its capabilities without software execution dependencies. Hardware owns
+schema register windows and access effects; IO has no register-image layer or schema dependency.
+SoftwareEnv/main/ISR scheduling stays in the software library. See
+[reusable library boundaries](reusable-libraries.md).
 A generic shared-context wrapper was evaluated but not introduced: model-specific
 projection and IRQ extraction still belong at the consumer, and remaining mutex/wakeup
 mechanics do not justify extra hooks or traits.

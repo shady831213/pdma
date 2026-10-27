@@ -35,7 +35,7 @@ transport stable across retained operations.
 Ordinary drivers use Rust ownership and borrowing without capturing a modeled CPU.
 They can be constructed outside a CPU context, and suspended operations may resume
 on another CPU or outside one. Any CPU restrictions belong to the supplied
-capability, such as `CpuRegisterAccess`, or to CPU-local interrupt state.
+capability, such as `EnvRegisterAccess`, or to CPU-local interrupt state.
 
 Encoding precedes producer publication; decoding precedes consumer publication.
 Encoding rejection releases the pending entry without writing its storage or

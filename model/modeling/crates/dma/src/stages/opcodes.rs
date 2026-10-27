@@ -5,7 +5,7 @@ use crate::{
     CheckRanges, ChunkInput, CommandRequest, Completion, CopyProgress, Dma, ExecutionContext,
     FetchedCommand, Flow,
 };
-use hardware_interface_memory::MemoryAccess;
+use hardware_interface_io::memory::MemoryAccess;
 use hardware_interface_pipeline::{Dispatch, FanOut, Route, Stage, StepOutcome, StepResult, Then};
 use pdma_model_contract::dma::{
     AtomicCommand, Command, FenceCommand, FillCommand, SemaphoreCommand, TimestampCommand,

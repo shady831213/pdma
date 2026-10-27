@@ -1,5 +1,6 @@
 use crate::support::{ADDRESS, Spaces};
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment, SharedMemory};
+use hardware_interface_io::memory::SharedMemory;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::dma::{ChannelId, ContextId, DmaAccess};
 use pdma_model_contract::hw_components::context::{
     ContextAttributeRegisters, ContextEntryRegisters, ContextTableRegisters,
@@ -39,10 +40,10 @@ fn memory_routes_default_and_pasid_zero_and_denies_foreign_or_unallocated_entrie
     };
     // When: each selector is used through the hardware memory view.
     let default = view
-        .read_typed_with_sideband::<[u8; 4]>(&access(0), ADDRESS, MemoryAlignment::ONE)
+        .read_buffer_with_sideband::<[u8; 4]>(&access(0), ADDRESS, MemoryAlignment::ONE)
         .unwrap();
     let pasid = view
-        .read_typed_with_sideband::<[u8; 4]>(&access(1), ADDRESS, MemoryAlignment::ONE)
+        .read_buffer_with_sideband::<[u8; 4]>(&access(1), ADDRESS, MemoryAlignment::ONE)
         .unwrap();
     view.write_with_sideband(&access(1), ADDRESS, MemoryAlignment::ONE, &[44; 4])
         .unwrap();
@@ -68,7 +69,7 @@ fn memory_routes_default_and_pasid_zero_and_denies_foreign_or_unallocated_entrie
     for ((_, memory), byte) in spaces.0.iter().zip([11, 44, 33]) {
         assert_eq!(
             memory
-                .read_typed::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)
+                .read_buffer::<[u8; 4]>(ADDRESS, MemoryAlignment::ONE)
                 .unwrap(),
             [byte; 4]
         );

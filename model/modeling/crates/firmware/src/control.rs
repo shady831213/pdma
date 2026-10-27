@@ -6,9 +6,9 @@ mod resources;
 mod service;
 
 use crate::{Configuration, Error};
-use hardware_interface_memory::MemoryAccess;
-use hardware_interface_register::RegisterAccess;
-use hardware_interface_runtime::InterruptRegistration;
+use hardware_interface_io::memory::MemoryAccess;
+use hardware_interface_io::register::RegisterAccess;
+use hardware_interface_software::InterruptRegistration;
 use pdma_model_contract::hw_components::firmware::{
     FirmwareBootError, FirmwareBootState, FirmwareBootValues, FirmwareRegisters,
 };

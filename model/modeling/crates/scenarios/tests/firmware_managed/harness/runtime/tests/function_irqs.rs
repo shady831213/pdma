@@ -5,11 +5,10 @@ use pdma_model_contract::dma::{
 
 use super::super::{Driver, HostVector, ManagementBus};
 use super::{Managed, control::memory::poll_once};
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAllocator,
-};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
-use hardware_interface_register::RegisterAccess;
 use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_host::{Channel, ChannelConfig, Rings};
 use pdma_model_software::{

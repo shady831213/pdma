@@ -1,6 +1,6 @@
 use crate::Error;
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_schema::Decode;
 use pdma_model_contract::hw_components::control::ControlNotificationRegisters;
 use pdma_model_contract::{
@@ -98,7 +98,7 @@ impl<'a, B: RegisterAccess + Sync, M: MemoryAccess + Sync> Events<'a, B, M> {
             .ok_or(EventRingErrorCode::InvalidRing)?;
         let state = self
             .memory
-            .read_typed::<ControlRingStateRaw>(MemoryAddress::new(address), MemoryAlignment::ONE)
+            .read_buffer::<ControlRingStateRaw>(MemoryAddress::new(address), MemoryAlignment::ONE)
             .map_err(|_| EventRingErrorCode::AccessError)?
             .decode()
             .map_err(|_| EventRingErrorCode::InvalidRing)?;

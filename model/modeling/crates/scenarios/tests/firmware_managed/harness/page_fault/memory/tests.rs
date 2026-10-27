@@ -1,6 +1,6 @@
 use super::*;
 use crate::harness::page_fault::platform::Sources;
-use hardware_interface_memory::{SharedMemory, SharedMemoryAllocator};
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::memory::{ContextAttributes, FunctionId};
 
@@ -49,7 +49,7 @@ fn same_space_channel_tags_preserve_origins_for_duplicate_reports() {
 
 #[test]
 fn platform_write_fault_reports_identity_without_committing_bytes() {
-    use hardware_interface_memory::{SharedMemory, SharedMemoryAllocator};
+    use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
     use pdma_model_contract::memory::{ContextAttributes, FunctionId};
     // Given: one missing page backed by initialized storage and an independent fault receiver.
     let allocator = SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into());

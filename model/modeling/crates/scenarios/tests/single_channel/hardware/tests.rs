@@ -1,9 +1,10 @@
 //! Assembly must keep serving after the software observes its first completion.
 
 use crate::{harness::TestResult, software};
-use hardware_interface_memory::{MemoryAddress, SharedMemory, SharedMemoryAllocator};
+use hardware_interface_io::memory::MemoryAddress;
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
 use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
-use hardware_interface_runtime::{InterruptRuntime, SoftwareCpu};
+use hardware_interface_software::{InterruptRuntime, SoftwareEnv};
 use pdma_model_host::runtime::Model;
 use std::sync::Arc;
 use tokio::task::JoinSet;
@@ -17,7 +18,7 @@ async fn assembled_hardware_remains_running_after_a_copy() -> TestResult {
     let (device, mut hardware) = super::assemble(memory.clone())?;
     let model = Model::new(device);
     let executor = AsyncExecutor::new(model.clone());
-    let runtime = InterruptRuntime::new(Arc::new(SoftwareCpu::new()), model.clone());
+    let runtime = InterruptRuntime::new(Arc::new(SoftwareEnv::new()), model.clone());
     let mut workers = JoinSet::new();
     workers.spawn(async move {
         executor

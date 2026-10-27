@@ -1,5 +1,5 @@
 use super::{CHANNEL, ChannelControl, Error};
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::register::RegisterAccess;
 use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{ChannelRegisters, ContextId};
 

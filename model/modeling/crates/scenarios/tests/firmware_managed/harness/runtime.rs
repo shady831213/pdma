@@ -17,9 +17,9 @@ pub use bus::HostBus;
 pub use error::{AccessError, BuildError, PlatformConfigError, RunError};
 pub use interrupts::{HostInterrupts, HostIrq, HostVector};
 
-use hardware_interface_irq::{InterruptEmitter, PendingInterrupt, pending_interrupt};
-use hardware_interface_memory::MemoryAccess;
-use hardware_interface_runtime::{InterruptRuntime, SoftwareCpu};
+use hardware_interface_io::memory::MemoryAccess;
+use hardware_interface_irq::{InterruptEmitter, InterruptReceiver, interrupt_wire};
+use hardware_interface_software::{InterruptRuntime, SoftwareEnv};
 use memory::RoutedMemory;
 use pdma_model_contract::dma::DmaAccess;
 use pdma_model_dma::Dma;
@@ -76,8 +76,8 @@ where
 {
     shared: Arc<Shared<M>>,
     hardware: Box<pdma_model_dma::Hardware>,
-    firmware_runtime: InterruptRuntime<PendingInterrupt<ControlIrq>>,
-    firmware_cpu: Arc<SoftwareCpu>,
+    firmware_runtime: InterruptRuntime<InterruptReceiver<ControlIrq>>,
+    firmware_env: Arc<SoftwareEnv>,
     firmware_memory: memory::ControlMemory<M>,
     function_count: usize,
 }

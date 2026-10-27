@@ -8,10 +8,8 @@ use pdma_model_contract::dma::{
 /// Shared raw-bus fixtures and single-command assembly.
 pub mod support;
 
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion,
-    MemoryRegionError,
-};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccessError, MemoryRegion, MemoryRegionError};
 use hardware_interface_pipeline::{Stage, StepOutcome};
 use pdma_model_dma::Dma;
 use std::{cell::RefCell, ops::Range};

@@ -1,5 +1,5 @@
 use crate::{COPY_CHUNK_BYTES, Chunk, Completion, ExecutionContext, Flow, MemoryFailure, Payload};
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
 use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use pdma_model_contract::dma::EventCode;
 

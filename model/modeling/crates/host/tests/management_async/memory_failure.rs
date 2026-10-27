@@ -1,8 +1,9 @@
 use super::support::{Fixture, response};
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
+use hardware_interface_io::memory::MemoryAccessError;
+use hardware_interface_io::memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_contract::control::{ControlQueue, ControlRingState};
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::{Error, Management, ManagementConfig};
@@ -14,7 +15,7 @@ use std::sync::{
 
 #[derive(Clone)]
 struct FallibleMemory {
-    memory: SharedMemoryAccess,
+    memory: SharedMemoryAccess<(), MemoryAccessError>,
     rejected: Arc<AtomicU64>,
 }
 
@@ -82,7 +83,7 @@ impl MemoryAccess for FallibleMemory {
 #[tokio::test]
 async fn publication_and_consumption_memory_failures_preserve_original_work() {
     let fixture = Fixture::new().unwrap();
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             // Given: a memory backend that can reject one selected cursor write.
             let memory = FallibleMemory {

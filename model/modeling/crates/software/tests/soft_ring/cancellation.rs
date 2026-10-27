@@ -1,6 +1,7 @@
 use crate::{CursorBus, Item};
-use hardware_interface_memory::{MemoryAccess, MemoryAlignment, MemoryRegion};
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_io::memory::MemoryRegion;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_software::ring::{
     RegisterRingIo, RingConfig, RingCursorRegisters, SoftRing, SoftRingError, SoftRingIo,
 };
@@ -23,7 +24,7 @@ async fn push_after_cancel(pause: u8) -> Result<(), Box<dyn std::error::Error>> 
             consumer: 4,
         },
     );
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             let mut ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?);
             bus.pause.store(pause, Ordering::SeqCst);
@@ -79,7 +80,7 @@ async fn cached_peek_survives_slot_reuse_after_consumer_commit()
             consumer: 4,
         },
     );
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             let mut ring = SoftRing::new(RingConfig::<Item>::new(16, 1)?);
             ring.try_push(&io, Item { value: 11 }).await?;
@@ -123,7 +124,7 @@ async fn suspended_publication_completes_on_another_cpu() -> Result<(), Box<dyn 
             consumer: 4,
         },
     );
-    let cpu = SoftwareCpu::new();
+    let cpu = SoftwareEnv::new();
     let config = RingConfig::<Item>::new(16, 2)?;
     let mut ring = cpu.run_main(async { SoftRing::new(config) }).await;
     bus.pause.store(3, Ordering::SeqCst);
@@ -135,14 +136,14 @@ async fn suspended_publication_completes_on_another_cpu() -> Result<(), Box<dyn 
                 .is_pending()
         );
         // When: a different CPU completes the same future.
-        assert!(SoftwareCpu::new().run_main(push).await?);
+        assert!(SoftwareEnv::new().run_main(push).await?);
     }
     // Then: exactly one entry was published; cached data and consumption work outside a CPU.
     assert!(!ring.has_pending_push());
     assert_eq!(ring.peek(&io).await?, Some(Item { value: 1 }));
     assert_eq!(ring.peek(&io).await?, Some(Item { value: 1 }));
     ring.consume(&io).await?;
-    let bytes: [u8; 4] = bus.memory.read_typed(16.into(), MemoryAlignment::ONE)?;
+    let bytes: [u8; 4] = bus.memory.read_buffer(16.into(), MemoryAlignment::ONE)?;
     assert_eq!(u32::from_le_bytes(bytes), 1);
     assert_eq!(io.read_producer().await?, 1);
     assert_eq!(io.read_consumer().await?, 1);
@@ -189,7 +190,7 @@ async fn cancelled_publication_rejects_an_unrelated_producer_cursor()
     assert!(ring.has_pending_push());
     assert_eq!(io.read_producer().await?, 7);
     assert_eq!(bus.writes.load(Ordering::SeqCst), 1);
-    let bytes: [u8; 4] = bus.memory.read_typed(16.into(), MemoryAlignment::ONE)?;
+    let bytes: [u8; 4] = bus.memory.read_buffer(16.into(), MemoryAlignment::ONE)?;
     assert_eq!(u32::from_le_bytes(bytes), 23);
     Ok(())
 }

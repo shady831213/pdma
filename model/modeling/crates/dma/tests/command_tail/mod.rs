@@ -49,7 +49,7 @@ impl Stage<ExecutionContext<'_, SharedMemory>> for InterruptedChunk {
 struct CommandTail {
     calls: Rc<Cell<usize>>,
     memory: SharedMemory,
-    final_address: hardware_interface_memory::MemoryAddress,
+    final_address: hardware_interface_io::memory::MemoryAddress,
 }
 
 impl Stage<ExecutionContext<'_, SharedMemory>> for CommandTail {
@@ -72,7 +72,7 @@ impl Stage<ExecutionContext<'_, SharedMemory>> for CommandTail {
         );
         let byte = self
             .memory
-            .read_typed::<[u8; 1]>(self.final_address, MemoryAlignment::ONE)
+            .read_buffer::<[u8; 1]>(self.final_address, MemoryAlignment::ONE)
             .map_err(|_| RunError::Exhausted)?;
         assert_eq!(byte, [0xa5]);
         Ok(StepOutcome::Complete(Ok(completion)))

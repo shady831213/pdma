@@ -1,5 +1,5 @@
 use crate::{ChannelFatal, Error};
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::{Encode, RegisterAccessError, RegisterWindow};
 use pdma_model_contract::dma::{Event, EventRegisters};
 use pdma_model_contract::register::ReadWordValues;
@@ -102,7 +102,7 @@ impl EventRing {
             .map_err(|_| ChannelFatal::EventConfiguration)?;
         let raw = event.encode().map_err(|_| ChannelFatal::EventWrite)?;
         memory
-            .write_typed(address, MemoryAlignment::ONE, &raw)
+            .write_buffer(address, MemoryAlignment::ONE, &raw)
             .map_err(|_| ChannelFatal::EventWrite)?;
         self.registers.values.producer = ReadWordValues::new(next.producer);
         Ok(())

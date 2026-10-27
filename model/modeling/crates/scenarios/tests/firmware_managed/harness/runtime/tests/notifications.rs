@@ -7,10 +7,9 @@ use super::{
     },
 };
 use crate::harness::TestResult;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
 use hardware_interface_irq::InterruptHandler;
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory, SharedMemoryAllocator,
-};
 use hardware_interface_schema::{Decode, Encode};
 use pdma_model_contract::control::{
     ControlRequest, ControlRequestOpcode, ControlResponseRaw, ControlResponseStatus,
@@ -50,7 +49,7 @@ async fn memory_publication_waits_for_request_doorbell_before_firmware_consumes(
         let queue = QueueMemory::new(&memory, storage.state);
         assert!(poll_once(running.as_mut()).await.is_pending());
         // When: Host publishes the complete record and cursor without a doorbell.
-        memory.write_typed(
+        memory.write_buffer(
             MemoryAddress::new(storage.command.entry(0)?),
             MemoryAlignment::ONE,
             &ControlRequest {
@@ -74,7 +73,7 @@ async fn memory_publication_waits_for_request_doorbell_before_firmware_consumes(
             result = queue.wait_response(&interrupt.response, 1) => result?,
         }
         let response = memory
-            .read_typed::<ControlResponseRaw>(
+            .read_buffer::<ControlResponseRaw>(
                 MemoryAddress::new(storage.response.entry(0)?),
                 MemoryAlignment::ONE,
             )?

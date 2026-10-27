@@ -1,3 +1,4 @@
+use hardware_interface_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelId, Command, CopyCommandDestinationValues, CopyCommandSourceValues, Event,
     LinearEndpoint,
@@ -5,14 +6,17 @@ use pdma_model_contract::dma::{
 
 use super::{Ports, TestResult};
 use crate::harness::runtime::HostBus;
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess};
+use hardware_interface_io::memory::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
+};
 use pdma_model_contract::control::{ControlQueue, ControlRequest, ControlResponse};
 use pdma_model_host::{
     Channel, ChannelConfig, Management, ManagementConfig, ManagementRings, RingConfig, Rings,
 };
 use pdma_model_software::control::InterruptEvent;
 
-pub(super) type Driver<M = SharedMemoryAccess> = Channel<HostBus<M>, SharedMemoryAccess>;
+pub(super) type Driver<M = SharedMemoryAccess<(), MemoryAccessError>> =
+    Channel<HostBus<M>, SharedMemoryAccess<(), MemoryAccessError>>;
 
 pub(super) struct Transfer {
     pub(super) driver: Driver,
@@ -20,7 +24,7 @@ pub(super) struct Transfer {
     destination: MemoryAddress,
     length: usize,
     completion: pdma_model_software::dma::CompletionWord,
-    memory: SharedMemoryAccess,
+    memory: SharedMemoryAccess<(), MemoryAccessError>,
 }
 
 impl Transfer {
@@ -105,7 +109,10 @@ impl Transfer {
         Ok(())
     }
 
-    pub(super) fn bytes(&self, memory: &SharedMemoryAccess) -> TestResult<Vec<u8>> {
+    pub(super) fn bytes(
+        &self,
+        memory: &SharedMemoryAccess<(), MemoryAccessError>,
+    ) -> TestResult<Vec<u8>> {
         read(memory, self.destination, self.length)
     }
 
@@ -113,7 +120,10 @@ impl Transfer {
         self.destination
     }
 
-    pub(super) async fn wait_started(&self, memory: &SharedMemoryAccess) -> TestResult<usize> {
+    pub(super) async fn wait_started(
+        &self,
+        memory: &SharedMemoryAccess<(), MemoryAccessError>,
+    ) -> TestResult<usize> {
         loop {
             let copied = copied_prefix(&self.bytes(memory)?);
             if copied > 0 {
@@ -154,7 +164,7 @@ pub(super) fn copied_prefix(bytes: &[u8]) -> usize {
 }
 
 pub(super) fn read(
-    memory: &SharedMemoryAccess,
+    memory: &SharedMemoryAccess<(), MemoryAccessError>,
     address: MemoryAddress,
     length: usize,
 ) -> TestResult<Vec<u8>> {
@@ -166,7 +176,12 @@ pub(super) fn read(
 pub(in crate::harness::program) async fn management(
     ports: &Ports<'_>,
     interrupt: InterruptEvent,
-) -> TestResult<Management<HostBus<SharedMemoryAccess>, SharedMemoryAccess>> {
+) -> TestResult<
+    Management<
+        HostBus<SharedMemoryAccess<(), MemoryAccessError>>,
+        SharedMemoryAccess<(), MemoryAccessError>,
+    >,
+> {
     management_with_context(
         ports,
         interrupt,
@@ -179,7 +194,7 @@ pub(in crate::harness::program) async fn management_with_context<M: Send>(
     ports: &Ports<'_, M>,
     interrupt: InterruptEvent,
     attributes: pdma_model_contract::memory::ContextAttributes,
-) -> TestResult<Management<HostBus<M>, SharedMemoryAccess>> {
+) -> TestResult<Management<HostBus<M>, SharedMemoryAccess<(), MemoryAccessError>>> {
     let event_interrupt = InterruptEvent::new();
     ports.interrupts.register(
         super::HostVector::Event,

@@ -1,4 +1,4 @@
-use hardware_interface_memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::Decode;
 use pdma_model_contract::dma::{
     CopyCommand, CopyCommandDestinationValues, CopyCommandSourceValues, EventCode, LinearEndpoint,
@@ -70,7 +70,7 @@ impl Cursor {
                 )
                 .map_err(|_| EventCode::InvalidLength)?;
                 memory
-                    .read_typed::<SegmentRaw>(MemoryAddress::new(address), alignment)
+                    .read_buffer::<SegmentRaw>(MemoryAddress::new(address), alignment)
                     .map_err(|_| EventCode::ListReadError)?
                     .decode()
                     .map_err(|_| EventCode::ListReadError)?

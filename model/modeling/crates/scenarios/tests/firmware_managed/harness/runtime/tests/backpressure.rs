@@ -8,11 +8,9 @@ use super::{
 };
 use crate::harness::TestResult;
 use crate::harness::runtime::platform::WINDOW_STATUS_BASE;
-use hardware_interface_memory::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
-    SharedMemoryAllocator,
-};
-use hardware_interface_register::RegisterAccess;
+use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_io::memory::{MemoryAccessError, SharedMemory, SharedMemoryAllocator};
+use hardware_interface_io::register::RegisterAccess;
 use hardware_interface_schema::{Decode, Encode, SchemaCodecError};
 use pdma_model_contract::control::{
     ControlRequest, ControlRequestOpcode, ControlResponseRaw, ControlResponseStatus,
@@ -59,7 +57,7 @@ pub(super) async fn release_backpressure(function: FunctionId) -> TestResult {
         )
         .await?;
         let queue = QueueMemory::new(&memory, storage.state);
-        memory.write_typed(
+        memory.write_buffer(
             MemoryAddress::new(storage.command.entry(0)?),
             MemoryAlignment::ONE,
             &ControlRequest {
@@ -79,7 +77,7 @@ pub(super) async fn release_backpressure(function: FunctionId) -> TestResult {
             result = queue.wait_response(&interrupt.response, 1) => result?,
         }
         let first = memory
-            .read_typed::<ControlResponseRaw>(
+            .read_buffer::<ControlResponseRaw>(
                 MemoryAddress::new(storage.response.entry(0)?),
                 MemoryAlignment::ONE,
             )?
@@ -89,7 +87,7 @@ pub(super) async fn release_backpressure(function: FunctionId) -> TestResult {
             (1, ControlResponseStatus::Success)
         );
         // When: Host publishes a release while the response slot remains occupied.
-        memory.write_typed(
+        memory.write_buffer(
             MemoryAddress::new(storage.command.entry(1)?),
             MemoryAlignment::ONE,
             &ControlRequest {
@@ -120,7 +118,7 @@ pub(super) async fn release_backpressure(function: FunctionId) -> TestResult {
             result = queue.wait_response(&interrupt.response, 2) => result?,
         }
         let released = memory
-            .read_typed::<ControlResponseRaw>(
+            .read_buffer::<ControlResponseRaw>(
                 MemoryAddress::new(storage.response.entry(1)?),
                 MemoryAlignment::ONE,
             )?

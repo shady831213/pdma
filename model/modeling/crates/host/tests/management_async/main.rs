@@ -7,7 +7,7 @@ mod memory_failure;
 mod reset;
 pub mod support;
 
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_software::SoftwareEnv;
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::Error;
 use pdma_model_software::ring::SoftRing;
@@ -16,7 +16,7 @@ use support::{Fixture, response};
 #[tokio::test]
 async fn submits_multiple_without_firmware_and_collects_out_of_order() {
     let fixture = Fixture::new().unwrap();
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             // Given: no firmware is running.
             let mut client = fixture.setup().await.unwrap();
@@ -55,7 +55,7 @@ async fn submits_multiple_without_firmware_and_collects_out_of_order() {
 #[tokio::test]
 async fn outstanding_bound_survives_firmware_consuming_all_commands() {
     let fixture = Fixture::new().unwrap();
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             // Given: two outstanding requests whose command slots firmware has freed.
             let mut client = fixture.setup().await.unwrap();
@@ -97,7 +97,7 @@ async fn outstanding_bound_survives_firmware_consuming_all_commands() {
 async fn unmatched_or_duplicate_response_is_never_consumed() {
     for duplicate in [false, true] {
         let fixture = Fixture::new().unwrap();
-        SoftwareCpu::new()
+        SoftwareEnv::new()
             .run_main(async {
                 // Given: a response with either an unknown or an already completed ID.
                 let mut client = fixture.setup().await.unwrap();
@@ -133,7 +133,7 @@ async fn unmatched_or_duplicate_response_is_never_consumed() {
 #[tokio::test]
 async fn wrong_release_channel_is_never_consumed() {
     let fixture = Fixture::new().unwrap();
-    SoftwareCpu::new()
+    SoftwareEnv::new()
         .run_main(async {
             // Given: a release response that names another channel.
             let mut client = fixture.setup().await.unwrap();

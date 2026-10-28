@@ -13,7 +13,11 @@ dependencies = [
 [[package]]
 name = "hw-model-io"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84c587d44405a92eb3368071ee498c987f999eecc8183052d79e14332ea9017e"
 
 [[package]]
 name = "hw-model-pipeline"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa64462578adb723e5064ae53b21d946c965a000619ba3ff7035ae5a01e5d8d0"

@@ -9,7 +9,7 @@ publish = false
 resolver = "3"
 
 [dependencies]
-hip = { package = "hw-model-pipeline", path = "../../.." }
+hip = { version = "0.1.0", package = "hw-model-pipeline" }
 
 [lints.rust]
 unsafe_code = "forbid"

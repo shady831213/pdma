@@ -9,15 +9,15 @@ publish.workspace = true
 description = "Async software for the managed DMA configuration"
 
 [dependencies]
-hw-model-io = { version = "0.1.0", path = "../hw-model-io", default-features = false }
-hw-model-swenv = { version = "0.1.0", path = "../hw-model-swenv" }
+hw-model-io = { version = "0.1.0", default-features = false }
+hw-model-swenv = "0.1.0"
 pdma-model-software = { path = "../software" }
 pdma-model-contract = { path = "../contract" }
-hw-model-schema = { path = "../hw-model-schema" }
+hw-model-schema = "0.1.0"
 tokio = { version = "1.49", default-features = false, features = ["rt", "macros"] }
 
 [dev-dependencies]
-hw-model-irq = { version = "0.1.0", path = "../hw-model-irq" }
+hw-model-irq = "0.1.0"
 tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync"] }
 
 [lints]

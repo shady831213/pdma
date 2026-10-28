@@ -9,9 +9,9 @@ publish = false
 resolver = "3"
 
 [dependencies]
-hw-model-irq = { version = "0.1.0", path = "../../../../hw-model-irq" }
-hw-model-io = { version = "0.1.0", path = "../../../../hw-model-io" }
-hir = { package = "hw-model-swenv", path = "../../.." }
+hw-model-irq = "0.1.0"
+hw-model-io = "0.1.0"
+hir = { version = "0.1.0", package = "hw-model-swenv" }
 tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync"] }
 
 [lints.rust]

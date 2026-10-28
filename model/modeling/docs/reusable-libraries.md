@@ -8,6 +8,22 @@ workspace default and PDMA application packages remain non-publishable. Enabling
 that manifest setting does not upload a release. See [publishing.md](publishing.md)
 for the first-release procedure and validation boundary.
 
+## Consuming the published libraries
+
+PDMA, library sibling dependencies and the standalone downstream fixtures use
+crates.io dependencies (`version = "0.1.0"`, resolved by their lockfiles). Normal
+builds have no path or patch override for `hw-model-*`. Updating local library
+source therefore does not silently alter PDMA's behavior.
+
+The six library source directories remain workspace members for maintenance.
+Cargo metadata and the workspace lockfile consequently contain both local and
+registry identities for some identical name/version pairs. `cargo test --workspace`
+tests local members as well as PDMA consuming registry libraries; the independent
+fixtures test the published packages. Library dependency-boundary tests that select
+workspace members describe those local members. To verify PDMA's wiring, follow
+resolved dependency IDs from each PDMA package and require every reachable
+`hw-model-*` package to have a crates.io source. Do not infer source from its name.
+
 ## Ownership and dependencies
 
 | Package | Responsibility | Normal dependencies |

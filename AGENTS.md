@@ -27,6 +27,11 @@ and six reusable building blocks:
 - `hw-model-schema`
 - `hw-model-schema-macros`
 
+PDMA and the standalone downstream fixtures consume published `hw-model-*` crates
+from crates.io. The library sources remain workspace members for maintenance;
+they do not override registry dependencies. Preserve this distinction and do not
+add local path dependencies or `[patch.crates-io]` overrides to the normal model build.
+
 The original scenarios sources are preserved on the backup branch only.
 The new `crates/scenarios` contains current-model integration tests. Current acceptance
 uses these system scenarios and the active crates' boundary tests.

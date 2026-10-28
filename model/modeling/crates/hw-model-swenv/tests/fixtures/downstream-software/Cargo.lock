@@ -15,10 +15,14 @@ dependencies = [
 [[package]]
 name = "hw-model-io"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84c587d44405a92eb3368071ee498c987f999eecc8183052d79e14332ea9017e"
 
 [[package]]
 name = "hw-model-irq"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "115e9ced807926e735bd268fb8dfada8148ba60826e7136506ec81f9d192a6cf"
 dependencies = [
  "tokio",
 ]
@@ -26,6 +30,8 @@ dependencies = [
 [[package]]
 name = "hw-model-swenv"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec33bf21e338c37815b0269f4cbe81e942f3aa4b0ad280f6e61fea6989c92526"
 dependencies = [
  "hw-model-io",
  "hw-model-irq",

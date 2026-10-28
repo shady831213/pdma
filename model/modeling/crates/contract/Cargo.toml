@@ -18,7 +18,7 @@ path = "src/bin/pdma-abi-header.rs"
 required-features = ["export-c-header"]
 
 [dependencies]
-hw-model-schema = { path = "../hw-model-schema" }
+hw-model-schema = "0.1.0"
 
 [lints]
 workspace = true

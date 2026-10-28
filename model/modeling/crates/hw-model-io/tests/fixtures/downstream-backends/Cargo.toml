@@ -14,8 +14,8 @@ negative-async-storage-closure = []
 negative-dyn-stage = []
 
 [dependencies]
-hw-model-io = { version = "0.1.0", path = "../../.." }
-hip = { package = "hw-model-pipeline", path = "../../../../hw-model-pipeline" }
+hw-model-io = "0.1.0"
+hip = { version = "0.1.0", package = "hw-model-pipeline" }
 
 [[bin]]
 name = "escape_reference"

@@ -43,11 +43,11 @@ hw-model-schema = "0.1.0"
 ```
 
 Enable `export-c-header` for the C header exporter. The default feature set is empty.
-A downstream workspace can also use a path dependency during local development:
+An application may rename the dependency without changing macro expansion:
 
 ```toml
 [dependencies]
-his = { package = "hw-model-schema", path = "../hw-model-schema", default-features = false }
+his = { package = "hw-model-schema", version = "0.1.0", default-features = false }
 ```
 
 It can use the same renamed-dependency form from a Git revision when the repository is
@@ -388,7 +388,7 @@ needs generic C11 record or register-map fragments:
 
 ```toml
 [dependencies]
-hw-model-schema = { path = "../hw-model-schema", features = ["export-c-header"] }
+hw-model-schema = { version = "0.1.0", features = ["export-c-header"] }
 ```
 
 With that feature enabled, the backend lives at

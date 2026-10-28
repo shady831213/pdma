@@ -27,6 +27,13 @@ layouts, and ABI compatibility are not requirements for this model.
 Keep these crates and their tests intact. Reuse their existing capabilities in the
 replacement model; do not introduce parallel composition or dispatch mechanisms.
 
+All `hw-model-*` dependency declarations use crates.io versions, including library
+sibling dependencies and standalone fixtures. Local library workspace members are
+maintained and tested separately from the registry packages consumed by PDMA.
+Do not add path/patch overrides to the default build. Verify resolved source IDs
+from PDMA roots when changing dependency wiring; names alone cannot distinguish
+local members from published packages with the same name and version.
+
 ## Historical references
 
 The obsolete scenarios sources are preserved on the backup branch only. The new

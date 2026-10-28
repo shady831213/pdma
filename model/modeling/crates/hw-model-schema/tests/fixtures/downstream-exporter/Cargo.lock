@@ -24,6 +24,8 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 [[package]]
 name = "hw-model-schema"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9730673ec4c81b1e421fafc58af43bf420b6b7e9d931945635539e742a7ab66"
 dependencies = [
  "hw-model-schema-macros",
 ]
@@ -31,6 +33,8 @@ dependencies = [
 [[package]]
 name = "hw-model-schema-macros"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2f3c9888d671e5d24a60f24495cfbc9045ed79b3d5a119539af43b05ab82a1a"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",

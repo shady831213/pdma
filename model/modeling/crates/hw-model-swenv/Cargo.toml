@@ -14,12 +14,12 @@ categories = ["development-tools"]
 documentation = "https://docs.rs/hw-model-swenv"
 
 [dependencies]
-hw-model-irq = { version = "0.1.0", path = "../hw-model-irq", default-features = false }
-hw-model-io = { version = "0.1.0", path = "../hw-model-io", default-features = false }
+hw-model-irq = { version = "0.1.0", default-features = false }
+hw-model-io = { version = "0.1.0", default-features = false }
 tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync"] }
 
 [dev-dependencies]
-hw-model-irq = { version = "0.1.0", path = "../hw-model-irq", features = ["tokio"] }
+hw-model-irq = { version = "0.1.0", features = ["tokio"] }
 
 [package.metadata.docs.rs]
 all-features = true

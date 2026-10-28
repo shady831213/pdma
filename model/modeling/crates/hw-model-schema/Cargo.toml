@@ -14,7 +14,7 @@ categories = ["development-tools"]
 documentation = "https://docs.rs/hw-model-schema"
 
 [dependencies]
-hw-model-schema-macros = { version = "0.1.0", path = "../hw-model-schema-macros" }
+hw-model-schema-macros = "0.1.0"
 
 [dev-dependencies]
 trybuild = "1"

@@ -98,6 +98,11 @@ version with that toolchain, inspect package files/licenses and publish dependen
 in order. Repository relocation is separate from package naming/version continuity.
 Actual PCIe/MMU/RTL features and new PDMA behavior are outside this extraction.
 
+The initial supported Rust baseline is 1.96, the toolchain used for the current
+implementation's regression tests. This is an explicit support policy, not a
+claim about the earliest compiler that could build each crate. Older toolchains
+are not promised; raising the baseline later is a separate deliberate change.
+
 ## User-facing API convergence
 
 The first extraction is checkpointed before this API pass. The follow-up keeps

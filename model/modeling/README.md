@@ -56,9 +56,12 @@ Hardware snapshots published producers for Drain/Abort and retains accepted work
 until retirement. The document records software obligations for the eventual RTL
 specification; model-local memory completion does not prove external bus drain.
 
-The Rust source requires Rust 1.88 or later (edition 2024 with let chains).
+The supported toolchain baseline is Rust 1.96 or later (edition 2024), matching
+the compiler used to validate the current implementation. This support policy
+does not claim that every crate technically requires Rust 1.96 features.
 Workspace and standalone fixture manifests declare the same minimum; Clippy uses
-that minimum when proposing API replacements. Strict generated-header tests also
+that minimum when proposing API replacements. Local toolchain upgrades do not
+automatically raise the declared minimum. Strict generated-header tests also
 require a C11 compiler (`cc`).
 
 Run from this directory:

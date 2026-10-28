@@ -4,7 +4,7 @@ Concrete Tokio software execution environments and services: `SoftwareEnv`,
 explicit environment-local resources, interrupt registration and dispatch, coalescing progress hints, and
 `TraceBuffer`. This crate requires `std` and Tokio. It is not a hardware capability
 umbrella or a configurable scheduler framework. `swenv` abbreviates software
-environment; the public type retains the full name `SoftwareEnv`. Publication is disabled.
+environment; the public type retains the full name `SoftwareEnv`.
 
 Use `hw-model-irq` directly for interrupt envelopes, sources, handlers,
 and the optional coalescing pending primitive. Use `hw-model-io`
@@ -12,6 +12,19 @@ for memory and register access capabilities and register observations. Use
 its `memory` module for supplied byte backing, allocation and shared-state storage.
 This runtime does not reexport those APIs or choose a backing model. It has no
 schema or device-protocol dependency.
+
+## Dependency
+
+```toml
+[dependencies]
+hw-model-swenv = "0.1.0"
+hw-model-irq = "0.1.0"
+tokio = { version = "1", features = ["macros", "rt"] }
+```
+
+Requires Rust 1.96 or later. The dependencies above support the first program
+below, including its IRQ source and Tokio entry point. Applications choose any
+additional Tokio runtime features they need.
 
 ## First program with an ISR
 

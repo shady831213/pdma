@@ -16,7 +16,8 @@ Use the facade's README and generated API documentation for syntax and executabl
 examples. This implementation crate is not a standalone schema API: generated code
 refers to the facade's metadata, layout and codec contracts.
 
-This crate has no device-model or runtime dependency. It is unpublished; its package
-name and release contents remain subject to review.
+Requires Rust 1.96 or later. Applications normally depend on
+`hw-model-schema = "0.1.0"`, which brings in the matching macro implementation. This crate has no
+device-model or runtime dependency.
 
 Licensed under MIT OR Apache-2.0, at your option. See LICENSE-MIT and LICENSE-APACHE.

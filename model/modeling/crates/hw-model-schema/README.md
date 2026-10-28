@@ -35,8 +35,15 @@ mechanics; PDMA defines those rules in its contract crate.
 
 ## Reuse
 
-The workspace marks this crate `publish = false`; this work does not deliver a crates.io
-release. A downstream workspace can use a path dependency during local development:
+Requires Rust 1.96 or later. Add the facade crate to use its types and macros:
+
+```toml
+[dependencies]
+hw-model-schema = "0.1.0"
+```
+
+Enable `export-c-header` for the C header exporter. The default feature set is empty.
+A downstream workspace can also use a path dependency during local development:
 
 ```toml
 [dependencies]

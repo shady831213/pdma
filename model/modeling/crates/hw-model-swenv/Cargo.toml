@@ -5,10 +5,13 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-publish = false
+publish = ["crates-io"]
 readme = "README.md"
 include = ["src/**", "tests/**", "examples/**", "README.md", "clippy.toml", "LICENSE-MIT", "LICENSE-APACHE", "Cargo.toml"]
 description = "Software execution environments, interrupt dispatch, and runtime services"
+keywords = ["hardware", "modeling", "async", "interrupts"]
+categories = ["development-tools"]
+documentation = "https://docs.rs/hw-model-swenv"
 
 [dependencies]
 hw-model-irq = { version = "0.1.0", path = "../hw-model-irq", default-features = false }
@@ -17,6 +20,9 @@ tokio = { version = "1.49", default-features = false, features = ["macros", "rt"
 
 [dev-dependencies]
 hw-model-irq = { version = "0.1.0", path = "../hw-model-irq", features = ["tokio"] }
+
+[package.metadata.docs.rs]
+all-features = true
 
 [lints]
 workspace = true

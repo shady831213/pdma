@@ -49,6 +49,15 @@ advance it. Application occupancy and readiness state supplies backpressure;
 the top-level hardware assembly and external driver provide subsequent inputs.
 No separate producer trait or command-lifetime streaming combinator is required.
 
+## Dependency
+
+```toml
+[dependencies]
+hw-model-pipeline = "0.1.0"
+```
+
+Requires Rust 1.96 or later. The library uses `std` without third-party normal dependencies.
+
 ## Fan value flow
 
 `Fan::new(inputs, policy, outputs)` connects N input stages to M output
@@ -155,5 +164,4 @@ byte-widening stage with a little-endian encoder. The first external step accept
 the value; the second delivers the encoded bytes. Both stages use only the public
 pipeline API and the standard library.
 
-Package names are provisional and publication remains disabled. Licensed under
-MIT OR Apache-2.0, at your option; see LICENSE-MIT and LICENSE-APACHE.
+Licensed under MIT OR Apache-2.0, at your option; see LICENSE-MIT and LICENSE-APACHE.

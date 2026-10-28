@@ -21,7 +21,18 @@ receivers compete for one notification. The receiver keeps the channel alive aft
 all emitters drop; the consumer controls shutdown. Device causes, masks, routing,
 and hardware-step wakeup policy remain outside this primitive.
 
-These package names are provisional and publication is disabled.
+## Dependency
+
+```toml
+[dependencies]
+hw-model-irq = "0.1.0"
+tokio = { version = "1", features = ["macros", "rt"] }
+```
+
+Requires Rust 1.96 or later. Default features include the Tokio interrupt wire; use
+`default-features = false` for the runtime-independent traits alone.
+The explicit Tokio dependency supplies the executable example's entry point;
+trait-only consumers do not need it.
 
 ## First interrupt
 

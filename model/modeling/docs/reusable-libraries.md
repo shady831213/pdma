@@ -3,8 +3,10 @@
 The runtime extraction prepares independent libraries for publication while PDMA
 remains one integration consumer. The libraries share the `hw-model-*` prefix;
 `hw-model-swenv` names the software execution environment, whose primary type is
-`SoftwareEnv`. No package is published by this change; manifests retain
-`publish = false` pending registry availability, ownership and release approval.
+`SoftwareEnv`. These six libraries permit publication only to crates.io; the
+workspace default and PDMA application packages remain non-publishable. Enabling
+that manifest setting does not upload a release. See [publishing.md](publishing.md)
+for the first-release procedure and validation boundary.
 
 ## Ownership and dependencies
 

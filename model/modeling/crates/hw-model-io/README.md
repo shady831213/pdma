@@ -25,6 +25,15 @@ The memory module documents both interface and backing use. Run
 semantics. Using `MemoryAccess` never requires constructing a supplied model;
 `tests/memory_implementations.rs` exercises a separate array implementation.
 
+## Dependency
+
+```toml
+[dependencies]
+hw-model-io = "0.1.0"
+```
+
+Requires Rust 1.96 or later. The library uses `std` without third-party normal dependencies.
+
 ## Choosing an entry point
 
 | Need | Start here |

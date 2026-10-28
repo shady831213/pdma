@@ -5,10 +5,13 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-publish.workspace = true
+publish = ["crates-io"]
 readme = "README.md"
 include = ["src/**", "tests/**", "examples/**", "README.md", "clippy.toml", "LICENSE-MIT", "LICENSE-APACHE", "Cargo.toml"]
 description = "Reusable hardware interface schema vocabulary and scalar codecs"
+keywords = ["hardware", "modeling", "schema", "registers", "codegen"]
+categories = ["development-tools"]
+documentation = "https://docs.rs/hw-model-schema"
 
 [dependencies]
 hw-model-schema-macros = { version = "0.1.0", path = "../hw-model-schema-macros" }

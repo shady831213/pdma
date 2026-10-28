@@ -5,10 +5,13 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-publish = false
+publish = ["crates-io"]
 readme = "README.md"
 include = ["src/**", "tests/**", "examples/**", "README.md", "clippy.toml", "LICENSE-MIT", "LICENSE-APACHE", "Cargo.toml"]
 description = "Memory and register IO interfaces, byte-memory models and shared storage"
+keywords = ["hardware", "modeling", "memory", "registers"]
+categories = ["development-tools"]
+documentation = "https://docs.rs/hw-model-io"
 
 [package.metadata.docs.rs]
 all-features = true

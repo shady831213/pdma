@@ -1,0 +1,5 @@
+error: field generates conflicting member `set_foo`
+ --> tests/ui/fail/record_member_setter.rs:4:24
+  |
+4 |     fields: { foo: u8, set_foo: u8 },
+  |                        ^^^^^^^

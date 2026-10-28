@@ -1,8 +1,8 @@
 //! Selected reset preserves every other channel's retained hardware work.
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
-use hardware_interface_pipeline::StepOutcome;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_pipeline::StepOutcome;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, CommandRegisters, DmaControl, DmaRegisters, EventRegisters,
 };
@@ -65,7 +65,7 @@ fn device_reset_subsumes_a_busy_channel_reset_and_cleans_idle_peers() -> TestRes
     let base = ChannelId::new(0).register_offset(3).ok_or("offset")?;
     let consumer = base + ChannelBlock::COMMAND.offset() + CommandRegisters::CONSUMER.offset();
     let mut hardware = device.hardware();
-    let mut driver = hardware_interface_pipeline::HardwareDriver::new();
+    let mut driver = hw_model_pipeline::HardwareDriver::new();
     for _ in 0..64 {
         let _ = driver.step(&mut hardware, &mut device)?;
         if word(&mut device, consumer)? == 1 {
@@ -142,7 +142,7 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
         submit(&mut device, index, u64::try_from(index)?)?;
     }
     let mut hardware = device.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     let mut committed = false;
     for _ in 0..256 {
         let _ = operation.step(&mut hardware, &mut device)?;

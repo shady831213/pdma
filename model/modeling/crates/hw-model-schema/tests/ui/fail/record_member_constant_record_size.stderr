@@ -1,0 +1,5 @@
+error: field generates conflicting member `RECORD_SIZE`
+ --> tests/ui/fail/record_member_constant_record_size.rs:3:42
+  |
+3 |     endian: Little, fields: { field: u8, RECORD_SIZE: u8 },
+  |                                          ^^^^^^^^^^^

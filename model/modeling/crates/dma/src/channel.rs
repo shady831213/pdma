@@ -9,7 +9,7 @@ pub use command::CommandRing;
 pub use event::EventRing;
 
 use crate::ChannelFatal;
-use hardware_interface_schema::RegisterWindow;
+use hw_model_schema::RegisterWindow;
 use pdma_model_contract::dma::{
     ChannelAdmin, ChannelBlock, ChannelFatalCode, ChannelIrqCauseValues, ChannelRegisters,
     FaultStatusValues, ResetValues,
@@ -78,7 +78,7 @@ impl Channel {
         );
     }
 
-    pub(crate) fn report<M: hardware_interface_io::memory::MemoryAccess>(
+    pub(crate) fn report<M: hw_model_io::memory::MemoryAccess>(
         &mut self,
         work: crate::Work,
         event: &pdma_model_contract::dma::Event,

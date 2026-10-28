@@ -5,8 +5,8 @@ use pdma_model_contract::dma::{CopyCommandSourceValues, LinearEndpoint};
 /// Shared DMA bus and memory fixtures.
 pub mod support;
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_pipeline::StepOutcome;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_pipeline::StepOutcome;
 use pdma_model_contract::dma::{ChannelId, CommandRegisters, ContextId};
 use support::{TestResult, command, setup, submit};
 
@@ -16,7 +16,7 @@ fn abort_discards_unstarted_work_without_event_publication() -> TestResult {
     let (mut dma, memory) = setup(0x1100, 1)?;
     submit(&mut dma, &memory, command())?;
     let mut pipeline = dma.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     for _ in 0..128 {
         let _ = operation.step(&mut pipeline, &mut dma)?;
     }
@@ -63,7 +63,7 @@ fn abort_waits_for_accepted_command_and_preserves_its_completed_payload() -> Tes
     let consumer =
         ChannelId::new(0).register_offset(1).ok_or("layout")? + CommandRegisters::CONSUMER.offset();
     let mut pipeline = dma.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     for _ in 0..32 {
         let _ = operation.step(&mut pipeline, &mut dma)?;
         if support::read_word(&mut dma, consumer)? == 1 {
@@ -122,7 +122,7 @@ fn reset_interrupts_drain_but_waits_for_resident_cleanup() -> TestResult {
             id.admin_offset(1).ok_or("layout")?
         };
         let mut pipeline = dma.hardware();
-        let mut driver = hardware_interface_pipeline::HardwareDriver::new();
+        let mut driver = hw_model_pipeline::HardwareDriver::new();
         for _ in 0..128 {
             let _ = driver.step(&mut pipeline, &mut dma)?;
             if support::read_word(&mut dma, consumer)? == 1 {
@@ -182,7 +182,7 @@ fn failed_drain_returns_channel_and_releases_reset_interlock() -> TestResult {
     // Then
     assert_eq!(dma.write(reset, &0_u32.to_le_bytes()), Ok(()));
     let mut pipeline = dma.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     for _ in 0..128 {
         let _ = operation.step(&mut pipeline, &mut dma)?;
     }

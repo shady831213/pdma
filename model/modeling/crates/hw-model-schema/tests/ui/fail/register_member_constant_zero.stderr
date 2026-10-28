@@ -1,0 +1,5 @@
+error: field generates conflicting member `ZERO`
+ --> tests/ui/fail/register_member_constant_zero.rs:4:49
+  |
+4 |     reset: Zero(0), writable_mask: 1, fields: { ZERO: 0..=0 },
+  |                                                 ^^^^

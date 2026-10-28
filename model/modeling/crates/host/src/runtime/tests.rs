@@ -3,9 +3,9 @@ use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::ChannelInterrupts;
 mod cooperative;
 mod notifications;
-use hardware_interface_io::memory::SharedMemory;
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
+use hw_model_io::memory::SharedMemory;
+use hw_model_io::register::RegisterAccess;
+use hw_model_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
 use pdma_model_contract::dma::{ChannelRegisters, CommandRegisters, EventRegisters};
 use pdma_model_dma::{ChannelFatal, Dma, Error};
 
@@ -133,13 +133,13 @@ async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestRe
     model.read(u32::try_from(IRQ_ENABLE)?, &mut [0; 4]).await?;
     // Then: the emitted notification is transferred once, even though the cause persists.
     assert!(
-        hardware_interface_irq::InterruptSource::claim(&mut model, ())
+        hw_model_irq::InterruptSource::claim(&mut model, ())
             .await?
             .is_some()
     );
     model.read(u32::try_from(IRQ_ENABLE)?, &mut [0; 4]).await?;
     assert!(
-        hardware_interface_irq::InterruptSource::claim(&mut model, ())
+        hw_model_irq::InterruptSource::claim(&mut model, ())
             .await?
             .is_none()
     );

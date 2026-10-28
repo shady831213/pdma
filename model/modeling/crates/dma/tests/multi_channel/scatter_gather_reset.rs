@@ -6,9 +6,9 @@ use pdma_model_contract::dma::{
 mod observed;
 
 use super::support::{TestResult, completion, configure, publish_fence, word};
-use hardware_interface_io::memory::MemoryRegion;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_pipeline::StepOutcome;
+use hw_model_io::memory::MemoryRegion;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_pipeline::StepOutcome;
 use observed::Observed;
 use pdma_model_dma::Dma;
 
@@ -120,7 +120,7 @@ fn reset_stops_sg_interactions_before_completion_and_keeps_them_stopped() -> Tes
             // Given: an SG command paused at an observed list, payload or publication boundary.
             let mut device = setup()?;
             let mut hardware = device.hardware();
-            let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+            let mut operation = hw_model_pipeline::HardwareDriver::new();
             for _ in 0..256 {
                 assert!(matches!(
                     operation.step(&mut hardware, &mut device)?,

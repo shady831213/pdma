@@ -5,8 +5,8 @@ use pdma_model_contract::dma::{
 const PF: FunctionId = FunctionId::new(0);
 
 use super::*;
-use hardware_interface_io::memory::MemoryAccess;
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccess;
+use hw_model_io::memory::MemoryAccessError;
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::{Channel, ChannelConfig, Rings};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -69,8 +69,12 @@ async fn reset_during_copy_drains_old_work_and_preserves_allocation() {
 
 async fn reset_case(release: bool) {
     // Given: a real shared DMA engine with observation of its old destination writes.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        256 * 1024,
+    )
+    .expect("valid test heap");
     let memory = allocator.memory_access();
     let observed = ObservedMemory {
         memory: memory.clone(),

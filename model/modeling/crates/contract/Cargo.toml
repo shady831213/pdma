@@ -10,7 +10,7 @@ description = "PDMA DMA and management wire and register schemas"
 
 [features]
 default = []
-export-c-header = ["hardware-interface-schema/export-c-header"]
+export-c-header = ["hw-model-schema/export-c-header"]
 
 [[bin]]
 name = "pdma-abi-header"
@@ -18,7 +18,7 @@ path = "src/bin/pdma-abi-header.rs"
 required-features = ["export-c-header"]
 
 [dependencies]
-hardware-interface-schema = { path = "../hardware-interface-schema" }
+hw-model-schema = { path = "../hw-model-schema" }
 
 [lints]
 workspace = true

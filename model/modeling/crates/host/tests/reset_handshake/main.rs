@@ -2,9 +2,9 @@
 
 pub mod support;
 
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
-use hardware_interface_software::SoftwareEnv;
+use hw_model_io::register::RegisterAccess;
+use hw_model_pipeline::{AsyncInteractionBackend, StepOutcome};
+use hw_model_swenv::SoftwareEnv;
 use pdma_model_contract::dma::{ChannelId, DmaControl};
 use pdma_model_host::DmaError as Error;
 use std::{

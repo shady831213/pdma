@@ -1,5 +1,5 @@
 use super::{COPY_CHUNK_BYTES, CopyState};
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress};
 use pdma_model_contract::dma::EventCode;
 
 impl CopyState {

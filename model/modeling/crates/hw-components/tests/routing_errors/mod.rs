@@ -2,7 +2,7 @@ mod backend;
 mod context;
 
 use backend::{ADDRESS, BackendError, PagedMemory};
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::{
     dma::ChannelId,
     memory::{ContextAttributes, FunctionId, MemoryIdentity},

@@ -1,6 +1,6 @@
 use super::transfer;
 use crate::harness::runtime::{AccessError, HostIrq};
-use hardware_interface_irq::InterruptHandler;
+use hw_model_irq::InterruptHandler;
 use pdma_model_host::DmaError;
 use pdma_model_software::control::ControlIsr;
 

@@ -1,7 +1,7 @@
 //! Management work is awakened by the software ISR, not by MMIO transport.
 
-use hardware_interface_irq::interrupt_wire;
-use hardware_interface_software::{InterruptDispatchError, InterruptRuntime, SoftwareEnv};
+use hw_model_irq::interrupt_wire;
+use hw_model_swenv::{InterruptDispatchError, InterruptRuntime, SoftwareEnv};
 use pdma_model_software::control::{ControlIrq, ControlIsr, InterruptEvent};
 use std::{
     future::{Future, pending, poll_fn},

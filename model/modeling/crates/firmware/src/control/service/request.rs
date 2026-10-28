@@ -8,10 +8,8 @@ use pdma_model_contract::control::{
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::ring::RingError;
 
-impl<
-    B: hardware_interface_io::register::RegisterAccess + Sync,
-    M: hardware_interface_io::memory::MemoryAccess + Sync,
-> super::Service<'_, B, M>
+impl<B: hw_model_io::register::RegisterAccess + Sync, M: hw_model_io::memory::MemoryAccess + Sync>
+    super::Service<'_, B, M>
 {
     pub(super) async fn dispatch(
         &self,
@@ -60,7 +58,7 @@ impl<
     }
 }
 
-impl<B: hardware_interface_io::register::RegisterAccess + Sync, M: Sync> super::Service<'_, B, M> {
+impl<B: hw_model_io::register::RegisterAccess + Sync, M: Sync> super::Service<'_, B, M> {
     pub(super) async fn execute<E>(
         &self,
         resources: &mut Resources,

@@ -1,6 +1,6 @@
 //! Documentation coverage of the concrete PDMA wire contract.
 
-use hardware_interface_schema::Documentation;
+use hw_model_schema::Documentation;
 use pdma_model_contract::dma::{
     ChannelFatal, ChannelRegisters, Command, CommandRegisters, DmaRegisters, Event, EventRegisters,
     LinearEndpoint, ScatterGatherEndpoint, Segment,

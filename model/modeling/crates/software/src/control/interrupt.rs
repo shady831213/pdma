@@ -1,5 +1,5 @@
-use hardware_interface_irq::{InterruptEnvelope, InterruptHandler};
-use hardware_interface_software::{NotificationWait, Notifications, Notifier, notifications};
+use hw_model_irq::{InterruptEnvelope, InterruptHandler};
+use hw_model_swenv::{NotificationWait, Notifications, Notifier, notifications};
 use std::convert::Infallible;
 
 /// One management interrupt destination on the firmware CPU.

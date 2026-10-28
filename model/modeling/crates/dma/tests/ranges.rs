@@ -7,7 +7,7 @@ use pdma_model_contract::dma::{
 /// Shared hardware fixtures.
 pub mod support;
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::dma::{ErrorInfo, EventInfoValues};
 use pdma_model_contract::dma::{Event, EventCode, Segment};
 use support::{TestResult, command, run, setup, submit};
@@ -25,7 +25,7 @@ fn selected_ranges_skip_unused_sg_prefix_and_clip_last_segment() -> TestResult {
             offset: 2,
         });
     crate::support::copy_mut(&mut request)?.copy_length = 4;
-    memory.add_regions(&[hardware_interface_io::memory::MemoryRegion::try_new(
+    memory.add_regions(&[hw_model_io::memory::MemoryRegion::try_new(
         0x3000.into(),
         32,
         MemoryAlignment::ONE,

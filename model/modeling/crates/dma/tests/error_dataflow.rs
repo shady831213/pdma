@@ -8,9 +8,9 @@ use pdma_model_contract::dma::{
 /// Shared hardware fixtures.
 pub mod support;
 
-use hardware_interface_io::memory::SharedMemory;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
-use hardware_interface_pipeline::{Operation, Stage, StepOutcome, StepResult, Then};
+use hw_model_io::memory::SharedMemory;
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_pipeline::{Operation, Stage, StepOutcome, StepResult, Then};
 use pdma_model_dma::{
     Chunk, Completion, ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy,
 };
@@ -153,7 +153,7 @@ fn standalone_chunk_graph_publishes_the_actual_read_failure() -> TestResult {
     // When: the standalone graph runs without a Hardware controller.
     let retired = {
         let mut context = dma.execution_context();
-        let mut operation = hardware_interface_pipeline::Operation::new(input);
+        let mut operation = hw_model_pipeline::Operation::new(input);
         let mut output = None;
         for _ in 0..128 {
             if let StepOutcome::Complete(result) = operation.step(&mut graph, &mut context)? {
@@ -165,7 +165,7 @@ fn standalone_chunk_graph_publishes_the_actual_read_failure() -> TestResult {
         output.ok_or("standalone graph watchdog")?
     };
     assert_eq!(
-        hardware_interface_pipeline::Operation::new(vec![(0, retired)])
+        hw_model_pipeline::Operation::new(vec![(0, retired)])
             .step(&mut pdma_model_dma::Retire, &mut dma)?,
         StepOutcome::Complete(Err(pdma_model_dma::Error::Halted))
     );

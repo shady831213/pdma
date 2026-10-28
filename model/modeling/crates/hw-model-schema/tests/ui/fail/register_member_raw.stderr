@@ -1,0 +1,5 @@
+error: field generates conflicting member `raw`
+ --> tests/ui/fail/register_member_raw.rs:5:15
+  |
+5 |     fields: { raw: 0..=0 },
+  |               ^^^

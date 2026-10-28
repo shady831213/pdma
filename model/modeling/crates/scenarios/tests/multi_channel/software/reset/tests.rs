@@ -1,8 +1,6 @@
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{
-    MemoryAccessError, MemoryRegion, SharedMemory, SharedMemoryAllocator,
-};
-use hardware_interface_software::{InterruptRuntime, SoftwareEnv};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccessError, MemoryRegion, SharedMemory, SharedMemoryAllocator};
+use hw_model_swenv::{InterruptRuntime, SoftwareEnv};
 use std::sync::Arc;
 
 use super::{Buffers, Ports, wait_boundary};
@@ -16,8 +14,12 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> TestResult<Self> {
-        let allocator =
-            SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+        let allocator = SharedMemoryAllocator::new(
+            Arc::new(SharedMemory::new()),
+            MemoryAddress::new(0x1000),
+            128 * 1024,
+        )
+        .expect("valid test heap");
         let buffers = (0..3)
             .map(|index| Buffers::allocate(&allocator, index))
             .collect::<TestResult<_>>()?;

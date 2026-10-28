@@ -64,9 +64,9 @@ impl Display for Error {
 }
 impl std::error::Error for Error {}
 
-impl From<hardware_interface_schema::RegisterAccessError<Self>> for Error {
-    fn from(error: hardware_interface_schema::RegisterAccessError<Self>) -> Self {
-        use hardware_interface_schema::RegisterAccessError;
+impl From<hw_model_schema::RegisterAccessError<Self>> for Error {
+    fn from(error: hw_model_schema::RegisterAccessError<Self>) -> Self {
+        use hw_model_schema::RegisterAccessError;
         match error {
             RegisterAccessError::OutsideWindow { .. }
             | RegisterAccessError::InvalidOffset { .. } => Self::Unmapped,
@@ -80,15 +80,15 @@ impl From<hardware_interface_schema::RegisterAccessError<Self>> for Error {
     }
 }
 
-impl From<hardware_interface_schema::RegisterAccessError> for Error {
-    fn from(error: hardware_interface_schema::RegisterAccessError) -> Self {
+impl From<hw_model_schema::RegisterAccessError> for Error {
+    fn from(error: hw_model_schema::RegisterAccessError) -> Self {
         error.widen::<Self>().into()
     }
 }
 
-impl From<hardware_interface_pipeline::BranchError<Self>> for Error {
-    fn from(error: hardware_interface_pipeline::BranchError<Self>) -> Self {
-        use hardware_interface_pipeline::BranchError;
+impl From<hw_model_pipeline::BranchError<Self>> for Error {
+    fn from(error: hw_model_pipeline::BranchError<Self>) -> Self {
+        use hw_model_pipeline::BranchError;
         match error {
             BranchError::Application(error) => error,
             BranchError::InvalidIndex { .. }

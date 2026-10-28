@@ -1,6 +1,6 @@
 use super::monitor::Monitor;
 use crate::{Configuration, Error};
-use hardware_interface_io::register::RegisterAccess;
+use hw_model_io::register::RegisterAccess;
 use pdma_model_contract::dma::{ChannelId, DmaDiscovery, DmaRegisters};
 use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_contract::memory::FunctionId;

@@ -1,6 +1,6 @@
 use crate::support::{ADDRESS, Spaces};
-use hardware_interface_io::memory::SharedMemory;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_io::memory::SharedMemory;
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::dma::{ChannelId, ContextId, DmaAccess};
 use pdma_model_contract::hw_components::context::{
     ContextAttributeRegisters, ContextEntryRegisters, ContextTableRegisters,

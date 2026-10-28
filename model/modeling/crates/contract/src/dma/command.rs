@@ -4,8 +4,8 @@ use super::operations::{
     AtomicCommand, CopyCommand, FenceCommand, FillCommand, SemaphoreCommand, TimestampCommand,
     TrapCommand, WaitCommand, WriteCommand,
 };
-use hardware_interface_schema::union_schema;
 pub use header::*;
+use hw_model_schema::union_schema;
 
 union_schema! {
     #[short_description = "Complete copy-engine command union"]

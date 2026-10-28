@@ -5,9 +5,9 @@ pub mod lifecycle;
 
 use crate::{hardware, software};
 use fault::{FaultBus, UnmappedRing};
-use hardware_interface_io::memory::{MemoryAddress, SharedMemoryAccess};
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
-use hardware_interface_software::{InterruptRuntime, InterruptSummary, SoftwareEnv};
+use hw_model_io::memory::{MemoryAddress, SharedMemoryAccess};
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_swenv::{InterruptRuntime, InterruptSummary, SoftwareEnv};
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, CommandRegisters, EventRegisters};
 use pdma_model_host::runtime::Model;
 use std::{error::Error, sync::Arc};
@@ -50,12 +50,17 @@ pub struct Report {
 /// Panics if platform setup allocates application buffers before software starts.
 pub async fn run(injection: FaultInjection, input: software::Input<'_>) -> TestResult<Report> {
     let storage = Arc::new(SharedMemory::new());
-    let first_address = match injection {
-        FaultInjection::AllocationExhausted => u64::MAX,
-        FaultInjection::None | FaultInjection::EventWrite | FaultInjection::CommandWrite => 0x1000,
+    let (first_address, heap_size) = match injection {
+        FaultInjection::AllocationExhausted => (u64::MAX, 0),
+        FaultInjection::None | FaultInjection::EventWrite | FaultInjection::CommandWrite => {
+            (0x1000, 64 * 1024)
+        }
     };
-    let allocator =
-        SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(first_address));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::clone(&storage),
+        MemoryAddress::new(first_address),
+        heap_size,
+    )?;
     let faulted = Arc::new(UnmappedRing::new(allocator.memory_access()));
     let access = SharedMemoryAccess::from(Arc::clone(&faulted));
     let (device, hardware) = hardware::assemble(access.clone())?;

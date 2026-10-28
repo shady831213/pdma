@@ -1,5 +1,5 @@
 //! Independent complete-command ABI fixture.
-use hardware_interface_schema::{Decode, Encode, SchemaCodec, SchemaCodecError};
+use hw_model_schema::{Decode, Encode, SchemaCodec, SchemaCodecError};
 use pdma_model_contract::dma::*;
 
 #[test]

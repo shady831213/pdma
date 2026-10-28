@@ -7,8 +7,8 @@ pub use config::RingConfig;
 pub use error::SoftRingError;
 pub use io::{MemoryRingIo, RegisterRingIo, RingCursorRegisters, SoftRingIo};
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_schema::{Decode, Encode, SchemaCodec};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_schema::{Decode, Encode, SchemaCodec};
 use pdma_model_contract::ring::{Ring, RingPointers};
 
 #[derive(Debug)]

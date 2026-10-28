@@ -1,6 +1,6 @@
 use super::super::command::CommandHeader;
 use super::WordTarget;
-use hardware_interface_schema::record_schema;
+use hw_model_schema::record_schema;
 
 record_schema! {
     #[short_description = "One atomic effect with no returned-result storage"]

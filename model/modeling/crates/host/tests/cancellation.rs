@@ -5,11 +5,11 @@ use pdma_model_contract::dma::{
     LinearEndpoint,
 };
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_pipeline::{AsyncExecutor, Operation};
-use hardware_interface_software::SoftwareEnv;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_io::register::RegisterAccess;
+use hw_model_pipeline::{AsyncExecutor, Operation};
+use hw_model_swenv::SoftwareEnv;
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
@@ -18,8 +18,12 @@ use std::sync::Arc;
 async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: a command and an operation retained independently of its driving future.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let alignment = MemoryAlignment::try_new(8)?;
     let rings = Rings {
         command: RingConfig::new(

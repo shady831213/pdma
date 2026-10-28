@@ -3,7 +3,7 @@ use super::{
     backend::{ADDRESS, Error},
     tag,
 };
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::{
     dma::ChannelId,
     memory::{ContextAttributes, MemoryIdentity},

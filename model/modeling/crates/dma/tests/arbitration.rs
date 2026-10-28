@@ -1,6 +1,6 @@
 //! Candidate selection is a value policy, independent of channel hardware.
 
-use hardware_interface_pipeline::Arbitration;
+use hw_model_pipeline::Arbitration;
 use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, EventRegisters,

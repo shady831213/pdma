@@ -1,0 +1,5 @@
+error: field generates conflicting member `ZERO`
+ --> tests/ui/fail/record_member_constant_zero.rs:3:42
+  |
+3 |     endian: Little, fields: { field: u8, ZERO: u8 },
+  |                                          ^^^^

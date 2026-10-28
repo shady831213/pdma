@@ -1,0 +1,5 @@
+error: field generates conflicting member `encoded`
+ --> tests/ui/fail/record_member_encoded.rs:3:31
+  |
+3 |     endian: Little, fields: { encoded: u8 },
+  |                               ^^^^^^^

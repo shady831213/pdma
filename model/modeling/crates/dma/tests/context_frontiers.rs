@@ -3,7 +3,7 @@
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, CommandRegisters, ContextId, EventRegisters,
 };
@@ -37,7 +37,7 @@ fn linear_command_does_not_reference_ignored_sg_selector() -> TestResult {
     // When
     dma.abort_context(ContextId::new(7), &[ChannelId::new(0)])?;
     let mut pipeline = dma.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     for _ in 0..128 {
         let _ = operation.step(&mut pipeline, &mut dma)?;
     }
@@ -77,7 +77,7 @@ fn later_unrelated_publication_does_not_extend_the_drain_frontier() -> TestResul
         &2_u32.to_le_bytes(),
     )?;
     let mut pipeline = dma.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     // When
     for _ in 0..128 {
         let _ = operation.step(&mut pipeline, &mut dma);

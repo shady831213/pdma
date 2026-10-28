@@ -13,7 +13,7 @@ pub use candidate::{Candidate, CommandRequest, RetainedTask};
 pub use data_path::Hardware;
 pub use execution::{CheckRanges, CommandExecution, PrepareChunk, ReadCopy, WriteCopy};
 pub use fetch::Fetch;
-use hardware_interface_pipeline::{Stage, Then};
+use hw_model_pipeline::{Stage, Then};
 pub use retire::Retire;
 
 /// One concrete chunk transferred through preparation, read and write.
@@ -36,7 +36,7 @@ impl<M, SB> Dma<M, SB> {
         Hardware::new(pipeline, self.channels.len())
     }
 }
-impl<M: hardware_interface_io::memory::MemoryAccess<SB>, SB> Dma<M, SB> {
+impl<M: hw_model_io::memory::MemoryAccess<SB>, SB> Dma<M, SB> {
     /// Builds the finite connected command admission and bounded execution graph.
     pub fn hardware(&self) -> Hardware
     where

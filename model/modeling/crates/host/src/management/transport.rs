@@ -1,6 +1,6 @@
 use super::Management;
 use crate::Error;
-use hardware_interface_io::register::RegisterAccess;
+use hw_model_io::register::RegisterAccess;
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_software::ring::SoftRingError;
 

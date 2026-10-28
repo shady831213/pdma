@@ -1,6 +1,6 @@
 use crate::hw_components::context::ContextAttributeRegisters;
 use crate::register::{Address, Switch};
-use hardware_interface_schema::{register_map, register_schema};
+use hw_model_schema::{register_map, register_schema};
 
 register_schema! {
     #[short_description = "Coalescing notification doorbell"]

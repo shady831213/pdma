@@ -1,7 +1,7 @@
 use super::support::{TestResult, configure, submit, word};
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
-use hardware_interface_pipeline::{Operation, StepOutcome, Then};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_pipeline::{Operation, StepOutcome, Then};
 use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, ChannelRegisters, EventRegisters};
 use pdma_model_dma::{

@@ -1,7 +1,7 @@
 //! Shared entry addressing and pointer rules independent of memory and bus backends.
 
 use core::marker::PhantomData;
-use hardware_interface_schema::{SchemaCodec, record_schema};
+use hw_model_schema::{SchemaCodec, record_schema};
 use pdma_model_contract::dma::{Command, Event};
 use pdma_model_contract::ring::{Ring, RingError, RingPointers};
 

@@ -1,9 +1,9 @@
 //! Scoped assembly for the three-channel lifecycle scenario.
 
 use super::{TestResult, program, runtime::Managed};
-use hardware_interface_io::memory::MemoryAddress;
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
-use hardware_interface_software::InterruptSummary;
+use hw_model_io::memory::MemoryAddress;
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_swenv::InterruptSummary;
 use std::{io, sync::Arc};
 
 #[derive(Debug)]
@@ -17,7 +17,8 @@ pub struct Report {
 /// Drives the real managed hardware and Host program with a bounded scheduling budget.
 pub async fn run() -> TestResult<Report> {
     let storage = Arc::new(SharedMemory::new());
-    let allocator = SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(0x1000));
+    let allocator =
+        SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(0x1000), 256 * 1024)?;
     let memory = allocator.memory_access();
     let (system, host) = Managed::with_channels(memory.clone(), 3)?;
     let execution = Box::pin(host.runtime.run_main(async |interrupts| {

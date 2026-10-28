@@ -4,7 +4,7 @@ use pdma_model_contract::dma::{
 };
 
 use super::*;
-use hardware_interface_pipeline::RunError;
+use hw_model_pipeline::RunError;
 use pdma_model_dma::{CommandExecution, Completion, Flow};
 use std::{cell::Cell, rc::Rc};
 
@@ -49,7 +49,7 @@ impl Stage<ExecutionContext<'_, SharedMemory>> for InterruptedChunk {
 struct CommandTail {
     calls: Rc<Cell<usize>>,
     memory: SharedMemory,
-    final_address: hardware_interface_io::memory::MemoryAddress,
+    final_address: hw_model_io::memory::MemoryAddress,
 }
 
 impl Stage<ExecutionContext<'_, SharedMemory>> for CommandTail {

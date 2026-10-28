@@ -248,7 +248,7 @@ Run from `model/modeling`:
 
 ```sh
 cargo test -p pdma-model-software --test soft_ring
-cargo test -p hardware-interface-software --test notifications
+cargo test -p hw-model-swenv --test notifications
 cargo test -p pdma-model-host --test management_memory
 cargo test -p pdma-model-firmware
 cargo test -p pdma-model-hw-components --test components control::

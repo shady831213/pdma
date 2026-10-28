@@ -1,5 +1,5 @@
 //! Permission projection across expanded registers and bank templates.
-use hardware_interface_schema::Access;
+use hw_model_schema::Access;
 use pdma_model_contract::dma::{DmaRegisters, DmaRegistersRegisterId};
 use pdma_model_contract::view::RegisterView;
 

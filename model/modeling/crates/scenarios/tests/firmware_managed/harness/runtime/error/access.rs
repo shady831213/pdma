@@ -1,4 +1,4 @@
-use hardware_interface_schema::RegisterAccessError;
+use hw_model_schema::RegisterAccessError;
 use pdma_model_hw_components::{control::ControlError, windows};
 use std::fmt::{self, Display, Formatter};
 

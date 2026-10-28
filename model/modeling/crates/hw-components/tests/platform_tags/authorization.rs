@@ -3,7 +3,7 @@ use super::{
     backend::{ADDRESS, Error},
     configured_table, sideband,
 };
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::{
     dma::{ChannelId, ContextId, DmaAccess},
     memory::FunctionId,
@@ -14,7 +14,7 @@ use std::cell::Cell;
 
 #[test]
 fn atomic_context_authorization_precedes_unsupported_backend() {
-    use hardware_interface_io::memory::{AtomicAccessError, AtomicOperation, AtomicReadOrder};
+    use hw_model_io::memory::{AtomicAccessError, AtomicOperation, AtomicReadOrder};
     // Given: valid and foreign contexts over a backend without atomic support.
     let windows = ChannelWindows::new(2, 0, 0x10000).unwrap();
     let table = configured_table(&windows).unwrap();

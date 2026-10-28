@@ -1,6 +1,6 @@
 //! Host channel discovery and independent reset boundaries.
 
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelId, Command, CommandHeader, DmaRegisters, Event, FenceCommand, Opcode, WordTarget,
     WordTargetWidth, WordWrite,
@@ -8,13 +8,11 @@ use pdma_model_contract::dma::{
 
 mod instances;
 
-use hardware_interface_io::memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
-};
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
-use hardware_interface_software::SoftwareEnv;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess};
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_io::register::RegisterAccess;
+use hw_model_pipeline::{AsyncInteractionBackend, StepOutcome};
+use hw_model_swenv::SoftwareEnv;
 use pdma_model_dma::Dma;
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
@@ -28,8 +26,12 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 const COUNT: usize =
     DmaRegisters::DISCOVERY.offset() + pdma_model_contract::dma::DmaDiscovery::CHANNEL_NUM.offset();
 
-fn allocator() -> SharedMemoryAllocator {
-    SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000))
+fn allocator() -> TestResult<SharedMemoryAllocator> {
+    Ok(SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )?)
 }
 
 fn config(allocator: &SharedMemoryAllocator, index: usize) -> TestResult<ChannelConfig> {
@@ -86,7 +88,7 @@ impl RegisterAccess for ObservedBus {
 #[tokio::test]
 async fn discovery_rejects_unavailable_channels_before_any_configuration_write() -> TestResult {
     // Given: the bus advertises two channels despite a three-channel backing device.
-    let allocator = allocator();
+    let allocator = allocator()?;
     let memory = allocator.memory_access();
     let model = Model::new(Dma::new(memory.clone(), 3)?);
     let cpu = SoftwareEnv::new();
@@ -118,7 +120,7 @@ async fn discovery_rejects_unavailable_channels_before_any_configuration_write()
 #[tokio::test]
 async fn setup_uses_supplied_bus_without_cpu_affinity() -> TestResult {
     // Given: a setup request outside a software CPU context.
-    let allocator = allocator();
+    let allocator = allocator()?;
     let memory = allocator.memory_access();
     let reads = Arc::new(AtomicUsize::new(0));
     let writes = Arc::new(AtomicUsize::new(0));
@@ -140,11 +142,11 @@ async fn setup_uses_supplied_bus_without_cpu_affinity() -> TestResult {
 #[tokio::test]
 async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestResult {
     // Given: three configured channels with independent ring storage and queued commands.
-    let allocator = allocator();
+    let allocator = allocator()?;
     let memory = allocator.memory_access();
     let device = Dma::new(memory.clone(), 3)?;
     let mut hardware = device.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     let model = Model::new(device);
     let cpu = SoftwareEnv::new();
     cpu.run_main(async {
@@ -210,7 +212,7 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
 #[tokio::test]
 async fn channel_count_is_read_only_and_survives_both_reset_scopes() -> TestResult {
     // Given: software discovers a configured three-channel device.
-    let allocator = allocator();
+    let allocator = allocator()?;
     let memory = allocator.memory_access();
     let model = Model::new(Dma::new(memory.clone(), 3)?);
     let cpu = SoftwareEnv::new();

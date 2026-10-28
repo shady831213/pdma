@@ -5,9 +5,9 @@ use pdma_model_contract::dma::{
     CopyCommandDestinationValues, CopyCommandSourceValues, EventRegisters, LinearEndpoint,
 };
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryAccessError, MemoryRegion, SharedMemory};
-use hardware_interface_pipeline::{Arbitration, Operation, Stage, StepOutcome, StepResult, Then};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccessError, MemoryRegion, SharedMemory};
+use hw_model_pipeline::{Arbitration, Operation, Stage, StepOutcome, StepResult, Then};
 use pdma_model_dma::{Candidate, CommandRequest, Dma, Fetch, FetchedCommand, RoundRobin};
 use std::cell::RefCell;
 

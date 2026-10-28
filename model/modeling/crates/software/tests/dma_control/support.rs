@@ -1,17 +1,15 @@
 //! Register buses and resident DMA fixtures for control tests.
 
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelConfiguration, ChannelId, ChannelRegisters, Command, CommandRegisters,
     CopyCommandDestinationValues, CopyCommandSourceValues, EventRegisters, LinearEndpoint,
 };
 
-use hardware_interface_io::memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
-};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_pipeline::{HardwareDriver, StepOutcome};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_io::register::RegisterAccess;
+use hw_model_pipeline::{HardwareDriver, StepOutcome};
 use pdma_model_dma::{Dma, Hardware};
 use std::sync::{Arc, Mutex};
 

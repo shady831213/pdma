@@ -4,8 +4,12 @@ use super::*;
 async fn fault_interrupt_arrives_when_event_write_is_unmapped()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: the event ring points outside the injected memory backend.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let alignment = MemoryAlignment::try_new(8)?;
     let rings = Rings {
         command: RingConfig::new(

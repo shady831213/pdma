@@ -1,7 +1,7 @@
 use super::support::{TestResult, configure, submit, word};
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
-use hardware_interface_pipeline::StepOutcome;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_pipeline::StepOutcome;
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, CommandRegisters, EventRegisters};
 use pdma_model_dma::Dma;
 
@@ -25,7 +25,7 @@ fn arbiter_accepts_no_peer_command_until_selected_command_finishes() -> TestResu
         submit(&mut device, index, u64::try_from(index)?)?;
     }
     let mut hardware = device.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     let mut first_write = false;
     // When: A reaches its first committed chunk, before event publication.
     for _ in 0..128 {

@@ -3,10 +3,10 @@
 pub mod platform;
 use platform::ADDRESSES;
 
-use hardware_interface_io::memory::SharedMemory;
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_irq::interrupt_wire;
-use hardware_interface_software::{EnvAccessError, EnvContextError, InterruptRuntime, SoftwareEnv};
+use hw_model_io::memory::SharedMemory;
+use hw_model_io::register::RegisterAccess;
+use hw_model_irq::interrupt_wire;
+use hw_model_swenv::{EnvAccessError, EnvContextError, InterruptRuntime, SoftwareEnv};
 use pdma_model_software::control::{ControlIrq, ControlIsr};
 use std::{
     future::{Future, poll_fn},

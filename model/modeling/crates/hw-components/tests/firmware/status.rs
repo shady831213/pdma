@@ -1,6 +1,6 @@
 //! Boot status reset and access boundaries.
 
-use hardware_interface_schema::RegisterAccessError;
+use hw_model_schema::RegisterAccessError;
 use pdma_model_contract::hw_components::firmware::{
     FirmwareBootError, FirmwareBootState, FirmwareBootValues,
 };

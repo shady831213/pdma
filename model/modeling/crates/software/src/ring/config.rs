@@ -1,5 +1,5 @@
 use core::marker::PhantomData;
-use hardware_interface_schema::SchemaCodec;
+use hw_model_schema::SchemaCodec;
 use pdma_model_contract::ring::{Ring, RingError};
 
 /// Validated storage configuration selected by software, with no cursor state.

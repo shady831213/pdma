@@ -1,6 +1,6 @@
 use super::{Failure, Progress, atomic, fill, word};
 use crate::{Error, MemoryFailure, SelectedResources};
-use hardware_interface_io::memory::MemoryAccess;
+use hw_model_io::memory::MemoryAccess;
 use pdma_model_contract::dma::{
     AtomicCommand, FillCommand, SemaphoreCommand, TimestampCommand, TrapCommand, WaitCommand,
 };

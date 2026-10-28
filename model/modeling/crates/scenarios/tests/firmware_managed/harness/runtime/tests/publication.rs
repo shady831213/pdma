@@ -4,10 +4,10 @@ use super::{
 };
 use crate::harness::TestResult;
 use crate::harness::runtime::platform::CONTROL_CHANNEL_BASE;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_schema::Encode;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_io::register::RegisterAccess;
+use hw_model_schema::Encode;
 use pdma_model_contract::control::{ControlResponse, ControlResponseStatus};
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_contract::memory::FunctionId;
@@ -75,8 +75,12 @@ impl<B: RegisterAccess<Error = AccessError> + Sync> RegisterAccess for PausingBu
 
 async fn cancellation_case(response_ack: bool, moment: Moment) -> TestResult {
     // Given: real control hardware and firmware, with one Host write paused at its boundary.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let memory = allocator.memory_access();
     let (system, host) = Managed::new(memory.clone())?;
     let pause = Arc::new(Pause {

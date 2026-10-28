@@ -20,12 +20,12 @@ Its Cargo workspace contains the core `contract`, `dma` and `host` crates, the
 managed MVP's `hw-components` and `firmware`, shared PDMA `software`, system scenarios,
 and six reusable building blocks:
 
-- `hardware-interface-pipeline`
-- `hardware-interface-software` (SoftwareEnv and main/ISR execution)
-- `hardware-interface-io`
-- `hardware-interface-irq`
-- `hardware-interface-schema`
-- `hardware-interface-schema-macros`
+- `hw-model-pipeline`
+- `hw-model-swenv` (SoftwareEnv and main/ISR execution)
+- `hw-model-io`
+- `hw-model-irq`
+- `hw-model-schema`
+- `hw-model-schema-macros`
 
 The original scenarios sources are preserved on the backup branch only.
 The new `crates/scenarios` contains current-model integration tests. Current acceptance

@@ -3,7 +3,7 @@ use pdma_model_contract::dma::ChannelConfiguration;
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{HardwareDriver, Stage, StepOutcome, StepResult};
+use hw_model_pipeline::{HardwareDriver, Stage, StepOutcome, StepResult};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelRegisters, CommandRegisters, DmaAdmin, DmaDiscovery, EventRegisters,
 };
@@ -33,7 +33,7 @@ impl<M> Stage<ExecutionContext<'_, M>> for Stalled {
             Err(error) => StepOutcome::Complete(Ok(self
                 .1
                 .take()
-                .ok_or(hardware_interface_pipeline::RunError::Exhausted)?
+                .ok_or(hw_model_pipeline::RunError::Exhausted)?
                 .stop(error))),
         })
     }

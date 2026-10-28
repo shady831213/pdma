@@ -17,9 +17,9 @@ pub use bus::HostBus;
 pub use error::{AccessError, BuildError, PlatformConfigError, RunError};
 pub use interrupts::{HostInterrupts, HostIrq, HostVector};
 
-use hardware_interface_io::memory::MemoryAccess;
-use hardware_interface_irq::{InterruptEmitter, InterruptReceiver, interrupt_wire};
-use hardware_interface_software::{InterruptRuntime, SoftwareEnv};
+use hw_model_io::memory::MemoryAccess;
+use hw_model_irq::{InterruptEmitter, InterruptReceiver, interrupt_wire};
+use hw_model_swenv::{InterruptRuntime, SoftwareEnv};
 use memory::RoutedMemory;
 use pdma_model_contract::dma::DmaAccess;
 use pdma_model_dma::Dma;

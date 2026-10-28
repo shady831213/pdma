@@ -1,4 +1,4 @@
-use hardware_interface_schema::{RegisterAccessError, RegisterWindow};
+use hw_model_schema::{RegisterAccessError, RegisterWindow};
 use pdma_model_contract::hw_components::windows::{
     ChannelWindowBlock, WindowControl, WindowStatus,
 };

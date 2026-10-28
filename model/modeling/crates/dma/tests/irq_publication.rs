@@ -7,8 +7,8 @@ use pdma_model_contract::dma::{
 
 /// Shared raw-bus test fixtures.
 pub mod support;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_pipeline::{Stage, StepOutcome};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_pipeline::{Stage, StepOutcome};
 use support::{TestResult, read_word, setup, submit};
 const EVENT_PRODUCER: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
     + pdma_model_contract::dma::ChannelBlock::EVENT.offset()
@@ -66,7 +66,7 @@ fn irq_requires_published_event_on_every_step() -> TestResult {
             StepOutcome::InProgress => {}
             StepOutcome::Complete(result) => {
                 assert_eq!(
-                    hardware_interface_pipeline::Operation::new(vec![(0, result?)])
+                    hw_model_pipeline::Operation::new(vec![(0, result?)])
                         .step(&mut pdma_model_dma::Retire, &mut device)?,
                     StepOutcome::Complete(Err(pdma_model_dma::Error::Halted))
                 );

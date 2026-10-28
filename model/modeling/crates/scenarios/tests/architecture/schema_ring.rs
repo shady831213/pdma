@@ -1,3 +1,3 @@
-use hardware_interface_schema::{Ring, RingConfig, RingError, RingPointers};
+use hw_model_schema::{Ring, RingConfig, RingError, RingPointers};
 
 fn main() {}

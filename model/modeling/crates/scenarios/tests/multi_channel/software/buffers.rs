@@ -1,13 +1,11 @@
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelId, Command, CopyCommandDestinationValues, CopyCommandSourceValues, Event,
     LinearEndpoint,
 };
 
-use hardware_interface_io::memory::SharedMemoryAllocator;
-use hardware_interface_io::memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
-};
+use hw_model_io::memory::SharedMemoryAllocator;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess};
 use pdma_model_host::{ChannelConfig, RingConfig, Rings};
 
 use crate::TestResult;

@@ -1,5 +1,5 @@
 use crate::register::{ReadWord, Switch, Word};
-use hardware_interface_schema::{register_map, register_schema};
+use hw_model_schema::{register_map, register_schema};
 
 impl ContextAttributeRegistersValues {
     /// Decodes and validates one complete address-space configuration.
@@ -121,7 +121,7 @@ impl ContextTableRegisters {
     pub fn for_channels(
         context_count: usize,
         channel_count: usize,
-    ) -> Result<ContextTableRegistersLayout, hardware_interface_schema::RegisterBankError> {
+    ) -> Result<ContextTableRegistersLayout, hw_model_schema::RegisterBankError> {
         Self::new(context_count, channel_count.div_ceil(32))
     }
 }

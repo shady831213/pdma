@@ -1,5 +1,5 @@
 use crate::{CommandRequest, Error};
-use hardware_interface_pipeline::Arbitration;
+use hw_model_pipeline::Arbitration;
 
 /// Selects a fresh or resumed task with rotating channel priority.
 #[derive(Debug, Default)]

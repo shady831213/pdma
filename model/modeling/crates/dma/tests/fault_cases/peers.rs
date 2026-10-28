@@ -4,7 +4,7 @@ use pdma_model_contract::dma::{
 };
 
 use super::*;
-use hardware_interface_pipeline::StepOutcome;
+use hw_model_pipeline::StepOutcome;
 
 pub(super) fn pair() -> TestResult<(Dma<Paged>, usize, Command)> {
     let mut device = Dma::new(setup()?.dma.memory, 2)?;
@@ -95,7 +95,7 @@ fn peer_channel_completes_while_faulted_channel_stays_parked() -> TestResult {
     // Given: two physical channels with independent rings and one missing source page.
     let (mut device, peer_event, peer) = pair()?;
     let mut pipeline = device.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     // When: the shared engine runs both channels with the page still absent.
     for _ in 0..512 {
         assert!(matches!(
@@ -153,7 +153,7 @@ fn parked_reset_finishes_while_an_accepted_peer_is_disabled() -> TestResult {
         + ChannelConfiguration::ENABLE.offset();
     let reset = ChannelId::new(0).admin_offset(2).ok_or("reset")?;
     let mut pipeline = device.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     for _ in 0..256 {
         assert!(matches!(
             operation.step(&mut pipeline, &mut device)?,

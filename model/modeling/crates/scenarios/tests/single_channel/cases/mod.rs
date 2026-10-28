@@ -8,7 +8,7 @@ use crate::{
     harness::{self, FaultInjection, TestResult},
     software,
 };
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{ChannelFatalCode, Segment};
 
 async fn copy(response_fault: bool, input: software::Input<'_>) -> TestResult<Vec<Segment>> {

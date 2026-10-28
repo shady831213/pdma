@@ -1,6 +1,6 @@
 use crate::{Chunk, ChunkInput, ExecutionContext, Flow};
-use hardware_interface_io::memory::{BoundMemory, MemoryAccess};
-use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
+use hw_model_io::memory::{BoundMemory, MemoryAccess};
+use hw_model_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use pdma_model_contract::dma::{ContextId, DmaAccess};
 
 /// Selects the next bounded chunk using the channel-owned traversal cursors.

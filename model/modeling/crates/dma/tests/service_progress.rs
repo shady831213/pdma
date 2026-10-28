@@ -8,11 +8,11 @@ use pdma_model_contract::dma::{
 /// Shared raw-bus test fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{Operation, StepOutcome};
+use hw_model_pipeline::{Operation, StepOutcome};
 mod service_progress {
     mod pending_tail;
 }
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_dma::COPY_CHUNK_BYTES;
 use support::{TestResult, command, read_word, setup, submit};
 
@@ -85,7 +85,7 @@ fn reset_between_chunks_retires_retained_progress() -> TestResult {
     memory.write(0x1400.into(), MemoryAlignment::ONE, &[0x5a; 600])?;
     submit(&mut device, &memory, descriptor)?;
     let mut hardware = device.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     let mut committed = false;
     for _ in 0..256 {
         if let StepOutcome::Complete(result) = operation.step(&mut hardware, &mut device)? {
@@ -152,7 +152,7 @@ fn reset_at_every_chunk_boundary_retires_without_more_writes() -> TestResult {
         )?;
         submit(&mut device, &memory, descriptor)?;
         let mut hardware = device.hardware();
-        let mut next = hardware_interface_pipeline::HardwareDriver::new();
+        let mut next = hw_model_pipeline::HardwareDriver::new();
         let mut committed = false;
         for _ in 0..256 {
             if let StepOutcome::Complete(result) = next.step(&mut hardware, &mut device)? {

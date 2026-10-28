@@ -4,7 +4,7 @@ mod tests;
 use super::opcodes::{Branches, branches};
 use super::{Candidate, Retire};
 use crate::{CommandRequest, Completion, Dma, Error, Flow, Pipeline, RoundRobin};
-use hardware_interface_pipeline::{
+use hw_model_pipeline::{
     Arbitrate, BranchError, FanIn, MapError, Stage, StepOutcome, StepResult, Then,
 };
 use pdma_model_contract::dma::ChannelId;
@@ -25,7 +25,7 @@ type Commands<S> = FanIn<
     (),
     Error,
 >;
-type Graph<S> = MapError<Commands<S>, fn(hardware_interface_pipeline::BranchError<Error>) -> Error>;
+type Graph<S> = MapError<Commands<S>, fn(hw_model_pipeline::BranchError<Error>) -> Error>;
 
 /// One finite admission-to-execution graph with DMA-local terminal error handling.
 #[derive(Debug)]

@@ -1,16 +1,16 @@
 //! Reset-handshake fixtures with suspended accepted DMA work.
 
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, Command, CommandRegisters, CopyCommandDestinationValues,
     CopyCommandSourceValues, LinearEndpoint,
 };
 
-use hardware_interface_io::memory::{MemoryAddress, MemoryAlignment, SharedMemoryAccess};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_pipeline::{AsyncInteractionBackend, HardwareDriver, StepOutcome};
-use hardware_interface_software::SoftwareEnv;
+use hw_model_io::memory::{MemoryAddress, MemoryAlignment, SharedMemoryAccess};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_io::register::RegisterAccess;
+use hw_model_pipeline::{AsyncInteractionBackend, HardwareDriver, StepOutcome};
+use hw_model_swenv::SoftwareEnv;
 use pdma_model_dma::{Dma, Hardware};
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::{

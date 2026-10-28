@@ -1,4 +1,4 @@
-use hardware_interface_schema::RegisterAccessError;
+use hw_model_schema::RegisterAccessError;
 use pdma_model_contract::hw_components::control::ControlNotificationRegisters;
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_contract::memory::FunctionId;

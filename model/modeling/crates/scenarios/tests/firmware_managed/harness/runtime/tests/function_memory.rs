@@ -1,7 +1,7 @@
 //! Scenario memory routing through the authoritative Function owner bank.
 use crate::harness::runtime::memory::{RouteError, RoutedMemory, SpaceError};
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_contract::memory::{ContextAttributes, FunctionId, MemoryIdentity};

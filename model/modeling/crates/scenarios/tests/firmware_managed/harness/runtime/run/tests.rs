@@ -2,9 +2,9 @@ use super::super::AccessError;
 use super::super::HostIrq;
 use super::*;
 use crate::harness::runtime::platform::WINDOW_STATUS_BASE;
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_irq::{InterruptHandler, interrupt_wire};
-use hardware_interface_software::{InterruptRuntime, SoftwareEnv};
+use hw_model_io::register::RegisterAccess;
+use hw_model_irq::{InterruptHandler, interrupt_wire};
+use hw_model_swenv::{InterruptRuntime, SoftwareEnv};
 use pdma_model_software::control::ControlIrq;
 use std::{future::pending, pin::pin, task::Poll};
 
@@ -23,14 +23,14 @@ impl InterruptHandler<HostIrq> for TestHandler {
 #[tokio::test]
 async fn assembled_host_and_firmware_have_distinct_cpu_ownership() {
     // Given: the two actual CPU environments created by the managed assembler.
-    let memory = hardware_interface_io::memory::SharedMemoryAccess::from(Arc::new(
-        hardware_interface_io::memory::SharedMemory::new(),
+    let memory = hw_model_io::memory::SharedMemoryAccess::from(Arc::new(
+        hw_model_io::memory::SharedMemory::new(),
     ));
     let (system, host) = Managed::new(memory).unwrap();
     let (owner, _) = host
         .runtime
         .run_main::<TestHandler, _>(async |_| {
-            hardware_interface_software::EnvLocal::capture_active(0_u32).unwrap()
+            hw_model_swenv::EnvLocal::capture_active(0_u32).unwrap()
         })
         .await
         .unwrap();
@@ -44,10 +44,7 @@ async fn assembled_host_and_firmware_have_distinct_cpu_ownership() {
         })
         .await;
     // Then: sharing the async executor did not merge the software CPU identities.
-    assert_eq!(
-        result,
-        Err(hardware_interface_software::EnvContextError::Mismatch)
-    );
+    assert_eq!(result, Err(hw_model_swenv::EnvContextError::Mismatch));
 }
 
 impl RegisterAccess for FailedManagement {
@@ -90,7 +87,7 @@ async fn initialization_error_drops_other_scoped_actors() {
             .run_main(async |registration| {
                 pdma_model_firmware::main(
                     bus,
-                    hardware_interface_io::memory::SharedMemory::new(),
+                    hw_model_io::memory::SharedMemory::new(),
                     registration,
                     crate::harness::runtime::platform::ADDRESSES,
                 )
@@ -112,7 +109,7 @@ async fn initialization_error_drops_other_scoped_actors() {
     assert!(matches!(
         result,
         Err(RunError::Firmware(pdma_model_firmware::Error::Bus(
-            hardware_interface_software::EnvAccessError::Access(AccessError::Unmapped)
+            hw_model_swenv::EnvAccessError::Access(AccessError::Unmapped)
         )))
     ));
     assert_eq!(Arc::strong_count(&hardware_owned), 1);
@@ -122,8 +119,8 @@ async fn initialization_error_drops_other_scoped_actors() {
 #[tokio::test]
 async fn cancellation_drops_running_hardware_and_firmware() {
     // Given: firmware initialized a real system and all actor futures remain scoped.
-    let memory = hardware_interface_io::memory::SharedMemoryAccess::from(Arc::new(
-        hardware_interface_io::memory::SharedMemory::new(),
+    let memory = hw_model_io::memory::SharedMemoryAccess::from(Arc::new(
+        hw_model_io::memory::SharedMemory::new(),
     ));
     let (system, host) = Managed::new(memory).unwrap();
     let retained = Arc::clone(&system.shared);

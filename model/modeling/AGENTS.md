@@ -17,12 +17,12 @@ layouts, and ABI compatibility are not requirements for this model.
 
 | Crate | Responsibility |
 | --- | --- |
-| hardware-interface-pipeline | Typed stages, generic gathering/distribution, composition, and driving policies. |
-| hardware-interface-software | SoftwareEnv, environment-local state, main/ISR execution, progress hints and tracing. |
-| hardware-interface-io | Memory/register interfaces, supplied byte backing/allocation, shared-state storage and observation. |
-| hardware-interface-irq | Source/claim/handler capabilities and optional Tokio pending-interrupt backend. |
-| hardware-interface-schema | Runtime-neutral record/register schemas, metadata, access, and exporters. |
-| hardware-interface-schema-macros | Schema code generation and compile-time validation. |
+| hw-model-pipeline | Typed stages, generic gathering/distribution, composition, and driving policies. |
+| hw-model-swenv | SoftwareEnv, environment-local state, main/ISR execution, progress hints and tracing. |
+| hw-model-io | Memory/register interfaces, supplied byte backing/allocation, shared-state storage and observation. |
+| hw-model-irq | Source/claim/handler capabilities and optional Tokio pending-interrupt backend. |
+| hw-model-schema | Runtime-neutral record/register schemas, metadata, access, and exporters. |
+| hw-model-schema-macros | Schema code generation and compile-time validation. |
 
 Keep these crates and their tests intact. Reuse their existing capabilities in the
 replacement model; do not introduce parallel composition or dispatch mechanisms.
@@ -46,7 +46,7 @@ software handlers or CPU state. Software calls the runtime-supplied ISR registra
 capability; CPU validation, handler tables and dispatcher lifecycle belong to the
 runtime. Do not expose registry freezing, startup handoff channels or dispatcher tasks
 to the software program. `host::runtime` owns PDMA transport, separate from the host
-channel driver; generic CPU/interrupt mechanics stay in `hardware-interface-software`.
+channel driver; generic CPU/interrupt mechanics stay in `hw-model-swenv`.
 `EnvOwner` is runtime-private. Software entrypoints and ordinary drivers must not
 capture CPU ownership tokens or bind their state to the CPU that created them.
 Management clients, rings and DMA drivers follow normal Rust ownership and borrowing;

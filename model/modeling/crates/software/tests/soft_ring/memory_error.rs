@@ -1,6 +1,6 @@
 use super::{CursorBus, Item};
-use hardware_interface_io::memory::MemoryRegion;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::MemoryRegion;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_software::ring::{
     RegisterRingIo, RingConfig, RingCursorRegisters, SoftRing, SoftRingError,
 };

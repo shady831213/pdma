@@ -1,6 +1,6 @@
 //! Scatter/gather endpoint wire behavior.
 
-use hardware_interface_schema::SchemaCodecError;
+use hw_model_schema::SchemaCodecError;
 use pdma_model_contract::dma::{Command, Event, Segment};
 
 #[test]

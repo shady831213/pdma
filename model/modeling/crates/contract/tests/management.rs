@@ -1,6 +1,6 @@
 //! Firmware control and host readiness register contracts.
 
-use hardware_interface_schema::{Access, RegisterWindow};
+use hw_model_schema::{Access, RegisterWindow};
 
 #[test]
 fn management_maps_define_distinct_control_and_status() -> Result<(), Box<dyn std::error::Error>> {
@@ -99,7 +99,7 @@ fn repeated_window_metadata_matches_configured_count_and_role()
 }
 
 fn assert_window_metadata<I: Copy>(
-    map: &hardware_interface_schema::ResolvedRegisterMap<I>,
+    map: &hw_model_schema::ResolvedRegisterMap<I>,
     (count, stride, first): (usize, usize, usize),
     access: Access,
 ) {

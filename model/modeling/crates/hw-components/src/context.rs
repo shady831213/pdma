@@ -1,5 +1,5 @@
 use crate::windows::ChannelWindows;
-use hardware_interface_schema::{
+use hw_model_schema::{
     RegisterAccessError, RegisterBank, RegisterBankError, RegisterShape, RegisterWindow,
     StaticRegisterLayout, register_dispatch,
 };

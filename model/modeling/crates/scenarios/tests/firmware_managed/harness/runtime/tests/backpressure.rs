@@ -8,10 +8,10 @@ use super::{
 };
 use crate::harness::TestResult;
 use crate::harness::runtime::platform::WINDOW_STATUS_BASE;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryAccessError, SharedMemory, SharedMemoryAllocator};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_schema::{Decode, Encode, SchemaCodecError};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccessError, SharedMemory, SharedMemoryAllocator};
+use hw_model_io::register::RegisterAccess;
+use hw_model_schema::{Decode, Encode, SchemaCodecError};
 use pdma_model_contract::control::{
     ControlRequest, ControlRequestOpcode, ControlResponseRaw, ControlResponseStatus,
 };
@@ -37,8 +37,12 @@ async fn backpressure_preserves_pending_request_until_host_releases_response_slo
 
 pub(super) async fn release_backpressure(function: FunctionId) -> TestResult {
     // Given: real firmware with a capacity-one response ring holding an acquisition result.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let memory = allocator.memory_access();
     let (system, mut hosts) =
         Managed::with_functions(memory.clone(), 1, usize::try_from(function.raw())? + 1)?;
@@ -137,8 +141,12 @@ pub(super) async fn release_backpressure(function: FunctionId) -> TestResult {
 
 async fn rejected_command_case(unmapped: bool) -> TestResult {
     // Given: a command queue pointing to an invalid record or unmapped memory.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let memory = allocator.memory_access();
     let (system, host) = Managed::new(memory.clone())?;
     let mut storage = rings(&allocator)?;

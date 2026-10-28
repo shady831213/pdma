@@ -1,8 +1,8 @@
 //! Hardware receives memory and contains no software registration or CPU state.
 
-use hardware_interface_io::memory::MemoryAccessError;
-use hardware_interface_io::memory::SharedMemoryAccess;
-use hardware_interface_pipeline::{AsyncExecutor, AsyncRunError, HardwareDriver};
+use hw_model_io::memory::MemoryAccessError;
+use hw_model_io::memory::SharedMemoryAccess;
+use hw_model_pipeline::{AsyncExecutor, AsyncRunError, HardwareDriver};
 use pdma_model_dma::{Dma, Hardware};
 use pdma_model_host::runtime::Model;
 

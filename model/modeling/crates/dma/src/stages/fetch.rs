@@ -1,8 +1,8 @@
 use crate::SelectedResources;
 use crate::channel::Accepted;
 use crate::{CommandAdmission, CommandRequest, CommandSnapshot, Dma, Error, FetchedCommand, Flow};
-use hardware_interface_io::memory::{BoundMemory, MemoryAccess};
-use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
+use hw_model_io::memory::{BoundMemory, MemoryAccess};
+use hw_model_pipeline::{Stage, StepOutcome, StepResult};
 use pdma_model_contract::dma::{ContextId, DmaAccess};
 use pdma_model_contract::ring::Ring;
 

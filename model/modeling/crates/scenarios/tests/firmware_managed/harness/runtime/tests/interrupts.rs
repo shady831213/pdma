@@ -1,12 +1,12 @@
 use super::super::{HostIrq, HostVector, Managed, ManagementBus};
 use super::control::memory::{kick, poll_once};
 use crate::harness::runtime::platform::CONTROL_CHANNEL_BASE;
-use hardware_interface_io::memory::MemoryAccessError;
-use hardware_interface_io::memory::SharedMemory;
-use hardware_interface_io::memory::SharedMemoryAccess;
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_irq::{InterruptEnvelope, InterruptHandler, InterruptSource};
-use hardware_interface_software::{EnvContextError, EnvLocal, InterruptDispatchError};
+use hw_model_io::memory::MemoryAccessError;
+use hw_model_io::memory::SharedMemory;
+use hw_model_io::memory::SharedMemoryAccess;
+use hw_model_io::register::RegisterAccess;
+use hw_model_irq::{InterruptEnvelope, InterruptHandler, InterruptSource};
+use hw_model_swenv::{EnvContextError, EnvLocal, InterruptDispatchError};
 use pdma_model_contract::hw_components::control::ControlNotificationRegisters;
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_software::control::{ControlIrq, ControlIsr, InterruptEvent};
@@ -79,10 +79,9 @@ async fn repeated_response_doorbells_before_wait_coalesce_into_one_isr() {
 async fn simultaneous_dma_control_and_event_pending_survive_cancelled_wait_and_are_fair() {
     // Given: separate pending bits with both destinations raised.
     let (dma, dma_source) =
-        hardware_interface_irq::interrupt_wire(HostIrq::Dma(pdma_model_host::runtime::Irq));
-    let (control, control_source) =
-        hardware_interface_irq::interrupt_wire(HostIrq::Control(ControlIrq));
-    let (event, event_source) = hardware_interface_irq::interrupt_wire(HostIrq::Event(ControlIrq));
+        hw_model_irq::interrupt_wire(HostIrq::Dma(pdma_model_host::runtime::Irq));
+    let (control, control_source) = hw_model_irq::interrupt_wire(HostIrq::Control(ControlIrq));
+    let (event, event_source) = hw_model_irq::interrupt_wire(HostIrq::Event(ControlIrq));
     let mut source = super::super::HostInterrupts {
         dma: dma_source,
         control: Some(control_source),

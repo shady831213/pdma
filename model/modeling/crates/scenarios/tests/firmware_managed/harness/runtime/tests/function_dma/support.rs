@@ -5,9 +5,9 @@ use pdma_model_contract::dma::{
 };
 
 use crate::harness::runtime::memory::RoutedMemory;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
-use hardware_interface_pipeline::{HardwareDriver, StepOutcome};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_pipeline::{HardwareDriver, StepOutcome};
 use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_dma::Dma;
 use pdma_model_hw_components::windows::ChannelWindows;

@@ -1,16 +1,16 @@
 //! Software owns allocation, shared IRQ draining and channel reset through the bus.
 
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{ChannelId, CommandHeader, DmaRegisters, Opcode, TrapCommand};
 
 mod buffers;
 mod reset;
 
-use hardware_interface_io::memory::SharedMemoryAllocator;
-use hardware_interface_io::memory::{MemoryAddress, SharedMemoryAccess};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_irq::InterruptHandler;
-use hardware_interface_software::InterruptRegistration;
+use hw_model_io::memory::SharedMemoryAllocator;
+use hw_model_io::memory::{MemoryAddress, SharedMemoryAccess};
+use hw_model_io::register::RegisterAccess;
+use hw_model_irq::InterruptHandler;
+use hw_model_swenv::InterruptRegistration;
 use pdma_model_host::{Channel, runtime::Irq};
 use std::{convert::Infallible, error::Error};
 use tokio::sync::mpsc;

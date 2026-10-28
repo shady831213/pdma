@@ -1,5 +1,5 @@
 //! Protocol-aware command views must use the contract's checks.
-use hardware_interface_schema::{Decode, Encode, SchemaCodec, SchemaCodecError, SchemaLayout};
+use hw_model_schema::{Decode, Encode, SchemaCodec, SchemaCodecError, SchemaLayout};
 use pdma_model_contract::dma::{
     Command, CommandHeader, CommandView, CommandViewMut, Opcode, TrapCommand,
 };

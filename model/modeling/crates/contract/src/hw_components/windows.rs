@@ -1,5 +1,5 @@
 use crate::register::{ReadWord, Switch, Word};
-use hardware_interface_schema::register_map;
+use hw_model_schema::register_map;
 
 impl crate::dma::ChannelId {
     /// Returns this channel's control offset within the permission bank.
@@ -8,7 +8,7 @@ impl crate::dma::ChannelId {
     }
 
     const fn window_offset(self, offset: usize) -> Option<usize> {
-        match hardware_interface_schema::checked_bank_offset(
+        match hw_model_schema::checked_bank_offset(
             ChannelWindowRegisters::WINDOWS_OFFSET,
             self.index(),
             ChannelWindowRegisters::WINDOWS_STRIDE,

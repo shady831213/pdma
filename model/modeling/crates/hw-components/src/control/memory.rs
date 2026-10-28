@@ -1,5 +1,5 @@
 use super::ControlChannel;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::memory::{InvalidContextAttributes, MemoryIdentity};
 
 #[doc = "Borrowed firmware Host-memory port using the independent PF control configuration."]

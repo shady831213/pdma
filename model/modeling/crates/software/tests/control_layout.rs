@@ -1,9 +1,7 @@
 //! Shared control queue address validation and cursor access.
 
-use hardware_interface_io::memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
-};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
 use pdma_model_contract::control::{ControlQueue, ControlRingState};
 use pdma_model_contract::ring::RingError;
 use pdma_model_software::ring::SoftRingIo;

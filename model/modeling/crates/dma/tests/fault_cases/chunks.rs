@@ -3,7 +3,7 @@ use pdma_model_contract::dma::{
 };
 
 use super::{composition::InvertPayload, *};
-use hardware_interface_pipeline::Then;
+use hw_model_pipeline::Then;
 use pdma_model_dma::{PrepareChunk, ReadCopy, WriteCopy};
 
 #[test]

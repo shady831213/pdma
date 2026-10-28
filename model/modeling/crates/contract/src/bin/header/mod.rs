@@ -1,4 +1,4 @@
-use hardware_interface_schema::{
+use hw_model_schema::{
     export::backends::c_header::{RecordCHeaderExporter, RegisterMapCHeaderExporter},
     export::{Exporter, InMemoryArtifactSink},
 };

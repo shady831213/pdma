@@ -1,5 +1,5 @@
 //! Function-specific channel access through the shared permission bank.
-use hardware_interface_schema::{RegisterAccessError, RegisterWindow};
+use hw_model_schema::{RegisterAccessError, RegisterWindow};
 use pdma_model_contract::dma::{ChannelBlock, ChannelId};
 use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_contract::memory::FunctionId;

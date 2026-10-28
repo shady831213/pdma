@@ -1,6 +1,6 @@
 use crate::{ChunkInput, CommandRequest, Dma, Error, ExecutionContext, Fetch, Flow, Retire};
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
-use hardware_interface_pipeline::{Operation, Stage, StepOutcome, StepResult};
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_pipeline::{Operation, Stage, StepOutcome, StepResult};
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, Command, CommandRegisters};
 use std::{cell::Cell, convert::Infallible, rc::Rc};
 
@@ -48,7 +48,7 @@ fn reset_waits_for_resident_child_to_observe_and_complete_cleanup() -> TestResul
                     let pending = self
                         .pending
                         .take()
-                        .ok_or(hardware_interface_pipeline::RunError::Exhausted)?;
+                        .ok_or(hw_model_pipeline::RunError::Exhausted)?;
                     return Ok(StepOutcome::Complete(Ok(pending.stop(error))));
                 }
             }
@@ -112,12 +112,9 @@ fn stale_fetch_cannot_enter_the_next_task_on_the_same_generation() -> TestResult
         fetched,
     )?;
     let chunk = dma.execution_context().install_progress(progress);
-    let mut execution = crate::CommandExecution::new(hardware_interface_pipeline::Then::new(
+    let mut execution = crate::CommandExecution::new(hw_model_pipeline::Then::new(
         crate::PrepareChunk::default(),
-        hardware_interface_pipeline::Then::new(
-            crate::ReadCopy::default(),
-            crate::WriteCopy::default(),
-        ),
+        hw_model_pipeline::Then::new(crate::ReadCopy::default(), crate::WriteCopy::default()),
     ));
     let completion = finish(&mut execution, &mut dma.execution_context(), chunk)?;
     finish(&mut Retire, &mut dma, vec![(0, completion)])?;

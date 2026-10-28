@@ -1,0 +1,5 @@
+error: field generates conflicting member `values`
+ --> tests/ui/fail/record_member_values.rs:3:31
+  |
+3 |     endian: Little, fields: { values: u8 },
+  |                               ^^^^^^

@@ -1,4 +1,4 @@
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     CopyCommandDestinationValues, CopyCommandSourceValues, LinearEndpoint,
 };
@@ -8,8 +8,8 @@ use super::{
     control::{ring, rings},
     *,
 };
-use hardware_interface_io::memory::SharedMemoryAllocator;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::SharedMemoryAllocator;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::{
     control::{ControlEvent, ControlEventKind, ControlResponseStatus},
     dma::{ChannelId, Command, Event},
@@ -34,8 +34,12 @@ async fn fatal_event_overflow_survives_dma_reset_and_rearms_without_replay() {
 async fn recovery(overflow: bool) {
     // Given: one VF owns the DMA channel; only PF has management/event interrupts.
     let backing = Arc::new(SharedMemory::new());
-    let allocator = SharedMemoryAllocator::new(Arc::clone(&backing), MemoryAddress::new(0x1000));
-    let vf_allocator = SharedMemoryAllocator::new(backing, MemoryAddress::new(0x0010_0000));
+    let allocator =
+        SharedMemoryAllocator::new(Arc::clone(&backing), MemoryAddress::new(0x1000), 64 * 1024)
+            .expect("valid test heap");
+    let vf_allocator =
+        SharedMemoryAllocator::new(backing, MemoryAddress::new(0x0010_0000), 64 * 1024)
+            .expect("valid test heap");
     let (system, mut hosts) = Managed::with_functions(allocator.memory_access(), 1, 2).unwrap();
     let vf = hosts.pop().unwrap();
     let pf = hosts.pop().unwrap();

@@ -1,4 +1,4 @@
-use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
+use hw_model_pipeline::{Stage, StepOutcome, StepResult};
 use pdma_model_dma::{ChunkInput, ExecutionContext, Flow};
 use std::{cell::Cell, rc::Rc};
 
@@ -32,7 +32,7 @@ impl<M> Stage<ExecutionContext<'_, M>> for Stalled {
                 StepOutcome::Complete(Ok(self
                     .0
                     .take()
-                    .ok_or(hardware_interface_pipeline::RunError::Exhausted)?
+                    .ok_or(hw_model_pipeline::RunError::Exhausted)?
                     .stop(error)))
             }
         })

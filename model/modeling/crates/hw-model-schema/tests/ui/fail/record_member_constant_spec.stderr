@@ -1,0 +1,5 @@
+error: field generates conflicting member `SPEC`
+ --> tests/ui/fail/record_member_constant_spec.rs:3:42
+  |
+3 |     endian: Little, fields: { field: u8, SPEC: u8 },
+  |                                          ^^^^

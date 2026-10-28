@@ -1,11 +1,11 @@
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{CommandHeader, Opcode, WriteCommand};
 mod commands;
 pub(super) mod timestamp;
 pub(super) mod waiting;
-use hardware_interface_io::memory::SharedMemoryAllocator;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
-use hardware_interface_io::register::RegisterAccess;
+use hw_model_io::memory::SharedMemoryAllocator;
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_io::register::RegisterAccess;
 use pdma_model_contract::dma::*;
 use pdma_model_host::{Channel, ChannelConfig, CompletionWord, RingConfig, Rings};
 
@@ -107,9 +107,7 @@ where
 
 pub(super) async fn setup<B>(
     ports: &Ports<B>,
-) -> TestResult<
-    Vec<Channel<B, hardware_interface_io::memory::SharedMemoryAccess<(), MemoryAccessError>>>,
->
+) -> TestResult<Vec<Channel<B, hw_model_io::memory::SharedMemoryAccess<(), MemoryAccessError>>>>
 where
     B: RegisterAccess + Clone + Send + Sync,
     B::Error: std::error::Error + Send + Sync + 'static,

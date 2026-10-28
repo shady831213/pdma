@@ -1,6 +1,6 @@
 use super::*;
 use crate::harness::runtime::platform::FIRMWARE_STATUS_BASE;
-use hardware_interface_software::SoftwareEnv;
+use hw_model_swenv::SoftwareEnv;
 use pdma_model_host::{Error, firmware};
 use std::{pin::pin, task::Poll, time::Duration};
 

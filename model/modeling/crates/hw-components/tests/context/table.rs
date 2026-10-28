@@ -1,5 +1,5 @@
 #![doc = "Context table publication and maintenance boundaries."]
-use hardware_interface_io::memory::SharedMemory;
+use hw_model_io::memory::SharedMemory;
 use pdma_model_contract::hw_components::context::{
     ContextEntryRegisters, ContextManagementRegisters, ContextTableRegisters,
 };

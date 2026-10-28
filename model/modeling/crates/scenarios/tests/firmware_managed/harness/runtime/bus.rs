@@ -1,6 +1,6 @@
 use super::{AccessError, Hardware, ManagementBus, Shared};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_schema::{RegisterAccessError, register_dispatch};
+use hw_model_io::register::RegisterAccess;
+use hw_model_schema::{RegisterAccessError, register_dispatch};
 use pdma_model_contract::memory::FunctionId;
 use std::sync::Arc;
 

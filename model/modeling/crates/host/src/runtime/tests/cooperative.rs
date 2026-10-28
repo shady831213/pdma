@@ -1,6 +1,6 @@
 use super::{IRQ_ENABLE, Model, TestResult};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_pipeline::{AsyncExecutor, Operation, Stage, StepOutcome, StepResult};
+use hw_model_io::register::RegisterAccess;
+use hw_model_pipeline::{AsyncExecutor, Operation, Stage, StepOutcome, StepResult};
 use pdma_model_dma::{Dma, Error};
 use std::{
     future::Future,

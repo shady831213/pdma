@@ -1,6 +1,6 @@
 //! Independent Host apertures against generated downstream storage.
 const WINDOW_CONTROL_BASE: u32 = 0x0010_0000;
-use hardware_interface_schema::RegisterWindow;
+use hw_model_schema::RegisterWindow;
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, DmaRegisters};
 use pdma_model_hw_components::windows::{AccessError, ChannelWindows};
 

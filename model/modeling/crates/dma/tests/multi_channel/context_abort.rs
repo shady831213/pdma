@@ -4,9 +4,9 @@ use pdma_model_contract::dma::{
 };
 
 use super::support::{TestResult, completion, configure, submit, word};
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
-use hardware_interface_pipeline::StepOutcome;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_pipeline::StepOutcome;
 use pdma_model_dma::Dma;
 
 #[test]
@@ -51,7 +51,7 @@ fn abort_during_unaccepted_arbitration_does_not_stall_peer_channels() -> TestRes
         )?;
         submit(&mut dma, 1, 8)?;
         let mut pipeline = dma.hardware();
-        let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+        let mut operation = hw_model_pipeline::HardwareDriver::new();
         for _ in 0..steps {
             let _ = operation.step(&mut pipeline, &mut dma)?;
         }

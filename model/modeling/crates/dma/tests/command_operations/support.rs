@@ -1,6 +1,6 @@
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
-use hardware_interface_pipeline::HardwareDriver;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_pipeline::HardwareDriver;
 use pdma_model_contract::dma::{
     CapabilitiesValues, ChannelBlock, ChannelConfiguration, ChannelId, ChannelInterrupts,
     ChannelRegisters, Command, CommandHeader, CommandRegisters, EventRegisters, FenceCommand,

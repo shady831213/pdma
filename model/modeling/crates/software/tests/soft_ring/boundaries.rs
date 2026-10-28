@@ -1,7 +1,7 @@
 use crate::Item;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
-use hardware_interface_software::SoftwareEnv;
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_swenv::SoftwareEnv;
 use pdma_model_contract::ring::RingError;
 use pdma_model_software::ring::{MemoryRingIo, RingConfig, SoftRing, SoftRingError, SoftRingIo};
 

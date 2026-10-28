@@ -1,5 +1,5 @@
 use super::*;
-use hardware_interface_pipeline::{HardwareDriver, Stage, StepResult, Then};
+use hw_model_pipeline::{HardwareDriver, Stage, StepResult, Then};
 use pdma_model_dma::{Completion, ExecutionContext, PrepareChunk, ReadCopy, WriteCopy};
 use std::{cell::Cell, rc::Rc};
 

@@ -5,10 +5,10 @@ use pdma_model_contract::dma::{
     ScatterGatherEndpoint, Segment,
 };
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryAccessError, SharedMemory, SharedMemoryAllocator};
-use hardware_interface_pipeline::{AsyncExecutor, Operation};
-use hardware_interface_software::SoftwareEnv;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccessError, SharedMemory, SharedMemoryAllocator};
+use hw_model_pipeline::{AsyncExecutor, Operation};
+use hw_model_swenv::SoftwareEnv;
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::{error::Error, sync::Arc};
@@ -58,8 +58,12 @@ fn scatter_gather(
 #[tokio::test(flavor = "current_thread")]
 async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes() -> TestResult {
     // Given: source boundaries [3, 5], destination boundaries [2, 6], and one retained operation.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let command_alignment = MemoryAlignment::try_new(u64::try_from(Command::RECORD_ALIGNMENT)?)?;
     let event_alignment = MemoryAlignment::try_new(u64::try_from(Event::RECORD_ALIGNMENT)?)?;
     let command = allocator.allocate(u64::try_from(Command::RECORD_SIZE)?, command_alignment)?;

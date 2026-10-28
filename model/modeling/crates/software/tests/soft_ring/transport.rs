@@ -1,6 +1,6 @@
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryAccessError, SharedMemory};
-use hardware_interface_io::register::RegisterAccess;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccessError, SharedMemory};
+use hw_model_io::register::RegisterAccess;
 use std::{
     future::pending,
     sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering},

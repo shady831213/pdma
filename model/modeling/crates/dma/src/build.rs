@@ -1,5 +1,5 @@
 use crate::{Channel, Dma};
-use hardware_interface_schema::{RegisterBankError, RegisterWindow};
+use hw_model_schema::{RegisterBankError, RegisterWindow};
 use pdma_model_contract::dma::{
     CapabilitiesValues, ChannelCountValues, DmaAccess, DmaAdmin, DmaControl, DmaDiscovery,
     DmaRegisters,

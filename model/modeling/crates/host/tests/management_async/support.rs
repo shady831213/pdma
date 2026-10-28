@@ -1,10 +1,10 @@
 //! Shared-memory queue fixtures and a suspendable register transport.
 
-use hardware_interface_io::memory::MemoryAccessError;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment, SharedMemoryAccess};
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_schema::Decode;
+use hw_model_io::memory::MemoryAccessError;
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment, SharedMemoryAccess};
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_io::register::RegisterAccess;
+use hw_model_schema::Decode;
 use pdma_model_contract::control::{
     ControlQueue, ControlQueueRaw, ControlRequest, ControlResponse,
 };
@@ -53,7 +53,8 @@ pub(super) struct Fixture {
 
 impl Fixture {
     pub(super) fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let allocator = SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into());
+        let allocator =
+            SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into(), 64 * 1024)?;
         let alignment = MemoryAlignment::try_new(8)?;
         Ok(Self {
             bus: Bus::default(),

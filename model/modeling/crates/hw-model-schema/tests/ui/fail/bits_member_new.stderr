@@ -1,0 +1,5 @@
+error: field generates conflicting member `new`
+ --> tests/ui/fail/bits_member_new.rs:2:40
+  |
+2 | bits_schema! { pub bits Conflict(u8) { new: 0..=0 } }
+  |                                        ^^^

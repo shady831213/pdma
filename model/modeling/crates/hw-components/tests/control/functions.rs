@@ -1,5 +1,5 @@
 //! PF control-aperture permission tests.
-use hardware_interface_schema::RegisterAccessError;
+use hw_model_schema::RegisterAccessError;
 use pdma_model_contract::hw_components::control::ControlNotificationRegisters;
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_contract::memory::FunctionId;
@@ -22,10 +22,8 @@ fn vf_cannot_publish_read_or_notify_through_pf_registers() {
         assert_eq!(
             controls.host_read(vf, 0x1000 + offset, &mut bytes),
             Err(match register.definition().access() {
-                hardware_interface_schema::Access::WriteOnly =>
-                    RegisterAccessError::ReadForbidden { offset },
-                hardware_interface_schema::Access::ReadOnly
-                | hardware_interface_schema::Access::ReadWrite =>
+                hw_model_schema::Access::WriteOnly => RegisterAccessError::ReadForbidden { offset },
+                hw_model_schema::Access::ReadOnly | hw_model_schema::Access::ReadWrite =>
                     RegisterAccessError::Other(ControlError::Permission),
             })
         );

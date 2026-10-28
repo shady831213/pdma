@@ -7,7 +7,7 @@ use crate::harness::{
     TestResult, program,
     runtime::{Managed, platform::ContextPlatform},
 };
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
 use pdma_model_contract::memory::{ContextAttributes, FunctionId, MemoryIdentity};
 pub use program::page_fault::shared_space::{Lifecycle, Outcome};
 use std::{sync::Arc, time::Duration};
@@ -23,8 +23,11 @@ pub(crate) struct Input {
 pub(crate) async fn run(input: &Input) -> TestResult<Outcome> {
     let (sender, reports) = tokio::sync::mpsc::channel(4);
     let sources = Sources::new(2);
-    let spaces: [Space; 2] = std::array::from_fn(|_| Space {
-        allocator: SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into()),
+    let [control, data] = std::array::from_fn(|_| {
+        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into(), 64 * 1024)
+    });
+    let spaces = [control?, data?].map(|allocator| Space {
+        allocator,
         pages: PageTable::default(),
     });
     let backing = [ContextAttributes::DEFAULT, input.attributes]

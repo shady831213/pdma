@@ -1,5 +1,5 @@
 use super::super::{HostInterrupts, HostVector};
-use hardware_interface_software::InterruptRuntime;
+use hw_model_swenv::InterruptRuntime;
 use pdma_model_host::{ManagementConfig, ManagementRings};
 use pdma_model_software::control::{ControlIsr, InterruptEvent};
 

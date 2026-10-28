@@ -10,8 +10,8 @@ mod hardware_lifecycle {
     mod stages;
 
     use crate::support::{TestResult, command, read_word, setup, submit};
-    use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
-    use hardware_interface_pipeline::{HardwareDriver, Operation, StepOutcome, Then};
+    use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
+    use hw_model_pipeline::{HardwareDriver, Operation, StepOutcome, Then};
     use pdma_model_contract::dma::{
         ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, ContextId, DmaAdmin,
         DmaDiscovery, Event, EventCode, EventRegisters,

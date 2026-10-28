@@ -6,11 +6,9 @@ mod command_tail;
 /// Shared raw-bus test fixtures.
 pub mod support;
 
-use hardware_interface_io::memory::SharedMemory;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_pipeline::{
-    HardwareDriver, Operation, Stage, StepOutcome, StepResult, Then,
-};
+use hw_model_io::memory::SharedMemory;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_pipeline::{HardwareDriver, Operation, Stage, StepOutcome, StepResult, Then};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, Event, EventCode, EventRaw, EventRegisters,
 };

@@ -6,9 +6,9 @@ use pdma_model_contract::dma::{
 use crate::{Dma, Error, PrepareChunk, ReadCopy, WriteCopy};
 mod collection;
 mod identity;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
-use hardware_interface_pipeline::{Operation, StepOutcome, Then};
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_pipeline::{Operation, StepOutcome, Then};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -100,7 +100,7 @@ fn wrong_report_owner_cannot_stop_or_publish_into_a_channel() -> TestResult {
 #[test]
 fn raw_error_after_consuming_flow_keeps_residency_until_tail_cleanup() -> TestResult {
     use crate::{ExecutionContext, Flow};
-    use hardware_interface_pipeline::{RunError, Stage, StepResult};
+    use hw_model_pipeline::{RunError, Stage, StepResult};
     use std::convert::Infallible;
 
     struct RawTail {

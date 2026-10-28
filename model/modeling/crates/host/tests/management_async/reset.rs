@@ -1,5 +1,5 @@
 use super::support::{Fixture, response};
-use hardware_interface_software::SoftwareEnv;
+use hw_model_swenv::SoftwareEnv;
 use pdma_model_contract::control::ControlRequestOpcode;
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::memory::FunctionId;

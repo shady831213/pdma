@@ -22,7 +22,7 @@ The follow-up keeps the behavior while changing ownership and reusable mechanics
   under `crates/scenarios/tests/firmware_managed/harness/runtime`. Native module
   paths preserve the tests without source duplication. The extra crate is removed;
   hardware components and firmware remain independent production crates.
-- `hardware-interface-irq::interrupt_wire` supplies split emission and
+- `hw-model-irq::interrupt_wire` supplies split emission and
   reception capabilities, reused by both ordinary and managed Host DMA delivery.
   This is not a new firmware communication protocol.
 - Firmware now receives management interrupts through its own `InterruptRuntime`.
@@ -201,12 +201,12 @@ From `model/modeling`:
 ```sh
 cargo test -p pdma-model-hw-components
 cargo test -p pdma-model-firmware
-cargo test -p hardware-interface-irq --test interrupt_wire
-cargo test -p hardware-interface-software --test interrupt_wire_delivery
+cargo test -p hw-model-irq --test interrupt_wire
+cargo test -p hw-model-swenv --test interrupt_wire_delivery
 cargo test -p pdma-model-scenarios --test firmware_managed
 cargo check -p pdma-model-dma --lib
 cargo tree -p pdma-model-dma --edges normal
-cargo test -p hardware-interface-software --no-default-features
+cargo test -p hw-model-swenv --no-default-features
 cargo test --workspace --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```

@@ -1,15 +1,19 @@
 use super::memory::{QueueMemory, kick};
 use super::*;
-use hardware_interface_io::memory::MemoryAccess;
-use hardware_interface_schema::{Decode, Encode};
+use hw_model_io::memory::MemoryAccess;
+use hw_model_schema::{Decode, Encode};
 use pdma_model_contract::control::{ControlRequestOpcode, ControlResponseRaw};
 use pdma_model_contract::ring::Ring;
 
 #[tokio::test]
 async fn acquisition_selects_channel_instead_of_using_ignored_request_field() {
     // Given: a Host using the wire protocol rather than the convenience API.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let memory = allocator.memory_access();
     let (system, host) = Managed::new(memory.clone()).unwrap();
     let program = client::run(host.runtime, async |interrupt| {

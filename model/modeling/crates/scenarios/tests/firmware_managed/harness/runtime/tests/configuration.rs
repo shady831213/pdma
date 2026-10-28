@@ -1,6 +1,6 @@
 use super::super::{BuildError, PlatformConfigError, platform};
 use super::Managed;
-use hardware_interface_io::memory::SharedMemory;
+use hw_model_io::memory::SharedMemory;
 use pdma_model_firmware::Configuration;
 use std::error::Error;
 
@@ -13,13 +13,13 @@ fn invalid_register_population_preserves_the_schema_cause() {
     assert!(matches!(
         error,
         BuildError::Platform(PlatformConfigError::Layout(
-            hardware_interface_schema::RegisterBankError::ZeroCount
+            hw_model_schema::RegisterBankError::ZeroCount
         ))
     ));
     let cause = error.source().unwrap().source().unwrap();
     assert_eq!(
-        cause.downcast_ref::<hardware_interface_schema::RegisterBankError>(),
-        Some(&hardware_interface_schema::RegisterBankError::ZeroCount)
+        cause.downcast_ref::<hw_model_schema::RegisterBankError>(),
+        Some(&hw_model_schema::RegisterBankError::ZeroCount)
     );
 }
 

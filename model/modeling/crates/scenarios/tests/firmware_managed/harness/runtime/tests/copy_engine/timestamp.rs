@@ -7,7 +7,9 @@ use std::{sync::Arc, time::Duration};
 #[tokio::test]
 async fn managed_timestamp_observes_copy_order_and_survives_channel_reset() {
     // Given: platform hardware and firmware; software owns its queues and all result storage.
-    let allocator = SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into());
+    let allocator =
+        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into(), 64 * 1024)
+            .expect("valid test heap");
     let (system, host) = Managed::with_channels(allocator.memory_access(), 2).unwrap();
     let program = client::run(host.runtime, async |interrupt| {
         let mut management = Management::setup(

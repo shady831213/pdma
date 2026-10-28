@@ -1,6 +1,6 @@
 //! Instance channel discovery and generated channel register storage.
 
-use hardware_interface_schema::{
+use hw_model_schema::{
     RegisterLayout,
     register::{Access, ResetKind},
 };

@@ -2,7 +2,7 @@ use super::{
     Channel, ChannelConfig, ChannelIrqMaskValues, ChannelRegisters, DmaFatalCode, Model,
     RegisterAccess, SoftwareEnv, fixture,
 };
-use hardware_interface_software::{EnvAccessError, EnvContextError};
+use hw_model_swenv::{EnvAccessError, EnvContextError};
 use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::{ChannelBlock, ChannelId};
 use pdma_model_host::DmaError;

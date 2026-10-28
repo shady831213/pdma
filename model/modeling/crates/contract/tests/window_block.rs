@@ -1,6 +1,6 @@
 //! Both software views derive from one repeated permission block.
 
-use hardware_interface_schema::Access;
+use hw_model_schema::Access;
 use pdma_model_contract::hw_components::windows::ChannelWindowRegisters;
 use pdma_model_contract::view::RegisterView;
 
@@ -31,7 +31,7 @@ fn role_views_preserve_the_complete_channel_window_geometry()
         assert_eq!(
             map.registers()
                 .iter()
-                .map(hardware_interface_schema::ResolvedRegister::offset)
+                .map(hw_model_schema::ResolvedRegister::offset)
                 .collect::<Vec<_>>(),
             offsets
         );

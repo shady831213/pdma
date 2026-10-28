@@ -1,5 +1,5 @@
 //! Transaction error ordering at trusted and Function-bound bank ingress.
-use hardware_interface_schema::RegisterAccessError;
+use hw_model_schema::RegisterAccessError;
 use pdma_model_contract::dma::{ChannelId, DmaRegisters};
 use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_contract::memory::FunctionId;

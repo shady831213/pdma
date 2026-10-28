@@ -7,8 +7,8 @@ use super::{
     TestResult, program,
     runtime::{Managed, platform::ContextPlatform},
 };
-use hardware_interface_io::memory::MemoryAddress;
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_io::memory::MemoryAddress;
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
 pub(in crate::harness) use memory::PageTable;
 pub use memory::{FaultAccess, FaultReport};
 use pdma_model_contract::memory::{ContextAttributes, FunctionId, MemoryIdentity};
@@ -40,13 +40,19 @@ pub async fn run(
 )> {
     let (reports, faults) = tokio::sync::mpsc::channel(2);
     let sources = platform::Sources::new(1);
-    let spaces: [Space; 4] = std::array::from_fn(|_| Space {
-        allocator: SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), input.base),
+    let [lists, control, source, destination] = std::array::from_fn(|_| {
+        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), input.base, 64 * 1024)
+    });
+    let spaces = [lists?, control?, source?, destination?].map(|allocator| Space {
+        allocator,
         pages: PageTable::default(),
     });
     let mut backing = backing((&spaces, input.attributes), &sources, &reports);
-    let management =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let management = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )?;
     let identity = MemoryIdentity {
         function: FunctionId::new(0),
         attributes: input.attributes[1],

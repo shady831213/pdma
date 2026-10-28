@@ -1,17 +1,17 @@
 //! End-to-end host submission and interrupt notification behavior.
 
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelFatalCode, Command, CommandHeader, CopyCommandDestinationValues,
     CopyCommandSourceValues, ErrorInfo, Event, EventCode, EventInfoValues, FenceCommand,
     LinearEndpoint, Opcode, TrapCommand, WordTarget, WordTargetWidth, WordWrite,
 };
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
-use hardware_interface_irq::InterruptSource;
-use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
-use hardware_interface_software::SoftwareEnv;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_irq::InterruptSource;
+use hw_model_pipeline::{AsyncExecutor, HardwareDriver};
+use hw_model_swenv::SoftwareEnv;
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
@@ -20,8 +20,12 @@ use std::sync::Arc;
 async fn malformed_event_is_not_consumed_before_explicit_decode_succeeds()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: hardware has published a event, then its backing bytes are corrupted.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let alignment = MemoryAlignment::try_new(8)?;
     let event_address = allocator.allocate(
         u64::try_from(Event::RECORD_SIZE)?,
@@ -86,7 +90,7 @@ async fn malformed_event_is_not_consumed_before_explicit_decode_succeeds()
     assert!(matches!(
         result,
         Err(pdma_model_host::DmaError::Codec(
-            hardware_interface_schema::SchemaCodecError::UnknownTag { observed: 255, .. }
+            hw_model_schema::SchemaCodecError::UnknownTag { observed: 255, .. }
         ))
     ));
     assert!(model.irq());
@@ -103,8 +107,12 @@ async fn malformed_event_is_not_consumed_before_explicit_decode_succeeds()
 async fn copy_fence_then_trap_exposes_completion_and_payload()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: externally allocated rings and payload memory.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let alignment = MemoryAlignment::try_new(8)?;
     let rings = Rings {
         command: RingConfig::new(
@@ -211,7 +219,7 @@ mod channel {
 }
 
 async fn until_irq(
-    model: Model<hardware_interface_io::memory::SharedMemoryAccess<(), MemoryAccessError>>,
+    model: Model<hw_model_io::memory::SharedMemoryAccess<(), MemoryAccessError>>,
     hardware: &mut pdma_model_dma::Hardware,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let executor = AsyncExecutor::new(model.clone());

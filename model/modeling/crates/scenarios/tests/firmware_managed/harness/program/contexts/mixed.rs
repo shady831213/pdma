@@ -1,7 +1,7 @@
 use super::{Spaces, TestResult, Transfer};
 use crate::harness::runtime::HostBus;
-use hardware_interface_io::memory::MemoryAccessError;
-use hardware_interface_io::memory::SharedMemoryAccess;
+use hw_model_io::memory::MemoryAccessError;
+use hw_model_io::memory::SharedMemoryAccess;
 use pdma_model_contract::control::ControlResponseStatus;
 use pdma_model_contract::dma::{ContextId, Event};
 use pdma_model_contract::memory::FunctionId;

@@ -1,4 +1,4 @@
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelId, Command, CopyCommandDestinationValues, CopyCommandSourceValues, Event,
     LinearEndpoint,
@@ -6,9 +6,7 @@ use pdma_model_contract::dma::{
 
 use super::{Ports, TestResult};
 use crate::harness::runtime::HostBus;
-use hardware_interface_io::memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
-};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess};
 use pdma_model_contract::control::{ControlQueue, ControlRequest, ControlResponse};
 use pdma_model_host::{
     Channel, ChannelConfig, Management, ManagementConfig, ManagementRings, RingConfig, Rings,

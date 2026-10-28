@@ -1,7 +1,7 @@
 //! Scoped execution of independent Function software programs.
 use super::{TestResult, program, runtime::Managed};
-use hardware_interface_io::memory::MemoryAddress;
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_io::memory::MemoryAddress;
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
 use pdma_model_contract::memory::FunctionId;
 use program::functions::{Assignment, Grant};
 use std::{sync::Arc, time::Duration};
@@ -11,8 +11,13 @@ pub(crate) async fn run_reset() -> TestResult<(program::functions::reset::Outcom
 {
     use program::functions::reset::{self, PeerSignals, ResetSignals};
     let [manager_memory, a_memory, b_memory] = std::array::from_fn(|_| {
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000))
+        SharedMemoryAllocator::new(
+            Arc::new(SharedMemory::new()),
+            MemoryAddress::new(0x1000),
+            256 * 1024,
+        )
     });
+    let [manager_memory, a_memory, b_memory] = [manager_memory?, a_memory?, b_memory?];
     let (system, mut hosts) = Managed::with_function_memory(
         vec![
             manager_memory.memory_access(),
@@ -92,16 +97,21 @@ pub(crate) async fn run_reset() -> TestResult<(program::functions::reset::Outcom
 /// Runs two IRQ-driven copy programs against one shared managed DMA.
 pub async fn run(payloads: [&[u8]; 2]) -> TestResult<[program::functions::Outcome; 2]> {
     let storage = Arc::new(SharedMemory::new());
-    let allocator = SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(0x1000));
+    let allocator =
+        SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(0x1000), 256 * 1024)?;
     run_with_memory(payloads, [allocator.clone(), allocator.clone(), allocator]).await
 }
 
 /// Gives each Function its own backing at identical DMA addresses.
 pub async fn run_isolated(payloads: [&[u8]; 2]) -> TestResult<[program::functions::Outcome; 2]> {
-    let allocators = std::array::from_fn(|_| {
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000))
+    let [manager, first, second] = std::array::from_fn(|_| {
+        SharedMemoryAllocator::new(
+            Arc::new(SharedMemory::new()),
+            MemoryAddress::new(0x1000),
+            256 * 1024,
+        )
     });
-    run_with_memory(payloads, allocators).await
+    run_with_memory(payloads, [manager?, first?, second?]).await
 }
 
 async fn run_with_memory(

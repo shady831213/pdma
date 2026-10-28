@@ -1,4 +1,4 @@
-use hardware_interface_schema::record_schema;
+use hw_model_schema::record_schema;
 
 record_schema! {
     #[description = "Extensible Host address-space attributes. Default is distinct from PASID zero. PASID is at most twenty bits and must be zero for Default."]

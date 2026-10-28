@@ -1,7 +1,7 @@
 use super::*;
 use crate::harness::runtime::{memory::SpaceError, platform::MemoryRequest};
-use hardware_interface_io::memory::AtomicReadOrder;
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::AtomicReadOrder;
+use hw_model_io::memory::MemoryAccessError;
 
 #[derive(Clone)]
 struct Tagged {

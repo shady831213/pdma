@@ -6,9 +6,9 @@ use pdma_model_contract::dma::{
 mod observed;
 
 use super::support::{TestResult, completion, configure, publish_fence, submit, word};
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
-use hardware_interface_pipeline::StepOutcome;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_pipeline::StepOutcome;
 use observed::Observed;
 use pdma_model_dma::Dma;
 use std::cell::Cell;
@@ -94,7 +94,7 @@ fn reset_at_each_interaction_boundary_preserves_only_valid_work() -> TestResult 
             // Given: A owns the shared engine and B/C are queued, at an observed interaction boundary.
             let mut device = setup()?;
             let mut hardware = device.hardware();
-            let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+            let mut operation = hw_model_pipeline::HardwareDriver::new();
             let mut ready = false;
             for _ in 0..128 {
                 assert!(matches!(

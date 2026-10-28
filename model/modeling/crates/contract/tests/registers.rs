@@ -1,6 +1,6 @@
 //! Generated nested PDMA register placement.
 
-use hardware_interface_schema::{
+use hw_model_schema::{
     RegisterLayout,
     register::{Access, ResetKind},
 };

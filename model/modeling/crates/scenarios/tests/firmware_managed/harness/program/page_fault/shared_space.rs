@@ -9,7 +9,7 @@ use crate::harness::{
         buffers::{self, Driver},
     },
 };
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::{
     control::ControlResponseStatus,
     dma::{ChannelId, Command, ContextId, Event},

@@ -1,6 +1,6 @@
 use crate::harness::runtime::AccessError;
 use crate::harness::{self, Input, TestResult};
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
 use std::sync::Arc;
 
 mod contexts;

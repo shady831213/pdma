@@ -1,8 +1,8 @@
 use super::{TestResult, configure_channel, queued_channel};
 use crate::{Completion, Dma, Error, Fetch, Flow, Retire};
-use hardware_interface_io::memory::SharedMemory;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
-use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
+use hw_model_io::memory::SharedMemory;
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_pipeline::{Operation, Stage, StepOutcome};
 use pdma_model_contract::dma::{
     ChannelId, Command, CommandHeader, Opcode, WaitCommand, WaitCommandComparison, WordTarget,
     WordTargetWidth,

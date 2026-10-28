@@ -6,9 +6,9 @@ use pdma_model_contract::dma::{
     EventRegisters, ScatterGatherEndpoint, Segment,
 };
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryAccessError, MemoryRegion, SharedMemory};
-use hardware_interface_pipeline::StepOutcome;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccessError, MemoryRegion, SharedMemory};
+use hw_model_pipeline::StepOutcome;
 use pdma_model_dma::{Dma, Hardware};
 use std::cell::RefCell;
 
@@ -70,7 +70,7 @@ struct Fixture {
     dma: Dma<ObservedMemory>,
     memory: SharedMemory,
     pipeline: Hardware,
-    operation: hardware_interface_pipeline::HardwareDriver<Hardware, Dma<ObservedMemory>>,
+    operation: hw_model_pipeline::HardwareDriver<Hardware, Dma<ObservedMemory>>,
     normal: Command,
 }
 
@@ -142,7 +142,7 @@ fn retired_copy_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
         &1_u32.to_le_bytes(),
     )?;
     let mut pipeline = dma.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     for _ in 0..256 {
         assert!(matches!(
             operation.step(&mut pipeline, &mut dma)?,

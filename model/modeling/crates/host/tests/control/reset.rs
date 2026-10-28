@@ -62,7 +62,7 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
     let mut hardware = device.hardware();
     let model = Model::new(device);
     let executor = AsyncExecutor::new(model.clone());
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     let software = async {
         let cpu = SoftwareEnv::new();
         let mut channel = cpu

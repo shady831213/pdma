@@ -1,5 +1,5 @@
 use super::*;
-use hardware_interface_pipeline::Stage;
+use hw_model_pipeline::Stage;
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_dma::{CheckRanges, CommandRequest, Fetch, PrepareChunk, ReadCopy, WriteCopy};
 

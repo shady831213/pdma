@@ -1,0 +1,5 @@
+error: field generates conflicting member `FIELD_IDENTITY`
+ --> tests/ui/fail/record_member_constant_field_identity.rs:3:42
+  |
+3 |     endian: Little, fields: { field: u8, FIELD_IDENTITY: u8 },
+  |                                          ^^^^^^^^^^^^^^

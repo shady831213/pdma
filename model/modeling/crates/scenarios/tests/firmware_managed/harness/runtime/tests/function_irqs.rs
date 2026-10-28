@@ -5,10 +5,10 @@ use pdma_model_contract::dma::{
 
 use super::super::{Driver, HostVector, ManagementBus};
 use super::{Managed, control::memory::poll_once};
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_io::register::RegisterAccess;
+use hw_model_pipeline::{AsyncExecutor, HardwareDriver};
 use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_host::{Channel, ChannelConfig, Rings};
 use pdma_model_software::{
@@ -21,7 +21,8 @@ use std::{pin::pin, sync::Arc, time::Duration};
 async fn pending_dma_notification_keeps_old_destination_after_reset_and_regrant() {
     // Given: a real DMA command whose owner has not yet started interrupt dispatch.
     let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into(), 64 * 1024)
+            .expect("valid test heap");
     let memory = allocator.memory_access();
     let (system, mut hosts) = Managed::with_functions(memory.clone(), 1, 2).unwrap();
     let new = hosts.pop().unwrap();

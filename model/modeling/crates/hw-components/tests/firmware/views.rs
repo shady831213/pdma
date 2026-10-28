@@ -1,4 +1,4 @@
-use hardware_interface_schema::Access;
+use hw_model_schema::Access;
 use pdma_model_contract::hw_components::firmware::FirmwareRegisters;
 use pdma_model_contract::view::RegisterView;
 use pdma_model_hw_components::firmware::FirmwareStatus;

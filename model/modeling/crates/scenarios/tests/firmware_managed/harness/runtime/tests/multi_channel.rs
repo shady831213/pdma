@@ -1,6 +1,6 @@
 use super::{client, control::rings, *};
-use hardware_interface_io::memory::MemoryAddress;
-use hardware_interface_io::memory::SharedMemoryAllocator;
+use hw_model_io::memory::MemoryAddress;
+use hw_model_io::memory::SharedMemoryAllocator;
 use pdma_model_contract::control::ControlResponseStatus;
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::memory::FunctionId;
@@ -10,8 +10,12 @@ use std::time::Duration;
 #[tokio::test]
 async fn outstanding_acquisitions_and_release_preserve_peer_permissions() {
     // Given: three closed channels and one trusted Host with two-slot management rings.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let (system, host) = Managed::with_channels(allocator.memory_access(), 3).unwrap();
     let program = client::run(host.runtime, async |interrupt| {
         let mut management = Management::setup(

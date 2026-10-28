@@ -1,6 +1,6 @@
 use super::super::command::CommandHeader;
 use super::WordWrite;
-use hardware_interface_schema::record_schema;
+use hw_model_schema::record_schema;
 
 record_schema! {
     #[short_description = "Complete Write command"]

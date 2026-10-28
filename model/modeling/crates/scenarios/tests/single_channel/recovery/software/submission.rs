@@ -1,5 +1,5 @@
 use super::*;
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccessError;
 
 pub(super) async fn initial<B>(
     channel: &mut Channel<B, SharedMemoryAccess<(), MemoryAccessError>>,

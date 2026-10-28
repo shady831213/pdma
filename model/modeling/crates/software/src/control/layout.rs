@@ -1,5 +1,5 @@
 use crate::ring::MemoryRingIo;
-use hardware_interface_io::memory::MemoryAddress;
+use hw_model_io::memory::MemoryAddress;
 use pdma_model_contract::control::{ControlQueue, ControlRingState};
 use pdma_model_contract::ring::RingError;
 

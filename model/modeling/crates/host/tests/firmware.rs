@@ -1,8 +1,8 @@
 //! Host boot polling outcomes.
 const FIRMWARE_STATUS_BASE: u32 = 0x4000;
 
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_software::SoftwareEnv;
+use hw_model_io::register::RegisterAccess;
+use hw_model_swenv::SoftwareEnv;
 use pdma_model_host::{Error, firmware};
 use std::{io, time::Duration};
 

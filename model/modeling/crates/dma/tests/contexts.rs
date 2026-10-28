@@ -6,8 +6,8 @@ use pdma_model_contract::dma::{
     Segment,
 };
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryAccessError, MemoryRegion, SharedMemory};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccessError, MemoryRegion, SharedMemory};
 use pdma_model_dma::Dma;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -150,7 +150,7 @@ fn identical_addresses_use_independent_ring_sg_source_and_destination_spaces() -
         dma.write(base + offset, &1_u32.to_le_bytes())?;
     }
     let mut pipeline = dma.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     // When
     for _ in 0..128 {
         let outcome = operation
@@ -158,7 +158,7 @@ fn identical_addresses_use_independent_ring_sg_source_and_destination_spaces() -
             .map_err(|e| format!("{e:?}"))?;
         assert!(!matches!(
             outcome,
-            hardware_interface_pipeline::StepOutcome::Complete(_)
+            hw_model_pipeline::StepOutcome::Complete(_)
         ));
     }
     // Then

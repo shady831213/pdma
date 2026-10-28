@@ -15,33 +15,39 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
-name = "hardware-interface-io"
+name = "hashbrown"
+version = "0.17.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
+
+[[package]]
+name = "hw-model-io"
 version = "0.1.0"
 
 [[package]]
-name = "hardware-interface-irq"
+name = "hw-model-irq"
 version = "0.1.0"
 dependencies = [
  "tokio",
 ]
 
 [[package]]
-name = "hardware-interface-pipeline"
+name = "hw-model-pipeline"
 version = "0.1.0"
 dependencies = [
  "tokio",
 ]
 
 [[package]]
-name = "hardware-interface-schema"
+name = "hw-model-schema"
 version = "0.1.0"
 dependencies = [
- "hardware-interface-schema-macros",
+ "hw-model-schema-macros",
  "trybuild",
 ]
 
 [[package]]
-name = "hardware-interface-schema-macros"
+name = "hw-model-schema-macros"
 version = "0.1.0"
 dependencies = [
  "proc-macro-crate",
@@ -51,19 +57,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "hardware-interface-software"
+name = "hw-model-swenv"
 version = "0.1.0"
 dependencies = [
- "hardware-interface-io",
- "hardware-interface-irq",
+ "hw-model-io",
+ "hw-model-irq",
  "tokio",
 ]
-
-[[package]]
-name = "hashbrown"
-version = "0.17.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "indexmap"
@@ -91,16 +91,16 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 name = "pdma-model-contract"
 version = "0.1.0"
 dependencies = [
- "hardware-interface-schema",
+ "hw-model-schema",
 ]
 
 [[package]]
 name = "pdma-model-dma"
 version = "0.1.0"
 dependencies = [
- "hardware-interface-io",
- "hardware-interface-pipeline",
- "hardware-interface-schema",
+ "hw-model-io",
+ "hw-model-pipeline",
+ "hw-model-schema",
  "pdma-model-contract",
 ]
 
@@ -108,10 +108,10 @@ dependencies = [
 name = "pdma-model-firmware"
 version = "0.1.0"
 dependencies = [
- "hardware-interface-io",
- "hardware-interface-irq",
- "hardware-interface-schema",
- "hardware-interface-software",
+ "hw-model-io",
+ "hw-model-irq",
+ "hw-model-schema",
+ "hw-model-swenv",
  "pdma-model-contract",
  "pdma-model-software",
  "tokio",
@@ -121,11 +121,11 @@ dependencies = [
 name = "pdma-model-host"
 version = "0.1.0"
 dependencies = [
- "hardware-interface-io",
- "hardware-interface-irq",
- "hardware-interface-pipeline",
- "hardware-interface-schema",
- "hardware-interface-software",
+ "hw-model-io",
+ "hw-model-irq",
+ "hw-model-pipeline",
+ "hw-model-schema",
+ "hw-model-swenv",
  "pdma-model-contract",
  "pdma-model-dma",
  "pdma-model-software",
@@ -136,9 +136,9 @@ dependencies = [
 name = "pdma-model-hw-components"
 version = "0.1.0"
 dependencies = [
- "hardware-interface-io",
- "hardware-interface-pipeline",
- "hardware-interface-schema",
+ "hw-model-io",
+ "hw-model-pipeline",
+ "hw-model-schema",
  "pdma-model-contract",
  "pdma-model-dma",
 ]
@@ -147,11 +147,11 @@ dependencies = [
 name = "pdma-model-scenarios"
 version = "0.1.0"
 dependencies = [
- "hardware-interface-io",
- "hardware-interface-irq",
- "hardware-interface-pipeline",
- "hardware-interface-schema",
- "hardware-interface-software",
+ "hw-model-io",
+ "hw-model-irq",
+ "hw-model-pipeline",
+ "hw-model-schema",
+ "hw-model-swenv",
  "pdma-model-contract",
  "pdma-model-dma",
  "pdma-model-firmware",
@@ -167,11 +167,11 @@ dependencies = [
 name = "pdma-model-software"
 version = "0.1.0"
 dependencies = [
- "hardware-interface-io",
- "hardware-interface-irq",
- "hardware-interface-pipeline",
- "hardware-interface-schema",
- "hardware-interface-software",
+ "hw-model-io",
+ "hw-model-irq",
+ "hw-model-pipeline",
+ "hw-model-schema",
+ "hw-model-swenv",
  "pdma-model-contract",
  "pdma-model-dma",
  "tokio",

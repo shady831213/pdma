@@ -60,7 +60,7 @@ fn timestamp_uses_target_context_not_ring_or_default_context() -> TestResult {
             dma.write(base + offset, &1_u32.to_le_bytes())?;
         }
         let mut hardware = dma.hardware();
-        let mut driver = hardware_interface_pipeline::HardwareDriver::new();
+        let mut driver = hw_model_pipeline::HardwareDriver::new();
         // When: Timestamp writes using the command's selector, or that selector is rejected.
         for _ in 0..128 {
             let _ = driver.step(&mut hardware, &mut dma)?;

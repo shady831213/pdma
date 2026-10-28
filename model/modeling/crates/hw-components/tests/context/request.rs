@@ -72,7 +72,7 @@ fn request_rejects_torn_or_invalid_writes_before_any_effect() {
 #[test]
 fn pending_request_cannot_be_replaced_or_have_its_binding_invalidated() {
     // Given: a published command keeps context maintenance pending.
-    let mut dma = Dma::new(hardware_interface_io::memory::SharedMemory::new(), 1).unwrap();
+    let mut dma = Dma::new(hw_model_io::memory::SharedMemory::new(), 1).unwrap();
     let windows = ChannelWindows::new(1, 0, 0x10000).unwrap();
     let mut table = ContextTable::new(2, 1, 0).unwrap();
     let valid = ContextTableRegisters::for_channels(2, 1)
@@ -134,7 +134,7 @@ fn pending_request_cannot_be_replaced_or_have_its_binding_invalidated() {
     assert_eq!(read(&mut table, valid), 1);
     dma.signal_fatal();
     let mut pipeline = dma.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     for _ in 0..8 {
         let _ = operation.step(&mut pipeline, &mut dma);
     }

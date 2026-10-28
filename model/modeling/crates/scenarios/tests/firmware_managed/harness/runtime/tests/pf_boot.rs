@@ -6,10 +6,10 @@ use crate::harness::{
     },
     runtime::{Host, HostBus, ManagementBus},
 };
-use hardware_interface_io::memory::MemoryAccessError;
-use hardware_interface_io::memory::{MemoryAddress, SharedMemoryAccess};
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
-use hardware_interface_io::register::RegisterAccess;
+use hw_model_io::memory::MemoryAccessError;
+use hw_model_io::memory::{MemoryAddress, SharedMemoryAccess};
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_io::register::RegisterAccess;
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::hw_components::control::ControlConfiguration;
 use pdma_model_contract::hw_components::control::ControlRegisters;
@@ -24,8 +24,12 @@ use tokio::sync::oneshot;
 type TestMemory = SharedMemoryAccess<(), MemoryAccessError>;
 
 fn platform() -> (Managed<TestMemory>, Host<TestMemory>, SharedMemoryAllocator) {
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let (system, mut hosts) = Managed::with_functions(allocator.memory_access(), 2, 3).unwrap();
     (system, hosts.remove(0), allocator)
 }

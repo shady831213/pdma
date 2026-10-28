@@ -119,16 +119,16 @@ backend errors. New platform error categories need no generic memory-library cha
 | `crates/host/src/firmware.rs` | Host boot polling with distinct firmware failure and software timeout outcomes. |
 | `crates/firmware/src/lib.rs` | Async boot and serial control service; resource sequencing in its native child modules. |
 | `crates/scenarios/tests/firmware_managed/harness/runtime.rs` | Managed-system assembly with native submodules for concrete transports and scoped actor execution. |
-| `crates/hardware-interface-irq/src/wire.rs` | Shared coalesced notification source with separate emission and claim capabilities. |
+| `crates/hw-model-irq/src/wire.rs` | Shared coalesced notification source with separate emission and claim capabilities. |
 | `crates/contract/src/ring.rs` | PDMA ring geometry, shared pointer rules and errors. |
 | `crates/software/src/ring.rs` | Shared PDMA software ring configuration and operations over borrowed MMIO or memory cursors. |
-| `crates/hardware-interface-software/src/notifications.rs` | Coalesced progress hints independent of interrupt dispatch. |
+| `crates/hw-model-swenv/src/notifications.rs` | Coalesced progress hints independent of interrupt dispatch. |
 | `crates/contract/src/bin/pdma-abi-header.rs` | Current C11 header generation through schema exporters. |
 | `crates/dma/src/channel.rs` | Channel registers, rings, IRQ and private accepted-work state. |
 | `crates/dma/src/channel/mmio.rs` | Generated block routing and software-write effects. |
 | `crates/dma/src/stages.rs` | One connected command admission and execution pipeline. |
 | `crates/dma/src/stages/fetch.rs` | Revalidated command acceptance into channel-owned state. |
-| `crates/hardware-interface-pipeline/src/combinators/` | Typed sequencing, gathering, arbitration and distribution. |
+| `crates/hw-model-pipeline/src/combinators/` | Typed sequencing, gathering, arbitration and distribution. |
 | `crates/dma/src/arbitration.rs` | PDMA round-robin selection policy. |
 | `crates/dma/src/stages/candidate.rs` | Non-consuming channel candidate advancement against the full DMA context. |
 | `crates/dma/src/channel/work.rs` | Local operations on retained channel work. |
@@ -146,7 +146,7 @@ backend errors. New platform error categories need no generic memory-library cha
 | `crates/host/src/runtime.rs` | PDMA transport: async context access, cooperative yielding and pending notification delivery. |
 | `crates/software/src/dma/control.rs` | Shared discovery, fatal, IRQ and register-only reset access. |
 | `crates/dma/src/reset.rs` | Reset completion after affected channel-owned work retires. |
-| `crates/hardware-interface-software/src/interrupt/runtime.rs` | Environment-bound software execution, ISR registration and dispatcher lifetime. |
+| `crates/hw-model-swenv/src/interrupt/runtime.rs` | Environment-bound software execution, ISR registration and dispatcher lifetime. |
 | `crates/scenarios/tests/single_channel/main.rs` | Test suite entry and module declarations. |
 | `crates/scenarios/tests/single_channel/cases/` | Linear, scatter/gather and fault cases, with acceptance assertions. |
 | `crates/scenarios/tests/single_channel/harness/` | Platform provisioning, fault injection and actor driving/cleanup. |

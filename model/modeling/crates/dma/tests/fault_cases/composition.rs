@@ -1,5 +1,5 @@
 use super::*;
-use hardware_interface_pipeline::{Stage, StepResult, Then};
+use hw_model_pipeline::{Stage, StepResult, Then};
 use pdma_model_dma::{CheckRanges, ExecutionContext, Payload, PrepareChunk, ReadCopy, WriteCopy};
 
 pub(super) struct InvertPayload;

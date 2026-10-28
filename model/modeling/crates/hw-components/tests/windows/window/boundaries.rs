@@ -2,7 +2,7 @@
 const WINDOW_CONTROL_BASE: u32 = 0x0010_0000;
 const WINDOW_STATUS_BASE: u32 = 0x0010_0008;
 
-use hardware_interface_schema::{RegisterAccessError, RegisterWindow};
+use hw_model_schema::{RegisterAccessError, RegisterWindow};
 use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_hw_components::windows::{AccessError, ChannelWindow, WindowConfigError};
 

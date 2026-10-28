@@ -7,10 +7,10 @@ use super::{
     },
 };
 use crate::harness::TestResult;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
-use hardware_interface_irq::InterruptHandler;
-use hardware_interface_schema::{Decode, Encode};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_irq::InterruptHandler;
+use hw_model_schema::{Decode, Encode};
 use pdma_model_contract::control::{
     ControlRequest, ControlRequestOpcode, ControlResponseRaw, ControlResponseStatus,
 };
@@ -32,8 +32,12 @@ use std::{
 #[tokio::test]
 async fn memory_publication_waits_for_request_doorbell_before_firmware_consumes() -> TestResult {
     // Given: firmware is parked after attaching empty control queues.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let memory = allocator.memory_access();
     let (system, host) = Managed::new(memory.clone())?;
     let mut running = pin!(system.run());
@@ -97,8 +101,12 @@ struct Handler {
 #[tokio::test]
 async fn spurious_request_doorbells_leave_empty_queues_and_resources_unchanged() -> TestResult {
     // Given: firmware attached to empty control queues through the real interrupt path.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let memory = allocator.memory_access();
     let (system, host) = Managed::new(memory.clone())?;
     let program = client::run(host.runtime, async |interrupt| {
@@ -151,8 +159,12 @@ impl InterruptHandler<HostIrq> for Handler {
 #[tokio::test]
 async fn response_notifications_resume_host_without_dma_interrupt_dispatch() -> TestResult {
     // Given: both vectors registered on a real Host interrupt runtime.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let memory = allocator.memory_access();
     let (system, host) = Managed::new(memory.clone())?;
     let dma = Arc::new(AtomicUsize::new(0));

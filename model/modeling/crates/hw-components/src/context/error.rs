@@ -1,7 +1,7 @@
 use core::fmt::{self, Display, Formatter};
 use std::collections::TryReserveError;
 
-use hardware_interface_schema::RegisterBankError;
+use hw_model_schema::RegisterBankError;
 
 /// Failure to construct an instance-sized context table.
 #[derive(Debug)]

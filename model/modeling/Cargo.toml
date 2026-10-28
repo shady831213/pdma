@@ -7,12 +7,12 @@ members = [
     "crates/host",
     "crates/software",
     "crates/scenarios",
-    "crates/hardware-interface-pipeline",
-    "crates/hardware-interface-software",
-    "crates/hardware-interface-io",
-    "crates/hardware-interface-irq",
-    "crates/hardware-interface-schema",
-    "crates/hardware-interface-schema-macros",
+    "crates/hw-model-pipeline",
+    "crates/hw-model-swenv",
+    "crates/hw-model-io",
+    "crates/hw-model-irq",
+    "crates/hw-model-schema",
+    "crates/hw-model-schema-macros",
 ]
 resolver = "3"
 

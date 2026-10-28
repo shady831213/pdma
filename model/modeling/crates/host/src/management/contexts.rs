@@ -1,7 +1,7 @@
 use super::{Management, ManagementRequestId};
 use crate::Error;
-use hardware_interface_io::memory::MemoryAccess;
-use hardware_interface_io::register::RegisterAccess;
+use hw_model_io::memory::MemoryAccess;
+use hw_model_io::register::RegisterAccess;
 use pdma_model_contract::control::{ControlRequest, ControlRequestOpcode};
 use pdma_model_contract::dma::ContextId;
 use pdma_model_contract::memory::{ContextAttributes, FunctionId};

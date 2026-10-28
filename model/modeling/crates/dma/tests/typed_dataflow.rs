@@ -2,8 +2,8 @@
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
-use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_pipeline::{Operation, Stage, StepOutcome};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_dma::{CheckRanges, CommandRequest, Fetch, PrepareChunk, ReadCopy, WriteCopy};
 use support::{TestResult, command, setup, submit};

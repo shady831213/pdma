@@ -1,0 +1,5 @@
+error: field generates conflicting member `FOO_OFFSET`
+ --> tests/ui/fail/generated_identifier_collision.rs:7:9
+  |
+7 |         FOO: u32,
+  |         ^^^

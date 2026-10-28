@@ -26,7 +26,7 @@ fn zero_context_capacity_is_a_context_build_error() {
         error,
         super::super::BuildError::Context(
             pdma_model_hw_components::context::ContextConfigError::Layout(
-                hardware_interface_schema::RegisterBankError::ZeroCount
+                hw_model_schema::RegisterBankError::ZeroCount
             )
         )
     ));

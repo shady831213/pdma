@@ -1,11 +1,11 @@
 //! Host decoding rejects unknown channel fault encodings.
 
-use hardware_interface_io::memory::MemoryAccessError;
-use hardware_interface_io::memory::{MemoryAddress, SharedMemoryAccess};
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_schema::RegisterCodecError;
-use hardware_interface_software::SoftwareEnv;
+use hw_model_io::memory::MemoryAccessError;
+use hw_model_io::memory::{MemoryAddress, SharedMemoryAccess};
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_io::register::RegisterAccess;
+use hw_model_schema::RegisterCodecError;
+use hw_model_swenv::SoftwareEnv;
 use pdma_model_contract::dma::ChannelRecovery;
 use pdma_model_contract::dma::ChannelRegisters;
 use pdma_model_dma::Dma;
@@ -42,8 +42,12 @@ impl RegisterAccess for CorruptFaultBus {
 #[tokio::test]
 async fn unknown_fault_is_a_codec_error() -> Result<(), Box<dyn std::error::Error>> {
     // Given: a real register transport with a corrupted fault read.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let memory = allocator.memory_access();
     let bus = CorruptFaultBus(Model::new(Dma::new(memory.clone(), 1)?));
     let rings = Rings {

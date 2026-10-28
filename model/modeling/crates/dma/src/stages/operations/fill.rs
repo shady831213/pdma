@@ -1,6 +1,6 @@
 use super::{Failure, Progress, access_failure};
 use crate::{MemoryFailure, SelectedResources};
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{EventCode, FillCommand, FillCommandWidth};
 
 pub(super) fn execute<M: MemoryAccess<SB>, SB>(

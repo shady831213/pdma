@@ -9,7 +9,7 @@ use crate::harness::{
     page_fault::{FaultReport, Input, Space},
     runtime::AccessError,
 };
-use hardware_interface_io::register::RegisterAccess;
+use hw_model_io::register::RegisterAccess;
 use pdma_model_contract::{
     dma::{ChannelBlock, ChannelId, ChannelRecovery, ChannelRegisters, ContextId},
     memory::FunctionId,

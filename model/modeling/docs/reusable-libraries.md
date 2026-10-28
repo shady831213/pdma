@@ -1,9 +1,10 @@
 # Reusable library boundaries
 
 The runtime extraction prepares independent libraries for publication while PDMA
-remains one integration consumer. Package names retain the provisional
-`hardware-interface-*` prefix. No package is published by this change; manifests
-retain `publish = false` until names, ownership and release contents are approved.
+remains one integration consumer. The libraries share the `hw-model-*` prefix;
+`hw-model-swenv` names the software execution environment, whose primary type is
+`SoftwareEnv`. No package is published by this change; manifests retain
+`publish = false` pending registry availability, ownership and release approval.
 
 ## Ownership and dependencies
 
@@ -11,7 +12,7 @@ retain `publish = false` until names, ownership and release contents are approve
 | --- | --- | --- |
 | io | Memory/register interfaces, addresses, atomics, byte backing/allocation, shared storage and observation | std |
 | irq | Source/readiness/claim/handler contracts | std; optional Tokio pending-interrupt backend |
-| software | SoftwareEnv, main/ISR execution, registry/dispatch, notifications and tracing | irq traits, io, Tokio |
+| swenv | SoftwareEnv, main/ISR execution, registry/dispatch, notifications and tracing | irq traits, io, Tokio |
 | pipeline | Stepped stages, composition and synchronous/asynchronous drivers | std |
 | schema | Layouts, codecs, register definitions and exporters | schema-macros |
 | schema-macros | Schema parsing, checking and code generation | proc-macro libraries |
@@ -48,6 +49,9 @@ atomic32/64 deliberately operate on naturally aligned little-endian words. That
 documented subset is not arbitrary atomic byte-order support. Typed helpers operate
 on byte buffers, not Rust object layout or schema codecs. The provided allocator is
 a concrete monotonic shared-store allocator; no speculative allocator trait is added.
+It manages an explicit `[base, base + size)` heap and installs backing on demand.
+Alignment padding counts against that heap; zero-length allocations reserve one
+address without backing. There is no free/reuse operation or eager heap allocation.
 
 Independent IRQ delivery requires neither SoftwareEnv nor an ISR registry. The
 former ordering requirement on every envelope's vector came from the registry's
@@ -89,7 +93,7 @@ IRQ delivery and composition. PDMA direct and managed scenarios retain behavior.
 Local package verification must build the actual archive contents without the PDMA
 workspace. Unpublished sibling dependencies may be patched to their extracted
 archives for this check; this is not proof of their availability on crates.io.
-Before upload, settle final names and owners, verify the declared minimum Rust
+Before upload, confirm registry availability and ownership, verify the declared minimum Rust
 version with that toolchain, inspect package files/licenses and publish dependencies
 in order. Repository relocation is separate from package naming/version continuity.
 Actual PCIe/MMU/RTL features and new PDMA behavior are outside this extraction.
@@ -125,6 +129,14 @@ implementation responsibilities while removing ambiguous user entry points:
 
 Old synonyms are removed rather than retained as unpublished compatibility APIs.
 The concise README recipes and first-use examples supplement the existing adverse
-validation examples. The unrelated schema generated-accessor collision for a field
-named `value`, noted during ergonomics investigation, remains outside this
-runtime-family API pass.
+validation examples. Schema publication validation now diagnoses generated-member
+collisions at the field declaration, including register `value` and `raw`. Record
+codec locals are isolated from field names, and discriminators decode before their
+tagged unions independently of wire order. The declared record name is its owned
+semantic value type; `*Values` remains the generated owned type for register maps.
+
+Pipeline branch and asynchronous execution errors implement standard `Display` and
+`Error` when their contained errors do, preserving source chains without imposing
+those bounds on application stages. Software documentation distinguishes interrupt
+claim (acceptance) from the later environment turn: cooperative shutdown finishes an
+accepted handler, whereas cancellation of scoped execution drops its futures.

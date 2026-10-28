@@ -1,6 +1,6 @@
 //! The complete software program and its persistent interrupt handler.
 
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelFatalCode, ChannelId, Command, CommandHeader, CopyCommand, Event, FenceCommand, Opcode,
     Segment, TrapCommand, WordTarget, WordTargetWidth, WordWrite,
@@ -8,13 +8,11 @@ use pdma_model_contract::dma::{
 
 mod buffers;
 
-use hardware_interface_io::memory::SharedMemoryAllocator;
-use hardware_interface_io::memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
-};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_irq::InterruptHandler;
-use hardware_interface_software::InterruptRegistration;
+use hw_model_io::memory::SharedMemoryAllocator;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess};
+use hw_model_io::register::RegisterAccess;
+use hw_model_irq::InterruptHandler;
+use hw_model_swenv::InterruptRegistration;
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as HostError, RingConfig, Rings, runtime::Irq,
 };

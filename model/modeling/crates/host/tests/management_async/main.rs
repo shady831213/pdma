@@ -7,7 +7,7 @@ mod memory_failure;
 mod reset;
 pub mod support;
 
-use hardware_interface_software::SoftwareEnv;
+use hw_model_swenv::SoftwareEnv;
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::Error;
 use pdma_model_software::ring::SoftRing;

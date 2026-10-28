@@ -1,6 +1,6 @@
 use super::memory::{PageError, Paged};
 use crate::harness::runtime::platform::MemoryRequest;
-use hardware_interface_io::memory::{BoundMemory, MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{BoundMemory, MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::{
     dma::ChannelId,
     memory::{FunctionId, MemoryIdentity},

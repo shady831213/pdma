@@ -1,15 +1,15 @@
 //! Submission continuity across modeled CPU changes.
 
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     Command, CommandRegisters, CopyCommandDestinationValues, CopyCommandSourceValues, Event,
     LinearEndpoint,
 };
 
-use hardware_interface_io::memory::{MemoryAddress, MemoryAlignment, SharedMemoryAccess};
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_software::SoftwareEnv;
+use hw_model_io::memory::{MemoryAddress, MemoryAlignment, SharedMemoryAccess};
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_io::register::RegisterAccess;
+use hw_model_swenv::SoftwareEnv;
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::{
@@ -42,8 +42,12 @@ impl RegisterAccess for DelayedBus {
 #[tokio::test]
 async fn suspended_submission_completes_on_another_cpu() -> Result<(), Box<dyn std::error::Error>> {
     // Given: a submission suspended just before publishing its producer cursor.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let rings = Rings {
         command: RingConfig::new(
             allocator

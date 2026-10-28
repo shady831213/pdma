@@ -15,7 +15,7 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use hardware_interface_schema::{Documentation, ResolvedRegisterMap};
+use hw_model_schema::{Documentation, ResolvedRegisterMap};
 use pdma_model_contract::control::{ControlRequest, ControlResponse};
 use pdma_model_contract::dma::{Command, DmaRegisters, Event, LinearEndpoint, Segment};
 use pdma_model_contract::hw_components::control::ControlRegisters;
@@ -129,7 +129,7 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
     let rust_offsets = resolved
         .registers()
         .iter()
-        .map(hardware_interface_schema::ResolvedRegister::offset)
+        .map(hw_model_schema::ResolvedRegister::offset)
         .collect::<Vec<_>>();
     assert_eq!(
         rust_offsets,
@@ -140,7 +140,7 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
         ControlRegisters::resolve()?
             .registers()
             .iter()
-            .map(hardware_interface_schema::ResolvedRegister::offset)
+            .map(hw_model_schema::ResolvedRegister::offset)
             .collect::<Vec<_>>(),
         control_offsets.map(usize::from)
     );

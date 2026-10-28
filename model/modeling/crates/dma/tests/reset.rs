@@ -6,8 +6,8 @@ use pdma_model_contract::dma::ChannelConfiguration;
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_pipeline::StepOutcome;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_pipeline::StepOutcome;
 use pdma_model_contract::dma::{
     ChannelRegisters, CommandRegisters, DmaAdmin, DmaControl, DmaDiscovery, EventRegisters,
 };
@@ -19,7 +19,7 @@ fn reset_invalidates_a_retained_copy_without_rolling_back_memory() -> TestResult
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
     let mut hardware = device.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     let mut accepted = false;
     for _ in 0..16 {
         assert!(matches!(
@@ -150,7 +150,7 @@ fn reset_copy(reset: usize) -> TestResult {
         });
     submit(&mut device, &memory, input)?;
     let mut hardware = device.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     let mut first_committed = false;
     let mut first_chunk = [0; 256];
     for _ in 0..64 {

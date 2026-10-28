@@ -1,13 +1,13 @@
 //! Host-owned concurrent management and real DMA lifecycle exercise.
 
 use super::buffers;
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccessError;
 
 use super::{Handler, HostVector, Ports, TestResult};
 use crate::harness::runtime::{AccessError, HostBus};
 use buffers::Transfer;
-use hardware_interface_io::memory::SharedMemoryAccess;
-use hardware_interface_io::register::RegisterAccess;
+use hw_model_io::memory::SharedMemoryAccess;
+use hw_model_io::register::RegisterAccess;
 use pdma_model_contract::control::ControlResponse;
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::memory::FunctionId;

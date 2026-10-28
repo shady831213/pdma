@@ -1,6 +1,6 @@
 use super::{TestResult, queued_channel};
 use crate::{CheckRanges, CopyProgress, Error, Fetch, Flow, Retire};
-use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
+use hw_model_pipeline::{Operation, Stage, StepOutcome};
 use pdma_model_contract::dma::ChannelId;
 
 fn finish<C, S: Stage<C>>(stage: &mut S, context: &mut C, input: S::Input) -> TestResult<S::Output>

@@ -9,10 +9,10 @@ publish.workspace = true
 description = "Multi-channel DMA hardware with a shared staged execution engine"
 
 [dependencies]
-hardware-interface-io = { version = "0.1.0", path = "../hardware-interface-io" }
+hw-model-io = { version = "0.1.0", path = "../hw-model-io" }
 pdma-model-contract = { path = "../contract" }
-hardware-interface-pipeline = { path = "../hardware-interface-pipeline" }
-hardware-interface-schema = { path = "../hardware-interface-schema" }
+hw-model-pipeline = { path = "../hw-model-pipeline" }
+hw-model-schema = { path = "../hw-model-schema" }
 
 [lints]
 workspace = true

@@ -1,6 +1,6 @@
 use super::ContextTable;
 use crate::windows::ChannelWindows;
-use hardware_interface_schema::{RegisterAccessError, RegisterWindow};
+use hw_model_schema::{RegisterAccessError, RegisterWindow};
 use pdma_model_contract::dma::{ChannelId, ContextId};
 use pdma_model_contract::hw_components::context::{
     ContextManagementRegisters, ContextRequestAction, ContextRequestValues, ContextResultState,

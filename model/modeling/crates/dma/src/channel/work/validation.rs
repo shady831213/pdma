@@ -1,6 +1,6 @@
 use super::{CopyState, Cursor};
 use crate::channel::{RangeCheck, Side};
-use hardware_interface_io::memory::MemoryAccess;
+use hw_model_io::memory::MemoryAccess;
 use pdma_model_contract::dma::{CopyCommand, EventCode};
 
 impl RangeCheck {

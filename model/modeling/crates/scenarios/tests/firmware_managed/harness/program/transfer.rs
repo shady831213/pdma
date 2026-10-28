@@ -1,16 +1,14 @@
 //! Software allocation, submission and interrupt-driven Fence observation.
 
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     ChannelId, Command, CommandHeader, CopyCommandDestinationValues, CopyCommandSourceValues,
     Event, LinearEndpoint, Opcode, TrapCommand,
 };
 
 use super::super::runtime::{AccessError, HostBus};
-use hardware_interface_io::memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
-};
-use hardware_interface_irq::InterruptHandler;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess};
+use hw_model_irq::InterruptHandler;
 use pdma_model_host::{Channel, ChannelConfig, DmaError, RingConfig, Rings, runtime::Irq};
 use std::sync::{
     Arc,

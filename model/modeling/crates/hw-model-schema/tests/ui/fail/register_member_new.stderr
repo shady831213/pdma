@@ -1,0 +1,5 @@
+error: field generates conflicting member `new`
+ --> tests/ui/fail/register_member_new.rs:5:15
+  |
+5 |     fields: { new: 0..=0 },
+  |               ^^^

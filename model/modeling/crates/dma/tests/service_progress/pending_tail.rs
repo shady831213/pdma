@@ -7,7 +7,7 @@ use crate::{
     PRODUCER,
     support::{TestResult, command, read_word, setup, submit},
 };
-use hardware_interface_pipeline::{Stage, StepOutcome, Then};
+use hw_model_pipeline::{Stage, StepOutcome, Then};
 use pdma_model_dma::{COPY_CHUNK_BYTES, PrepareChunk, ReadCopy, WriteCopy};
 use std::{cell::Cell, rc::Rc};
 
@@ -40,7 +40,7 @@ impl<M> Stage<pdma_model_dma::ExecutionContext<'_, M>> for Tail {
         &mut self,
         context: &mut pdma_model_dma::ExecutionContext<'_, M>,
         input: &mut Option<Self::Input>,
-    ) -> hardware_interface_pipeline::StepResult<Self::Output, Self::Error> {
+    ) -> hw_model_pipeline::StepResult<Self::Output, Self::Error> {
         if self.state.is_none() && input.is_none() {
             return Ok(StepOutcome::InProgress);
         }
@@ -62,11 +62,11 @@ impl<M> Stage<pdma_model_dma::ExecutionContext<'_, M>> for Tail {
             let mut state = self
                 .state
                 .take()
-                .ok_or(hardware_interface_pipeline::RunError::Exhausted)?;
+                .ok_or(hw_model_pipeline::RunError::Exhausted)?;
             return Ok(StepOutcome::Complete(Ok(state
                 .completion
                 .take()
-                .ok_or(hardware_interface_pipeline::RunError::Exhausted)?
+                .ok_or(hw_model_pipeline::RunError::Exhausted)?
                 .stop(error))));
         }
         self.entered.set(true);
@@ -76,7 +76,7 @@ impl<M> Stage<pdma_model_dma::ExecutionContext<'_, M>> for Tail {
                 .state
                 .take()
                 .and_then(|mut state| state.completion.take())
-                .ok_or(hardware_interface_pipeline::RunError::Exhausted)?))
+                .ok_or(hw_model_pipeline::RunError::Exhausted)?))
         } else {
             StepOutcome::InProgress
         })
@@ -126,7 +126,7 @@ fn reset_after_committed_chunk_retires_hardware_while_custom_tail_is_pending() -
         sink,
     ));
     let mut hardware = device.hardware_with(pipeline);
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     for _ in 0..256 {
         if let StepOutcome::Complete(result) = operation.step(&mut hardware, &mut device)? {
             result?;

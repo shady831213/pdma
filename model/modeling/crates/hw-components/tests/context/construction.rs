@@ -1,5 +1,5 @@
 //! Context-table construction reports its own capacity and layout failures.
-use hardware_interface_schema::RegisterBankError;
+use hw_model_schema::RegisterBankError;
 use pdma_model_contract::hw_components::context::ContextManagementRegisters;
 use pdma_model_hw_components::context::{ContextConfigError, ContextTable};
 

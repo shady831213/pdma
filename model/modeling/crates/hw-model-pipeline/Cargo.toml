@@ -1,0 +1,17 @@
+[package]
+name = "hw-model-pipeline"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+readme = "README.md"
+include = ["src/**", "tests/**", "examples/**", "README.md", "clippy.toml", "LICENSE-MIT", "LICENSE-APACHE", "Cargo.toml"]
+description = "Deterministic hardware modeling stages, composition, and execution"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tokio = { version = "1.49", default-features = false, features = ["macros", "rt"] }

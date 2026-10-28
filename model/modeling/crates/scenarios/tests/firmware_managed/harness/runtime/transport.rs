@@ -1,5 +1,5 @@
 use super::{Driver, Hardware, RoutedMemory, Shared};
-use hardware_interface_pipeline::{AsyncInteractionBackend, StepResult};
+use hw_model_pipeline::{AsyncInteractionBackend, StepResult};
 use pdma_model_contract::dma::DmaAccess;
 use pdma_model_dma::Dma;
 use std::{

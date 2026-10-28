@@ -1,5 +1,5 @@
 use super::{Command, CommandCase, CommandHeader, Opcode};
-use hardware_interface_schema::{SchemaCodec, SchemaCodecError};
+use hw_model_schema::{SchemaCodec, SchemaCodecError};
 
 impl SchemaCodec for Command {
     /// Decodes the common header and selects the complete command record.

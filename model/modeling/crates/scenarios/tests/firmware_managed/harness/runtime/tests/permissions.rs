@@ -1,6 +1,6 @@
 use super::{client, control::rings, *};
-use hardware_interface_io::memory::MemoryAddress;
-use hardware_interface_io::memory::SharedMemoryAllocator;
+use hw_model_io::memory::MemoryAddress;
+use hw_model_io::memory::SharedMemoryAllocator;
 use pdma_model_contract::dma::{ChannelAdmin, ChannelId, DmaControl, DmaDiscovery, DmaRegisters};
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::Management;
@@ -9,8 +9,12 @@ use std::time::Duration;
 #[tokio::test]
 async fn granting_data_never_exposes_global_or_channel_administration() {
     // Given: two channels behind real managed runtime permissions.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let (system, host) = Managed::with_channels(allocator.memory_access(), 2).unwrap();
     let program = client::run(host.runtime, async |interrupt| {
         let mut management = Management::setup(

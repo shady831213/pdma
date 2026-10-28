@@ -11,11 +11,11 @@ pub mod page_fault;
 pub mod transfer;
 
 use super::runtime::{AccessError, HostBus, HostIrq, HostVector};
-use hardware_interface_io::memory::MemoryAccessError;
-use hardware_interface_io::memory::SharedMemoryAllocator;
-use hardware_interface_io::memory::{MemoryAddress, SharedMemoryAccess};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_software::InterruptRegistration;
+use hw_model_io::memory::MemoryAccessError;
+use hw_model_io::memory::SharedMemoryAllocator;
+use hw_model_io::memory::{MemoryAddress, SharedMemoryAccess};
+use hw_model_io::register::RegisterAccess;
+use hw_model_swenv::InterruptRegistration;
 use interrupts::Handler;
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::firmware;

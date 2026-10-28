@@ -27,7 +27,7 @@ pub use flow::{
     Chunk, ChunkInput, CommandAdmission, CommandSnapshot, Completion, CopyProgress, FetchedCommand,
     Flow, Payload,
 };
-use hardware_interface_schema::RegisterWindow;
+use hw_model_schema::RegisterWindow;
 pub use maintenance::MaintenanceError;
 pub use memory::{ChannelContext, MemoryFailure};
 use pdma_model_contract::dma::{

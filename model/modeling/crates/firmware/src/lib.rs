@@ -6,9 +6,9 @@ mod control;
 pub use configuration::Configuration;
 pub use control::main;
 
-use hardware_interface_io::memory::MemoryAccessError;
-use hardware_interface_schema::{RegisterCodecError, SchemaCodecError};
-use hardware_interface_software::InterruptRegistrationError;
+use hw_model_io::memory::MemoryAccessError;
+use hw_model_schema::{RegisterCodecError, SchemaCodecError};
+use hw_model_swenv::InterruptRegistrationError;
 use pdma_model_contract::ring::RingError;
 use std::{error, fmt};
 

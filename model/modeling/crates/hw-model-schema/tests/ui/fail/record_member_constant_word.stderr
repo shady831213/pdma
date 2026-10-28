@@ -1,0 +1,5 @@
+error: field generates conflicting member `WORD0_OFFSET`
+ --> tests/ui/fail/record_member_constant_word.rs:6:9
+  |
+6 |         WORD0_OFFSET: u8,
+  |         ^^^^^^^^^^^^

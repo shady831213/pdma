@@ -8,9 +8,9 @@ use pdma_model_contract::dma::{
 /// Shared raw-bus fixtures and single-command assembly.
 pub mod support;
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryAccessError, MemoryRegion, MemoryRegionError};
-use hardware_interface_pipeline::{Stage, StepOutcome};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccessError, MemoryRegion, MemoryRegionError};
+use hw_model_pipeline::{Stage, StepOutcome};
 use pdma_model_dma::Dma;
 use std::{cell::RefCell, ops::Range};
 
@@ -196,7 +196,7 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
             StepOutcome::InProgress => {}
             StepOutcome::Complete(result) => {
                 assert_eq!(
-                    hardware_interface_pipeline::Operation::new(vec![(0, result?)])
+                    hw_model_pipeline::Operation::new(vec![(0, result?)])
                         .step(&mut pdma_model_dma::Retire, &mut device)?,
                     StepOutcome::Complete(Ok(()))
                 );

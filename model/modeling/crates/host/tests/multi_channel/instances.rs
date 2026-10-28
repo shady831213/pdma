@@ -2,7 +2,7 @@ use super::{
     Arc, AtomicUsize, COUNT, Channel, ChannelId, Dma, Error, Model, Ordering, RegisterAccess,
     SharedMemoryAccess, SoftwareEnv, TestResult, allocator, config,
 };
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccessError;
 
 struct CountWrites {
     model: Model<SharedMemoryAccess<(), MemoryAccessError>>,
@@ -25,7 +25,7 @@ impl RegisterAccess for CountWrites {
 #[tokio::test]
 async fn setup_uses_each_instances_discovered_channel_range() -> TestResult {
     // Given: one software CPU can reach independent one-channel and five-channel devices.
-    let allocator = allocator();
+    let allocator = allocator()?;
     let memory = allocator.memory_access();
     let instances = [
         (1, Model::new(Dma::new(memory.clone(), 1)?)),
@@ -71,7 +71,7 @@ async fn setup_uses_each_instances_discovered_channel_range() -> TestResult {
 #[tokio::test]
 async fn instance_channel_counts_survive_channel_and_device_resets() -> TestResult {
     // Given: differently sized devices are both visible to one software program.
-    let allocator = allocator();
+    let allocator = allocator()?;
     let memory = allocator.memory_access();
     let instances = [
         (1, Model::new(Dma::new(memory.clone(), 1)?)),

@@ -1,15 +1,13 @@
 //! Management bootstrap publishes shared state before its first doorbell.
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccessError;
 use pdma_model_contract::hw_components::control::ControlConfiguration;
 const CONTROL_CHANNEL_BASE: u32 = 0x3000;
 
-use hardware_interface_io::memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
-};
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_schema::Decode;
-use hardware_interface_software::SoftwareEnv;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess};
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_io::register::RegisterAccess;
+use hw_model_schema::Decode;
+use hw_model_swenv::SoftwareEnv;
 use pdma_model_contract::control::{ControlQueue, ControlQueueRaw};
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_contract::memory::FunctionId;
@@ -64,7 +62,8 @@ impl RegisterAccess for &Bus {
 async fn descriptor_is_in_memory_before_bootstrap_enable_and_request_doorbell() {
     // Given: software allocated the queue descriptor and entry buffers.
     let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into(), 64 * 1024)
+            .expect("valid test heap");
     let state = allocator
         .allocate(
             ControlQueue::RECORD_SIZE as u64,
@@ -131,7 +130,8 @@ async fn descriptor_is_in_memory_before_bootstrap_enable_and_request_doorbell() 
 async fn repeated_setup_cannot_reinitialize_live_shared_cursors() {
     // Given: an enabled control queue with existing shared state.
     let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into(), 64 * 1024)
+            .expect("valid test heap");
     let state = allocator
         .allocate(
             ControlQueue::RECORD_SIZE as u64,
@@ -192,7 +192,9 @@ async fn nonempty_or_invalid_control_cursors_reject_a_new_request()
     use pdma_model_contract::control::ControlRingState;
     use pdma_model_host::Error;
     // Given: initialized cursors with unmapped entry storage and no outstanding request.
-    let allocator = SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into());
+    let allocator =
+        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into(), 64 * 1024)
+            .expect("valid test heap");
     let state = allocator.allocate(
         u64::try_from(ControlQueue::RECORD_SIZE)?,
         MemoryAlignment::try_new(8)?,

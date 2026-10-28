@@ -1,9 +1,9 @@
-error[E0432]: unresolved imports `hardware_interface_schema::Ring`, `hardware_interface_schema::RingConfig`, `hardware_interface_schema::RingError`, `hardware_interface_schema::RingPointers`
- --> tests/architecture/schema_ring.rs:1:33
+error[E0432]: unresolved imports `hw_model_schema::Ring`, `hw_model_schema::RingConfig`, `hw_model_schema::RingError`, `hw_model_schema::RingPointers`
+ --> tests/architecture/schema_ring.rs:1:23
   |
-1 | use hardware_interface_schema::{Ring, RingConfig, RingError, RingPointers};
-  |                                 ^^^^  ^^^^^^^^^^  ^^^^^^^^^  ^^^^^^^^^^^^ no `RingPointers` in the root
-  |                                 |     |           |
-  |                                 |     |           no `RingError` in the root
-  |                                 |     no `RingConfig` in the root
-  |                                 no `Ring` in the root
+1 | use hw_model_schema::{Ring, RingConfig, RingError, RingPointers};
+  |                       ^^^^  ^^^^^^^^^^  ^^^^^^^^^  ^^^^^^^^^^^^ no `RingPointers` in the root
+  |                       |     |           |
+  |                       |     |           no `RingError` in the root
+  |                       |     no `RingConfig` in the root
+  |                       no `Ring` in the root

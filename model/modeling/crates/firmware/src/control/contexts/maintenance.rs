@@ -1,6 +1,6 @@
 use super::{Contexts, Monitor};
 use crate::Error;
-use hardware_interface_io::register::RegisterAccess;
+use hw_model_io::register::RegisterAccess;
 use pdma_model_contract::control::{
     ControlRequest, ControlRequestOpcode, ControlResponse, ControlResponseStatus,
 };

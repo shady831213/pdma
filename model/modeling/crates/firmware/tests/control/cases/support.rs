@@ -1,11 +1,11 @@
 use pdma_model_contract::hw_components::control::ControlConfiguration;
 pub(super) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_irq::{InterruptEmitter, InterruptReceiver, interrupt_wire};
-use hardware_interface_schema::{Decode, Encode};
-use hardware_interface_software::{EnvAccessError, InterruptRuntime, SoftwareEnv};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_io::register::RegisterAccess;
+use hw_model_irq::{InterruptEmitter, InterruptReceiver, interrupt_wire};
+use hw_model_schema::{Decode, Encode};
+use hw_model_swenv::{EnvAccessError, InterruptRuntime, SoftwareEnv};
 use pdma_model_contract::control::{
     ControlQueue, ControlRequest, ControlResponse, ControlResponseRaw, ControlRingState,
 };

@@ -1,6 +1,6 @@
 use super::{ChannelControl, Error};
 use crate::ring::{RegisterRingIo, RingCursorRegisters};
-use hardware_interface_io::register::RegisterAccess;
+use hw_model_io::register::RegisterAccess;
 use pdma_model_contract::dma::ChannelId;
 
 #[derive(Debug)]

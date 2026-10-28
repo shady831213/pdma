@@ -1,5 +1,5 @@
 use crate::{Channel, Dma, Error, Work};
-use hardware_interface_io::memory::BoundMemory;
+use hw_model_io::memory::BoundMemory;
 use pdma_model_contract::dma::{ChannelId, ContextId, DmaAccess};
 
 /// Borrowed channel execution resources with owner lifecycle observation.
@@ -197,7 +197,7 @@ impl<M, S> SelectedResources<'_, M, S> {
     }
 }
 
-impl<M: hardware_interface_io::memory::MemoryAccess<S>, S> SelectedResources<'_, M, S> {
+impl<M: hw_model_io::memory::MemoryAccess<S>, S> SelectedResources<'_, M, S> {
     pub(crate) fn report(&mut self, event: &pdma_model_contract::dma::Event) -> Error {
         if let Err(error) = self.lifecycle() {
             return error;

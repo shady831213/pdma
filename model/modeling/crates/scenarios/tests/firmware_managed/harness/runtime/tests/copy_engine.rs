@@ -2,9 +2,9 @@ mod program;
 mod timestamp;
 
 use super::{Managed, client, control::rings};
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
-use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
-use hardware_interface_software::{InterruptRuntime, SoftwareEnv};
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_pipeline::{AsyncExecutor, HardwareDriver};
+use hw_model_swenv::{InterruptRuntime, SoftwareEnv};
 use pdma_model_contract::{
     dma::{CapabilitiesValues, ChannelId, EventCode},
     memory::FunctionId,
@@ -42,7 +42,9 @@ fn verify(outcome: &Outcome, supported: bool) {
 async fn direct_commands_release_wait_for_peer_and_publish_fence() -> TestResult {
     for (supported, semaphore_first) in [(false, false), (false, true), (true, false)] {
         // Given: two channels and software-owned storage with selected atomic capabilities.
-        let allocator = SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into());
+        let allocator =
+            SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into(), 64 * 1024)
+                .expect("valid test heap");
         let dma = Dma::with_config(
             allocator.memory_access(),
             DmaConfig {
@@ -76,7 +78,9 @@ async fn direct_commands_release_wait_for_peer_and_publish_fence() -> TestResult
 async fn managed_commands_preserve_firmware_grants_and_atomic_capabilities() {
     for (supported, semaphore_first) in [(false, false), (false, true), (true, false)] {
         // Given: firmware-managed channels and a PF-owned control service.
-        let allocator = SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into());
+        let allocator =
+            SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into(), 64 * 1024)
+                .expect("valid test heap");
         let (system, host) = Managed::with_dma_config(
             allocator.memory_access(),
             DmaConfig {
@@ -129,7 +133,9 @@ async fn managed_commands_preserve_firmware_grants_and_atomic_capabilities() {
 #[tokio::test]
 async fn reset_retires_wait_without_publishing_cancelled_fence() -> TestResult {
     // Given: a retained false Wait, a queued Fence and an independent peer.
-    let allocator = SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into());
+    let allocator =
+        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into(), 64 * 1024)
+            .expect("valid test heap");
     let dma = Dma::new(allocator.memory_access(), 2)?;
     let mut hardware = dma.hardware();
     let model = Model::new(dma);

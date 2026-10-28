@@ -1,6 +1,6 @@
 use super::Channel;
 use crate::Error;
-use hardware_interface_schema::{RegisterAccessError, register_dispatch};
+use hw_model_schema::{RegisterAccessError, register_dispatch};
 use pdma_model_contract::dma::{
     ChannelIrqCauseValues, FaultStatusValues, ResetValues, ResumeValues, TrapAckValues,
 };

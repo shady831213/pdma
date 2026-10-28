@@ -8,9 +8,9 @@ use pdma_model_contract::dma::{
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_io::memory::SharedMemory;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
-use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
+use hw_model_io::memory::SharedMemory;
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_pipeline::{Operation, Stage, StepOutcome};
 use pdma_model_dma::{CheckRanges, CommandAdmission, CommandRequest, Dma, Error, Fetch, Retire};
 use support::TestResult;
 

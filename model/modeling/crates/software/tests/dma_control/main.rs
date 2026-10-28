@@ -2,8 +2,8 @@
 
 pub mod support;
 
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_software::SoftwareEnv;
+use hw_model_io::register::RegisterAccess;
+use hw_model_swenv::SoftwareEnv;
 use pdma_model_contract::dma::ChannelId;
 use std::{
     future::{Future, poll_fn},

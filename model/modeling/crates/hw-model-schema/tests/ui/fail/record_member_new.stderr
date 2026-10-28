@@ -1,0 +1,5 @@
+error: field generates conflicting member `new`
+ --> tests/ui/fail/record_member_new.rs:3:31
+  |
+3 |     endian: Little, fields: { new: u8 },
+  |                               ^^^

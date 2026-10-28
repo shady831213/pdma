@@ -1,5 +1,5 @@
 //! Single-window ownership against real downstream register storage.
-use hardware_interface_schema::{RegisterAccessError, RegisterWindow, register_map};
+use hw_model_schema::{RegisterAccessError, RegisterWindow, register_map};
 use pdma_model_contract::hw_components::windows::{ChannelWindowBlock, WindowControl};
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_contract::register::Word;

@@ -1,0 +1,5 @@
+error: field generates conflicting member `raw`
+ --> tests/ui/fail/bits_member_raw.rs:2:40
+  |
+2 | bits_schema! { pub bits Conflict(u8) { raw: 0..=0 } }
+  |                                        ^^^

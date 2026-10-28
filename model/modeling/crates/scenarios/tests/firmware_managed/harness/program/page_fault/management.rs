@@ -1,6 +1,6 @@
 use super::{Grant, Handler, HostVector, Ports, TestResult};
 use crate::harness::{program::buffers, runtime::AccessError};
-use hardware_interface_io::register::RegisterAccess;
+use hw_model_io::register::RegisterAccess;
 use pdma_model_contract::dma::ChannelRecovery;
 use pdma_model_contract::{
     control::ControlResponseStatus,

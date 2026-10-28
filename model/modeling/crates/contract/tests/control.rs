@@ -136,10 +136,7 @@ fn register_composition_has_bootstrap_enable_and_dual_doorbells() {
         24
     );
     assert_eq!(ControlRegisters::EXTENT, 36);
-    assert_eq!(
-        Doorbell::SPEC.access(),
-        hardware_interface_schema::Access::WriteOnly
-    );
+    assert_eq!(Doorbell::SPEC.access(), hw_model_schema::Access::WriteOnly);
     assert_eq!(Doorbell::SPEC.writable_mask(), 1);
 }
 

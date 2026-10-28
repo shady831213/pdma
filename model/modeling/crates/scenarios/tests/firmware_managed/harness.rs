@@ -9,9 +9,9 @@ pub mod page_fault;
 pub mod program;
 pub mod runtime;
 
-use hardware_interface_io::memory::MemoryAddress;
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
-use hardware_interface_software::InterruptSummary;
+use hw_model_io::memory::MemoryAddress;
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_swenv::InterruptSummary;
 use runtime::Managed;
 use std::{error::Error, io, sync::Arc};
 
@@ -38,7 +38,8 @@ pub async fn run_at(
     addresses: pdma_model_software::control::ManagementAddresses,
 ) -> TestResult<Report> {
     let storage = Arc::new(SharedMemory::new());
-    let allocator = SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(0x1000));
+    let allocator =
+        SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(0x1000), 64 * 1024)?;
     let memory = allocator.memory_access();
     let (system, host) = Managed::with_addresses(memory.clone(), 1, addresses)?;
     let execution = Box::pin(host.runtime.run_main(async |interrupts| {

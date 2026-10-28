@@ -1,7 +1,7 @@
 use super::support::{TestResult, completion, configure, submit, word};
-use hardware_interface_io::memory::MemoryAlignment;
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
-use hardware_interface_pipeline::StepOutcome;
+use hw_model_io::memory::MemoryAlignment;
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_pipeline::StepOutcome;
 use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, EventRegisters,
@@ -38,7 +38,7 @@ fn reselect_before_fetch(reset: bool) -> TestResult {
         let third = third.ok_or("third channel")?;
         let consumer = ChannelBlock::COMMAND.offset() + CommandRegisters::CONSUMER.offset();
         let mut engine = device.hardware();
-        let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+        let mut operation = hw_model_pipeline::HardwareDriver::new();
         for _ in 0..prefix {
             assert!(matches!(
                 operation.step(&mut engine, &mut device)?,
@@ -102,7 +102,7 @@ fn reset_and_reconfigure_before_acceptance_uses_the_new_command_generation() -> 
             + ChannelBlock::COMMAND.offset()
             + CommandRegisters::CONSUMER.offset();
         let mut hardware = device.hardware();
-        let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+        let mut operation = hw_model_pipeline::HardwareDriver::new();
         for _ in 0..prefix {
             assert!(matches!(
                 operation.step(&mut hardware, &mut device)?,

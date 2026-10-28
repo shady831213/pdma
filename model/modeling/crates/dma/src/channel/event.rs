@@ -1,6 +1,6 @@
 use crate::{ChannelFatal, Error};
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_schema::{Encode, RegisterAccessError, RegisterWindow};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_schema::{Encode, RegisterAccessError, RegisterWindow};
 use pdma_model_contract::dma::{Event, EventRegisters};
 use pdma_model_contract::register::ReadWordValues;
 use pdma_model_contract::ring::{Ring, RingPointers};

@@ -5,7 +5,7 @@ mod ownership;
 const WINDOW_CONTROL_BASE: u32 = 0x0010_0000;
 const WINDOW_STATUS_BASE: u32 = 0x0010_0008;
 
-use hardware_interface_schema::{RegisterAccessError, RegisterWindow, register_map};
+use hw_model_schema::{RegisterAccessError, RegisterWindow, register_map};
 use pdma_model_contract::register::Word;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;

@@ -1,7 +1,5 @@
 use core::ops::Range;
-use hardware_interface_schema::{
-    RegisterAccessError, RegisterBank, RegisterShape, StaticRegisterLayout,
-};
+use hw_model_schema::{RegisterAccessError, RegisterBank, RegisterShape, StaticRegisterLayout};
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, DmaDiscovery, DmaRegisters};
 use pdma_model_contract::hw_components::windows::{ChannelWindowBlock, ChannelWindowRegisters};
 use pdma_model_contract::memory::FunctionId;

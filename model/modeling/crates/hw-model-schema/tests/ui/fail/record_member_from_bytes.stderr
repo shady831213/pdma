@@ -1,0 +1,5 @@
+error: field generates conflicting member `from_bytes`
+ --> tests/ui/fail/record_member_from_bytes.rs:3:31
+  |
+3 |     endian: Little, fields: { from_bytes: u8 },
+  |                               ^^^^^^^^^^

@@ -1,5 +1,5 @@
 use super::{ChannelControl, Error};
-use hardware_interface_io::register::RegisterAccess;
+use hw_model_io::register::RegisterAccess;
 
 impl ChannelControl {
     pub(super) async fn channel_read_word<B: RegisterAccess + Sync>(

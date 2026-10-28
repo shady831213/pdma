@@ -1,7 +1,7 @@
 use super::*;
 use crate::Dma;
-use hardware_interface_io::memory::{MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_io::memory::{MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
 use pdma_model_contract::dma::ChannelInterrupts;
 use pdma_model_contract::dma::{ChannelRegisters, EventRegisters};
 use pdma_model_contract::dma::{ErrorInfo, EventInfoValues};

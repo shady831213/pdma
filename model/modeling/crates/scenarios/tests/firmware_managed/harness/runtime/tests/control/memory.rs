@@ -1,12 +1,10 @@
 use super::super::AccessError;
 use crate::harness::TestResult;
 use crate::harness::runtime::platform::CONTROL_CHANNEL_BASE;
-use hardware_interface_io::memory::MemoryAccessError;
-use hardware_interface_io::memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
-};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_schema::Decode;
+use hw_model_io::memory::MemoryAccessError;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess};
+use hw_model_io::register::RegisterAccess;
+use hw_model_schema::Decode;
 use pdma_model_contract::control::{ControlQueue, ControlQueueRaw, ControlRingState};
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use std::{

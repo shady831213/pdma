@@ -1,13 +1,15 @@
 use super::*;
 use crate::harness::page_fault::platform::Sources;
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::memory::{ContextAttributes, FunctionId};
 
 #[test]
 fn same_space_channel_tags_preserve_origins_for_duplicate_reports() {
     // Given: two channel requests touch the same missing page in the same address space.
-    let allocator = SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into());
+    let allocator =
+        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into(), 64 * 1024)
+            .expect("valid test heap");
     let address = allocator.allocate(4, MemoryAlignment::ONE).unwrap();
     let (reports, mut receiver) = mpsc::channel(3);
     let sources = Sources::new(2);
@@ -49,10 +51,12 @@ fn same_space_channel_tags_preserve_origins_for_duplicate_reports() {
 
 #[test]
 fn platform_write_fault_reports_identity_without_committing_bytes() {
-    use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+    use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
     use pdma_model_contract::memory::{ContextAttributes, FunctionId};
     // Given: one missing page backed by initialized storage and an independent fault receiver.
-    let allocator = SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into());
+    let allocator =
+        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into(), 64 * 1024)
+            .expect("valid test heap");
     let address = allocator.allocate(4, MemoryAlignment::ONE).unwrap();
     let (reports, mut receiver) = mpsc::channel(1);
     let sources = Sources::new(1);

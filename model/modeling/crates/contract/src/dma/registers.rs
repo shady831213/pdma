@@ -24,7 +24,7 @@ pub use channel::{
 };
 
 use crate::register::Switch;
-use hardware_interface_schema::{register_map, register_schema};
+use hw_model_schema::{register_map, register_schema};
 
 register_schema! {
     #[short_description = "Hardware channel count"]

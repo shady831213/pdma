@@ -1,7 +1,7 @@
 use crate::Error;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_schema::Decode;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::register::RegisterAccess;
+use hw_model_schema::Decode;
 use pdma_model_contract::hw_components::control::ControlNotificationRegisters;
 use pdma_model_contract::{
     control::{ControlEvent, ControlQueue, ControlResponseStatus, ControlRingStateRaw},

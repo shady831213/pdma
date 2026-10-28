@@ -1,7 +1,7 @@
 use crate::{CursorBus, Item};
-use hardware_interface_io::memory::MemoryAlignment;
-use hardware_interface_io::memory::MemoryRegion;
-use hardware_interface_software::SoftwareEnv;
+use hw_model_io::memory::MemoryAlignment;
+use hw_model_io::memory::MemoryRegion;
+use hw_model_swenv::SoftwareEnv;
 use pdma_model_software::ring::{
     RegisterRingIo, RingConfig, RingCursorRegisters, SoftRing, SoftRingIo,
 };

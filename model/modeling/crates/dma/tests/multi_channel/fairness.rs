@@ -4,9 +4,9 @@ use pdma_model_contract::dma::{
 };
 
 use super::support::{TestResult, completion, configure, submit, word};
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
-use hardware_interface_pipeline::StepOutcome;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_pipeline::StepOutcome;
 use pdma_model_dma::Dma;
 
 #[test]
@@ -44,7 +44,7 @@ fn stopped_or_fatal_channel_does_not_stall_peers() -> TestResult {
         }
         // When: the sustained graph visits all channels while A remains stopped.
         let mut hardware = device.hardware();
-        let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+        let mut operation = hw_model_pipeline::HardwareDriver::new();
         for _ in 0..512 {
             assert!(matches!(
                 operation.step(&mut hardware, &mut device)?,
@@ -113,7 +113,7 @@ fn stop_channel(device: &mut Dma<SharedMemory>, base: usize) -> TestResult {
         &1_u32.to_le_bytes(),
     )?;
     let mut hardware = device.hardware();
-    let mut operation = hardware_interface_pipeline::Operation::new(());
+    let mut operation = hw_model_pipeline::Operation::new(());
     let mut finished = false;
     for _ in 0..128 {
         if let StepOutcome::Complete(result) = operation.step(&mut hardware, device)? {
@@ -126,7 +126,7 @@ fn stop_channel(device: &mut Dma<SharedMemory>, base: usize) -> TestResult {
                 finished = true;
                 break;
             }
-            operation = hardware_interface_pipeline::Operation::new(());
+            operation = hw_model_pipeline::Operation::new(());
         }
     }
     assert!(finished);

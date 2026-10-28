@@ -1,5 +1,5 @@
 use super::*;
-use hardware_interface_pipeline::{RunError, Stage, StepResult};
+use hw_model_pipeline::{RunError, Stage, StepResult};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_dma::{ChunkInput, Error, ExecutionContext, Pipeline};
 
@@ -25,7 +25,7 @@ impl Stage<ExecutionContext<'_, Paged>> for PeerFailure {
             self.raw_error = false;
             return Ok(StepOutcome::Complete(Ok(input
                 .take()
-                .ok_or(hardware_interface_pipeline::RunError::Exhausted)?
+                .ok_or(hw_model_pipeline::RunError::Exhausted)?
                 .stop(Error::Reset))));
         }
         if input
@@ -38,7 +38,7 @@ impl Stage<ExecutionContext<'_, Paged>> for PeerFailure {
             } else {
                 Ok(StepOutcome::Complete(Ok(input
                     .take()
-                    .ok_or(hardware_interface_pipeline::RunError::Exhausted)?
+                    .ok_or(hw_model_pipeline::RunError::Exhausted)?
                     .stop(Error::Routing))))
             }
         } else {
@@ -99,7 +99,7 @@ fn peer_pipeline_termination_preserves_parked_hardware_until_reset() -> TestResu
             assert!(state.is_complete());
         }
         let mut cleanup = device.hardware();
-        let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+        let mut operation = hw_model_pipeline::HardwareDriver::new();
         for _ in 0..128 {
             let _ = operation.step(&mut cleanup, &mut device)?;
         }

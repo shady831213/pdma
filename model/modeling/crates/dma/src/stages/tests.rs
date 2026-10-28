@@ -5,11 +5,11 @@ use pdma_model_contract::dma::{
 };
 
 use crate::Dma;
-use hardware_interface_pipeline::StepOutcome;
+use hw_model_pipeline::StepOutcome;
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
-use hardware_interface_pipeline::Operation;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_pipeline::Operation;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -17,7 +17,7 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 fn accepted_datapath_cannot_short_circuit_retirement_with_domain_errors() {
     fn assert_boundary<S>()
     where
-        for<'a> S: hardware_interface_pipeline::Stage<
+        for<'a> S: hw_model_pipeline::Stage<
                 crate::ExecutionContext<'a, SharedMemory>,
                 Input = crate::Flow<crate::ChunkInput>,
                 Output = crate::Flow<crate::Completion>,

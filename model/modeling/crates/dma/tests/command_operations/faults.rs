@@ -1,6 +1,6 @@
 use super::support::{CAUSE, EVENT_PRODUCER, Rig, TestResult, fence, target};
-use hardware_interface_io::memory::SharedMemory;
-use hardware_interface_io::memory::{
+use hw_model_io::memory::SharedMemory;
+use hw_model_io::memory::{
     AtomicAccessError, AtomicOperation, MemoryAccess, MemoryAddress, MemoryAlignment,
 };
 use pdma_model_contract::dma::{

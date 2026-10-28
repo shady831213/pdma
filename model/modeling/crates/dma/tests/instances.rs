@@ -1,8 +1,8 @@
 //! Instance sizing and quiescent shared hardware driving.
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryAccessError, SharedMemory};
-use hardware_interface_pipeline::{HardwareDriver, StepOutcome};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccessError, SharedMemory};
+use hw_model_pipeline::{HardwareDriver, StepOutcome};
 use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, EventRegisters,

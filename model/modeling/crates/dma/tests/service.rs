@@ -7,8 +7,8 @@ mod service {
     mod retained;
 }
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_pipeline::StepOutcome;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_pipeline::StepOutcome;
 use pdma_model_contract::dma::{ChannelBlock, ChannelRegisters, CommandRegisters, EventRegisters};
 use pdma_model_dma::Error;
 use support::{TestResult, chunk_pipeline, command, read_word, setup, submit};
@@ -36,7 +36,7 @@ fn custom_service_publishes_completion() -> TestResult {
     submit(&mut device, &memory, command())?;
     let pipeline = chunk_pipeline();
     let mut hardware = device.hardware_with(pipeline);
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     // When: the custom command is driven to its terminal boundary.
     let mut completed = false;
     for _ in 0..128 {
@@ -77,7 +77,7 @@ fn custom_pipeline_retires_reset_work_before_accepting_new_work() -> TestResult 
     submit(&mut device, &memory, command())?;
     let pipeline = chunk_pipeline();
     let mut hardware = device.hardware_with(pipeline);
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     for _ in 0..32 {
         let _ = operation.step(&mut hardware, &mut device)?;
         if read_word(&mut device, CONSUMER)? == 1 {

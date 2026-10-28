@@ -1,5 +1,5 @@
 //! Complete command enums compose through the same codec boundary as records.
-use hardware_interface_schema::{SchemaCodecError, record_schema, union_schema};
+use hw_model_schema::{SchemaCodecError, record_schema, union_schema};
 use pdma_model_contract::dma::{Command, CommandHeader, Opcode, TrapCommand};
 
 record_schema! {

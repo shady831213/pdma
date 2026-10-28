@@ -6,7 +6,7 @@ use pdma_model_contract::dma::ChannelConfiguration;
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{Operation, Stage, StepOutcome, StepResult, Then};
+use hw_model_pipeline::{Operation, Stage, StepOutcome, StepResult, Then};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, DmaControl, DmaRegisters,
     EventRegisters,
@@ -99,7 +99,7 @@ fn reset_waits_for_the_resident_tail_after_event_publication() -> TestResult {
     let pipeline = Then::new(chunk, CommandExit);
     let mut hardware = device.hardware_with(pipeline);
     let command = &mut hardware;
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     let producer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
         + ChannelBlock::EVENT.offset()
         + EventRegisters::PRODUCER.offset();
@@ -163,7 +163,7 @@ fn reset_stays_busy_until_the_accepted_invocation_retires() -> TestResult {
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
     let mut hardware = device.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     let consumer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
         + ChannelBlock::COMMAND.offset()
         + CommandRegisters::CONSUMER.offset();
@@ -201,7 +201,7 @@ fn repeated_and_zero_requests_do_not_cancel_or_complete_reset() -> TestResult {
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
     let mut hardware = device.hardware();
-    let mut driver = hardware_interface_pipeline::HardwareDriver::new();
+    let mut driver = hw_model_pipeline::HardwareDriver::new();
     let consumer = ChannelBlock::ALIGNMENT
         + ChannelBlock::COMMAND.offset()
         + CommandRegisters::CONSUMER.offset();

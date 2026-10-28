@@ -27,9 +27,9 @@ async fn software_allocation_failure_stops_interrupt_runtime() -> TestResult {
     // Then: its allocation error returns without installing memory or delivering an IRQ.
     assert!(matches!(
         report.program.as_ref().err().and_then(|error| {
-            error.downcast_ref::<hardware_interface_io::memory::MemoryAllocationError>()
+            error.downcast_ref::<hw_model_io::memory::MemoryAllocationError>()
         }),
-        Some(hardware_interface_io::memory::MemoryAllocationError::AddressExhausted)
+        Some(hw_model_io::memory::MemoryAllocationError::AddressExhausted)
     ));
     assert!(report.storage.regions()?.is_empty());
     assert!(report.worker.is_cancelled());

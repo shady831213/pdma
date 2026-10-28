@@ -9,8 +9,8 @@ publish.workspace = true
 description = "PDMA access windows, contexts and management interface hardware"
 
 [dependencies]
-hardware-interface-io = { version = "0.1.0", path = "../hardware-interface-io" }
-hardware-interface-schema = { path = "../hardware-interface-schema" }
+hw-model-io = { version = "0.1.0", path = "../hw-model-io" }
+hw-model-schema = { path = "../hw-model-schema" }
 pdma-model-contract = { path = "../contract" }
 pdma-model-dma = { path = "../dma" }
 
@@ -18,4 +18,4 @@ pdma-model-dma = { path = "../dma" }
 workspace = true
 
 [dev-dependencies]
-hardware-interface-pipeline = { path = "../hardware-interface-pipeline" }
+hw-model-pipeline = { path = "../hw-model-pipeline" }

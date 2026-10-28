@@ -1,5 +1,5 @@
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_schema::Decode;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_schema::Decode;
 use pdma_model_contract::dma::{
     CopyCommand, CopyCommandDestinationValues, CopyCommandSourceValues, EventCode, LinearEndpoint,
     ScatterGatherEndpoint, Segment, SegmentRaw,

@@ -1,6 +1,6 @@
 use super::{client, control::rings, *};
-use hardware_interface_io::memory::MemoryAddress;
-use hardware_interface_io::memory::SharedMemoryAllocator;
+use hw_model_io::memory::MemoryAddress;
+use hw_model_io::memory::SharedMemoryAllocator;
 use pdma_model_contract::control::ControlResponseStatus;
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::memory::FunctionId;
@@ -10,8 +10,12 @@ use std::time::Duration;
 #[tokio::test]
 async fn pf_manages_dormant_vfs_and_rejects_invalid_target_functions() {
     // Given: only PF software boots, with two dormant VF ports.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let (system, mut hosts) = Managed::with_functions(allocator.memory_access(), 1, 3).unwrap();
     let _b = hosts.pop().unwrap();
     let a = hosts.pop().unwrap();
@@ -86,8 +90,12 @@ async fn pf_manages_dormant_vfs_and_rejects_invalid_target_functions() {
 #[tokio::test]
 async fn pf_lifecycle_validates_target_ownership_and_reassignment_revokes_old_access() {
     // Given: one PF management endpoint and two independently bound VF work ports.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let (system, mut hosts) = Managed::with_functions(allocator.memory_access(), 2, 3).unwrap();
     let b = hosts.pop().unwrap();
     let a = hosts.pop().unwrap();

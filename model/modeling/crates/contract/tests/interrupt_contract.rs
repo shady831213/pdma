@@ -1,6 +1,6 @@
 #![doc = "Copy-engine wire and notification boundary assertions."]
 
-use hardware_interface_schema::Access;
+use hw_model_schema::Access;
 use pdma_model_contract::dma::{
     Capabilities, ChannelIrqCauseValues, ChannelIrqMaskValues, DmaDiscovery, TrapAck, TrapAckValues,
 };

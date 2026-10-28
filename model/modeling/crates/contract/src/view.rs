@@ -2,7 +2,7 @@ use crate::hw_components::control::ControlConfiguration;
 use crate::hw_components::control::ControlNotificationRegisters;
 use crate::hw_components::control::ControlRegisters;
 use crate::hw_components::windows::ChannelWindowBlock;
-use hardware_interface_schema::Access;
+use hw_model_schema::Access;
 
 /// Software domain whose static register permissions are exported.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

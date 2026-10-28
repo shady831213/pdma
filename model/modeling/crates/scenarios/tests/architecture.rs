@@ -33,12 +33,12 @@ fn frameworks_do_not_expose_pdma_ring_apis() {
 fn framework_normal_dependencies_remain_model_independent() -> Result<(), Box<dyn Error>> {
     // Given: each reusable building block with all of its supported features.
     for package in [
-        "hardware-interface-schema",
-        "hardware-interface-schema-macros",
-        "hardware-interface-software",
-        "hardware-interface-pipeline",
-        "hardware-interface-io",
-        "hardware-interface-irq",
+        "hw-model-schema",
+        "hw-model-schema-macros",
+        "hw-model-swenv",
+        "hw-model-pipeline",
+        "hw-model-io",
+        "hw-model-irq",
     ] {
         // When: Cargo resolves its actual transitive normal dependencies.
         let dependencies = dependencies(package)?;
@@ -60,7 +60,7 @@ fn shared_software_depends_on_contract_not_host_firmware_or_dma() -> Result<(), 
     let dependencies = dependencies("pdma-model-software")?;
     // Then: it uses contract and software execution without either consumer or hardware.
     assert!(dependencies.contains("pdma-model-contract"));
-    assert!(dependencies.contains("hardware-interface-software"));
+    assert!(dependencies.contains("hw-model-swenv"));
     for forbidden in [
         "pdma-model-host",
         "pdma-model-firmware",
@@ -83,27 +83,19 @@ fn standalone_capabilities_do_not_require_unrelated_runtime_policy() -> Result<(
     // Given: each independent capability with optional integrations disabled.
     for (package, required, forbidden) in [
         (
-            "hardware-interface-irq",
+            "hw-model-irq",
             &[][..],
-            &[
-                "tokio",
-                "hardware-interface-io",
-                "hardware-interface-software",
-            ][..],
+            &["tokio", "hw-model-io", "hw-model-swenv"][..],
         ),
         (
-            "hardware-interface-io",
+            "hw-model-io",
             &[][..],
-            &[
-                "tokio",
-                "hardware-interface-schema",
-                "hardware-interface-software",
-            ][..],
+            &["tokio", "hw-model-schema", "hw-model-swenv"][..],
         ),
         (
-            "hardware-interface-software",
-            &["hardware-interface-io", "hardware-interface-irq", "tokio"][..],
-            &["hardware-interface-schema"][..],
+            "hw-model-swenv",
+            &["hw-model-io", "hw-model-irq", "tokio"][..],
+            &["hw-model-schema"][..],
         ),
     ] {
         // When: Cargo resolves normal dependencies without workspace feature unification.

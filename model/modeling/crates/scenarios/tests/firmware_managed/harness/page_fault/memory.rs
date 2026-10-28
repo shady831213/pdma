@@ -1,8 +1,6 @@
 use super::{ChannelTag, platform::TaggedRequest};
-use hardware_interface_io::memory::MemoryAccessError;
-use hardware_interface_io::memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
-};
+use hw_model_io::memory::MemoryAccessError;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess};
 use pdma_model_contract::memory::MemoryIdentity;
 use std::{
     collections::BTreeSet,

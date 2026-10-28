@@ -1,6 +1,6 @@
 //! Typed channel fatal codes over the unchanged MMIO representation.
 
-use hardware_interface_schema::RegisterValueError;
+use hw_model_schema::RegisterValueError;
 use pdma_model_contract::dma::{
     ChannelFatal, ChannelFatalCode, ChannelFatalValues, ChannelRegistersValues,
 };

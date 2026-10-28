@@ -15,7 +15,7 @@ pub mod support;
 
 #[test]
 fn active_copy_fatal_stops_next_memory_access_and_reset_retires_old_work() -> support::TestResult {
-    use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+    use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
 
     // Given: the first chunk of an accepted two-chunk command is externally visible.
     let (mut dma, memory) = support::setup(0x1100, 2)?;
@@ -34,12 +34,12 @@ fn active_copy_fatal_stops_next_memory_access_and_reset_retires_old_work() -> su
         });
     support::submit(&mut dma, &memory, command)?;
     let mut pipeline = dma.hardware();
-    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
+    let mut operation = hw_model_pipeline::HardwareDriver::new();
     let mut prefix = [0; 256];
     for _ in 0..64 {
         assert!(matches!(
             operation.step(&mut pipeline, &mut dma),
-            Ok(hardware_interface_pipeline::StepOutcome::InProgress)
+            Ok(hw_model_pipeline::StepOutcome::InProgress)
         ));
         memory.read(
             MemoryAddress::new(0x1600),
@@ -56,7 +56,7 @@ fn active_copy_fatal_stops_next_memory_access_and_reset_retires_old_work() -> su
     for _ in 0..32 {
         assert!(matches!(
             operation.step(&mut pipeline, &mut dma),
-            Ok(hardware_interface_pipeline::StepOutcome::InProgress)
+            Ok(hw_model_pipeline::StepOutcome::InProgress)
         ));
     }
     let reset = DmaDiscovery::EXTENT + DmaControl::RESET.offset();
@@ -64,7 +64,7 @@ fn active_copy_fatal_stops_next_memory_access_and_reset_retires_old_work() -> su
     for _ in 0..64 {
         assert!(matches!(
             operation.step(&mut pipeline, &mut dma),
-            Ok(hardware_interface_pipeline::StepOutcome::InProgress)
+            Ok(hw_model_pipeline::StepOutcome::InProgress)
         ));
     }
     // Then: cleanup completes without rolling back the prefix or writing the old suffix.

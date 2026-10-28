@@ -1,5 +1,5 @@
 use super::{BuildError, PlatformConfigError};
-use hardware_interface_schema::RegisterShape;
+use hw_model_schema::RegisterShape;
 use pdma_model_contract::dma::DmaRegisters;
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_contract::hw_components::firmware::FirmwareRegisters;

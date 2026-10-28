@@ -1,4 +1,4 @@
-use hardware_interface_pipeline::AsyncRunError;
+use hw_model_pipeline::AsyncRunError;
 use std::{convert::Infallible, fmt};
 
 mod access;
@@ -12,7 +12,7 @@ pub enum PlatformConfigError {
     /// Optional context capacity and register base must be supplied together.
     ContextConfiguration,
     /// A generated register population has invalid geometry.
-    Layout(hardware_interface_schema::RegisterBankError),
+    Layout(hw_model_schema::RegisterBankError),
     /// A block is misaligned or exceeds the platform's address representation.
     AddressSpace,
     /// Two platform register apertures overlap.
@@ -73,17 +73,12 @@ impl std::error::Error for BuildError {
 
 /// Failure of a supervised hardware or firmware actor.
 #[derive(Debug)]
-pub enum RunError<E = hardware_interface_io::memory::MemoryAccessError> {
+pub enum RunError<E = hw_model_io::memory::MemoryAccessError> {
     /// Firmware boot or control service failed.
-    Firmware(
-        pdma_model_firmware::Error<
-            hardware_interface_software::EnvAccessError<super::AccessError>,
-            E,
-        >,
-    ),
+    Firmware(pdma_model_firmware::Error<hw_model_swenv::EnvAccessError<super::AccessError>, E>),
     /// Firmware interrupt delivery failed.
     FirmwareInterrupt(
-        hardware_interface_software::InterruptDispatchError<
+        hw_model_swenv::InterruptDispatchError<
             (),
             tokio::sync::watch::error::RecvError,
             Infallible,

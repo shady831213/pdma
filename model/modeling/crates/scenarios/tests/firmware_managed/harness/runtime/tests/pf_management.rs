@@ -1,5 +1,5 @@
 use super::*;
-use hardware_interface_schema::RegisterAccessError;
+use hw_model_schema::RegisterAccessError;
 use pdma_model_contract::hw_components::control::ControlConfiguration;
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_hw_components::control::ControlError;

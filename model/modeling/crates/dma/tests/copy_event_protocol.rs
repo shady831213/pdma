@@ -2,8 +2,8 @@
 #[doc = "Shared hardware test fixtures."]
 pub mod support;
 
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_pipeline::HardwareDriver;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_pipeline::HardwareDriver;
 use pdma_model_contract::dma::{ChannelBlock, EventRegisters};
 use support::{TestResult, command, read_word, setup, submit};
 

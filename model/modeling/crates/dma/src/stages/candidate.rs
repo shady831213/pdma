@@ -1,5 +1,5 @@
 use crate::{CommandSnapshot, Dma, Error, Work};
-use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
+use hw_model_pipeline::{Stage, StepOutcome, StepResult};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::ring::Ring;
 

@@ -1,5 +1,5 @@
 use crate::{Completion, Dma, Error, Flow};
-use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
+use hw_model_pipeline::{Stage, StepOutcome, StepResult};
 
 #[cfg(test)]
 mod tests;

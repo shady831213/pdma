@@ -1,5 +1,5 @@
-use hardware_interface_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryAccessError, MemoryRegion, SharedMemory};
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::{MemoryAccessError, MemoryRegion, SharedMemory};
 use pdma_model_dma::MemoryFailure;
 use std::cell::Cell;
 

@@ -1,6 +1,6 @@
 use super::{Model, TestResult};
-use hardware_interface_io::register::RegisterAccess;
-use hardware_interface_irq::InterruptSource;
+use hw_model_io::register::RegisterAccess;
+use hw_model_irq::InterruptSource;
 use pdma_model_contract::dma::DmaControl;
 use pdma_model_dma::Dma;
 

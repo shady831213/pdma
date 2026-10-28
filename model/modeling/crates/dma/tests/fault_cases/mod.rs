@@ -18,9 +18,9 @@ mod termination;
 
 use self::memory::Paged;
 use crate::support::{TestResult, configure};
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
-use hardware_interface_pipeline::{Operation, StepOutcome};
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_pipeline::{Operation, StepOutcome};
 use pdma_model_dma::{Dma, Hardware};
 
 const CMD: usize = ChannelBlock::ALIGNMENT + ChannelBlock::COMMAND.offset();
@@ -30,7 +30,7 @@ const CTRL: usize = ChannelBlock::ALIGNMENT + ChannelBlock::CONTROL.offset();
 struct Fixture {
     dma: Dma<Paged>,
     pipeline: Hardware,
-    operation: hardware_interface_pipeline::HardwareDriver<Hardware, Dma<Paged>>,
+    operation: hw_model_pipeline::HardwareDriver<Hardware, Dma<Paged>>,
 }
 
 impl std::ops::Deref for Fixture {
@@ -93,7 +93,7 @@ fn setup() -> TestResult<Fixture> {
     Ok(Fixture {
         dma,
         pipeline,
-        operation: hardware_interface_pipeline::HardwareDriver::new(),
+        operation: hw_model_pipeline::HardwareDriver::new(),
     })
 }
 

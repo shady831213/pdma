@@ -1,7 +1,7 @@
 use super::client;
 use super::*;
-use hardware_interface_io::memory::SharedMemoryAllocator;
-use hardware_interface_io::memory::{MemoryAddress, MemoryAlignment};
+use hw_model_io::memory::SharedMemoryAllocator;
+use hw_model_io::memory::{MemoryAddress, MemoryAlignment};
 use pdma_model_contract::control::{
     ControlQueue, ControlRequest, ControlResponse, ControlResponseStatus,
 };
@@ -30,7 +30,7 @@ pub(super) fn rings(
     })
 }
 
-pub(super) fn ring<E: hardware_interface_schema::SchemaCodec>(
+pub(super) fn ring<E: hw_model_schema::SchemaCodec>(
     allocator: &SharedMemoryAllocator,
 ) -> crate::harness::TestResult<RingConfig<E>> {
     let layout = RingConfig::<E>::new(0, 2)?;
@@ -47,8 +47,12 @@ pub(super) fn ring<E: hardware_interface_schema::SchemaCodec>(
 #[tokio::test]
 async fn host_acquires_releases_and_reuses_channel_through_control_rings() {
     // Given: separate firmware and Host CPUs over one real managed channel.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let (system, host) = Managed::new(allocator.memory_access()).unwrap();
     // When: Host uses the independent management rings while the DMA gate starts closed.
     let program = client::run(host.runtime, async |interrupt| {
@@ -118,8 +122,12 @@ async fn host_acquires_releases_and_reuses_channel_through_control_rings() {
 #[tokio::test]
 async fn cancelling_host_wait_retains_one_request_and_resumes_its_response() {
     // Given: firmware booted once and is temporarily not being polled.
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        MemoryAddress::new(0x1000),
+        64 * 1024,
+    )
+    .expect("valid test heap");
     let (system, host) = Managed::new(allocator.memory_access()).unwrap();
     let mut running = pin!(system.run());
     assert!(

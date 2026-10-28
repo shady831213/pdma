@@ -2,8 +2,8 @@ use super::{
     TestResult, program,
     runtime::{Managed, platform::ContextPlatform},
 };
-use hardware_interface_io::memory::MemoryAddress;
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_io::memory::MemoryAddress;
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
 use pdma_model_contract::memory::{
     ContextAttributes, ContextAttributesAddressSpace, FunctionId, MemoryIdentity,
 };
@@ -28,9 +28,14 @@ pub const ATTRIBUTES: [ContextAttributes; 4] = [
 
 #[doc = "Runs software context management and DMA with optional fault recovery."]
 pub async fn run(failure: bool) -> TestResult<program::contexts::Outcome> {
-    let allocators: [SharedMemoryAllocator; 4] = std::array::from_fn(|_| {
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000))
+    let [lists, control, source, destination] = std::array::from_fn(|_| {
+        SharedMemoryAllocator::new(
+            Arc::new(SharedMemory::new()),
+            MemoryAddress::new(0x1000),
+            256 * 1024,
+        )
     });
+    let allocators = [lists?, control?, source?, destination?];
     let spaces = ATTRIBUTES
         .iter()
         .zip(&allocators)

@@ -1,6 +1,6 @@
 //! Bootstrap ownership and independent control-doorbell boundary tests.
 
-use hardware_interface_schema::RegisterAccessError;
+use hw_model_schema::RegisterAccessError;
 use pdma_model_contract::hw_components::control::{
     ControlConfiguration, ControlNotificationRegisters, ControlRegisters,
 };

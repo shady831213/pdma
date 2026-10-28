@@ -1,9 +1,9 @@
 use crate::harness::runtime::memory::{FunctionSpaces, RouteError, RoutedMemory};
-use hardware_interface_io::memory::{
+use hw_model_io::memory::{
     AtomicAccessError, AtomicOperation, AtomicWriteOrder, MemoryAccess, MemoryAddress,
     MemoryAlignment,
 };
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
 use pdma_model_contract::{
     dma::{ChannelId, ContextId, DmaAccess},
     hw_components::{
@@ -176,7 +176,7 @@ fn atomic_contexts_isolate_pasid_zero_and_deny_foreign_owner_before_modification
     assert_eq!(changed, Ok(55));
     let rejection = || {
         AtomicAccessError::Access(
-            RouteError::<hardware_interface_io::memory::MemoryAccessError>::Context(
+            RouteError::<hw_model_io::memory::MemoryAccessError>::Context(
                 MemoryError::OwnerMismatch {
                     context: ContextId::new(2),
                     owner: FunctionId::new(0),

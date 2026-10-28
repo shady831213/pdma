@@ -1,6 +1,6 @@
-use hardware_interface_io::memory::MemoryAccessError;
-use hardware_interface_io::memory::SharedMemoryAllocator;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment, SharedMemoryAccess};
+use hw_model_io::memory::MemoryAccessError;
+use hw_model_io::memory::SharedMemoryAllocator;
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment, SharedMemoryAccess};
 use pdma_model_contract::dma::Segment;
 use pdma_model_contract::dma::{CopyCommandSourceValues, LinearEndpoint, ScatterGatherEndpoint};
 use std::{error::Error, io};

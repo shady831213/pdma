@@ -2,9 +2,9 @@ use crate::{
     RESET,
     support::{TestResult, command, read_word, setup, submit},
 };
-use hardware_interface_io::memory::SharedMemory;
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
-use hardware_interface_pipeline::{Operation, RunError, StepOutcome, Then};
+use hw_model_io::memory::SharedMemory;
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_pipeline::{Operation, RunError, StepOutcome, Then};
 use pdma_model_contract::dma::ChannelConfiguration;
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, EventRegisters,

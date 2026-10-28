@@ -1,11 +1,11 @@
-use hardware_interface_io::memory::MemoryAccessError;
+use hw_model_io::memory::MemoryAccessError;
 use pdma_model_contract::dma::{
     Command, CommandRegisters, ContextId, CopyCommandDestinationValues, CopyCommandSourceValues,
     Event, LinearEndpoint,
 };
 
 use super::*;
-use hardware_interface_io::memory::MemoryAccess;
+use hw_model_io::memory::MemoryAccess;
 use pdma_model_contract::memory::{
     ContextAttributes, ContextAttributesAddressSpace, MemoryIdentity,
 };
@@ -14,7 +14,9 @@ use pdma_model_host::{Channel, ChannelConfig, Rings};
 #[tokio::test]
 async fn pending_drain_and_reset_complete_with_independent_results() {
     // Given: real firmware and DMA share a live, long-running payload context.
-    let allocator = SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into());
+    let allocator =
+        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into(), 256 * 1024)
+            .expect("valid test heap");
     let memory = allocator.memory_access();
     let pf = FunctionId::new(0);
     let payload_attributes = ContextAttributes {

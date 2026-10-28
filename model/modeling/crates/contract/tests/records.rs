@@ -1,6 +1,6 @@
 //! Generated PDMA wire-codec behavior.
 
-use hardware_interface_schema::SchemaCodecError;
+use hw_model_schema::SchemaCodecError;
 use pdma_model_contract::dma::Event;
 use pdma_model_contract::dma::{ErrorInfo, EventInfoValues};
 

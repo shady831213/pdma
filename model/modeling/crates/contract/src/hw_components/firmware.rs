@@ -1,4 +1,4 @@
-use hardware_interface_schema::{register_map, register_schema};
+use hw_model_schema::{register_map, register_schema};
 
 register_schema! {
     #[short_description = "Firmware boot report"]

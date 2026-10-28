@@ -1,9 +1,7 @@
 use super::support::{Fixture, response};
-use hardware_interface_io::memory::MemoryAccessError;
-use hardware_interface_io::memory::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
-};
-use hardware_interface_software::SoftwareEnv;
+use hw_model_io::memory::MemoryAccessError;
+use hw_model_io::memory::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess};
+use hw_model_swenv::SoftwareEnv;
 use pdma_model_contract::control::{ControlQueue, ControlRingState};
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::{Error, Management, ManagementConfig};

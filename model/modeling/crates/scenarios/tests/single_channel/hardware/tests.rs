@@ -1,10 +1,10 @@
 //! Assembly must keep serving after the software observes its first completion.
 
 use crate::{harness::TestResult, software};
-use hardware_interface_io::memory::MemoryAddress;
-use hardware_interface_io::memory::{SharedMemory, SharedMemoryAllocator};
-use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
-use hardware_interface_software::{InterruptRuntime, SoftwareEnv};
+use hw_model_io::memory::MemoryAddress;
+use hw_model_io::memory::{SharedMemory, SharedMemoryAllocator};
+use hw_model_pipeline::{AsyncExecutor, HardwareDriver};
+use hw_model_swenv::{InterruptRuntime, SoftwareEnv};
 use pdma_model_host::runtime::Model;
 use std::sync::Arc;
 use tokio::task::JoinSet;
@@ -13,7 +13,8 @@ use tokio::task::JoinSet;
 async fn assembled_hardware_remains_running_after_a_copy() -> TestResult {
     // Given: the public hardware assembly and a complete software copy program.
     let storage = Arc::new(SharedMemory::new());
-    let allocator = SharedMemoryAllocator::new(storage, MemoryAddress::new(0x1000));
+    let allocator = SharedMemoryAllocator::new(storage, MemoryAddress::new(0x1000), 64 * 1024)
+        .expect("valid test heap");
     let memory = allocator.memory_access();
     let (device, mut hardware) = super::assemble(memory.clone())?;
     let model = Model::new(device);

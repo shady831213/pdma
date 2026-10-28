@@ -1,0 +1,5 @@
+error: field generates conflicting member `to_bytes`
+ --> tests/ui/fail/record_member_to_bytes.rs:3:31
+  |
+3 |     endian: Little, fields: { to_bytes: u8 },
+  |                               ^^^^^^^^

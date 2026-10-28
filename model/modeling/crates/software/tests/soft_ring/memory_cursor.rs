@@ -1,5 +1,5 @@
-use hardware_interface_io::memory::{MemoryAccess, MemoryAlignment};
-use hardware_interface_io::memory::{MemoryRegion, SharedMemory};
+use hw_model_io::memory::{MemoryAccess, MemoryAlignment};
+use hw_model_io::memory::{MemoryRegion, SharedMemory};
 use pdma_model_software::ring::{MemoryRingIo, SoftRingIo};
 
 #[tokio::test]

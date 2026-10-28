@@ -1,0 +1,118 @@
+error[E0080]: evaluation panicked: union case alignment must be a nonzero power of two
+  --> tests/ui/fail/tagged_codec_zero_alignment.rs:19:1
+   |
+19 | / record_schema! { record Parent { endian: Little, fields: {
+20 | |     tag: enum(u8) { variants: { Bad = 0, Wide = 1 } },
+21 | |     payload: tagged_union { tag: self.tag, cases: { Bad(Bad), Wide(Wide) } },
+22 | | } } }
+   | |_____^ evaluation of `ParentPayloadRaw::bytes::{constant#0}` failed here
+
+error[E0080]: evaluation panicked: union case alignment must be a nonzero power of two
+  --> tests/ui/fail/tagged_codec_zero_alignment.rs:19:1
+   |
+19 | / record_schema! { record Parent { endian: Little, fields: {
+20 | |     tag: enum(u8) { variants: { Bad = 0, Wide = 1 } },
+21 | |     payload: tagged_union { tag: self.tag, cases: { Bad(Bad), Wide(Wide) } },
+22 | | } } }
+   | |_____^ evaluation of `Parent::RECORD_SIZE` failed here
+
+note: erroneous constant encountered
+  --> tests/ui/fail/tagged_codec_zero_alignment.rs:19:1
+   |
+19 | / record_schema! { record Parent { endian: Little, fields: {
+20 | |     tag: enum(u8) { variants: { Bad = 0, Wide = 1 } },
+21 | |     payload: tagged_union { tag: self.tag, cases: { Bad(Bad), Wide(Wide) } },
+22 | | } } }
+   | |_____^
+   |
+   = note: this note originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0080]: evaluation panicked: union case alignment must be a nonzero power of two
+  --> tests/ui/fail/tagged_codec_zero_alignment.rs:19:1
+   |
+19 | / record_schema! { record Parent { endian: Little, fields: {
+20 | |     tag: enum(u8) { variants: { Bad = 0, Wide = 1 } },
+21 | |     payload: tagged_union { tag: self.tag, cases: { Bad(Bad), Wide(Wide) } },
+22 | | } } }
+   | |_____^ evaluation of `ParentPayloadRaw::new::{constant#0}` failed here
+
+error[E0080]: evaluation panicked: union case alignment must be a nonzero power of two
+  --> tests/ui/fail/tagged_codec_zero_alignment.rs:19:1
+   |
+19 | / record_schema! { record Parent { endian: Little, fields: {
+20 | |     tag: enum(u8) { variants: { Bad = 0, Wide = 1 } },
+21 | |     payload: tagged_union { tag: self.tag, cases: { Bad(Bad), Wide(Wide) } },
+22 | | } } }
+   | |_____^ evaluation of `ParentPayloadRaw::as_bytes::{constant#0}` failed here
+
+error[E0080]: evaluation panicked: union case alignment must be a nonzero power of two
+  --> tests/ui/fail/tagged_codec_zero_alignment.rs:19:1
+   |
+19 | / record_schema! { record Parent { endian: Little, fields: {
+20 | |     tag: enum(u8) { variants: { Bad = 0, Wide = 1 } },
+21 | |     payload: tagged_union { tag: self.tag, cases: { Bad(Bad), Wide(Wide) } },
+22 | | } } }
+   | |_____^ evaluation of `ParentPayloadRaw::into_parts::{constant#0}` failed here
+
+error[E0080]: evaluation panicked: union case alignment must be a nonzero power of two
+  --> tests/ui/fail/tagged_codec_zero_alignment.rs:19:1
+   |
+19 | / record_schema! { record Parent { endian: Little, fields: {
+20 | |     tag: enum(u8) { variants: { Bad = 0, Wide = 1 } },
+21 | |     payload: tagged_union { tag: self.tag, cases: { Bad(Bad), Wide(Wide) } },
+22 | | } } }
+   | |_____^ evaluation of `<ParentPayloadRaw as std::clone::Clone>::clone::{constant#0}` failed here
+
+error[E0080]: evaluation panicked: union case alignment must be a nonzero power of two
+  --> tests/ui/fail/tagged_codec_zero_alignment.rs:19:1
+   |
+19 | / record_schema! { record Parent { endian: Little, fields: {
+20 | |     tag: enum(u8) { variants: { Bad = 0, Wide = 1 } },
+21 | |     payload: tagged_union { tag: self.tag, cases: { Bad(Bad), Wide(Wide) } },
+22 | | } } }
+   | |_____^ evaluation of `<ParentPayloadRaw as std::cmp::Eq>::assert_fields_are_eq::{constant#0}` failed here
+
+error[E0080]: evaluation panicked: union case alignment must be a nonzero power of two
+  --> tests/ui/fail/tagged_codec_zero_alignment.rs:19:1
+   |
+19 | / record_schema! { record Parent { endian: Little, fields: {
+20 | |     tag: enum(u8) { variants: { Bad = 0, Wide = 1 } },
+21 | |     payload: tagged_union { tag: self.tag, cases: { Bad(Bad), Wide(Wide) } },
+22 | | } } }
+   | |_____^ evaluation of `<ParentPayloadRaw as std::default::Default>::default::{constant#0}` failed here
+
+error[E0080]: evaluation panicked: union case alignment must be a nonzero power of two
+  --> tests/ui/fail/tagged_codec_zero_alignment.rs:19:1
+   |
+19 | / record_schema! { record Parent { endian: Little, fields: {
+20 | |     tag: enum(u8) { variants: { Bad = 0, Wide = 1 } },
+21 | |     payload: tagged_union { tag: self.tag, cases: { Bad(Bad), Wide(Wide) } },
+22 | | } } }
+   | |_____^ evaluation of `<ParentPayloadValues as hw_model_schema::Encode>::encode::{constant#0}` failed here
+
+error[E0080]: evaluation panicked: union case alignment must be a nonzero power of two
+  --> tests/ui/fail/tagged_codec_zero_alignment.rs:19:1
+   |
+19 | / record_schema! { record Parent { endian: Little, fields: {
+20 | |     tag: enum(u8) { variants: { Bad = 0, Wide = 1 } },
+21 | |     payload: tagged_union { tag: self.tag, cases: { Bad(Bad), Wide(Wide) } },
+22 | | } } }
+   | |_____^ evaluation of `ParentPayloadValues::RECORD_SIZE` failed here
+
+error[E0080]: evaluation panicked: union case alignment must be a nonzero power of two
+  --> tests/ui/fail/tagged_codec_zero_alignment.rs:19:1
+   |
+19 | / record_schema! { record Parent { endian: Little, fields: {
+20 | |     tag: enum(u8) { variants: { Bad = 0, Wide = 1 } },
+21 | |     payload: tagged_union { tag: self.tag, cases: { Bad(Bad), Wide(Wide) } },
+22 | | } } }
+   | |_____^ evaluation of `Parent::PAYLOAD_OFFSET` failed here
+
+error[E0080]: evaluation panicked: union case alignment must be a nonzero power of two
+  --> tests/ui/fail/tagged_codec_zero_alignment.rs:19:1
+   |
+19 | / record_schema! { record Parent { endian: Little, fields: {
+20 | |     tag: enum(u8) { variants: { Bad = 0, Wide = 1 } },
+21 | |     payload: tagged_union { tag: self.tag, cases: { Bad(Bad), Wide(Wide) } },
+22 | | } } }
+   | |_____^ evaluation of `Parent::RECORD_ALIGNMENT` failed here

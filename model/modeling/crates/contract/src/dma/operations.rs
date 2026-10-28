@@ -11,7 +11,7 @@ pub use atomic::{
     AtomicCommandOperationRaw, AtomicCommandOrder, AtomicCommandOrderRaw, AtomicCommandRaw,
     AtomicCommandView, AtomicCommandViewMut,
 };
-use hardware_interface_schema::record_schema;
+use hw_model_schema::record_schema;
 
 record_schema! {
     #[short_description = "Complete independent-endpoint copy command"]

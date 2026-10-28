@@ -1,6 +1,6 @@
 use core::fmt::{self, Display, Formatter};
 
-use hardware_interface_schema::RegisterAccessError;
+use hw_model_schema::RegisterAccessError;
 
 /// Invalid access-window address geometry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

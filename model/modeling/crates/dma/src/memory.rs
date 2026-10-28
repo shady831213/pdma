@@ -1,6 +1,6 @@
 use crate::{Channel, Dma, Error};
-use hardware_interface_io::memory::MemoryAccessError;
-use hardware_interface_io::memory::{BoundMemory, MemoryAddress};
+use hw_model_io::memory::MemoryAccessError;
+use hw_model_io::memory::{BoundMemory, MemoryAddress};
 use pdma_model_contract::dma::{ChannelId, ContextId, DmaAccess};
 
 /// Memory-port failures understood by DMA, independent of backend diagnostics.

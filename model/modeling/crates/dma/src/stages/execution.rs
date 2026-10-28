@@ -8,7 +8,7 @@ pub use validate::CheckRanges;
 pub(super) use validate::Install;
 
 use crate::{ChunkInput, Completion, Error, ExecutionContext, Flow};
-use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
+use hw_model_pipeline::{Stage, StepOutcome, StepResult};
 use std::convert::Infallible;
 
 /// Executes successive chunks of one accepted command through the same child graph.

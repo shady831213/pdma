@@ -1,0 +1,5 @@
+error: field generates conflicting member `encode_into`
+ --> tests/ui/fail/record_member_encode_into.rs:3:31
+  |
+3 |     endian: Little, fields: { encode_into: u8 },
+  |                               ^^^^^^^^^^^

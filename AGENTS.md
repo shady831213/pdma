@@ -15,8 +15,16 @@ Do not restore their compatibility interfaces without a user request.
 
 ## Scope and retained material
 
-Active work is under `model/modeling`; read its `AGENTS.md`.
-Its Cargo workspace contains the core `contract`, `dma` and `host` crates, the
+The executable model is under `model/modeling`; read its `AGENTS.md` for model work.
+RTL preparation is under `rtl`, `verification/pdma`, `impl/pdma` and `tools/rtl-flow`.
+`docs/rtl/architecture.md` records confirmed inputs and unresolved design choices;
+it does not supersede the system specification under `model/modeling/docs`.
+The RTL skeleton has no DMA design implementation or executable design tests yet.
+Follow `rtl/README.md` for source and verification ownership. PDMA independently
+pins and maintains Veryl under `tools/rtl-flow`, starting from a verified snapshot
+of pcie_modeling's tool inputs. Do not modify that project's active toolchain or
+automatically follow its updates; shared tool extraction is deferred.
+The model's Cargo workspace contains the core `contract`, `dma` and `host` crates, the
 managed MVP's `hw-components` and `firmware`, shared PDMA `software`, system scenarios,
 and six reusable building blocks:
 

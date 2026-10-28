@@ -1,0 +1,185 @@
+diff --git a/crates/analyzer/src/conv/utils.rs b/crates/analyzer/src/conv/utils.rs
+index 81b85ab0..95c19612 100644
+--- a/crates/analyzer/src/conv/utils.rs
++++ b/crates/analyzer/src/conv/utils.rs
+@@ -4214,8 +4214,10 @@ pub fn get_overridden_params(
+     arg: &ComponentInstantiation,
+ ) -> IrResult<HashMap<VarPath, (Comptime, ir::Expression)>> {
+     let token: TokenRange = arg.scoped_identifier.as_ref().into();
+-    let symbol =
+-        symbol_table::resolve(arg.scoped_identifier.as_ref()).map_err(|_| ir_error!(token))?;
++    // A generic component parameter does not own the target's parameters.
++    // Substitute it before looking up the parameter namespace.
++    let path = context.resolve_path(arg.scoped_identifier.as_ref().into());
++    let symbol = symbol_table::resolve(&path).map_err(|_| ir_error!(token))?;
+     // An `alias module` has its own namespace, and the parameters live in the
+     // TARGET's. Resolving them in the alias's finds nothing, and the loop
+     // below skips what it cannot resolve -- so every override through an
+diff --git a/crates/analyzer/src/ir/signature.rs b/crates/analyzer/src/ir/signature.rs
+index 1b0fde2f..32118ea0 100644
+--- a/crates/analyzer/src/ir/signature.rs
++++ b/crates/analyzer/src/ir/signature.rs
+@@ -234,6 +234,31 @@ impl Signature {
+                         .append(&mut found.inner_namespace().paths.to_vec());
+                 }
+             }
++        } else {
++            // A template's known value arguments still size nested interfaces.
++            // Carry only literals here: a caller's symbolic package argument
++            // cannot safely be substituted by name inside the callee's scope.
++            let path = context.resolve_path(path);
++            for map in path.to_generic_maps() {
++                for (name, arg) in map.map {
++                    let literal = if arg.to_literal().is_some() {
++                        Some(arg)
++                    } else if let Ok(symbol) = symbol_table::resolve(&arg)
++                        && let SymbolKind::GenericParameter(parameter) = &symbol.found.kind
++                    {
++                        parameter
++                            .default_value
++                            .as_ref()
++                            .filter(|value| value.to_literal().is_some())
++                            .cloned()
++                    } else {
++                        None
++                    };
++                    if let Some(literal) = literal {
++                        sig.add_generic_parameter(name, literal);
++                    }
++                }
++            }
+         }
+ 
+         Some(sig)
+diff --git a/crates/analyzer/src/tests.rs b/crates/analyzer/src/tests.rs
+index d19dff17..18338fe7 100644
+--- a/crates/analyzer/src/tests.rs
++++ b/crates/analyzer/src/tests.rs
+@@ -29,6 +29,7 @@ mod comb_loop_tier_tests;
+ mod constant_evaluation_tests;
+ mod dynamic_packed_member_tests;
+ mod generic_interface_port_tests;
++mod generic_interface_width_tests;
+ mod instantiation_note_tests;
+ mod interface_array_tests;
+ mod modport_connection_tests;
+diff --git a/crates/analyzer/src/tests/generic_interface_width_tests.rs b/crates/analyzer/src/tests/generic_interface_width_tests.rs
+new file mode 100644
+index 00000000..f58176ca
+--- /dev/null
++++ b/crates/analyzer/src/tests/generic_interface_width_tests.rs
+@@ -0,0 +1,53 @@
++use super::analyze;
++use crate::AnalyzerError;
++
++#[test]
++fn generic_interface_width_uses_the_callers_known_argument() {
++    let code = r#"
++    interface MaskPort::<N: u32 = 4> { var mask: logic<N>; }
++    module WidthParent::<N: u32 = 8> (result: output logic<N>) {
++        inst port: MaskPort::<N>;
++        assign port.mask = '1;
++        for i in 0..N :row { assign result[i] = port.mask[i]; }
++    }
++    module Top (result4: output logic<4>, result16: output logic<16>) {
++        inst small_parent: WidthParent::<4> (result: result4);
++        inst large_parent: WidthParent::<16> (result: result16);
++    }
++    "#;
++    let errors = analyze(code);
++    assert!(errors.is_empty(), "{errors:?}");
++}
++
++#[test]
++fn generic_interface_width_still_rejects_out_of_range_selects() {
++    let code = r#"
++    interface MaskPort::<N: u32 = 4> { var mask: logic<N>; }
++    module WidthParent::<N: u32 = 8> (result: output logic) {
++        inst port: MaskPort::<N>;
++        assign port.mask = '1;
++        assign result = port.mask[N];
++    }
++    module Top (result: output logic) { inst dut: WidthParent::<4> (result); }
++    "#;
++    assert!(
++        analyze(code)
++            .iter()
++            .any(|error| matches!(error, AnalyzerError::InvalidSelect { .. }))
++    );
++}
++
++#[test]
++fn generic_interface_width_literal_does_not_capture_the_callers_name() {
++    let code = r#"
++    interface MaskPort::<N: u32 = 2> { var mask: logic<N>; }
++    module WidthParent::<N: u32 = 8> (result: output logic<12>) {
++        inst port: MaskPort::<12>;
++        assign port.mask = '1;
++        for i in 0..12 :row { assign result[i] = port.mask[i]; }
++    }
++    module Top (result: output logic<12>) { inst dut: WidthParent::<4> (result); }
++    "#;
++    let errors = analyze(code);
++    assert!(errors.is_empty(), "{errors:?}");
++}
+diff --git a/crates/simulator/src/tests.rs b/crates/simulator/src/tests.rs
+--- a/crates/simulator/src/tests.rs
++++ b/crates/simulator/src/tests.rs
+@@ -1,3 +1,5 @@
++mod generic_parameter_forwarding;
++
+ use crate::ir::Ir;
+ use crate::ir::{Config, ModuleVariables, build_ir, parse_hex_content};
+ use crate::ir::{Event, Value};
+diff --git a/crates/simulator/src/tests/generic_parameter_forwarding.rs b/crates/simulator/src/tests/generic_parameter_forwarding.rs
+new file mode 100644
+index 00000000..3d551ed5
+--- /dev/null
++++ b/crates/simulator/src/tests/generic_parameter_forwarding.rs
+@@ -0,0 +1,46 @@
++use super::*;
++
++#[test]
++fn module_parameters_forward_through_generic_component() {
++    let code = r#"
++    proto module Contract #(
++        param DEPTH: u32 = 8,
++    ) (depth: output logic<32>);
++
++    module Cell for Contract #(
++        param DEPTH: u32 = 8,
++    ) (depth: output logic<32>) {
++        assign depth = DEPTH;
++    }
++
++    module Parent::<ENTRIES: u32 = 32, CELL: Contract = Cell> (
++        constant_depth: output logic<32>,
++        expression_depth: output logic<32>,
++    ) {
++        const SETS: u32 = ENTRIES / 4;
++        inst constant_child: CELL #(DEPTH: SETS) (depth: constant_depth);
++        inst expression_child: CELL #(DEPTH: ENTRIES / 4) (depth: expression_depth);
++    }
++
++    module Top (
++        c128: output logic<32>, e128: output logic<32>,
++        c256: output logic<32>, e256: output logic<32>,
++    ) {
++        inst p128: Parent::<128> (constant_depth: c128, expression_depth: e128);
++        inst p256: Parent::<256> (constant_depth: c256, expression_depth: e256);
++    }
++    "#;
++
++    for config in Config::all() {
++        let ir = analyze(code, &config);
++        let mut sim = Simulator::new(ir, None);
++        sim.step(&Event::clock(VarId::SYNTHETIC));
++        for (port, expected) in [("c128", 32), ("e128", 32), ("c256", 64), ("e256", 64)] {
++            assert_eq!(
++                sim.get(port).unwrap(),
++                Value::new(expected, 32, false),
++                "{port}, {config:?}"
++            );
++        }
++    }
++}

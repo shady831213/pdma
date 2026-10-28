@@ -1,3 +1,15 @@
 /model/modeling/target/
 /target/
 /.omo/
+/rtl/target/
+/rtl/.build/
+/rtl/dependencies/
+/rtl/pdma_rtl.f
+/verification/**/.run/
+/impl/**/.run/
+/tools/rtl-flow/.run/
+/tools/rtl-flow/local.env
+/tools/rtl-flow/smoke/target/
+/tools/rtl-flow/smoke/.build/
+/tools/rtl-flow/smoke/dependencies/
+/tools/rtl-flow/smoke/pdma_tool_smoke.f

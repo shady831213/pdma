@@ -11,6 +11,21 @@ faults retain work for owner resume while peer channels remain eligible.
 Hardware behavior is deterministic and step-based. Memory backing, software CPU
 execution and interrupt delivery are supplied outside the hardware model.
 
+RTL preparation lives in [rtl](rtl/README.md), with architecture inputs in
+[docs/rtl](docs/rtl/architecture.md). The directory skeleton has no implemented
+DMA RTL or executable DMA RTL tests yet; the tool directory has a compiler smoke test.
+
+## Repository structure
+
+| Directory | Responsibility |
+| --- | --- |
+| `model/modeling/` | Executable Rust model, firmware, Host software, contract and system specification |
+| `rtl/` | Veryl design and native block tests |
+| `verification/pdma/` | System-level RTL testbench, VIP integration and scenarios |
+| `impl/pdma/` | Synthesis, timing constraints and CDC/RDC analysis |
+| `tools/rtl-flow/` | Toolchain and shared flow integration |
+| `docs/rtl/` | RTL architecture decisions and model-to-hardware mapping |
+
 ## Current documentation
 
 - [Model architecture and verification](model/modeling/README.md).

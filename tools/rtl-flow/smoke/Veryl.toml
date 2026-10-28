@@ -1,0 +1,12 @@
+[project]
+name = "pdma_tool_smoke"
+version = "0.1.0"
+
+[build]
+sources = ["src"]
+target = {type = "directory", path = "target"}
+
+[test]
+seed = 20261028
+four_state = true
+waveform_target = {type = "directory", path = "target/waves"}

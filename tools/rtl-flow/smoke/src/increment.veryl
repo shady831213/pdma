@@ -1,0 +1,23 @@
+// Compiler smoke only: exercise a parameterized DUT, including width wraparound.
+module Increment #(
+    param WIDTH: u32 = 4,
+) (
+    value : input  logic<WIDTH>,
+    result: output logic<WIDTH>,
+) {
+    assign result = value + 1;
+}
+
+#[test(increment_wraparound)]
+module IncrementTest {
+    var value : logic<4>;
+    var result: logic<4>;
+    inst dut: Increment #( WIDTH: 4 ) ( value, result );
+    initial {
+        for input_value in 0..16 {
+            value = input_value as 4;
+            $assert(result == ((input_value + 1) % 16), "INCREMENT_WRAPAROUND");
+        }
+        $finish();
+    }
+}

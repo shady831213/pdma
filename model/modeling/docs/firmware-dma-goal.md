@@ -16,6 +16,13 @@ Generic memory atomics and reset during context maintenance remain implemented.
 This document records decisions and open questions; it is not an execution plan
 or an instruction to start implementation automatically.
 
+The next phase is RTL architecture preparation against the implemented system
+contract. [RTL design inputs](../../../docs/rtl/architecture.md) records the agreed AXI5 master,
+32/64-bit AXI4-Lite slave, three clock domains, configurable geometry and tentative
+22nm/500MHz target. Tool/EDA flows are assumed available for this phase; it does
+not start a toolchain split or add model features. Register commit and transaction
+retirement details still require closure before RTL coding.
+
 First milestone: the [firmware-managed DMA architecture MVP](firmware-dma-mvp.md).
 The subsequent [control channel](control-channel.md) implements independent
 command/response rings for multi-channel acquisition/reset/release, including local

@@ -5,6 +5,17 @@
 [system specification](../../model/modeling/docs/spec.md)。
 涉及寄存器提交协议的变化，必须先同步 contract、Host/Firmware 和 model 测试，不能只改 RTL。
 
+本轮具体草案：
+
+| 文档 | 内容 |
+| --- | --- |
+| [寄存器接口](register-interface.md) | 32/64 位单 leaf 访问、提交、权限和跨域返回 |
+| [内存接口](memory-interface.md) | AXI5 事务责任、ID、atomic、RESP/USER 和可见性 |
+| [共享数据通路](datapath.md) | 阶段与状态归属、保留窗口、吞吐预算和等价性问题 |
+| [Reset 与 CDC](reset-cdc.md) | 关闭/排空协议、跨域责任、通知和 timer |
+
+这是同一套设计的不同视角，不新增 Rust runtime、通用 pipeline 组合子或软件命令。
+
 ## 已确认的设计输入
 
 | 项目 | 本轮决定 |
@@ -66,27 +77,17 @@ flowchart LR
 
 ## 寄存器 32/64 位共同协议
 
+具体访问矩阵、ContextRequest 编码建议、跨域提交路径和实施范围见
+[寄存器接口设计草案](register-interface.md)。该文档同样待评审，尚未修改现有 contract。
+
 现有 schema 包含 32 位控制和 64 位地址；`ContextRequest` 当前也是 64 位，低 32 位
 为 context ID，高位为 action。它在 model 中要求一次完整写入。AXI4-Lite 32 位模式
 无法直接满足这一假设，必须在 RTL 编码前完成协议收敛。
 
-建议按用途定义，而不是给全部寄存器增加一套通用 shadow/commit 状态：
-
-1. **稳定配置值**：地址等 64 位配置允许在 32 位接口上分低/高字访问。依赖现有
-   configuration lock、enable 或 valid 发布完整配置；硬件不能在配置中间态使用该值。
-   如果某字段确实允许在线改变，再为它单独定义原子更新协议。
-2. **动作请求**：优先让完整请求落在一个 32 位提交字中。ContextRequest 若在确认的
-   capacity 范围内能容纳 index 与 action，应优先保持“同一字一次提交”的原设计意图；
-   不能仅因为 Rust ContextId 是 u32，就认为硬件一定需要 32 位有效表索引。
-   若不能容纳，再讨论参数区加显式提交字，定义单写者、busy 拒绝和 reset 清理。
-3. **64 位接口**：共享以上语义，可加速完整 64 位配置访问；动作仍有唯一提交点。
-   不能把两次 32 位软件写入在该模式下悄悄解释成另一套协议。
-4. **读回和 strobes**：明确 64 位访问覆盖两个 32 位位置时的快照、权限、空洞和副作用，
-   以及合法 WSTRB。AXI4-Lite 没有 AxSIZE，不能假装能从读请求恢复原始软件访问尺寸。
-   一个 beat 包含参数和动作时，要规定先形成完整参数再提交，或明确拒绝该访问形状。
-
-这一节是建议，尚未选择最终字段布局、分段写入顺序或错误响应编码。当前 contract
-仍保持原行为，不能提前宣称已经支持两种物理接口。
+具体草案建议配置地址分段写后由 enable/valid 发布，ContextRequest 收紧为 30 位
+index 与 2 位 action 的完整 32 位请求。64 位端口仍一次选中一个 leaf，不合并相邻
+寄存器；平台桥接必须保留低地址位和 byte lane，不能无条件套用任意宽度转换器。
+这些建议已有具体矩阵和错误规则，但仍未修改当前 contract；不宣称已支持两种物理接口。
 
 ## 命令、流水与资源归属
 
@@ -177,6 +178,8 @@ ATS+PRI 保持事务的配置不向 DMA 暴露这种终止，仍属于另一种�
 需要记录并跳过这些已提交访问，或给出能够排除这种情况的真实发射/提交结构。
 这是编码前必须完成的 transaction-window 设计，不以“丢弃后续流水”代替。
 恢复只重试未完成工作；已经消费的 semaphore、atomic 更新、Timestamp 样本均不能重做。
+此外，窗口不能解决已定义的重叠 SG 读写依赖或自动确定永久错误的 prefix 保证。
+具体反例和设计边界见 [datapath](datapath.md)，不能把这些问题隐藏成单纯参数调优。
 
 ## 吞吐要求与容量评估
 
@@ -240,13 +243,18 @@ VIP，也不能用 DUT 自己报告的值生成同一项检查的 expected。
 允许结果，不把某条模型调度轨迹冒称唯一结果。总线握手、所有返回排空、CDC/RDC 和
 物理约束另有 RTL 验证，不能由 model PASS 推导。
 
-进入 RTL 编码前还要完成这些具体决定：
+当前设计状态与实现门槛：
 
-1. 32/64-bit MMIO 的共同提交协议、ContextRequest 布局、WSTRB/读回和 AXI 错误映射。
-2. AXI5 profile/ID 与 outstanding 上限、atomic 事务矩阵，以及 pageable 模式的 fault 分类接口。
-3. 三域 reset/关闭证明、各域频率与允许比值、外部 timer 和 IRQ 的跨域归属。
-4. C/K/数据位宽的承诺范围、FIFO 与 retained transaction-window 资源预算。
-5. 同周期事件优先级和“接受/发射/提交/退休”各点的精确定义，以及对应的断言和场景。
+| 项目 | 已形成的草案 | 仍需落实的门槛 |
+| --- | --- | --- |
+| 寄存器 | 具体 lane/strobe、动作格式、配置发布、错误映射 | 桥接兼容性测试、批准格式后同步 contract/软件/header |
+| AXI5 | slot 责任、ID 生命周期、原子映射、reason 编码 | 精确协议 profile、参数组合、VIP 检查与返回异常测试 |
+| Reset/CDC | 请求接收前计债、Close/Drain/Open、通知/timer 归属 | 实际 CDC/RDC 结构、初始化和同拍断言 |
+| 数据通路 | owner/阶段接口、任务和事务分层、保留资源预算 | 预读对重叠 SG 的等价性、永久错误非连续效果的合同 |
+| 性能/PPA | 外部参考吞吐、容量下界、覆盖维度 | 具体 clock ratio、资源档位、真实库/PVT 和测量结果 |
+
+不要把已经形成设计建议写成已经完成实现验证。尚未闭合的数据通路优化，不阻塞
+其它已明确对象的独立设计，但也不能据此宣称可以直接冻结完整高吞吐执行 engine。
 
 建议先实现的验证切片仍包含两个 channel 共享执行能力，贯通 Copy、Fence/Trap 和
 reset；这是验证顺序建议，不删除其余已实现命令及 managed 模式的整体架构要求。

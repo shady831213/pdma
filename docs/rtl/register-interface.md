@@ -1,0 +1,230 @@
+# 寄存器接口设计草案
+
+状态：2026-10-28，供 RTL 编码前评审。本文件提出具体实现合同，**尚未修改 model、
+contract、生成头文件或 RTL**。当前行为以 [系统规范](../../model/modeling/docs/spec.md)
+和现有 schema 为准；这里标为“建议”的规则必须经评审后再同步实现。
+
+## 目标与现状
+
+用户已确认 AXI4-Lite 数据位宽为实例参数 32/64，寄存器前端、core、内存 master
+分属三个时钟域，均异步复位、相对本域时钟同步释放。两种总线位宽共用寄存器布局、
+权限与动作语义。平台决定基址；DMA 不接管外围 Function/context 的管理职责。
+
+当前访问边界是一个完整 schema leaf，而不是任意地址范围：
+
+| 类别 | 现有对象 | 生效边界 |
+| --- | --- | --- |
+| 32 位状态 | discovery、fatal、fault_status、IRQ cause、context result/failed bitmap、window ready | 所属对象读取时采样；当前没有读清寄存器 |
+| 32 位普通写入 | ring capacity/cursors、IRQ enable/mask、context attributes、window owner | 先检查权限、合法值和当前状态，再提交 |
+| 32 位发布 | channel enable、context valid、control enable、window open | 检查完整配置后使其可用 |
+| 32 位动作 | reset、resume、trap_ack、doorbell | 一次有效写触发一次动作，写零行为按各 leaf 定义 |
+| 64 位配置 | command/event base、control bootstrap | 使用前配置，首次 enable 后冻结 |
+| 64 位动作 | ContextRequest | 当前要求完整 8 字节提交 selector 和 action；这是 32 位总线的实质缺口 |
+
+依据：[register primitives](../../model/modeling/crates/contract/src/register.rs)、
+[DMA registers](../../model/modeling/crates/contract/src/dma/registers.rs)、
+[channel registers](../../model/modeling/crates/contract/src/dma/registers/channel.rs)、
+[context registers](../../model/modeling/crates/contract/src/hw_components/context.rs)、
+[control registers](../../model/modeling/crates/contract/src/hw_components/control.rs)。
+通用 [RegisterWindow](../../model/modeling/crates/hw-model-schema/src/register/window.rs)
+目前要求精确 leaf 起始地址和完整宽度，不能直接用它证明半字访问或 WSTRB 已受支持。
+
+## 建议一：保留“一次访问一个 leaf”
+
+AXI4-Lite 没有 ARSIZE/AWSIZE，读传输宽度是总线宽度；写端有 WSTRB，寄存器外设可
+拒绝不支持的 strobe 组合。不能由一次 64 位 AR 推断调用者原本执行了 read32 还是
+read64。依据：[Arm IHI0022H，B1.1–B1.3](https://developer.arm.com/-/media/Arm%20Developer%20Community/PDF/IHI0022H_amba_axi_protocol_spec.pdf)。
+
+建议明确采用 **PDMA 的按地址选择 leaf 的 CSR 访问约定**：AXI beat 的容器宽度不改变
+被访问对象。读返回被选 leaf 对应的有效字节，其他 lane 返回零；不顺便读取邻居。
+这不是 AXI 标准替我们定义的语义，也不承诺跨两个 32 位寄存器的 64 位合并访问。
+
+设 D 为总线字节数，lane = address mod D；所有软件访问至少 4 字节对齐。
+平台地址和 aperture 基址要保留这些低地址位，64 位 leaf 保持 8 字节对齐。
+
+| 目标/访问地址 | AXI4-Lite 32 | AXI4-Lite 64 |
+| --- | --- | --- |
+| 32 位 leaf 的起始地址 | 读返回 32 位；写要求 WSTRB=0xF | lane=0/4，读只填对应 32 位 lane；写要求 0x0F/0xF0 |
+| 64 位配置 leaf 起始地址 A | 读/写低 32 位，WSTRB=0xF | 读返回完整 64 位；写支持 0xFF 完整值或 0x0F 低半字 |
+| 同一 64 位配置 leaf 的 A+4 | 读/写高 32 位，WSTRB=0xF | 读只填高 32 位 lane；写要求 0xF0 |
+| WSTRB=0 | 地址及来源权限合法时成功空操作，不修改 leaf 或触发动作 | 相同 |
+
+其他非零 strobe（单字节、半字、不连续、越过被选 leaf）返回 SLVERR。未选中的
+WDATA 字节完全不参与检查。禁止把 0xFF 写拆成两个独立的 32 位动作再逐个提交。
+零 strobe 仍检查地址对齐、aperture/leaf 命中及 requester 权限，但不尝试修改 RO
+值或执行动作，也不因维护 Pending 拒绝这个空操作。32 位 leaf 上的 0xFF 写必须
+在任何副作用之前拒绝。写保留位沿用现有值合法性检查，
+不能悄悄将非法写入吞掉。
+
+例如当前 channel 的 command.capacity=0x08、producer=0x0C：64 位接口读 0x08
+只返回 capacity，读 0x0C 在高 lane 返回 producer；写 producer 用地址 0x0C、
+WSTRB=0xF0。event.producer=0x24 为 RO、consumer=0x28 为 RW。fault_status=0x38
+后紧邻 WO resume=0x3C；读 fault_status 不访问 resume。保留紧凑布局而不引入
+相邻 leaf 之间的读权限和副作用耦合。偏移均相对 ChannelBlock，源自当前生成布局。
+
+**平台约束。** 桥接器必须保留被选寄存器地址（尤其 bit 2）和 byte lane 含义，
+不能把请求向下对齐后合并邻居，或擅自扩成对两个 leaf 的访问。普通 64 位内存加载
+不等于“获取相邻两个寄存器”。若集成平台要求完全按 beat 覆盖范围访问，则必须另行
+评审布局/访问合同；不能宣称本方案无条件兼容所有宽度转换器。选此方案的动机是保持
+现有单 leaf 语义，避免为每个 32 位寄存器浪费一个 8 字节槽或引入跨 leaf 事务回滚。
+
+## 建议二：配置值可以拆，动作不拆
+
+64 位配置每次半字写直接更新所属对象的配置存储，不增加一份通用 shadow。
+硬件只在 enable/valid 发布之后使用完整值，已发布值按原合同冻结。软件应先写低字，
+再写高字，确认写入完成后发布；硬件不依赖该顺序，不维护“低字已到达”状态。
+一位软件所有者负责串行配置，同步释放 reset 不是软件配置完成的替代标志。
+
+半字更新必须在 core 中基于同一个 leaf 的当前值形成候选完整值、验证并提交。
+不能在 reg 域先读旧值，跨域后再以旧快照覆盖另一半。32/64 位总线采用相同权限、
+配置锁定和错误规则；拆写中断只留下未发布配置，不得导致 DMA 使用半个地址。
+若配置中途 reset，软件重做完整配置，不能继续提交另一半并假定此前的值仍存在。
+
+两次 32 位读取不提供 64 位原子快照保证。当前 64 位配置不由硬件自增；软件必须排除
+并发配置/reset，或在冻结配置期间读取。不为未来尚不存在的活动计数器增加快照硬件。
+
+ContextRequest 建议改成固定 32 位格式：
+
+```text
+31             30 29                                         0
++----------------+--------------------------------------------+
+| action (2 bits)| context_id (30 bits)                       |
++----------------+--------------------------------------------+
+action: 0 Idle, 1 Drain, 2 Abort, 3 invalid
+```
+
+这是 MMIO 编码上限，不是承诺能例化 2^30 个 context；实际 capacity 由实例配置和资源
+预算决定。建议约束 capacity <= 2^30。ContextId/PASID/Function 软件类型不因此合并，
+descriptor 和管理队列中的 32 位 ContextId 也不缩窄。写入前必须检查可表示范围，
+不得截断高位；完整请求中的 id >= capacity 按原语义报告 InvalidContext。
+
+建议 management 保持 alignment=8、extent=16：capacity@0、result@4、request@8
+各 4 字节，12..15 为保留空洞。entries 从16开始，failed bitmap 仍在 map 尾部。
+这样改动动作编码而不移动已有 context entry bank；空洞不是可写的 selector 高字。
+
+动作在 core 接受一次完整有效写时提交并自清零。Pending 期间拒绝新的非空写，包含
+Idle 写；拒绝不覆盖 result/bitmap。非 Pending 时 Idle 不清理历史结果。
+无效 action 返回 SLVERR 且无副作用。合法 Drain/Abort 写的 B=OKAY 表示请求已受理，
+不保证维护成功；InvalidContext、Busy、Failed 等仍通过 result 报告。
+零 WSTRB 不构成请求，任何状态下都不清历史结果。
+
+## 前端、跨域与真实寄存器的分工
+
+```mermaid
+flowchart LR
+    AW[AW 地址与可信来源] --> WPAIR[reg_clk: AW/W 配对]
+    W[W 数据与 strobes] --> WPAIR
+    AR[AR 地址与可信来源] --> ARBUF[reg_clk: 读请求]
+    WPAIR --> ORDER[有界读写仲裁]
+    ARBUF --> ORDER
+    ORDER --> REQ[异步请求 FIFO]
+    REQ --> OWNER[core_clk: decode / authorize / validate / commit]
+    OWNER --> RSP[异步响应 FIFO]
+    RSP --> HOLD[reg_clk: B/R 保持寄存器]
+```
+
+前端不镜像硬件寄存器。建议内部 request 携带 op、原始 byte address、64 位数据容器、
+byte enable、静态端口位宽信息以及可信 requester；response 携带 read/write 类别、
+结果和读数据。core 根据 layout 确定 leaf，外部软件不能伪造 leaf ID 或权限标志。
+无须增加软件可见 transaction ID，也不让 generic schema 依赖 AXI。
+
+Host 的 Function 身份、Firmware 身份必须来自平台可信端口/sideband，不能从软件
+可写地址字段或 AXPROT 推导。AXI4-Lite 基本接口不提供 Function ID；单 Function
+直连可以静态绑定，多来源必须由集成 wrapper 携带来源，或使用独立可信入口。
+AW 携带写来源，W 只与该入口顺序匹配的 AW 配对；AR 携带读来源。布局和权限由各
+对象拥有，外围 wrapper 做来源传递和路由，不在 DMA 内再维护 Function 表。
+
+首版控制端口建议每入口最多一个未完成读和一个未完成写；AW/W 各有独立保持位，
+支持 W 先到、AW 先到和同拍到。读请求不会等待一个缺失 W 的 AW。完整写与读都就绪
+时公平仲裁送往请求 FIFO。核心提交顺序由 FIFO 和入口仲裁确定；读写跨方向不凭
+AXI 握手时间臆造全序。软件要求“写后读”时，应先等待 B，再发 AR。
+
+跨域 FIFO 深度先取能容纳一读一写的有界结构，实际 CDC 实现和吞吐评估后再确定。
+返回方向必须保证每个已接收请求都有响应存储位置：B/R 各有保持寄存器，背压时数据
+稳定，不重复触发动作。限制下一笔同类事务的接收，可避免某个 BREADY=0 反复占用
+所有响应空间。有限 MMIO 带宽与 payload 持续吞吐是不同预算；不能把这个简化方案
+冒称支持每拍 doorbell，需在小 command 场景测量后决定是否加深队列。
+
+core 的本地操作在一个明确的接受点完成检查与提交。只有 committed/rejected 结果
+形成后才产生 B；不能在 CDC 入队时就回 OKAY。读在 core 获取快照，RREADY 延迟不
+改变快照或重复读副作用。软件 reset 请求只设置/推进清理，绝不等 reset 完成才回 B，
+因此执行流水或内存端口长期阻塞不应阻止读取 busy 或发出恢复请求。
+
+## 权限、错误和并发边界
+
+| 情况 | 建议总线响应 | 状态变化 |
+| --- | --- | --- |
+| 成功读写 | OKAY | 按所属 leaf 语义恰好执行一次 |
+| 不属于任何 aperture，或命中布局保留空洞 | DECERR | 无 |
+| 对齐/strobe/编码非法、RO 写、WO 读、权限不足 | SLVERR | 无；错误读 RDATA=0 |
+| 配置被冻结、scope resetting、维护互锁禁止本次修改 | SLVERR | 无，不清旧结果 |
+| 合法 context 请求被受理，但目标不存在或维护失败 | B=OKAY | result 给出业务结果 |
+
+上表是 PDMA 的错误映射建议，不是 AXI 强制规定所有业务错误的编码。寄存器访问失败
+不产生 DMA command event，不触发 payload page-fault resume 协议。AXI5 内存端的
+RESP+USER 故障原因与此控制接口分开定义。所有预检在动作之前执行，不能先触发
+doorbell/reset 再发现 strobe 或权限非法。
+
+对请求的权限在 **core 实际执行时** 检查，不能只在 reg 域缓存“window 已开启”。
+Host 读 discovery 与管理 PF/Firmware 的权限保持原合同；任何 beat 都不能因某 channel
+打开就顺带访问 admin。多入口同一周期冲突由有界公平仲裁串行化，不宣称 Host 与
+Firmware 同时操作同一配置对象可以获得任意预期的顺序。
+
+同拍优先级建议：先决定 reset/fatal 关闭边界，再检查本拍能否提交普通配置和发出新
+工作；已经承诺的 bus 义务照常退休。读取得操作点的状态，不承诺看到同拍稍后发生的
+完成。对 sticky cause 的软件清除和新硬件置位采用置位优先；未 faulted 时的 resume
+不能预先清掉同拍新 fault。具体数据通路与 context frontier 的边界需在后续设计中
+统一，不允许仅用一个全局 reset 信号删除尚未完成的工作。
+
+异步物理复位使前端停止握手，并按三个域的初始化协议恢复；不能将复位中消失的 B/R
+伪造成成功。软件 reset 不复位 AXI 前端/CDC 队列。scope reset 完成只证明约定的
+数据工作清理，不能自动取消尚未送达 core 的外部 MMIO；软件在 release/rebind 前须
+停止旧访问并等已发 MMIO 完成。软件取消 future 也不撤销已接受的总线写。
+
+## 软件顺序示例
+
+配置 channel 时先在 reset 完成后写 base 的低/高字、capacity、ring_context 和通知
+配置；在内存中准备 descriptor，执行平台要求的可见性操作，再发布 producer/enable。
+enable 成功后配置冻结。等待 B 是寄存器接受证明，**不是普通内存 cache clean 或
+DMA 可见性屏障**。相关平台 cache/ordering 义务保持不变。
+
+配置 context 时按 owner、attributes、valid=1 发布；Destroy 仍由 firmware 等 Drain
+成功后清 valid。请求写和 result 读取必须有确定先后，不能在请求尚未生效时把旧
+Success 当成新结果。软件保持单个维护请求的生命周期约束。
+
+配置 PF control channel 时先完成内存队列、bootstrap 两半和 attributes，再写 enable；
+只写 bootstrap 的低字不唤醒 firmware。doorbell 仍发生在内存发布及可见性保证之后。
+
+## 实施映射与验收
+
+评审后依次推进，先有失败行为测试再改实现，不以文档表格代替运行证据：
+
+1. `contract`：ContextRequest 32 位格式、capacity 编码限制、management extent 和描述；
+   重新生成 Host/Firmware header，保留独立 ABI 字节断言。原 64 位动作不设兼容接口。
+2. `hw-components`/firmware：请求编码、容量构造检查、pending 拒绝和结果行为；保留
+   ContextId 在其它协议中的完整类型，测试超出可表示范围不得截断。
+3. RTL 控制前端及各 owner：实现 lane/strobe、授权、配置半字合并和 CDC 接受/返回；
+   Host/Firmware 的真实总线适配层负责把 typed 64 位配置访问展开，策略不移到 runtime。
+   schema 的完整 leaf API 保持原意，不为 AXI 增加通用读改写软件锁。
+4. 用独立 bus 测试验证本文件的 transport 行为；Rust model 只验证已有体系结构语义及
+   经批准的 contract 改动，不向 step 模型塞 AXI 时序或周期仿真。
+
+| 场景 | 必须观察的结果 |
+| --- | --- |
+| 两种端口位宽、32 位 leaf 两种 lane、64 位配置全字/半字 | 读回正确，未选 lane 为零，未选 leaf 不被访问 |
+| 读 fault_status 紧邻 resume，读窗口 status 紧邻管理字段 | 不触发邻居，不泄漏未授权值；显式 WO/未授权访问仍报错 |
+| 零/非法 strobe、保留位、未对齐、非法 action、越界 context | 拒绝无副作用；零 strobe 不发请求或清历史结果 |
+| base 两次写之间 enable/reset、冻结后改 base | 不使用未发布配置；配置锁定不被半字更新绕过 |
+| W 先到、AW 先到、B/R 长背压、同时读写 | 正确配对、恰好一次提交、响应稳定、另一类请求有界推进 |
+| window 关闭发生于前端接收后/core 执行前 | 在执行点拒绝；无先验授权缓存绕过 |
+| 任意时钟相位/比值、不同域释放先后 | 初始化前不传递伪请求，跨域数据完整，不重复副作用 |
+| reset 请求后立刻读 busy，数据访问长 outstanding | 请求响应可返回，busy 只有真实 cleanup 后才清零 |
+| 请求仍 pending、新请求/Idle、旧 Success 后的新请求 | 不覆盖旧维护；按 core 接受顺序观察最新 result |
+| 普通配置/发布和 hardware 状态更新同拍 | 匹配明确优先级，不丢新 fault/Trap，不产生半配置 |
+
+## 当前草案选择与边界
+
+本稿按单 leaf 的 64 位总线访问约定及其桥接限制、ContextRequest 的 30 位 index +
+2 位 action 继续展开设计。它们仍是提议，未改变已实现 ABI；下一步需要将适配假设
+落到真实端口验证。内存事务和责任排空分别见 [memory-interface](memory-interface.md)
+与 [reset-cdc](reset-cdc.md)，不要求用户逐项设计握手状态机。

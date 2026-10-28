@@ -8,6 +8,11 @@ The [system specification](../model/modeling/docs/spec.md) defines observable
 hardware, firmware, Host and platform behavior. The
 [RTL architecture draft](../docs/rtl/architecture.md) records confirmed interfaces,
 clock/reset requirements and decisions still needed before coding.
+The [register-interface proposal](../docs/rtl/register-interface.md) develops the
+32/64-bit access, submission and CDC rules; it remains a proposal, not implemented RTL.
+The related [memory interface](../docs/rtl/memory-interface.md),
+[datapath](../docs/rtl/datapath.md) and [reset/CDC](../docs/rtl/reset-cdc.md) drafts
+define transaction ownership and identify correctness constraints on pipelining.
 
 ## Source ownership
 

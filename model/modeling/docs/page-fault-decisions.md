@@ -5,6 +5,23 @@ subsequent removal of suspension tickets. The numbered requirements in
 [page-fault-recovery.md](page-fault-recovery.md) are normative. Earlier alternatives
 below are history, not additional interfaces to implement.
 
+## RTL overlap clarification, 2026-10-29
+
+RTL preparation initially treated the model's exact overlapping-SG regression
+as a portable access-order requirement. The user clarified that the earlier
+decision already assigned overlap to software: hardware does not check it, and
+the impact of timed/pipelined execution must be documented rather than adding
+overlap detection or forcing the model's chunk schedule on RTL.
+
+For example, copying `ab` over a later source containing `cd` yields `ababab` in
+the current sequential test, but pre-reading that source can yield `ababcd`.
+Neither pattern is promised for such ordering-dependent input. Physical aliases
+also include different VA/context mappings and repeated destination SG ranges.
+This permits internal pipelining without a new descriptor mode or alias table;
+it does not weaken same-channel command ordering, safe PageFault retry or reset.
+The normative clarification is [HOST-CE-5 / MODEL-CE-3](copy-engine.md#software-owned-overlap-policy).
+The existing model regression is retained as implementation characterization.
+
 ## 1. Start with the recovery boundary, not the vendor name
 
 The discussion separated two uses of the same copy engine. A migration service

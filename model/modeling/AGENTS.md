@@ -356,6 +356,10 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   incrementally and retains only current cursors. One command copy_length selects
   independent Linear byte offsets or SG entry/local offsets; backing totals need not match;
   do not cache whole lists, reject overlap or invent segment-count/total-length limits.
+  Overlap is software-owned (HOST-CE-5): hardware does not check it, but no portable
+  within-command overlap result is promised. The deterministic overlapping-SG test
+  characterizes this model, not an RTL access-order requirement. Preserve range,
+  authorization, fault-retention and cleanup guarantees even for overlapping input.
   Fixed copy scratch size is an implementation detail, not a command-size limit.
 - Reuse FanIn/Arbitrate/FanOut/Dispatch/Then for execution composition.
   Repeat and AfterEach are removed. Do not recreate them with renamed combinators,

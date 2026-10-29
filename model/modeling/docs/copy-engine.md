@@ -2,7 +2,7 @@
 
 Status: implemented and model-verified, 2026-10-22. This chapter
 specifies the replacement copy-engine protocol. The ABI is not frozen. The
-[roadmap](firmware-dma-goal.md#agreed-next-feature-set-not-yet-implemented)
+[roadmap](firmware-dma-goal.md#agreed-copy-engine-feature-set-and-implementation-status)
 records the motivation, reference evidence and excluded features.
 
 ## Ownership and execution
@@ -30,6 +30,44 @@ They preserve platform source tags and downstream failures. Runtime selects memo
 backing and delivers notifications; it owns no command execution or semaphore policy.
 
 ## Command meanings
+
+### Software-owned overlap policy
+
+Clarified 2026-10-29: overlap remains a software responsibility. This clarifies
+the existing decision that hardware neither detects nor rejects overlapping Copy
+ranges; it does not add a memmove mode or an overlap-error opcode.
+
+**HOST-CE-5.** Software must not depend on the order of payload accesses within
+one Copy command to resolve aliases. This includes earlier writes overlapping
+later reads, later writes overlapping earlier reads, and repeated/overlapping
+destination SG ranges. Distinct virtual addresses or ContextIds do not prove
+distinct underlying storage. A straightforward sufficient condition for an
+order-independent copy is disjoint source/destination storage and no destination
+self-overlap. Repeated source reads alone do not imply a write dependency.
+
+Hardware may pipeline accesses and change chunk/burst boundaries. If software
+submits ordering-dependent overlaps, the resulting data is not specified by the
+PDMA contract: it can differ between the model and RTL, implementations, or runs
+with different stalls/faults. Overlap alone does not require an error and a
+successful command does not certify that its data matches a software-assumed
+overlap order. A Fence after that Copy does not impose an order inside it or
+repair its contents. Software needing an ordered move must construct that order,
+for example using non-aliasing temporary storage and separate ordered commands.
+
+This limitation concerns overlap results, not blanket undefined device behavior.
+Range/authorization checks, same-channel command ordering, error reporting,
+no-replay of completed effects, retained write data across PageFault and reset
+cleanup obligations still apply. It does not authorize out-of-range accesses or
+discarding outstanding transactions. Existing metadata-stability and memory
+lifetime obligations also remain in force.
+
+**MODEL-CE-3.** The model's deterministic overlapping-SG result characterizes its
+current traversal and scratch behavior. Its regression can retain that exact
+expectation without making it an RTL golden result. Portable data-equivalence
+tests use inputs satisfying HOST-CE-5; overlap cases check the unaffected safety
+and lifecycle obligations without assuming a particular resulting byte pattern.
+
+### Operations
 
 | Command | Effect |
 | --- | --- |

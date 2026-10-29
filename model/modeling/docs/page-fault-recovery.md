@@ -68,9 +68,15 @@ On a read fault, resume retries that read. On a write fault, retain the successf
 read's scratch and retry the write without rereading the source. Earlier committed
 writes are never replayed. Source and destination SG boundaries may differ.
 
-Overlap remains governed by actual chunk order, without a whole-copy memmove
-guarantee. Retained scratch also avoids changing a pending write if its source is
-modified while parked. Real RTL must establish equivalent replay-safe commit
+Overlap is software-owned: the model's actual chunk order is not a portable
+ordering guarantee or a whole-copy memmove guarantee. The 2026-10-29 clarification
+in [HOST-CE-5 / MODEL-CE-3](copy-engine.md#software-owned-overlap-policy) covers
+source/destination aliases and destination SG self-overlap, including aliases
+through distinct virtual addresses or contexts. Hardware does not check/reject
+overlap, and its resulting bytes are not specified when software relies on such
+ordering. Same-channel command order and lifecycle guarantees remain intact.
+Retained scratch still prevents changing an already-read pending write if its
+source is modified while parked. Real RTL must establish equivalent replay-safe commit
 boundaries; the synchronous model does not prescribe serial physical transactions.
 Ordered task completion does not imply that only one memory transaction may be
 outstanding. Parallel physical execution would need equivalent commit/retirement

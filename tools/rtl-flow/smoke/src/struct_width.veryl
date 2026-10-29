@@ -1,0 +1,21 @@
+// Native lowering must apply the member width even to non-literal expressions.
+package StructWidthSmoke {
+    struct S { value: logic<8>, }
+}
+#[test(struct_ternary_width)]
+module StructWidthTest {
+    inst clk: $tb::clock_gen #(period: 10);
+    var select: logic;
+    var narrow: logic<8>;
+    let result: StructWidthSmoke::S = StructWidthSmoke::S'{value: if select ? narrow : 0};
+    initial {
+        narrow = 32'h1234_abcd;
+        select = 1;
+        clk.next();
+        $assert(result.value == 8'hcd, "HIGH_BITS_TRUNCATED");
+        select = 0;
+        clk.next();
+        $assert(result.value == 8'h00, "ZERO_BRANCH");
+        $finish();
+    }
+}

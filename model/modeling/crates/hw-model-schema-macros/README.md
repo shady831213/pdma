@@ -17,7 +17,12 @@ examples. This implementation crate is not a standalone schema API: generated co
 refers to the facade's metadata, layout and codec contracts.
 
 Requires Rust 1.96 or later. Applications normally depend on
-`hw-model-schema = "0.1.0"`, which brings in the matching macro implementation. This crate has no
+`hw-model-schema = "0.2.0"`, which brings in the matching macro implementation. This crate has no
 device-model or runtime dependency.
+
+Version 0.2 adds definition/reference metadata and optional automatic registration
+through the facade's `discovery` feature. Generated code requires the matching
+facade API; the facade pins this implementation version. No schema scope or
+catalog annotation is added to the DSL. Rust imports continue to resolve types.
 
 Licensed under MIT OR Apache-2.0, at your option. See LICENSE-MIT and LICENSE-APACHE.

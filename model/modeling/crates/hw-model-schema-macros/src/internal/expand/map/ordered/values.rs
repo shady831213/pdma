@@ -73,6 +73,9 @@ pub(super) fn expand(
             fn default() -> Self { Self::DEFAULT }
         }
         impl #facade::RegisterLayout for #marker {
+            fn schema_definition() -> #facade::graph::Definition {
+                <Self as #facade::graph::DescribeSchema>::schema_definition()
+            }
             const DOCUMENTATION: #facade::Documentation = Self::DOCUMENTATION;
             type Value = #values_name;
             type View<'a> = #view_name<'a>;

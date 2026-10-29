@@ -44,9 +44,8 @@ fn check_type(decl: &ModernRecordDecl, ty: &ModernTypeDecl) -> syn::Result<()> {
         ModernTypeDecl::BitsReference(_) => Ok(()),
         ModernTypeDecl::Codec(path) => {
             if path
-                .segments
-                .last()
-                .is_some_and(|segment| segment.ident == decl.name)
+                .get_ident()
+                .is_some_and(|name| *name == decl.name || name == "Self")
             {
                 Err(syn::Error::new_spanned(
                     path,

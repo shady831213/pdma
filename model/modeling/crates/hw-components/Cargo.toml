@@ -10,7 +10,7 @@ description = "PDMA access windows, contexts and management interface hardware"
 
 [dependencies]
 hw-model-io = "0.1.0"
-hw-model-schema = "0.1.0"
+hw-model-schema = "0.2.0"
 pdma-model-contract = { path = "../contract" }
 pdma-model-dma = { path = "../dma" }
 

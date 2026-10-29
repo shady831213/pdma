@@ -1,4 +1,5 @@
 use proc_macro2::TokenStream;
+mod graph;
 use quote::{format_ident, quote};
 
 use crate::internal::syntax::{
@@ -92,25 +93,19 @@ pub(super) fn expand(
     let slots = geometry.slots;
     let extent = &geometry.extent;
     let root = quote!(value);
-    let storage_assertions = decl.cases.iter().flat_map(|case| {
-        case.fields.iter().map(|field| {
-            let width = match &field.ty {
-                crate::internal::syntax::TaggedUnionFieldType::Scalar(scalar_type) => {
-                    let width = scalar_type.width();
-                    quote!(#width)
-                }
-                crate::internal::syntax::TaggedUnionFieldType::Bits(path) => {
-                    quote!(<#path as #facade::BitsLayout>::EXTENT)
-                }
-            };
-            quote!(
-                const _: () =
-                    assert!(#width == #quantum, "union fields must use one container width");
-            )
-        })
-    });
+    let storage_assertions = storage_assertions(decl, quantum, facade);
     let tag = tag_info(record, &decl.tag, &root)?;
     let tag_type = &tag.ty;
+    let graph = graph::expand(&graph::Context {
+        record,
+        field,
+        decl,
+        facade,
+        tag: tag_type,
+        extent,
+        quantum,
+        endian,
+    })?;
     let case_declarations = decl
         .cases
         .iter()
@@ -156,6 +151,7 @@ pub(super) fn expand(
         facade,
     });
     Ok(quote! {
+        #graph
         #(#storage_assertions)*
         #(#case_declarations)*
         #(#case_identities)*
@@ -182,6 +178,32 @@ pub(super) fn expand(
         }
         #codec
     })
+}
+
+fn storage_assertions(
+    decl: &TaggedUnionDecl,
+    quantum: &TokenStream,
+    facade: &TokenStream,
+) -> Vec<TokenStream> {
+    decl.cases
+        .iter()
+        .flat_map(|case| case.fields.iter())
+        .map(|field| {
+            let width = match &field.ty {
+                crate::internal::syntax::TaggedUnionFieldType::Scalar(scalar_type) => {
+                    let width = scalar_type.width();
+                    quote!(#width)
+                }
+                crate::internal::syntax::TaggedUnionFieldType::Bits(path) => {
+                    quote!(<#path as #facade::BitsLayout>::EXTENT)
+                }
+            };
+            quote!(
+                const _: () =
+                    assert!(#width == #quantum, "union fields must use one container width");
+            )
+        })
+        .collect()
 }
 
 fn case_declaration(

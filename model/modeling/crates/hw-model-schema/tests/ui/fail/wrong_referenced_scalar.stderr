@@ -16,6 +16,37 @@ help: the trait `SchemaLayout` is implemented for `Bad`
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = note: this error originates in the macro `register_schema` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
+error[E0277]: the trait bound `Control: SchemaLayout` is not satisfied in `Bad`
+ --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
+  |
+8 | record_schema! { pub record Bad {
+  |                             ^^^ unsatisfied trait bound
+  |
+help: within `Bad`, the trait `SchemaLayout` is not implemented for `Control`
+ --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+  |
+3 | register_schema! { pub register Control {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `SchemaLayout` is implemented for `Bad`
+ --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+  |
+8 | record_schema! { pub record Bad {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
+  |
+8 | record_schema! { pub record Bad {
+  |                             ^^^
+note: required by a bound in `DescribeSchema`
+ --> src/graph.rs
+  |
+  | / pub trait DescribeSchema {
+  | |     /// Returns the definition without recursively constructing its dependencies.
+  | |     fn schema_definition() -> Definition;
+  | | }
+  | |_^ required by this bound in `DescribeSchema`
+  = note: this error originates in the macro `register_schema` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
 error[E0277]: the trait bound `Control: SchemaLayout` is not satisfied
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
@@ -415,9 +446,9 @@ note: required by a bound in `SchemaLayout`
   --> src/layout.rs
    |
    | / pub trait SchemaLayout {
-   | |     /// Owned decoded value for this layout.
-   | |     type Value: Clone + Copy + Default + Eq + PartialEq;
-   | |     /// Checked immutable view for this layout.
+   | |     /// Describes this type for exporters; custom layouts are opaque by default.
+   | |     fn schema_definition() -> crate::graph::Definition
+   | |     where
 ...  |
    | |     fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError>;
    | | }
@@ -449,9 +480,9 @@ note: required by a bound in `SchemaLayout`
  --> src/layout.rs
   |
   | / pub trait SchemaLayout {
-  | |     /// Owned decoded value for this layout.
-  | |     type Value: Clone + Copy + Default + Eq + PartialEq;
-  | |     /// Checked immutable view for this layout.
+  | |     /// Describes this type for exporters; custom layouts are opaque by default.
+  | |     fn schema_definition() -> crate::graph::Definition
+  | |     where
 ... |
   | |     fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError>;
   | | }
@@ -602,6 +633,68 @@ note: required by a bound in `TryFrom`
    |
    | pub const trait TryFrom<T>: Sized {
    |                             ^^^^^ required by this bound in `TryFrom`
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: SchemaLayout` is not satisfied in `Bad`
+ --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
+  |
+8 | record_schema! { pub record Bad {
+  |                             ^^^ unsatisfied trait bound
+  |
+help: within `Bad`, the trait `SchemaLayout` is not implemented for `Control`
+ --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+  |
+3 | register_schema! { pub register Control {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `SchemaLayout` is implemented for `Bad`
+ --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+  |
+8 | record_schema! { pub record Bad {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
+  |
+8 | record_schema! { pub record Bad {
+  |                             ^^^
+note: required by a bound in `hw_model_schema::graph::DescribeSchema::schema_definition`
+ --> src/graph.rs
+  |
+  | / pub trait DescribeSchema {
+  | |     /// Returns the definition without recursively constructing its dependencies.
+  | |     fn schema_definition() -> Definition;
+  | | }
+  | |_^ required by this bound in `DescribeSchema::schema_definition`
+  = note: this error originates in the macro `register_schema` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: SchemaLayout` is not satisfied in `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: within `Bad`, the trait `SchemaLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `SchemaLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
+   |
+ 8 | record_schema! { pub record Bad {
+   |                             ^^^
+note: required by a bound in `hw_model_schema::graph::Definition::record`
+  --> src/graph/definition.rs
+   |
+   |     pub fn record<T: ?Sized + 'static>(spec: RecordSpec, references: Vec<Reference>) -> Self {
+   |                   ^ required by this bound in `Definition::record`
    = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0277]: the trait bound `Control: SchemaLayout` is not satisfied
@@ -837,4 +930,38 @@ note: required because it appears within the type `Bad`
  8 | record_schema! { pub record Bad {
    |                             ^^^
    = note: all function arguments must have a statically known size
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: SchemaLayout` is not satisfied in `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: within `Bad`, the trait `SchemaLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `SchemaLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
+   |
+ 8 | record_schema! { pub record Bad {
+   |                             ^^^
+note: required by a bound in `hw_model_schema::graph::DescribeSchema::schema_definition`
+  --> src/graph.rs
+   |
+   | / pub trait DescribeSchema {
+   | |     /// Returns the definition without recursively constructing its dependencies.
+   | |     fn schema_definition() -> Definition;
+   | | }
+   | |_^ required by this bound in `DescribeSchema::schema_definition`
    = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)

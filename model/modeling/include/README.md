@@ -2,6 +2,11 @@
 
 The contract generates one shared wire header and two static register views:
 
+The common header selects record/union/bits definitions through the contract's
+optional schema discovery registry and follows dependencies. No separate list of
+command branches is maintained. Register views still receive explicit hardware
+instance parameters and application-owned Host/firmware permission projections.
+
 | Header | Register prefixes | Domain |
 | --- | --- | --- |
 | `pdma_common.h` | Existing record prefixes | Identical Host/firmware record sizes, encoding, enums and accessors |

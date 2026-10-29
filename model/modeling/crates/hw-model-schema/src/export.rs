@@ -3,7 +3,7 @@
 use core::{convert::Infallible, fmt};
 
 /// Built-in artifact renderers enabled by format-specific crate features.
-#[cfg(feature = "export-c-header")]
+#[cfg(any(feature = "export-c-header", feature = "export-veryl-layout"))]
 pub mod backends;
 
 /// One fully owned artifact emitted by an exporter.

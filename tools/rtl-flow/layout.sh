@@ -7,5 +7,5 @@ if [[ $# != 1 || ($1 != --write && $1 != --check) ]]; then
 fi
 CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-4}" cargo run --locked --quiet \
     --manifest-path "$root/model/modeling/Cargo.toml" \
-    -p pdma-model-contract --bin pdma-rtl-layout -- \
+    -p pdma-model-contract --features export-rtl-layout --bin pdma-rtl-layout -- \
     "$1" "$root/rtl/src/dma/layout.veryl"

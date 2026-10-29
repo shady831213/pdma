@@ -201,6 +201,13 @@ impl BitsValueError {
 
 /// Shared contract implemented by markers generated with `bits_schema!`.
 pub trait BitsLayout {
+    /// Describes the shared bit definition independently of each embedding.
+    fn schema_definition() -> crate::graph::Definition
+    where
+        Self: 'static,
+    {
+        crate::graph::Definition::bits::<Self>()
+    }
     /// Owned typed value containing every declared bit field.
     type Value: Clone + Copy + Default + Eq + PartialEq;
     /// Unsigned scalar containing the complete encoded bit layout.

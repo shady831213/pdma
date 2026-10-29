@@ -47,6 +47,12 @@ from crates.io. The library sources remain workspace members for maintenance;
 they do not override registry dependencies. Preserve this distinction and do not
 add local path dependencies or `[patch.crates-io]` overrides to the normal model build.
 
+Schema 0.2.0 is currently an **unpublished review candidate** (user requested review
+before publication). Its definition graph and generator integration are validated
+with an explicit temporary Cargo-home patch configuration, never a checked-in
+default override. See `model/modeling/docs/schema-export-review.md` to reproduce
+candidate checks. Do not publish until the user authorizes publication again.
+
 The original scenarios sources are preserved on the backup branch only.
 The new `crates/scenarios` contains current-model integration tests. Current acceptance
 uses these system scenarios and the active crates' boundary tests.

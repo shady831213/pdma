@@ -79,6 +79,9 @@ pub(super) fn expand(decl: &RegisterDefinitionDecl) -> syn::Result<TokenStream> 
         #[doc = "Checked mutable byte view for the generated register."] #[derive(Debug)] #visibility struct #view_mut_name<'a> { bytes: &'a mut [u8], base: #facade::SchemaCoordinate }
         impl<'a> #view_mut_name<'a> { #[doc = "Creates a checked mutable register view."] pub fn new(bytes: &'a mut [u8]) -> ::core::result::Result<Self, #facade::RegisterCodecError> { let actual = bytes.len(); let bytes = bytes.get_mut(..#width).ok_or(#facade::RegisterCodecError::BufferTooShort { required: #width, actual })?; ::core::result::Result::Ok(Self { bytes, base: #facade::SchemaCoordinate::Byte(0) }) } #[doc = "Reads the complete register value."] pub fn value(&self) -> ::core::result::Result<u64, #facade::RegisterCodecError> { #marker::SPEC.view(self.bytes)?.value() } #[doc = "Writes the complete register value."] pub fn set_value(&mut self, value: u64) -> ::core::result::Result<(), #facade::RegisterCodecError> { #marker::SPEC.view_mut(self.bytes)?.set_value(value) } #(#getters)* #(#setters)* }
         impl #facade::RegisterLayout for #marker {
+            fn schema_definition() -> #facade::graph::Definition {
+                <Self as #facade::graph::DescribeSchema>::schema_definition()
+            }
             type Value = #values_name;
             type View<'a> = #view_name<'a>;
             type ViewMut<'a> = #view_mut_name<'a>;

@@ -1,6 +1,6 @@
 [package]
 name = "hw-model-schema"
-version = "0.1.0"
+version = "0.2.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -14,7 +14,8 @@ categories = ["development-tools"]
 documentation = "https://docs.rs/hw-model-schema"
 
 [dependencies]
-hw-model-schema-macros = "0.1.0"
+hw-model-schema-macros = "=0.2.0"
+inventory = { version = "0.3.25", optional = true }
 
 [dev-dependencies]
 trybuild = "1"
@@ -24,7 +25,9 @@ all-features = true
 
 [features]
 default = []
+discovery = ["dep:inventory"]
 export-c-header = []
+export-veryl-layout = []
 
 [lints]
 workspace = true

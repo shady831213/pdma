@@ -30,6 +30,12 @@ pub(super) fn expand(context: &SchemaContext<'_>) -> syn::Result<TokenStream> {
         }
     });
     Ok(quote! {
+        #facade::__register_schema!(<#marker as #facade::BitsLayout>::schema_definition);
+        impl #facade::graph::DescribeSchema for #marker {
+            fn schema_definition() -> #facade::graph::Definition {
+                <Self as #facade::BitsLayout>::schema_definition()
+            }
+        }
         #rust_docs
         #[doc = "Marker and metadata namespace for one reusable bits schema."]
         #[derive(Clone, Copy, Debug)]

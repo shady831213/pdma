@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use quote::format_ident;
+use quote::{format_ident, quote};
 use syn::parse2;
 
 use crate::internal::syntax::RegisterDefinitionDecl;
@@ -8,7 +8,12 @@ mod definition;
 
 pub(in crate::internal) fn run(input: TokenStream) -> TokenStream {
     parse2::<RegisterDefinitionDecl>(input)
-        .and_then(|decl| definition::expand(&decl))
+        .and_then(|decl| {
+            let body = definition::expand(&decl)?;
+            let facade = crate::internal::crate_path::facade()?;
+            let graph = super::graph::register(&decl, &facade);
+            Ok(quote!(#body #graph))
+        })
         .unwrap_or_else(syn::Error::into_compile_error)
 }
 

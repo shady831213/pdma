@@ -21,7 +21,7 @@ pdma-model-host = { path = "../host" }
 pdma-model-firmware = { path = "../firmware" }
 pdma-model-hw-components = { path = "../hw-components" }
 hw-model-pipeline = "0.1.0"
-hw-model-schema = "0.1.0"
+hw-model-schema = "0.2.0"
 tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync"] }
 
 [lints]

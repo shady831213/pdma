@@ -9,7 +9,7 @@ publish = false
 resolver = "3"
 
 [dependencies]
-his = { version = "0.1.0", package = "hw-model-schema" }
+his = { version = "0.2.0", package = "hw-model-schema" }
 
 [lints.rust]
 unsafe_code = "forbid"

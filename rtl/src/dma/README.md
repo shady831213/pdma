@@ -19,9 +19,11 @@ Only the owning module commits a validated write at the core handshake.
 
 `layout.veryl` is generated from contract metadata. It contains offsets,
 permissions, field masks/positions, enum values and command/event record geometry.
-The exporter explicitly describes the current DMA bank topology and checks its
-parameterized channel-base formula against schema instances across the admin-page
-boundary. It is not a generic symbolic schema compiler.
+The application selects `DmaRegisters`, `Command` and `Event`; the generic schema
+Veryl backend traverses dependencies and emits bank geometry from the map
+definitions. No DMA address formula or Veryl renderer remains in the application.
+Tests cross-check the admin-page boundary. Generated geometry functions assume
+valid instance parameters; they are not runtime software configuration validators.
 
 Supported integration parameters are a 32-bit register address, 32/64-bit AXI4-Lite
 data, positive `CHANNEL_COUNT` and a page-aligned `BASE_ADDR` whose complete map

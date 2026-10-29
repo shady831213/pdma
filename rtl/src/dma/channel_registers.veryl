@@ -1,7 +1,7 @@
 // Channel-owned configuration composes its two ring owners and views live execution/IRQ status.
 pub module ChannelRegisters #(
-    param BASE      : u32 = DmaLayout::channel_base(1) as u32   ,
-    param ADMIN_BASE: u32 = DmaLayout::CHANNEL_ADMIN_BASE as u32,
+    param BASE      : u32 = DmaRegistersLayout::channels_offset(1) as u32                                    ,
+    param ADMIN_BASE: u32 = (DmaRegistersLayout::admin_offset(1) + DmaAdminLayout::channels_offset(1)) as u32,
 ) (
     clk                  : input  clock                        ,
     rst_n                : input  reset_async_low              ,
@@ -22,7 +22,7 @@ pub module ChannelRegisters #(
     actions              : output RegisterState::ChannelActions,
     result               : output RegisterAccess::Result       ,
 ) {
-    alias package L = ChannelLayout;
+    alias package L = ChannelBlockLayout;
     var command_result  : RegisterAccess::Result    ;
     var event_result    : RegisterAccess::Result    ;
     var control_result  : RegisterAccess::Result    ;
@@ -36,8 +36,8 @@ pub module ChannelRegisters #(
         | (((events.producer != events.consumer) as u32) << L::CONTROL_IRQ_CAUSE_EVENT_NON_EMPTY_LSB);
 
     inst command_ring: RingRegisters #(
-        BASE             : BASE + DmaLayout::CHANNEL_COMMAND_OFFSET as u32,
-        SOFTWARE_PRODUCER: true                                           ,
+        BASE             : BASE + ChannelBlockLayout::command_offset() as u32,
+        SOFTWARE_PRODUCER: true                                              ,
     ) (
         clk                                  ,
         rst_n                                ,
@@ -53,8 +53,8 @@ pub module ChannelRegisters #(
         geometry_valid: command_geometry     ,
     );
     inst event_ring: RingRegisters #(
-        BASE             : BASE + DmaLayout::CHANNEL_EVENT_OFFSET as u32,
-        SOFTWARE_PRODUCER: false                                        ,
+        BASE             : BASE + ChannelBlockLayout::event_offset() as u32,
+        SOFTWARE_PRODUCER: false                                           ,
     ) (
         clk                                ,
         rst_n                              ,

@@ -9,12 +9,14 @@
 mod documentation;
 mod enumeration;
 mod error;
+mod graph;
 mod model;
 mod naming;
 mod record;
 mod register_map;
 
 pub use error::CHeaderExportError;
+pub use graph::{CHeaderExporter, CHeaderGraphError};
 pub use model::{
     RecordCHeaderField, RecordCHeaderModel, RegisterCHeaderBank, RegisterCHeaderModel,
     RegisterMapCHeaderModel,

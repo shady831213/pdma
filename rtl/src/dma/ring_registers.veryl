@@ -17,34 +17,34 @@ pub module RingRegisters #(
     geometry_valid: output logic                 ,
 ) {
     const BASE_OFFSET    : u32                        = if SOFTWARE_PRODUCER ?
-        CommandRingLayout::BASE_OFFSET
+        CommandRegistersLayout::BASE_OFFSET
     :
-        EventRingLayout::BASE_OFFSET
+        EventRegistersLayout::BASE_OFFSET
     ;
     const CAPACITY_OFFSET: u32                        = if SOFTWARE_PRODUCER ?
-        CommandRingLayout::CAPACITY_OFFSET
+        CommandRegistersLayout::CAPACITY_OFFSET
     :
-        EventRingLayout::CAPACITY_OFFSET
+        EventRegistersLayout::CAPACITY_OFFSET
     ;
     const PRODUCER_OFFSET: u32                        = if SOFTWARE_PRODUCER ?
-        CommandRingLayout::PRODUCER_OFFSET
+        CommandRegistersLayout::PRODUCER_OFFSET
     :
-        EventRingLayout::PRODUCER_OFFSET
+        EventRegistersLayout::PRODUCER_OFFSET
     ;
     const CONSUMER_OFFSET: u32                        = if SOFTWARE_PRODUCER ?
-        CommandRingLayout::CONSUMER_OFFSET
+        CommandRegistersLayout::CONSUMER_OFFSET
     :
-        EventRingLayout::CONSUMER_OFFSET
+        EventRegistersLayout::CONSUMER_OFFSET
     ;
     const ENTRY_BYTES    : u64                        = if SOFTWARE_PRODUCER ?
-        DmaLayout::COMMAND_BYTES
+        CommandLayout::EXTENT
     :
-        DmaLayout::EVENT_BYTES
+        EventLayout::EXTENT
     ;
     const ALIGNMENT      : u64                        = if SOFTWARE_PRODUCER ?
-        DmaLayout::COMMAND_ALIGNMENT
+        CommandLayout::ALIGNMENT
     :
-        DmaLayout::EVENT_ALIGNMENT
+        EventLayout::ALIGNMENT
     ;
     var   base_access    : RegisterAccess::Result    ;
     var   capacity_access: RegisterAccess::Result    ;

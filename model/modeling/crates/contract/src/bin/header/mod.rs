@@ -1,20 +1,13 @@
 use hw_model_schema::{
-    export::backends::c_header::{RecordCHeaderExporter, RegisterMapCHeaderExporter},
+    export::backends::c_header::{CHeaderExporter, RegisterMapCHeaderExporter},
     export::{Exporter, InMemoryArtifactSink},
+    graph::{DefinitionBody, SchemaRegistry, SchemaSet},
 };
-use pdma_model_contract::control::{
-    ControlEvent, ControlQueue, ControlRequest, ControlResponse, ControlRingState,
-};
-use pdma_model_contract::dma::{
-    AtomicCommand, Command, CommandHeader, CopyCommand, DmaRegisters, ErrorInfo, Event,
-    FenceCommand, FillCommand, LinearEndpoint, ScatterGatherEndpoint, Segment, SemaphoreCommand,
-    TimestampCommand, TrapCommand, WaitCommand, WordTarget, WordWrite, WriteCommand,
-};
+use pdma_model_contract::dma::DmaRegisters;
 use pdma_model_contract::hw_components::context::ContextTableRegisters;
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_contract::hw_components::firmware::FirmwareRegisters;
 use pdma_model_contract::hw_components::windows::ChannelWindowRegisters;
-use pdma_model_contract::memory::ContextAttributes;
 use pdma_model_contract::view::RegisterView;
 use std::{error::Error, io::Write};
 
@@ -35,37 +28,18 @@ pub fn generate_with_contexts(count: usize, contexts: usize) -> Result<HeaderSet
     let contexts = ContextTableRegisters::for_channels(contexts, count)?;
     let registers = layout.resolve()?;
     let mut common = InMemoryArtifactSink::new();
-    for (name, record) in [
-        ("segment", Segment::SPEC.resolve()?),
-        ("linearendpoint", LinearEndpoint::SPEC.resolve()?),
-        (
-            "scattergatherendpoint",
-            ScatterGatherEndpoint::SPEC.resolve()?,
-        ),
-        ("commandheader", CommandHeader::SPEC.resolve()?),
-        ("writecommand", WriteCommand::SPEC.resolve()?),
-        ("fencecommand", FenceCommand::SPEC.resolve()?),
-        ("trapcommand", TrapCommand::SPEC.resolve()?),
-        ("command", Command::SPEC.resolve()?),
-        ("copycommand", CopyCommand::SPEC.resolve()?),
-        ("wordtarget", WordTarget::SPEC.resolve()?),
-        ("wordwrite", WordWrite::SPEC.resolve()?),
-        ("fillcommand", FillCommand::SPEC.resolve()?),
-        ("waitcommand", WaitCommand::SPEC.resolve()?),
-        ("atomiccommand", AtomicCommand::SPEC.resolve()?),
-        ("semaphorecommand", SemaphoreCommand::SPEC.resolve()?),
-        ("timestampcommand", TimestampCommand::SPEC.resolve()?),
-        ("event", Event::SPEC.resolve()?),
-        ("errorinfo", ErrorInfo::SPEC.resolve()?),
-        ("contextattributes", ContextAttributes::SPEC.resolve()?),
-        ("controlrequest", ControlRequest::SPEC.resolve()?),
-        ("controlresponse", ControlResponse::SPEC.resolve()?),
-        ("controlevent", ControlEvent::SPEC.resolve()?),
-        ("controlringstate", ControlRingState::SPEC.resolve()?),
-        ("controlqueue", ControlQueue::SPEC.resolve()?),
-    ] {
-        RecordCHeaderExporter::new(name, name).export(&record, &mut common)?;
+    let mut records = SchemaSet::new();
+    for definition in SchemaRegistry::discover().definitions() {
+        if definition.id().path().starts_with("pdma_model_contract::")
+            && matches!(
+                definition.body(),
+                DefinitionBody::Bits(_) | DefinitionBody::Record(_) | DefinitionBody::Union { .. }
+            )
+        {
+            records.add_definition(definition.clone());
+        }
     }
+    CHeaderExporter::new().export(&records.resolve()?, &mut common)?;
     let mut headers = vec![("pdma_common.h", wrap("PDMA_COMMON_H", &common, false))];
     for (role, prefix, filename, guard) in [
         (RegisterView::Host, "h", "pdma_host.h", "PDMA_HOST_H"),

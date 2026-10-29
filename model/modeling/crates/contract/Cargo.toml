@@ -10,7 +10,8 @@ description = "PDMA DMA and management wire and register schemas"
 
 [features]
 default = []
-export-c-header = ["hw-model-schema/export-c-header"]
+export-c-header = ["hw-model-schema/export-c-header", "hw-model-schema/discovery"]
+export-rtl-layout = ["hw-model-schema/export-veryl-layout"]
 
 [[bin]]
 name = "pdma-abi-header"
@@ -20,9 +21,10 @@ required-features = ["export-c-header"]
 [[bin]]
 name = "pdma-rtl-layout"
 path = "src/bin/pdma-rtl-layout.rs"
+required-features = ["export-rtl-layout"]
 
 [dependencies]
-hw-model-schema = "0.1.0"
+hw-model-schema = "0.2.0"
 
 [lints]
 workspace = true

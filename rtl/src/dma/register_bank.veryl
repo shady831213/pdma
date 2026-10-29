@@ -27,17 +27,21 @@ pub module DmaRegisterBank #(
     actions              : output  RegisterState::ChannelActions                [CHANNEL_COUNT],
 ) {
     const CHANNEL_BASE   : u32                                    = BASE_ADDR
-        + DmaLayout::channel_base(CHANNEL_COUNT) as u32;
-    const CONTROL_BASE   : u32                                    = BASE_ADDR + DmaLayout::CONTROL_BASE as u32;
-    const DISCOVERY_BASE : u32                                    = BASE_ADDR + DmaLayout::DISCOVERY_BASE as u32;
+        + DmaRegistersLayout::channels_offset(CHANNEL_COUNT as u64) as u32;
+    const ADMIN_BASE     : u32                                    = BASE_ADDR
+        + DmaRegistersLayout::admin_offset(CHANNEL_COUNT as u64) as u32;
+    const CONTROL_BASE   : u32                                    = ADMIN_BASE
+        + DmaAdminLayout::control_offset(CHANNEL_COUNT as u64) as u32;
+    const DISCOVERY_BASE : u32                                    = BASE_ADDR
+        + DmaRegistersLayout::discovery_offset(CHANNEL_COUNT as u64) as u32;
     const CAPABILITIES   : u64                                    = ((if ATOMIC32 ? 64'd1 : 64'd0)
-            << DiscoveryLayout::CAPABILITIES_ATOMIC32_LSB)
-        | ((if ATOMIC64 ? 64'd1 : 64'd0) << DiscoveryLayout::CAPABILITIES_ATOMIC64_LSB);
+            << DmaDiscoveryLayout::CAPABILITIES_ATOMIC32_LSB)
+        | ((if ATOMIC64 ? 64'd1 : 64'd0) << DmaDiscoveryLayout::CAPABILITIES_ATOMIC64_LSB);
     let   fatal_value    : u64                                    = (if global_fatal ?
-            ControlLayout::FATAL_CODE_INTERNAL
+            DmaControlLayout::FATAL_CODE_INTERNAL
         :
-            ControlLayout::FATAL_CODE_NONE
-        ) << ControlLayout::FATAL_CODE_LSB;
+            DmaControlLayout::FATAL_CODE_NONE
+        ) << DmaControlLayout::FATAL_CODE_LSB;
     let   commit         : logic                                  = port.request_valid && port.request_ready;
     var   channel_results: RegisterAccess::Result [CHANNEL_COUNT];
     var   selected       : RegisterAccess::Result                ;
@@ -48,8 +52,9 @@ pub module DmaRegisterBank #(
 
     for i in 0..CHANNEL_COUNT :channels {
         inst owner: ChannelRegisters #(
-            BASE      : CHANNEL_BASE + i * DmaLayout::CHANNEL_STRIDE as u32,
-            ADMIN_BASE: BASE_ADDR + DmaLayout::CHANNEL_ADMIN_BASE as u32 + i * DmaLayout::CHANNEL_ADMIN_STRIDE as u32,
+            BASE      : CHANNEL_BASE + i * DmaRegistersLayout::channels_stride(CHANNEL_COUNT as u64) as u32,
+            ADMIN_BASE: ADMIN_BASE + DmaAdminLayout::channels_offset(CHANNEL_COUNT as u64) as u32 + i
+                * DmaAdminLayout::channels_stride(CHANNEL_COUNT as u64) as u32,
         ) (
             clk                                                     ,
             rst_n                                                   ,
@@ -79,33 +84,33 @@ pub module DmaRegisterBank #(
     always_comb {
         global_result = RegisterAccess::leaf(
             port.request,
-            DISCOVERY_BASE + DiscoveryLayout::CHANNEL_NUM_OFFSET,
-            DiscoveryLayout::CHANNEL_NUM_BYTES,
+            DISCOVERY_BASE + DmaDiscoveryLayout::CHANNEL_NUM_OFFSET,
+            DmaDiscoveryLayout::CHANNEL_NUM_BYTES,
             CHANNEL_COUNT as u64,
-            DiscoveryLayout::CHANNEL_NUM_READ,
-            DiscoveryLayout::CHANNEL_NUM_WRITE,
-            DiscoveryLayout::CHANNEL_NUM_WRITABLE,
+            DmaDiscoveryLayout::CHANNEL_NUM_READ,
+            DmaDiscoveryLayout::CHANNEL_NUM_WRITE,
+            DmaDiscoveryLayout::CHANNEL_NUM_WRITABLE,
         );
         candidate     = RegisterAccess::leaf(
             port.request,
-            DISCOVERY_BASE + DiscoveryLayout::CAPABILITIES_OFFSET,
-            DiscoveryLayout::CAPABILITIES_BYTES,
+            DISCOVERY_BASE + DmaDiscoveryLayout::CAPABILITIES_OFFSET,
+            DmaDiscoveryLayout::CAPABILITIES_BYTES,
             CAPABILITIES,
-            DiscoveryLayout::CAPABILITIES_READ,
-            DiscoveryLayout::CAPABILITIES_WRITE,
-            DiscoveryLayout::CAPABILITIES_WRITABLE,
+            DmaDiscoveryLayout::CAPABILITIES_READ,
+            DmaDiscoveryLayout::CAPABILITIES_WRITE,
+            DmaDiscoveryLayout::CAPABILITIES_WRITABLE,
         );
         if candidate.matched {
             global_result = candidate;
         }
         candidate = RegisterAccess::leaf(
             port.request,
-            CONTROL_BASE + ControlLayout::IRQ_ENABLE_OFFSET,
-            ControlLayout::IRQ_ENABLE_BYTES,
+            CONTROL_BASE + DmaControlLayout::IRQ_ENABLE_OFFSET,
+            DmaControlLayout::IRQ_ENABLE_BYTES,
             global_irq_enable as u64,
-            ControlLayout::IRQ_ENABLE_READ,
-            ControlLayout::IRQ_ENABLE_WRITE,
-            ControlLayout::IRQ_ENABLE_WRITABLE,
+            DmaControlLayout::IRQ_ENABLE_READ,
+            DmaControlLayout::IRQ_ENABLE_WRITE,
+            DmaControlLayout::IRQ_ENABLE_WRITABLE,
         );
         if candidate.write && (global_reset_busy || global_clear) {
             candidate.write  = 0;
@@ -116,24 +121,24 @@ pub module DmaRegisterBank #(
         }
         candidate = RegisterAccess::leaf(
             port.request,
-            CONTROL_BASE + ControlLayout::FATAL_OFFSET,
-            ControlLayout::FATAL_BYTES,
+            CONTROL_BASE + DmaControlLayout::FATAL_OFFSET,
+            DmaControlLayout::FATAL_BYTES,
             fatal_value,
-            ControlLayout::FATAL_READ,
-            ControlLayout::FATAL_WRITE,
-            ControlLayout::FATAL_WRITABLE,
+            DmaControlLayout::FATAL_READ,
+            DmaControlLayout::FATAL_WRITE,
+            DmaControlLayout::FATAL_WRITABLE,
         );
         if candidate.matched {
             global_result = candidate;
         }
         candidate = RegisterAccess::leaf(
             port.request,
-            CONTROL_BASE + ControlLayout::RESET_OFFSET,
-            ControlLayout::RESET_BYTES,
+            CONTROL_BASE + DmaControlLayout::RESET_OFFSET,
+            DmaControlLayout::RESET_BYTES,
             global_reset_busy as u64,
-            ControlLayout::RESET_READ,
-            ControlLayout::RESET_WRITE,
-            ControlLayout::RESET_WRITABLE,
+            DmaControlLayout::RESET_READ,
+            DmaControlLayout::RESET_WRITE,
+            DmaControlLayout::RESET_WRITABLE,
         );
         if candidate.matched {
             global_result = candidate;
@@ -159,7 +164,7 @@ pub module DmaRegisterBank #(
             if global_clear {
                 global_irq_enable = 0;
             } else if commit && global_result.write && port.request.address == CONTROL_BASE
-                + ControlLayout::IRQ_ENABLE_OFFSET {
+                + DmaControlLayout::IRQ_ENABLE_OFFSET {
                 global_irq_enable = global_result.value[0];
             }
             if commit {

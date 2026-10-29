@@ -1,7 +1,8 @@
 # PDMA implementation checks
 
 This directory will own Design Compiler synthesis, SDC timing constraints and
-VC SpyGlass CDC/RDC analysis for actual PDMA tops. Add constraints and flow scripts
+VC SpyGlass CDC/RDC analysis for the DMA-only top in the first phase. CPU,
+peripheral and subsystem implementation assessments are deferred. Add constraints and flow scripts
 with the corresponding design; no timing constraints or waivers are supplied yet.
 
 Use the three domains and reset requirements recorded in the

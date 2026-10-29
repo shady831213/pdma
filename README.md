@@ -14,6 +14,8 @@ execution and interrupt delivery are supplied outside the hardware model.
 RTL preparation lives in [rtl](rtl/README.md), with architecture inputs in
 [docs/rtl](docs/rtl/architecture.md). The directory skeleton has no implemented
 DMA RTL or executable DMA RTL tests yet; the tool directory has a compiler smoke test.
+The first RTL phase is DMA only; CPU, peripheral hardware and full subsystem
+integration follow after DMA convergence.
 
 ## Repository structure
 

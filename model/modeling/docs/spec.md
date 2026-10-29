@@ -69,6 +69,9 @@ The evolving RTL architecture inputs, clock/domain ownership, register-bus
 compatibility questions and performance criteria are recorded in
 [RTL architecture preparation](../../../docs/rtl/architecture.md). That draft does not override
 the normative chapters or claim completed RTL qualification.
+The first RTL implementation phase covers DMA only. CPU, peripheral hardware and
+full subsystem integration follow DMA convergence; their future interface obligations
+remain relevant but are not prerequisites for implementing the DMA core.
 
 Contract schemas define relative register placement, field access, wire encodings
 and instance-sized banks. Generated Host and firmware headers are projections of

@@ -12,12 +12,18 @@ DATA_WIDTH、ADDR_WIDTH、ID_WIDTH 和 outstanding 容量是实例参数；架�
 不能因物理地址端口更窄就截断高位。不能表示的请求在发射前失败，映射到原有访问用途
 对应的 error/fatal，不另造软件成功路径。地址端口具体支持范围待实现参数矩阵验证。
 
-DMA 请求携带 channel、context selector、地址、长度、访问用途、操作及必要 ordering。
-`hw-components` 在送出前查询并授权 Function/context，形成稳定的 address-space 属性。
-平台 wrapper 再编码总线 sideband 和 opaque ch_tag。总线 ID 标识正在执行的事务，
-不等于 channel、context、Function 或 ch_tag。直连模式不要求实例化 context 表。
-PF control memory 仍用独立、enable 冻结的配置；若平台汇聚它与 DMA，仲裁和来源
-区分在平台 wrapper，不让 DMA 排空逻辑误清 firmware 的内存请求。
+当前阶段只做 DMA RTL。DMA 请求携带 channel、完整 context selector、地址、长度、
+访问用途、操作及必要 ordering；core 不解释 Function/PASID，也不实例化授权表。
+这些 selector 必须保留到外部适配边界，不能在 core 中擅自把 ContextId 当成 PASID。
+第一阶段 testbench 提供地址空间/错误/故障响应，检查 DUT 发出的 selector，不要求
+实现外围硬件、CPU 或固件。
+
+后续 `hw-components` 才负责查询并授权 Function/context，平台 wrapper 编码下游
+身份和 opaque ch_tag。DMA 输出 selector 的 sideband 与最终 MMU 接收的 ch_tag
+不是同一语义；具体 AXI USER 位布局在 DMA 端口定义中保留清晰边界。总线 ID 仅标识
+正在执行的事务，不等于 channel、context、Function 或 ch_tag。
+PF control memory 及其汇聚/仲裁不在本阶段 DUT 中；后续集成不能让 DMA reset
+误清 firmware 的内存请求。
 
 建议物理接口只启用需要的 AXI5 特性：普通 INCR、原生 atomic 所需的 Compare WRAP，
 以及显式配置的 request/response USER。地址/数据翻译、ATS/PRI 和 PCIe ID 编码不在
@@ -32,14 +38,13 @@ DMA 内实现。atomic 能力由端到端配置决定，不能见到 AXI5 就把
 | 值/资源 | 内容与职责 |
 | --- | --- |
 | MemoryRequest | owner channel、接受任务的身份、访问用途、context selector、地址/长度、操作、ordering |
-| AuthorizedRequest | 上述信息及经授权的稳定 Function/地址空间属性；仍不拥有任务分配策略 |
 | PayloadBuffer | 要发送或保留的数据、有效字节范围、唯一 owner；读写双方转移使用权 |
 | TransactionSlot | AXI ID、owner、请求快照、offer/握手状态、预期返回、错误、buffer handle |
 | MemoryReceipt | 成功/永久失败/PageFault/发射前取消、返回数据及内部请求身份；只终结这次访问 |
 
 任务引用由 channel 保留；slot 只拥有一次外部访问的责任，不能用 slot 清空替代任务退休。
-授权后的身份快照要保留至该次访问结束。绑定仍按既有 context 生命周期锁定；不是
-缓存了旧 PASID 就可以让 firmware 提前撤销或重新绑定。
+DMA 的 selector 和 owner 快照保留至访问结束。后续外围产生的授权身份同样必须
+保持其生命周期，但不会作为本阶段 DMA 内部的一份 Function/PASID 表。
 
 请求接受前必须预留 slot、足够的读/atomic 返回容量、必要的写数据和终结回执容量。
 不能先让外部接受请求再等待一次可能失败的内部内存分配。所有容量有界，缺资源通过
@@ -130,7 +135,13 @@ slot 和 channel 的责任账本，不反向调用 Fetch 或重启整个命令�
 | SG metadata | ListReadError，停止并尝试发布 error event |
 | payload、Wait、Atomic、SEM、Fence、Timestamp target | 保留任务及所需数据，完成收尾后进入可 resume 的 parked 状态 |
 | error-event write | EventWrite channel fatal；不推进 event producer，不隐式重试 |
-| firmware control memory | 不由 DMA 分类，由该软件/平台通路处理 |
+| firmware control memory | 不在本阶段 DMA DUT 内；由后续软件/平台通路处理 |
+
+普通永久错误不提供 write burst 的逐字节成功 bitmap，不能凭 WLAST 推导完成前缀。
+error event 的 `bytes_completed` 建议取固化 record 时已确认成功的连续逻辑前缀；
+其它已接受请求可能继续结束。event 不作为恢复 checkpoint，软件仍需 reset 并等
+清理完成。具体推导及与 PageFault 内部逐项状态的区别见
+[数据通路中的进度规则](datapath.md#error-的-prefix报告快照不是重试位置)。
 
 MMU 向软件报告地址、访问类型、空间和 ch_tag 的路径仍由平台提供。USER 原因码只
 告诉 DMA 此次访问的结果，不替代 fault report，不携带软件 handler，也不是 fault

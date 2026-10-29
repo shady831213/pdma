@@ -4,6 +4,8 @@
 [reset](../../model/modeling/docs/reset.md) 和
 [context](../../model/modeling/docs/context-contract.md) 合同；本文给出多时钟、多事务
 实现必须维持的不变量。与 [memory-interface](memory-interface.md) 配套。
+本阶段仅实现 DMA；外部 CPU、Function/window/context 管理硬件和 firmware 不进 DUT。
+涉及这些对象的描述是后续集成责任，当前 testbench 直接驱动 DMA 控制/平台接口。
 
 ## 三种完成不得混用
 
@@ -111,8 +113,9 @@ IRQ cause/mask/ACK 属于各 channel；产生通知是状态更新的一部分�
 “IRQ pipeline”。建议 top 提供 core_clk 同步的 notification_pending/accept 接口，
 承载来源和用途，不把单拍脉冲直接跨时钟传递。平台再实现中断线、消息或 MSI 路由。
 
-DMA channel 通知（含 channel fatal）在 managed 模式交给受权 owner，DMA-wide fatal
-按现有合同交给 firmware。
+DMA 本阶段输出 channel 通知和独立 DMA-wide fatal 通知，testbench 扮演接收方。
+后续 managed 集成将 channel 通知（含 channel fatal）交给受权 owner，DMA-wide fatal
+按现有合同交给 firmware；路由实现不移入 DMA。
 身份路由必须在交付平台前稳定；已交付消息不得因重新绑定而变成新 owner 的通知。
 可合并通知采用 pending 状态记录，背压不丢掉“需要检查”的事实，不要求为每次 Trap
 存无界计数。后到的未屏蔽事件和 ACK 同拍置位优先。软件仍检查原因和队列。

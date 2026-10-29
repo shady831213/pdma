@@ -31,9 +31,40 @@
 | channel/context | 实例参数；数量影响真实存储和访问结构，不只是 generate 次数 |
 | 吞吐 | 无不合理的内部吞吐损失；在声明的工作条件下，zero-delay 外部系统不能被内部周期性空泡限速 |
 
-保留 direct DMA 和 firmware-managed 两种配置。后者的 Function/window/context 管理
+2026-10-29 用户明确：**先只做 DMA RTL，收敛后再考虑 CPU、外围组件和子系统**。
+当前范围是 DMA 自有寄存器、channel、共享执行、内存端口、通知及 reset/维护边界。
+现有 DMA 内部 Drain/Abort 语义保留，用 testbench 驱动它的控制接口；不实现外围的
+ContextRequest MMIO、context table、Function/window 路由、PF control channel 或 CPU。
+
+保留后续 direct DMA 和 firmware-managed 集成的边界。后者的 Function/window/context 管理
 仍在 DMA 外围，生命周期策略仍由 firmware 承担；不把 Function/PASID 表塞回 DMA core。
 当前不增加 PCIe、MMU、逻辑 channel 超售、NPU 或 firmware 失效后的完整设备救援机制。
+
+## 本阶段 DMA top 的边界
+
+接口名称尚未冻结，首阶段按下列实际责任定义端口，不先实例化一个完整子系统：
+
+| DMA 边界 | 当前需要表达的内容 | 明确留在外部的部分 |
+| --- | --- | --- |
+| 寄存器访问 | 一个 32/64 位 AXI4-Lite slave，覆盖 DMA discovery/admin/channel map | Function/PF/VF 权限窗口、PF control 与 boot 寄存器 |
+| 内存访问 | 一个 AXI5 master；请求保留 channel 与完整 ContextId，响应保留错误原因 | selector 到 Function/PASID/ch_tag 的映射、MMU、内存实体与 CPU cache 协调 |
+| Context 维护控制 | 完整 ContextId、Drain/Abort、受理/忙状态、结果及失败 channel 集合 | ContextRequest MMIO 编码、context valid/owner 表、Destroy 策略与 firmware 请求队列 |
+| 通知 | channel notification pending/accept 和独立 DMA-wide fatal pending/accept | 中断控制器、CPU ISR、Function 路由与 PCIe MSI |
+| 时间 | core 域一致的 64 位外部样本；无 timer 配置下 Timestamp 按既有 Unsupported 语义 | timer 实体、计时单位及异步源的快照适配 |
+| 时钟/复位 | reg/core/bus 三域及各域同步释放；软件 reset 仍走责任排空 | 平台冷复位协调、电源管理与任意单域热复位恢复 |
+
+维护控制是 DMA 内已有行为的硬件接口，不新增 Host/VF 可写的维护寄存器，也不是
+firmware 的命令队列。首版只需一个在途维护操作，结果交接与 reset 的独立受理必须
+明确；外围未来把它接到自己的寄存器，而不是让 DMA 解析 PF control descriptor。
+本阶段的验证端直接驱动该接口，检查 producer frontier、引用保留和 reset 打断维护。
+
+DMA 输出的 channel/context selector 需要稳定地随 AR/AW 交付。它们不是最终的
+MMU 身份；后续外围可做映射，而普通直连适配可以按其平台约定使用或忽略 selector。
+因此没有必要现在为 DMA 添加 Function/PASID 表、预留 control context slot 或 K 参数。
+本阶段的结构参数是 channel 数、总线宽度/ID/缓冲容量及既有能力开关；最终取值需验证。
+
+testbench 承担寄存器 driver、memory responder、fault/timer 注入和通知接收，使用
+独立期望检查。它不实现另一套 DMA engine，也不为了驱动这些接口先造 CPU/firmware。
 
 ## 三个时钟域的职责
 
@@ -80,12 +111,11 @@ flowchart LR
 具体访问矩阵、ContextRequest 编码建议、跨域提交路径和实施范围见
 [寄存器接口设计草案](register-interface.md)。该文档同样待评审，尚未修改现有 contract。
 
-现有 schema 包含 32 位控制和 64 位地址；`ContextRequest` 当前也是 64 位，低 32 位
-为 context ID，高位为 action。它在 model 中要求一次完整写入。AXI4-Lite 32 位模式
-无法直接满足这一假设，必须在 RTL 编码前完成协议收敛。
+DMA 自身的动作寄存器是 32 位，64 位的是 ring base 配置。外围 `ContextRequest`
+虽然目前要求完整 64 位写，但不属于本阶段 DMA map；其格式改版留到外围阶段，
+不再作为 DMA 编码前置条件。
 
-具体草案建议配置地址分段写后由 enable/valid 发布，ContextRequest 收紧为 30 位
-index 与 2 位 action 的完整 32 位请求。64 位端口仍一次选中一个 leaf，不合并相邻
+具体草案建议 ring 地址分段写后由 channel enable 发布。64 位端口仍一次选中一个 leaf，不合并相邻
 寄存器；平台桥接必须保留低地址位和 byte lane，不能无条件套用任意宽度转换器。
 这些建议已有具体矩阵和错误规则，但仍未修改当前 contract；不宣称已支持两种物理接口。
 
@@ -178,8 +208,9 @@ ATS+PRI 保持事务的配置不向 DMA 暴露这种终止，仍属于另一种�
 需要记录并跳过这些已提交访问，或给出能够排除这种情况的真实发射/提交结构。
 这是编码前必须完成的 transaction-window 设计，不以“丢弃后续流水”代替。
 恢复只重试未完成工作；已经消费的 semaphore、atomic 更新、Timestamp 样本均不能重做。
-此外，窗口不能解决已定义的重叠 SG 读写依赖或自动确定永久错误的 prefix 保证。
-具体反例和设计边界见 [datapath](datapath.md)，不能把这些问题隐藏成单纯参数调优。
+重叠访问已经明确由软件负责：不检查、不拒绝，也不保证特定覆盖顺序；同 channel
+命令顺序和安全重试仍保证。永久错误的 prefix 已提出“报告时已确认连续前缀”的快照
+规则，不作为重试起点；仍需同步规范。具体影响和推导见 [datapath](datapath.md)。
 
 ## 吞吐要求与容量评估
 
@@ -220,15 +251,16 @@ Intel DSA 将 WQ、engine 和 group 区分配置，并通过能力提供最大�
 | 维度 | 设计与验证候选 |
 | --- | --- |
 | channel 数 C | 1、2、3、8、16；3 覆盖非二次幂索引/仲裁，后续依面积时序决定更大规模 |
-| context 数 K | direct 模式无表；managed 模式 1、3、16、64、256 的候选扫描；最终范围独立于 C |
+| context 数 K | 外围阶段再评估；本阶段 DMA 只保留 32 位 selector 和已有维护语义，不实例化 K 项表 |
 | master data width | 按协议档位建参数合法性矩阵，优先测窄、中、宽代表点，再覆盖承诺的全部档位 |
 | slave data width | 32 与 64，执行相同的软件场景和提交语义检查 |
 | clocks | 相同频率不同相位、非整数比、core 较慢、bus 较慢；物理停钟另有恢复协议 |
 
-规模预算必须分别列出：C 份 channel/任务保留状态，K 份授权表项，读/写/atomic
+本阶段预算必须分别列出：C 份 channel/任务保留状态，读/写/atomic
 outstanding，跨域 FIFO，以及故障后仍须保留的数据。单块 scratch 是否可服务全部
 parked channel 取决于实际分配与容量保证，不能由模型里的一个常量得出结论。
-500MHz 的评估也必须覆盖大 C/K 的选择网络、表访问和宽数据路径；参数能展开不等于
+500MHz 的评估也必须覆盖大 C 的选择网络和宽数据路径；外围的 K 项授权表留到后续。
+参数能展开不等于
 该规模已获得功能或时序支持。generic RAM 的综合结果不能冒称已经绑定 SRAM 宏的 PPA。
 
 ## 验证衔接与编码前剩余决定
@@ -247,16 +279,17 @@ VIP，也不能用 DUT 自己报告的值生成同一项检查的 expected。
 
 | 项目 | 已形成的草案 | 仍需落实的门槛 |
 | --- | --- | --- |
-| 寄存器 | 具体 lane/strobe、动作格式、配置发布、错误映射 | 桥接兼容性测试、批准格式后同步 contract/软件/header |
+| 寄存器 | DMA map 的 lane/strobe、配置发布和错误映射 | 桥接兼容性与 DMA owner 行为验证；外围格式不阻塞本阶段 |
 | AXI5 | slot 责任、ID 生命周期、原子映射、reason 编码 | 精确协议 profile、参数组合、VIP 检查与返回异常测试 |
 | Reset/CDC | 请求接收前计债、Close/Drain/Open、通知/timer 归属 | 实际 CDC/RDC 结构、初始化和同拍断言 |
-| 数据通路 | owner/阶段接口、任务和事务分层、保留资源预算 | 预读对重叠 SG 的等价性、永久错误非连续效果的合同 |
+| 数据通路 | owner/阶段接口、任务和事务分层、软件重叠义务及 prefix 快照建议 | 正式记录错误进度保证并验证实际返回交错 |
 | 性能/PPA | 外部参考吞吐、容量下界、覆盖维度 | 具体 clock ratio、资源档位、真实库/PVT 和测量结果 |
 
 不要把已经形成设计建议写成已经完成实现验证。尚未闭合的数据通路优化，不阻塞
 其它已明确对象的独立设计，但也不能据此宣称可以直接冻结完整高吞吐执行 engine。
 
 建议先实现的验证切片仍包含两个 channel 共享执行能力，贯通 Copy、Fence/Trap 和
-reset；这是验证顺序建议，不删除其余已实现命令及 managed 模式的整体架构要求。
+reset；这是验证顺序建议，不删除其余 DMA 命令。managed 模式仅保留接口边界，
+CPU/外围/子系统实现与资格验证在 DMA 收敛后另行开展。
 目录与原生 Veryl manifest 已建立，见 [RTL 入口](../../rtl/README.md)。尚无 RTL
 设计源文件或可执行测试；本阶段没有修改 contract/model，也没有改动 pcie_modeling。

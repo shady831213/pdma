@@ -23,6 +23,13 @@ contract. [RTL design inputs](../../../docs/rtl/architecture.md) records the agr
 not start a toolchain split or add model features. Register commit and transaction
 retirement details still require closure before RTL coding.
 
+On 2026-10-29 the first RTL phase was scoped to DMA only. CPU, managed peripherals
+and subsystem integration follow DMA convergence. Existing DMA-maintenance behavior
+is retained, but peripheral ContextRequest register redesign is not a prerequisite.
+The same day's overlap clarification restates software ownership: no hardware
+overlap detection/rejection or portable within-Copy overlap result is promised;
+see [HOST-CE-5](copy-engine.md#software-owned-overlap-policy).
+
 First milestone: the [firmware-managed DMA architecture MVP](firmware-dma-mvp.md).
 The subsequent [control channel](control-channel.md) implements independent
 command/response rings for multi-channel acquisition/reset/release, including local

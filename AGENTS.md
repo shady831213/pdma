@@ -17,6 +17,10 @@ Do not restore their compatibility interfaces without a user request.
 
 The executable model is under `model/modeling`; read its `AGENTS.md` for model work.
 RTL preparation is under `rtl`, `verification/pdma`, `impl/pdma` and `tools/rtl-flow`.
+The first RTL phase is DMA only (confirmed 2026-10-29). CPU, peripheral
+hw-components, firmware execution and subsystem integration wait until DMA RTL
+converges. Keep their future interface boundaries, but do not implement them or
+make their register redesign prerequisites for this phase.
 `docs/rtl/architecture.md` records confirmed inputs and unresolved design choices;
 it does not supersede the system specification under `model/modeling/docs`.
 The RTL skeleton has no DMA design implementation or executable design tests yet.

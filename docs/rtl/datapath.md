@@ -2,6 +2,7 @@
 
 状态：尚未编码。本文把 [architecture](architecture.md) 的原则展开到状态所有者、
 数据交接和吞吐预算。它不是 Rust 模块的逐一翻译，也不引入逻辑 channel 超售。
+2026-10-29 明确首阶段仅实现 DMA；CPU、外围组件及完整子系统留到 DMA 收敛以后。
 总线责任见 [memory-interface](memory-interface.md)，跨域关闭见 [reset-cdc](reset-cdc.md)。
 
 ## 一条数据通路
@@ -56,9 +57,10 @@ accepted task 的 context 引用与 command consumer 推进在同一个可线性
 操作/范围则按现有 command error 路径处理。ring context 的存活约束独立于某一条
 command 的 payload 引用，不能在 enable=0 时就假定 ring 不再绑定 context。
 
-context 的 owner/attributes/valid 表由 hw-components 拥有。原型可评估单查询端口和
-流水查询，但要用目标事务率证明它不是瓶颈；不预设一个大组合 mux 可以在任意 K 下
-跑到 500MHz，也不为了多个调用点复制权威 context 表。只读解析结果随事务保存。
+context 的 owner/attributes/valid 表由未来外围 hw-components 拥有，本阶段不实现。
+DMA 保存 selector 和已有任务引用，不加入 K 项授权表，不缩减 ContextId 位宽。
+DMA 内部的 context Drain/Abort、producer frontier、parked 引用和 reset 交互仍属
+本体行为，由 testbench 经 DMA 维护控制边界直接驱动；外围 MMIO 编码和固件调度延后。
 
 ## Copy/Fill 的工作项与保留窗口
 
@@ -108,36 +110,95 @@ peer 是否能在目标事务收尾期间就运行，取决于是否已完成全
 也是第一版不需要推测依赖图的原因。可预取 descriptor 的设计也必须保留未接受状态，
 不能推进 consumer、安装错误的引用或触发 payload；预取不是当前必选实现。
 
-## 本轮发现的真实兼容性问题
+## 行为边界及其收敛
 
-### 预读会改变已定义的重叠 SG 行为
+### 已明确：重叠由软件负责，不保证 model 的访问顺序
 
-当前 [PF-D02](../../model/modeling/docs/page-fault-recovery.md#pf-d02-retain-committed-progress-and-read-scratch)
-与 [overlapping_segments_follow_execution_order](../../model/modeling/crates/dma/tests/scatter_gather.rs)
-有明确证据：初始 `abcdef`，先把 `ab` 写到后续 source 所在位置，再读取它，最终是
+当前 [overlapping_segments_follow_execution_order](../../model/modeling/crates/dma/tests/scatter_gather.rs)
+展示了模型的一种执行结果：初始 `abcdef`，先把 `ab` 写到后续 source 所在位置，再读取它，最终是
 `ababab`。如果提前把第二段的 `cd` 读进窗口，结果会变成 `ababcd`。
-两者都没有回滚，但只有前者满足这条已有场景。不能把它当作过时测试删掉。
+2026-10-29 用户确认原意是由软件保证，硬件不负责检查；不能把前一种结果提升为
+RTL 保证。具体影响已写入
+[HOST-CE-5 / MODEL-CE-3](../../model/modeling/docs/copy-engine.md#software-owned-overlap-policy)。
+该模型测试保留，不删断言来迎合 RTL；它不作为重叠输入的跨实现数据 oracle。
 
-因此不能仅凭“chunk 完成不回外围流水”就推出可无条件跨 chunk 预读。不同 context
+不同 context
 还可能指向物理别名；DMA 看不到 MMU 翻译结果，仅比较 VA 和 context ID 不能证明
 物理不重叠。持有更多 buffer 也不能修复这一语义差异。
 
-草案保留两条边界：保序执行是功能基线；跨工作项的高吞吐流水必须先证明无依赖，
-或另行明确软件/平台的别名与访问顺序合同。本轮不新增 descriptor 模式位、不加入
-地址翻译，也不擅自把重叠情形改为 undefined。这个问题阻塞“任意合法输入均可满
-吞吐”的承诺，但不阻塞 register/CDC/AXI endpoint 的独立设计和实现。
+需要区别三类依赖，不能只检查“本 chunk 的 src 是否等于 dst”：
 
-### Error 的 prefix 不等于全部物理效果的集合
+| 关系（i 在 j 前） | 不受约束的流水化会发生什么 |
+| --- | --- |
+| W(i) 与 R(j) 访问同一实际存储 | R(j) 提前读到旧值，破坏原来的先写后读 |
+| R(i) 与 W(j) 访问同一实际存储 | 后写可能在前读完成前修改其输入 |
+| W(i) 与 W(j) 访问同一实际存储 | 乱序写入或补洞重试可能改变最终覆盖顺序 |
 
-`Event.info.bytes_completed` 定义的是连续 committed prefix。多 outstanding 下，如果
-前项失败、后项已写成功，仅有一个 prefix 无法描述所有已生效字节。当前 synchronous
-model 不会产生这种交织。reset 不回滚不能自动证明这种永久失败结果已经与 model
-等价；必须在允许该发射策略前明确 event 的保证边界。
+源 SG 重复读取同一范围本身不构成上述写依赖；目的 SG 的重复/相交范围则可能形成
+WAW。源/目的虚拟区间不相交、ContextId 不同均不是“实际存储不相交”的充分证明。
+同 channel 的前后两条 command 仍按命令顺序执行，这与单条 Copy 内是否可流水化
+是不同层级的约定。
 
-对于可恢复 fault，窗口可以保留每项结果：后项已成功的写不重放，只补未完成项，
-等缺口填满再推进 prefix。但它仍不能消除前一节的读写依赖问题。永久错误的方案需
-选择限制效果顺序，或者明确 prefix 只是已确认前缀、其后可能有在途效果；后者会影响
-软件恢复合同，不能作为内部优化默默采用。本轮保持这个判定点可见，不宣称解决了。
+结论是软件不能依赖单条 Copy 内这些访问的执行顺序。RTL 可采用有界预读/写窗口，
+不增加 descriptor 模式位、硬件别名检查或重叠错误。成功/Fence 证明对应操作结束，
+不能证明重叠结果符合软件期望；事后插入 Fence 也不能改变先前 Copy 内部的访问顺序。
+需要有序搬移时软件自行构造安全操作，例如非别名暂存区与多条有序 command。
+
+这不等于整个设备行为未定义。访问范围、授权、同 channel 命令顺序、PageFault
+保留及 reset 清理继续成立；hardware 不得因为软件重叠就越界或丢失事务责任。
+无需为了保证某个重叠字节模式而强制串行化，但正常输入的吞吐仍须实际测量。
+
+### Error 的 prefix：报告快照，不是重试位置
+
+2026-10-29 收敛建议：保留字段和 error/reset 机制，把 `Event.info.bytes_completed`
+明确为 **本次 event 固化时已确认成功的连续逻辑前缀**。不是成功字节总数，也不是
+最高成功地址。源/目的 SG 分段不同，prefix 仍按 command 的逻辑字节流定义。
+
+在 event 快照时刻 t，P 满足 `[0,P)` 的所有目的字节均已有成功的完整访问结果；若
+某位置未知或失败，不能跨过去增长 P。成功回执可以乱序到达，但只能从前缀头向前
+退休连续成功项。一个有错误响应的 write burst 不能凭 WSTRB/WLAST 计入已确认字节。
+
+例如三笔逻辑写 U0=[0,4)、U1=[4,8)、U2=[8,12)：U2 和 U0 成功，U1 错误，则
+P=4，即使已经写成功的总量是8。若固化 event 时 U0 还没返回，即便后来成功，event
+中的 P 也仍是0；发布后不回写这个 record。它不承诺 `[P,length)` 从未被修改。
+
+这不是凭空免除 cleanup。现有
+[HOST-CE-3 / HW-CE-13](../../model/modeling/docs/copy-engine.md#completion-error-events-and-notification)
+已明确 event/IRQ 不证明退休、不允许释放内存；
+[reset contract](../../model/modeling/docs/reset.md#interrupting-context-maintenance)
+要求已承诺外部事务继续排空。因此建议的 RTL 解释保留现有恢复路径：停止错误后软件
+走 reset，等待真实完成，再决定如何处理目标；不能拿 P 当作 DSA-style 重提的起点。
+这是需要补入正式规范的明确化草案，尚未改写当前 schema 描述或模型测试。
+
+硬件检测永久错误时先关闭本 channel 的新数据请求，保留 error origin/command ID，
+由 channel 固化一次 event。此前已经接受的请求仍可能结束，error-event 写本身是
+允许的独立报告效果。reset 到来时仍按其全 scope Close 协议取消/排空，不为了早点
+发布错误而把 memory_debt 清零。已发布的 prefix 不追随后续回执变化。
+
+可恢复 PageFault 不使用这个 event 字段来决定重试。它必须保留逐次访问的结果和
+数据：后项已经成功就不重放，失败且保证未生效的项才可在 resume 后重试。只有缺口
+全部补齐才推进退休前缀。该窗口不额外保证软件依赖的重叠覆盖顺序。
+
+永久失败场景的 RTL 检查应验证“报告的前缀确实成功、没有新命令越过错误、reset 后
+没有旧写继续发生”，不能额外假定报告前缀后的每个字节都没变。当前模型精确的失败
+注入断言继续保留，因为它们描述的是该确定性执行方式，不因此成为所有 RTL 返回
+交错的唯一 oracle；模型和 RTL 的比较需区分这种被允许的结果集合。
+
+### 多笔可恢复 fault 的安全重试边界
+
+一条 command 的窗口中可能有不止一笔 PageFault。首次观察到 fault 后停止新增数据
+请求；已接受访问的返回全部结清，保留每项 read/transform/write 状态和已经成功读取
+的字节。不能仅保留最早 fault 的单块 scratch 而丢掉其它已成功 read 的结果。
+
+尚未接受的请求留作未完成工作；已失败且无副作用的访问留待重试；已成功写入的项
+留下完成记录并释放其数据，但在退休头跨过它前不能丢掉该记录。slot 身份不等于
+可复用 AXI ID；完成顺序与窗口逻辑顺序也不同。
+
+FAULT_STATUS.faulted 只在窗口达到安全 park 边界后发布。软件修复、resume 后，
+先恢复这个未完成窗口，再允许生成窗口之后的新工作，避免一边补洞一边无限扩张。
+再次缺页再次 park，不自动重发，不重做已成功 transform 或 atomic。跨 channel 的
+保留资源仍需提前保证。该结构不增加 fault response、fault episode ID 或 firmware
+代理提交；平台 fault report 的聚合和软件处理仍是平台责任。
 
 ## 吞吐、时钟比和资源预算
 
@@ -153,27 +214,32 @@ model 不会产生这种交织。reset 不回滚不能自动证明这种永久�
 端点队列要能在有合法工作时连续服务。反过来，在依赖要求下串行等待是语义成本，
 不能隐藏在“已经达到自己定义的峰值”中。保序基线是否满足长 Copy 目标尚未证实。
 
-参数评估记录 C、K、D、W、P、slot 数、RAM 端口、三个时钟及 CDC 深度，分别报告：
+本阶段参数评估记录 C、D、W、P、slot 数、RAM 端口、三个时钟及 CDC 深度，分别报告：
 
 | 用例 | 观测 |
 | --- | --- |
 | 长、对齐、互不依赖的 Linear Copy | 启动/稳态/收尾，有效字节率及每类空泡 |
 | 很短的连续 command | descriptor/仲裁/寄存器发布开销，不能用大传输结果代替 |
 | 独立源/目的 SG、非对齐头尾 | 元数据与窄访问成本；没有越界读写 |
-| 现有重叠 SG | 精确结果必须保持，不用吞吐门槛覆盖正确性 |
+| 重叠 SG/物理别名 | 模型保留自身精确结果；RTL 检查安全与生命周期，不比较未承诺的字节模式 |
 | 一个 channel parked、其它可运行 | buffer 保留、peer 进度、复用与重试不重复效果 |
 | 全部 channel parked，再分别 resume/reset | 容量不超额，无资源循环等待 |
 | 满事务窗口时单 channel reset | 不清 peer，全部目标责任结束后 busy 才清 |
 
-最终 C/K 上限、RAM 宏和频率范围需综合/时序及功能矩阵共同确认。22nm、500MHz
+最终 C 上限、RAM 宏和频率范围需综合/时序及功能矩阵共同确认；K 留到外围阶段。
+22nm、500MHz
 不是可推导这些值的充分条件，本轮不会硬写一组未经验证的“产品规格”。
 
 ## 接下来可独立落实的顺序
 
-先冻结寄存器 transport 的访问规则和 ContextRequest 格式，再做带真实握手的寄存器
-前端/CDC；并行在设计层面完善 AXI slot/return/atomic profile 和关闭账本。第一条功能
+先落实 DMA 自有 map 的访问规则，再做带真实握手的寄存器前端/CDC；ContextRequest
+格式在外围阶段决定，不是此前置条件。设计层面继续完善 AXI slot/return/atomic
+profile 和关闭账本。第一条功能
 切片用两个 channel 共享执行、真实内存响应、Copy/Fence/Trap 和 reset，先证明责任
-边界，再扩大参数与命令覆盖。不得因切片较小而丢掉 managed 接口和其它 opcode 的设计。
+边界，再扩大参数与 DMA 命令覆盖。保留 managed 接入边界，但不以实现外围、CPU
+或完整子系统作为当前验收条件，也不减少 DMA 原有 opcode 和维护语义。
 
-在高速 Copy 发射优化前，必须结束上面两个等价性问题；通过现有 Rust tests 或工具
-smoke 都不能证明它们。待明确后，再把所需的系统合同补进规范并写 RTL 行为测试。
+重叠访问合同已明确；在高速 Copy 发射优化前，还要把已提出的 event prefix 快照规则
+写入正式规范和对应验证场景；通过现有 Rust tests 或工具 smoke 都不能替代这些工作。
+409 个有界抽象返回顺序（1..4 项、所有非空 fault 子集及返回排列）已用来检查前缀
+推进和恢复时不重放成功写的账目规则；这只是设计演算，不是 RTL 或模型测试通过。

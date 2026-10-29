@@ -1,0 +1,63 @@
+#[test(register_leaf_lanes_and_rejection)]
+module RegisterAccessTest {
+    initial {
+        var request        : RegisterBus::Request  ;
+        var result         : RegisterAccess::Result;
+        request         = '0;
+        request.write   = 1;
+        request.wide    = 1;
+        request.address = 20;
+        request.strobe  = 8'hf0;
+        request.data    = 64'hcafebabe_ffffffff;
+        result          = RegisterAccess::leaf(request, 20, 4, 0, true, true, 64'hffffffff);
+        $assert(result.matched && result.write && result.value == 64'hcafebabe, "UPPER_LANE_32_BIT_REGISTER");
+        request.strobe = 8'hff;
+        result         = RegisterAccess::leaf(request, 20, 4, 0, true, true, 64'hffffffff);
+        $assert(result.status == RegisterBus::SLVERR && !result.write, "NO_CROSS_LEAF_WRITE");
+        request.address = 4096;
+        request.strobe  = 8'h0f;
+        request.data    = 64'hdeadbeef_12345678;
+        result          = RegisterAccess::leaf(
+            request,
+            4096,
+            8,
+            64'habcdef01_00000000,
+            true,
+            true,
+            64'hffffffffffffffff,
+        );
+        $assert(result.value == 64'habcdef01_12345678, "LOW_HALF_PRESERVES_HIGH");
+        request.address = 4100;
+        request.wide    = 0;
+        request.data    = 64'h76543210;
+        result          = RegisterAccess::leaf(
+            request,
+            4096,
+            8,
+            64'habcdef01_12345678,
+            true,
+            true,
+            64'hffffffffffffffff,
+        );
+        $assert(result.value == 64'h76543210_12345678, "32_BIT_BUS_HIGH_HALF");
+        request.write = 0;
+        request.wide  = 1;
+        result        = RegisterAccess::leaf(request, 4096, 8, 64'h76543210_12345678, true, true, 64'hffffffffffffffff);
+        $assert(result.data == 64'h76543210_00000000, "HIGH_HALF_READ_LANE");
+        request.address = 60;
+        result          = RegisterAccess::leaf(request, 60, 4, 0, false, true, 1);
+        $assert(result.status == RegisterBus::SLVERR && result.data == 0, "WRITE_ONLY_READ_REJECTED");
+        request.write  = 1;
+        request.strobe = 8'hf0;
+        request.data   = 64'h00000002_00000000;
+        result         = RegisterAccess::leaf(request, 60, 4, 0, false, true, 1);
+        $assert(!result.write && result.status == RegisterBus::SLVERR, "RESERVED_BIT_REJECTED");
+        request.strobe = 0;
+        result         = RegisterAccess::leaf(request, 60, 4, 0, false, true, 1);
+        $assert(!result.write && result.status == RegisterBus::OKAY, "ZERO_STROBE_NO_ACTION");
+        request.address = 61;
+        result          = RegisterAccess::leaf(request, 60, 4, 0, false, true, 1);
+        $assert(result.status == RegisterBus::SLVERR, "UNALIGNED_REJECTED");
+        $finish();
+    }
+}

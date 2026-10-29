@@ -1,0 +1,37 @@
+// One register operation, preserving the original AXI byte address and lane placement.
+pub package RegisterBus {
+    struct Request {
+        write  : logic    ,
+        address: logic<32>,
+        data   : logic<64>,
+        strobe : logic<8> ,
+        wide   : logic    ,
+    }
+    struct Response {
+        data  : logic<64>,
+        status: logic<2> ,
+    }
+    const OKAY  : logic<2> = 2'b00;
+    const SLVERR: logic<2> = 2'b10;
+    const DECERR: logic<2> = 2'b11;
+}
+
+pub interface RegisterPort {
+    var request_valid : logic                ;
+    var request_ready : logic                ;
+    var request       : RegisterBus::Request ;
+    var response_valid: logic                ;
+    var response_ready: logic                ;
+    var response      : RegisterBus::Response;
+    modport master {
+        request_valid : output,
+        request_ready : input ,
+        request       : output,
+        response_valid: input ,
+        response_ready: output,
+        response      : input ,
+    }
+    modport slave {
+        ..converse(master)
+    }
+}

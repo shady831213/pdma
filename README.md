@@ -11,9 +11,11 @@ faults retain work for owner resume while peer channels remain eligible.
 Hardware behavior is deterministic and step-based. Memory backing, software CPU
 execution and interrupt delivery are supplied outside the hardware model.
 
-RTL preparation lives in [rtl](rtl/README.md), with architecture inputs in
-[docs/rtl](docs/rtl/architecture.md). The directory skeleton has no implemented
-DMA RTL or executable DMA RTL tests yet; the tool directory has a compiler smoke test.
+RTL lives in [rtl](rtl/README.md), with architecture inputs in
+[docs/rtl](docs/rtl/architecture.md). The first implemented slice is the DMA
+32/64-bit AXI4-Lite register frontend, reg/core CDC and object-owned registers,
+covered by native block tests. The execution engine and AXI5 memory port are not
+implemented yet; compiler smoke tests remain separate from design verification.
 The first RTL phase is DMA only; CPU, peripheral hardware and full subsystem
 integration follow after DMA convergence.
 

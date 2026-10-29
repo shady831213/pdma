@@ -1,0 +1,163 @@
+// One ring owns its configuration and cursors. Advance follows a successful hardware memory operation.
+pub module RingRegisters #(
+    param BASE             : u32   = 0   ,
+    param SOFTWARE_PRODUCER: bbool = true,
+) (
+    clk           : input  clock                 ,
+    rst_n         : input  reset_async_low       ,
+    request       : input  RegisterBus::Request  ,
+    commit        : input  logic                 ,
+    locked        : input  logic                 ,
+    blocked       : input  logic                 ,
+    clear         : input  logic                 ,
+    advance       : input  logic                 ,
+    advance_ready : output logic                 ,
+    state         : output RegisterState::Ring   ,
+    result        : output RegisterAccess::Result,
+    geometry_valid: output logic                 ,
+) {
+    const BASE_OFFSET    : u32                        = if SOFTWARE_PRODUCER ?
+        CommandRingLayout::BASE_OFFSET
+    :
+        EventRingLayout::BASE_OFFSET
+    ;
+    const CAPACITY_OFFSET: u32                        = if SOFTWARE_PRODUCER ?
+        CommandRingLayout::CAPACITY_OFFSET
+    :
+        EventRingLayout::CAPACITY_OFFSET
+    ;
+    const PRODUCER_OFFSET: u32                        = if SOFTWARE_PRODUCER ?
+        CommandRingLayout::PRODUCER_OFFSET
+    :
+        EventRingLayout::PRODUCER_OFFSET
+    ;
+    const CONSUMER_OFFSET: u32                        = if SOFTWARE_PRODUCER ?
+        CommandRingLayout::CONSUMER_OFFSET
+    :
+        EventRingLayout::CONSUMER_OFFSET
+    ;
+    const ENTRY_BYTES    : u64                        = if SOFTWARE_PRODUCER ?
+        DmaLayout::COMMAND_BYTES
+    :
+        DmaLayout::EVENT_BYTES
+    ;
+    const ALIGNMENT      : u64                        = if SOFTWARE_PRODUCER ?
+        DmaLayout::COMMAND_ALIGNMENT
+    :
+        DmaLayout::EVENT_ALIGNMENT
+    ;
+    var   base_access    : RegisterAccess::Result    ;
+    var   capacity_access: RegisterAccess::Result    ;
+    var   producer_access: RegisterAccess::Result    ;
+    var   consumer_access: RegisterAccess::Result    ;
+    var   next_capacity  : logic                 <32>;
+    var   next_software  : logic                 <32>;
+    var   delta          : logic                 <32>;
+    let   pending        : logic                 <32> = state.producer - state.consumer;
+    let   end_address    : logic                 <65> = (state.base as 65) + (state.capacity as 65)
+        * (ENTRY_BYTES as 65);
+    assign geometry_valid = state.capacity != 0 && !state.capacity[31] && (state.capacity & (state.capacity - 1)) == 0
+        && (state.base & (ALIGNMENT - 1)) == 0 && !end_address[64];
+    assign advance_ready  = !blocked && !clear && pending <= state.capacity
+        && (if SOFTWARE_PRODUCER ? pending != 0 : pending <: state.capacity);
+
+    always_comb {
+        base_access     = RegisterAccess::leaf(
+            request,
+            BASE + BASE_OFFSET,
+            8,
+            state.base,
+            true,
+            true,
+            64'hffffffffffffffff,
+        );
+        capacity_access = RegisterAccess::leaf(
+            request,
+            BASE + CAPACITY_OFFSET,
+            4,
+            state.capacity as u64,
+            true,
+            true,
+            64'hffffffff,
+        );
+        producer_access = RegisterAccess::leaf(
+            request,
+            BASE + PRODUCER_OFFSET,
+            4,
+            state.producer as u64,
+            true,
+            SOFTWARE_PRODUCER,
+            64'hffffffff,
+        );
+        consumer_access = RegisterAccess::leaf(
+            request,
+            BASE + CONSUMER_OFFSET,
+            4,
+            state.consumer as u64,
+            true,
+            !SOFTWARE_PRODUCER,
+            64'hffffffff,
+        );
+        result          = base_access;
+        if capacity_access.matched {
+            result = capacity_access;
+        }
+        if producer_access.matched {
+            result = producer_access;
+        }
+        if consumer_access.matched {
+            result = consumer_access;
+        }
+        next_capacity = if capacity_access.write ? capacity_access.value as 32 : state.capacity;
+        if SOFTWARE_PRODUCER {
+            next_software = if producer_access.write ? producer_access.value as 32 : state.producer;
+            delta         = next_software - state.producer;
+        } else {
+            next_software = if consumer_access.write ? consumer_access.value as 32 : state.consumer;
+            delta         = next_software - state.consumer;
+        }
+        if result.write {
+            if blocked || clear
+                || (locked
+                    && ((base_access.write && base_access.value != state.base)
+                        || (capacity_access.write && next_capacity != state.capacity))) || pending >: next_capacity
+                || delta >: (if SOFTWARE_PRODUCER ? next_capacity - pending : pending) {
+                result.write  = 0;
+                result.status = RegisterBus::SLVERR;
+            }
+        }
+    }
+
+    always_ff (clk, rst_n) {
+        if_reset {
+            state = '0;
+        } else if clear {
+            state = '0;
+        } else {
+            if commit && result.write {
+                if base_access.write {
+                    state.base = base_access.value;
+                }
+                if capacity_access.write {
+                    state.capacity = next_capacity;
+                }
+                if SOFTWARE_PRODUCER {
+                    if producer_access.write {
+                        state.producer = next_software;
+                    }
+                } else {
+                    if consumer_access.write {
+                        state.consumer = next_software;
+                    }
+                }
+            }
+            if advance && advance_ready {
+                if SOFTWARE_PRODUCER {
+                    state.consumer += 1;
+                } else {
+                    state.producer += 1;
+                }
+            }
+        }
+    }
+}

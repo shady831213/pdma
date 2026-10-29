@@ -1,0 +1,236 @@
+// Channel-owned configuration composes its two ring owners and views live execution/IRQ status.
+pub module ChannelRegisters #(
+    param BASE      : u32 = DmaLayout::channel_base(1) as u32   ,
+    param ADMIN_BASE: u32 = DmaLayout::CHANNEL_ADMIN_BASE as u32,
+) (
+    clk                  : input  clock                        ,
+    rst_n                : input  reset_async_low              ,
+    request              : input  RegisterBus::Request         ,
+    commit               : input  logic                        ,
+    clear                : input  logic                        ,
+    global_blocked       : input  logic                        ,
+    maintenance          : input  logic                        ,
+    status               : input  RegisterState::ChannelStatus ,
+    command_advance      : input  logic                        ,
+    event_advance        : input  logic                        ,
+    command_advance_ready: output logic                        ,
+    event_advance_ready  : output logic                        ,
+    event_geometry       : output logic                        ,
+    command              : output RegisterState::Ring          ,
+    events               : output RegisterState::Ring          ,
+    configuration        : output RegisterState::ChannelConfig ,
+    actions              : output RegisterState::ChannelActions,
+    result               : output RegisterAccess::Result       ,
+) {
+    alias package L = ChannelLayout;
+    var command_result  : RegisterAccess::Result    ;
+    var event_result    : RegisterAccess::Result    ;
+    var control_result  : RegisterAccess::Result    ;
+    var candidate       : RegisterAccess::Result    ;
+    var command_geometry: logic                     ;
+    let blocked         : logic                      = global_blocked || status.resetting || clear;
+    let locked          : logic                      = configuration.configured || maintenance;
+    let cause           : logic                 <32> = (((status.fatal != 0) as u32)
+            << L::CONTROL_IRQ_CAUSE_CHANNEL_FATAL_LSB) | ((status.error as u32) << L::CONTROL_IRQ_CAUSE_ERROR_LSB)
+        | ((status.trap as u32) << L::CONTROL_IRQ_CAUSE_TRAP_LSB)
+        | (((events.producer != events.consumer) as u32) << L::CONTROL_IRQ_CAUSE_EVENT_NON_EMPTY_LSB);
+
+    inst command_ring: RingRegisters #(
+        BASE             : BASE + DmaLayout::CHANNEL_COMMAND_OFFSET as u32,
+        SOFTWARE_PRODUCER: true                                           ,
+    ) (
+        clk                                  ,
+        rst_n                                ,
+        request                              ,
+        commit                               ,
+        locked                               ,
+        blocked                              ,
+        clear                                ,
+        advance       : command_advance      ,
+        advance_ready : command_advance_ready,
+        state         : command              ,
+        result        : command_result       ,
+        geometry_valid: command_geometry     ,
+    );
+    inst event_ring: RingRegisters #(
+        BASE             : BASE + DmaLayout::CHANNEL_EVENT_OFFSET as u32,
+        SOFTWARE_PRODUCER: false                                        ,
+    ) (
+        clk                                ,
+        rst_n                              ,
+        request                            ,
+        commit                             ,
+        locked                             ,
+        blocked                            ,
+        clear                              ,
+        advance       : event_advance      ,
+        advance_ready : event_advance_ready,
+        state         : events             ,
+        result        : event_result       ,
+        geometry_valid: event_geometry     ,
+    );
+
+    always_comb {
+        control_result = RegisterAccess::leaf(
+            request,
+            BASE + L::CONTROL_CONFIG_ENABLE_OFFSET,
+            L::CONTROL_CONFIG_ENABLE_BYTES,
+            configuration.enable as u64,
+            L::CONTROL_CONFIG_ENABLE_READ,
+            L::CONTROL_CONFIG_ENABLE_WRITE,
+            L::CONTROL_CONFIG_ENABLE_WRITABLE,
+        );
+        candidate      = RegisterAccess::leaf(
+            request,
+            BASE + L::CONTROL_CONFIG_RING_CONTEXT_OFFSET,
+            L::CONTROL_CONFIG_RING_CONTEXT_BYTES,
+            configuration.ring_context as u64,
+            L::CONTROL_CONFIG_RING_CONTEXT_READ,
+            L::CONTROL_CONFIG_RING_CONTEXT_WRITE,
+            L::CONTROL_CONFIG_RING_CONTEXT_WRITABLE,
+        );
+        if candidate.matched {
+            control_result = candidate;
+        }
+        candidate = RegisterAccess::leaf(
+            request,
+            BASE + L::CONTROL_RECOVERY_FATAL_OFFSET,
+            L::CONTROL_RECOVERY_FATAL_BYTES,
+            status.fatal as u64,
+            L::CONTROL_RECOVERY_FATAL_READ,
+            L::CONTROL_RECOVERY_FATAL_WRITE,
+            L::CONTROL_RECOVERY_FATAL_WRITABLE,
+        );
+        if candidate.matched {
+            control_result = candidate;
+        }
+        candidate = RegisterAccess::leaf(
+            request,
+            BASE + L::CONTROL_RECOVERY_FAULT_STATUS_OFFSET,
+            L::CONTROL_RECOVERY_FAULT_STATUS_BYTES,
+            status.faulted as u64,
+            L::CONTROL_RECOVERY_FAULT_STATUS_READ,
+            L::CONTROL_RECOVERY_FAULT_STATUS_WRITE,
+            L::CONTROL_RECOVERY_FAULT_STATUS_WRITABLE,
+        );
+        if candidate.matched {
+            control_result = candidate;
+        }
+        candidate = RegisterAccess::leaf(
+            request,
+            BASE + L::CONTROL_RECOVERY_RESUME_OFFSET,
+            L::CONTROL_RECOVERY_RESUME_BYTES,
+            0,
+            L::CONTROL_RECOVERY_RESUME_READ,
+            L::CONTROL_RECOVERY_RESUME_WRITE,
+            L::CONTROL_RECOVERY_RESUME_WRITABLE,
+        );
+        if candidate.matched {
+            control_result = candidate;
+        }
+        candidate = RegisterAccess::leaf(
+            request,
+            BASE + L::CONTROL_IRQ_ENABLE_OFFSET,
+            L::CONTROL_IRQ_ENABLE_BYTES,
+            configuration.irq_enable as u64,
+            L::CONTROL_IRQ_ENABLE_READ,
+            L::CONTROL_IRQ_ENABLE_WRITE,
+            L::CONTROL_IRQ_ENABLE_WRITABLE,
+        );
+        if candidate.matched {
+            control_result = candidate;
+        }
+        candidate = RegisterAccess::leaf(
+            request,
+            BASE + L::CONTROL_IRQ_CAUSE_OFFSET,
+            L::CONTROL_IRQ_CAUSE_BYTES,
+            cause as u64,
+            L::CONTROL_IRQ_CAUSE_READ,
+            L::CONTROL_IRQ_CAUSE_WRITE,
+            L::CONTROL_IRQ_CAUSE_WRITABLE,
+        );
+        if candidate.matched {
+            control_result = candidate;
+        }
+        candidate = RegisterAccess::leaf(
+            request,
+            BASE + L::CONTROL_IRQ_MASK_OFFSET,
+            L::CONTROL_IRQ_MASK_BYTES,
+            configuration.irq_mask as u64,
+            L::CONTROL_IRQ_MASK_READ,
+            L::CONTROL_IRQ_MASK_WRITE,
+            L::CONTROL_IRQ_MASK_WRITABLE,
+        );
+        if candidate.matched {
+            control_result = candidate;
+        }
+        candidate = RegisterAccess::leaf(
+            request,
+            BASE + L::CONTROL_IRQ_TRAP_ACK_OFFSET,
+            L::CONTROL_IRQ_TRAP_ACK_BYTES,
+            0,
+            L::CONTROL_IRQ_TRAP_ACK_READ,
+            L::CONTROL_IRQ_TRAP_ACK_WRITE,
+            L::CONTROL_IRQ_TRAP_ACK_WRITABLE,
+        );
+        if candidate.matched {
+            control_result = candidate;
+        }
+        if control_result.write {
+            if blocked
+                || (request.address == BASE + L::CONTROL_CONFIG_ENABLE_OFFSET
+                    && ((control_result.value != configuration.enable as u64 && maintenance)
+                        || (control_result.value != 0 && !command_geometry)))
+                || (request.address == BASE + L::CONTROL_CONFIG_RING_CONTEXT_OFFSET && control_result.value
+                    != configuration.ring_context as u64 && locked) {
+                control_result.write  = 0;
+                control_result.status = RegisterBus::SLVERR;
+            }
+        }
+        result = control_result;
+        if command_result.matched {
+            result = command_result;
+        }
+        if event_result.matched {
+            result = event_result;
+        }
+        candidate = RegisterAccess::leaf(
+            request,
+            ADMIN_BASE + ChannelAdminLayout::RESET_OFFSET,
+            ChannelAdminLayout::RESET_BYTES,
+            status.resetting as u64,
+            ChannelAdminLayout::RESET_READ,
+            ChannelAdminLayout::RESET_WRITE,
+            ChannelAdminLayout::RESET_WRITABLE,
+        );
+        if candidate.matched {
+            result = candidate;
+        }
+        actions = '0;
+        if commit && result.write && result.value[0] {
+            actions.reset_request  = request.address == ADMIN_BASE + ChannelAdminLayout::RESET_OFFSET;
+            actions.resume_request = request.address == BASE + L::CONTROL_RECOVERY_RESUME_OFFSET;
+            actions.trap_ack       = request.address == BASE + L::CONTROL_IRQ_TRAP_ACK_OFFSET;
+        }
+    }
+    always_ff (clk, rst_n) {
+        if_reset {
+            configuration = '0;
+        } else if clear {
+            configuration = '0;
+        } else if commit && control_result.write {
+            case request.address {
+                BASE + L::CONTROL_CONFIG_ENABLE_OFFSET: {
+                    configuration.enable = control_result.value[0];
+                    if control_result.value[0] {
+                        configuration.configured = 1;
+                    }
+                }
+                BASE + L::CONTROL_CONFIG_RING_CONTEXT_OFFSET: configuration.ring_context = control_result.value as 32;
+                BASE + L::CONTROL_IRQ_ENABLE_OFFSET         : configuration.irq_enable   = control_result.value[0];
+                BASE + L::CONTROL_IRQ_MASK_OFFSET           : configuration.irq_mask     = control_result.value as 2;
+                default                                     : {}
+            }
+        }
+    }
+}

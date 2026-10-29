@@ -17,6 +17,10 @@ name = "pdma-abi-header"
 path = "src/bin/pdma-abi-header.rs"
 required-features = ["export-c-header"]
 
+[[bin]]
+name = "pdma-rtl-layout"
+path = "src/bin/pdma-rtl-layout.rs"
+
 [dependencies]
 hw-model-schema = "0.1.0"
 

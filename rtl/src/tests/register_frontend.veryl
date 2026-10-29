@@ -1,0 +1,85 @@
+#[test(register_frontend_pairing_and_backpressure)]
+module RegisterFrontendTest {
+    alias package B = $std::axi4_lite_pkg::<32, 8, 1>;
+    inst clk : $tb::clock_gen #( period: 10 );
+    inst rst : $tb::reset_gen ( clk );
+    inst axi : $std::axi4_lite_if::<B>;
+    inst core: RegisterPort;
+    inst dut: RegisterFrontend::<B> (
+        clk       ,
+        rst_n: rst,
+        axi       ,
+        core      ,
+    );
+    initial {
+        axi.awvalid         = 0;
+        axi.awaddr          = 0;
+        axi.awprot          = '0;
+        axi.awid            = 0;
+        axi.wvalid          = 0;
+        axi.wdata           = 0;
+        axi.wstrb           = 0;
+        axi.bready          = 0;
+        axi.arvalid         = 0;
+        axi.araddr          = 0;
+        axi.arprot          = '0;
+        axi.arid            = 0;
+        axi.rready          = 0;
+        core.request_ready  = 0;
+        core.response_valid = 0;
+        core.response       = '0;
+        rst.assert();
+        clk.next(3);
+        $assert(axi.awready && axi.wready && axi.arready, "INITIAL_CREDIT");
+        // W arrives first. It cannot execute or prevent an unrelated read.
+        axi.wvalid = 1;
+        axi.wdata  = 64'h11223344_00000000;
+        axi.wstrb  = 8'hf0;
+        clk.next();
+        axi.wvalid = 0;
+        clk.next(2);
+        $assert(!core.request_valid && !axi.wready, "NO_WRITE_WITHOUT_ADDRESS");
+        axi.arvalid = 1;
+        axi.araddr  = 4;
+        clk.next();
+        axi.arvalid = 0;
+        for cycle in 0..4 {
+            clk.next();
+        }
+        $assert(core.request_valid && !core.request.write && core.request.address == 4, "READ_PASSES_UNPAIRED_WRITE");
+        // Arrival of AW must not change an already-offered, stalled read.
+        axi.awvalid = 1;
+        axi.awaddr  = 12;
+        clk.next();
+        axi.awvalid = 0;
+        clk.next(2);
+        $assert(!core.request.write && core.request.address == 4, "REQUEST_STABLE");
+        core.request_ready = 1;
+        clk.next();
+        core.request_ready  = 0;
+        core.response_valid = 1;
+        core.response       = RegisterBus::Response'{data: 64'h5678_00000000, status: RegisterBus::OKAY};
+        $assert(core.response_ready, "READ_RESPONSE_CREDIT");
+        clk.next();
+        core.response_valid = 0;
+        clk.next(3);
+        $assert(axi.rvalid && axi.rdata == 64'h5678_00000000, "READ_RESPONSE_HELD");
+        $assert(core.request_valid && core.request.write && core.request.address == 12, "PAIRED_WRITE");
+        $assert(core.request.data == 64'h11223344_00000000 && core.request.strobe == 8'hf0, "WRITE_LANES_PRESERVED");
+        core.request_ready = 1;
+        clk.next();
+        core.request_ready  = 0;
+        core.response_valid = 1;
+        core.response       = RegisterBus::Response'{data: 0, status: RegisterBus::SLVERR};
+        clk.next();
+        core.response_valid = 0;
+        clk.next(3);
+        $assert(axi.bvalid && (axi.bresp as 2) == RegisterBus::SLVERR, "WRITE_ERROR_HELD");
+        $assert(axi.rvalid && !core.request_valid, "NO_REPEATED_EFFECT");
+        axi.bready = 1;
+        axi.rready = 1;
+        clk.next();
+        $assert(!axi.bvalid && !axi.rvalid && axi.awready && axi.arready, "CREDIT_RETURNED");
+        $finish();
+    }
+}

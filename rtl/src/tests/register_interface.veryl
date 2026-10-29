@@ -1,0 +1,219 @@
+#[test(dma_register_interface_async_32_and_64bit)]
+module DmaRegisterInterfaceTest {
+    alias package B = $std::axi4_lite_pkg::<32, 4, 1>;
+    alias package WideBus = $std::axi4_lite_pkg::<32, 8, 1>;
+    inst reg_clk :       $tb::clock_gen #( period: 10 );
+    inst core_clk:       $tb::clock_gen #( period: 14 );
+    inst reg_rst: $tb::reset_gen (
+        clk: reg_clk,
+    );
+    inst core_rst: $tb::reset_gen (
+        clk: core_clk,
+    );
+    inst axi     : 'cfg  $std::axi4_lite_if::<B>;
+    inst wide_axi: 'cfg  $std::axi4_lite_if::<WideBus>;
+    var global_reset_busy    : 'core logic                                ;
+    var global_fatal         : 'core logic                                ;
+    var global_clear         : 'core logic                                ;
+    var global_reset_request : 'core logic                                ;
+    var global_irq_enable    : 'core logic                                ;
+    var clear_channels       : 'core logic                                ;
+    var maintenance          : 'core logic                                ;
+    var command_advance      : 'core logic                                ;
+    var event_advance        : 'core logic                                ;
+    var command_advance_ready: 'core logic                                ;
+    var event_advance_ready  : 'core logic                                ;
+    var event_geometry       : 'core logic                                ;
+    var statuses             : 'core RegisterState::ChannelStatus      [1];
+    var commands             : 'core RegisterState::Ring               [1];
+    var events               : 'core RegisterState::Ring               [1];
+    var configurations       : 'core RegisterState::ChannelConfig      [1];
+    var actions              : 'core RegisterState::ChannelActions     [1];
+    var resume_count         : 'core logic                        <32>    ;
+    var wide_commands        : 'core RegisterState::Ring               [1];
+    var wide_actions         : 'core RegisterState::ChannelActions     [1];
+    var wide_resume_count    : 'core logic                        <32>    ;
+    inst dut: DmaRegisterInterface::<B> #(
+        CHANNEL_COUNT: 1,
+    ) (
+        reg_clk                        ,
+        reg_rst_n            : reg_rst ,
+        core_clk                       ,
+        core_rst_n           : core_rst,
+        axi                            ,
+        global_reset_busy              ,
+        global_fatal                   ,
+        global_clear                   ,
+        global_reset_request           ,
+        global_irq_enable              ,
+        clear_channels                 ,
+        maintenance                    ,
+        command_advance                ,
+        event_advance                  ,
+        command_advance_ready          ,
+        event_advance_ready            ,
+        event_geometry                 ,
+        statuses                       ,
+        commands                       ,
+        events                         ,
+        configurations                 ,
+        actions                        ,
+    );
+    inst wide_dut: DmaRegisterInterface::<WideBus> #(
+        CHANNEL_COUNT: 1        ,
+        BASE_ADDR    : 32'h10000,
+    ) (
+        reg_clk                             ,
+        reg_rst_n            : reg_rst      ,
+        core_clk                            ,
+        core_rst_n           : core_rst     ,
+        axi                  : wide_axi     ,
+        global_reset_busy                   ,
+        global_fatal                        ,
+        global_clear                        ,
+        global_reset_request : _            ,
+        global_irq_enable    : _            ,
+        clear_channels                      ,
+        maintenance                         ,
+        command_advance                     ,
+        event_advance                       ,
+        command_advance_ready: _            ,
+        event_advance_ready  : _            ,
+        event_geometry       : _            ,
+        statuses                            ,
+        commands             : wide_commands,
+        events               : _            ,
+        configurations       : _            ,
+        actions              : wide_actions ,
+    );
+    // The scenario issues AW/W together; this is test stimulus encoding, not a general bus bridge.
+    assign wide_axi.awvalid = axi.awvalid;
+    assign wide_axi.awaddr  = axi.awaddr + 32'h10000;
+    assign wide_axi.awprot  = axi.awprot;
+    assign wide_axi.awid    = axi.awid;
+    assign wide_axi.wvalid  = axi.wvalid;
+    assign wide_axi.wdata   = (axi.wdata as 64) << (if axi.awaddr[2] ? 32 : 0);
+    assign wide_axi.wstrb   = if axi.awaddr[2] ? 8'hf0 : 8'h0f;
+    assign wide_axi.bready  = axi.bready;
+    assign wide_axi.arvalid = axi.arvalid;
+    assign wide_axi.araddr  = axi.araddr + 32'h10000;
+    assign wide_axi.arprot  = axi.arprot;
+    assign wide_axi.arid    = axi.arid;
+    assign wide_axi.rready  = axi.rready;
+    always_ff (core_clk, core_rst) {
+        if_reset {
+            resume_count      = 0;
+            wide_resume_count = 0;
+        } else {
+            if actions[0].resume_request {
+                resume_count += 1;
+            }
+            if wide_actions[0].resume_request {
+                wide_resume_count += 1;
+            }
+        }
+    }
+    initial {
+        global_reset_busy = 0;
+        global_fatal      = 0;
+        global_clear      = 0;
+        clear_channels    = 0;
+        maintenance       = 0;
+        command_advance   = 0;
+        event_advance     = 0;
+        statuses          = '{default: '0};
+        axi.awvalid       = 0;
+        axi.awaddr        = 0;
+        axi.awprot        = '0;
+        axi.awid          = 0;
+        axi.wvalid        = 0;
+        axi.wdata         = 0;
+        axi.wstrb         = 0;
+        axi.bready        = 0;
+        axi.arvalid       = 0;
+        axi.araddr        = 0;
+        axi.arprot        = '0;
+        axi.arid          = 0;
+        axi.rready        = 0;
+        reg_rst.assert();
+        core_rst.assert();
+        for i in 0..8 {
+            reg_clk.next();
+            core_clk.next();
+        }
+        axi.awaddr  = 4096;
+        axi.wdata   = 32'h12345678;
+        axi.wstrb   = 4'hf;
+        axi.awvalid = 1;
+        axi.wvalid  = 1;
+        $assert(axi.awready && axi.wready, "ADDRESS_AND_DATA_CREDIT");
+        $assert(wide_axi.awready && wide_axi.wready, "WIDE_ADDRESS_AND_DATA_CREDIT");
+        reg_clk.next();
+        axi.awvalid = 0;
+        axi.wvalid  = 0;
+        for i in 0..32 {
+            core_clk.next();
+            reg_clk.next();
+        }
+        $assert(axi.bvalid && (axi.bresp as 2) == RegisterBus::OKAY, "WRITE_RESPONSE");
+        $assert(commands[0].base == 64'h12345678, "OWNER_CHANGED");
+        $assert(wide_commands[0].base == 64'h12345678, "WIDE_OWNER_CHANGED");
+        $assert(wide_axi.bvalid && (wide_axi.bresp as 2) == RegisterBus::OKAY, "WIDE_WRITE_RESPONSE");
+        axi.bready = 1;
+        reg_clk.next();
+        axi.bready  = 0;
+        axi.araddr  = 4152;
+        axi.arvalid = 1;
+        reg_clk.next();
+        axi.arvalid = 0;
+        for i in 0..32 {
+            core_clk.next();
+            reg_clk.next();
+        }
+        $assert(axi.rvalid && axi.rdata == 0, "INITIAL_FAULT_SNAPSHOT");
+        $assert(wide_axi.rvalid && wide_axi.rdata == 0, "WIDE_INITIAL_FAULT_SNAPSHOT");
+        statuses[0].faulted = 1;
+        for i in 0..8 {
+            reg_clk.next();
+            core_clk.next();
+        }
+        $assert(axi.rvalid && axi.rdata == 0, "READ_BACKPRESSURE_PRESERVES_SNAPSHOT");
+        $assert(wide_axi.rvalid && wide_axi.rdata == 0, "WIDE_READ_SNAPSHOT_HELD");
+        axi.rready = 1;
+        reg_clk.next();
+        axi.rready  = 0;
+        axi.arvalid = 1;
+        reg_clk.next();
+        axi.arvalid = 0;
+        for i in 0..32 {
+            reg_clk.next();
+            core_clk.next();
+        }
+        $assert(axi.rvalid && axi.rdata == 1, "FRESH_FAULT_SNAPSHOT");
+        $assert(wide_axi.rvalid && wide_axi.rdata == 1, "WIDE_FRESH_FAULT_SNAPSHOT");
+        axi.rready = 1;
+        reg_clk.next();
+        axi.rready  = 0;
+        axi.awaddr  = 4156;
+        axi.wdata   = 1;
+        axi.awvalid = 1;
+        axi.wvalid  = 1;
+        reg_clk.next();
+        axi.awvalid = 0;
+        axi.wvalid  = 0;
+        for i in 0..40 {
+            core_clk.next();
+            reg_clk.next();
+        }
+        $assert(axi.bvalid, "ACTION_RESPONSE_HELD");
+        $assert(resume_count == 1, "ACTION_EXACTLY_ONCE");
+        $assert(wide_resume_count == 1, "WIDE_ACTION_EXACTLY_ONCE");
+        for i in 0..16 {
+            reg_clk.next();
+            core_clk.next();
+        }
+        $assert(resume_count == 1, "NO_ACTION_REPLAY_UNDER_BACKPRESSURE");
+        $assert(wide_resume_count == 1, "WIDE_NO_ACTION_REPLAY");
+        $finish();
+    }
+}

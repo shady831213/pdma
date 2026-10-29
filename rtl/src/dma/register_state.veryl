@@ -1,0 +1,27 @@
+pub package RegisterState {
+    struct Ring {
+        base    : logic<64>,
+        capacity: logic<32>,
+        producer: logic<32>,
+        consumer: logic<32>,
+    }
+    struct ChannelStatus {
+        resetting: logic    ,
+        fatal    : logic<32>,
+        faulted  : logic    ,
+        error    : logic    ,
+        trap     : logic    ,
+    }
+    struct ChannelConfig {
+        enable      : logic    ,
+        configured  : logic    ,
+        ring_context: logic<32>,
+        irq_enable  : logic    ,
+        irq_mask    : logic<2> ,
+    }
+    struct ChannelActions {
+        reset_request : logic,
+        resume_request: logic,
+        trap_ack      : logic,
+    }
+}

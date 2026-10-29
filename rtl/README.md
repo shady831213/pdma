@@ -1,8 +1,9 @@
 # PDMA RTL
 
-This is a directory skeleton, not an implemented or qualified RTL design.
-The native Veryl manifest has no design dependencies or executable tests yet.
-A successful empty build or zero-test run is not verification evidence.
+The first implemented slice is the DMA register-access path: AXI4-Lite 32/64,
+reg/core CDC and channel/ring register owners. Seven native tests exercise it.
+This is not yet a complete DMA or a physically qualified design: execution,
+IRQ/lifecycle owners and the AXI5 memory endpoint remain to be implemented.
 
 The first RTL phase is **DMA only**, confirmed 2026-10-29. CPU implementation,
 managed peripheral hardware, firmware execution and full subsystem integration
@@ -14,7 +15,8 @@ hardware, firmware, Host and platform behavior. The
 [RTL architecture draft](../docs/rtl/architecture.md) records confirmed interfaces,
 clock/reset requirements and decisions still needed before coding.
 The [register-interface proposal](../docs/rtl/register-interface.md) develops the
-32/64-bit access, submission and CDC rules; it remains a proposal, not implemented RTL.
+32/64-bit access, submission and CDC rules; its implementation status separates
+the tested register slice from outstanding lifecycle/datapath integration.
 The related [memory interface](../docs/rtl/memory-interface.md),
 [datapath](../docs/rtl/datapath.md) and [reset/CDC](../docs/rtl/reset-cdc.md) drafts
 define transaction ownership and identify correctness constraints on pipelining.
@@ -36,7 +38,22 @@ does not own its policy or introduce another software runtime.
 Veryl is the design source. Generated SystemVerilog, dependency checkouts,
 filelists, simulator caches and waveforms are build artifacts. Use native
 Veryl source discovery and dependencies, not generated manifests or copied source
-trees. A lockfile will be produced when dependencies are actually resolved.
+trees. `Veryl.lock` pins the resolved native project dependencies.
+
+Regenerate layout metadata from the Rust contract, then run the native checks:
+
+```sh
+# Repository root; use --write after intentional contract changes.
+bash tools/rtl-flow/layout.sh --check
+cd rtl
+bash ../tools/rtl-flow/veryl.sh fmt --check
+bash ../tools/rtl-flow/veryl.sh build
+VERYL_DUT_REUSE=0 bash ../tools/rtl-flow/veryl.sh test
+VERYL_DUT_REUSE=0 bash ../tools/rtl-flow/veryl.sh test --backend cranelift
+```
+
+See [DMA register ownership and integration](src/dma/README.md) and
+[test coverage](src/tests/README.md) before wiring another owner.
 
 ## Verification and implementation
 

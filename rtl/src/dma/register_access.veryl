@@ -1,0 +1,67 @@
+// Leaf-local access calculation. The owning hardware object decides whether to commit value.
+pub package RegisterAccess {
+    struct Result {
+        matched: logic    ,
+        write  : logic    ,
+        value  : logic<64>,
+        data   : logic<64>,
+        status : logic<2> ,
+    }
+
+    function leaf (
+        request : input RegisterBus::Request,
+        address : input u32                 ,
+        bytes   : input u32                 ,
+        current : input u64                 ,
+        readable: input bbool               ,
+        writable: input bbool               ,
+        mask    : input u64                 ,
+    ) -> Result {
+        var result         : Result   ;
+        var lane_shift     : u32      ;
+        var value_shift    : u32      ;
+        var required_strobe: logic <8>;
+        var selected_mask  : u64      ;
+        var incoming       : u64      ;
+        result          = '0;
+        result.value    = current;
+        result.status   = RegisterBus::DECERR;
+        lane_shift      = if request.wide && request.address[2] ? 32 : 0;
+        value_shift     = if bytes == 8 && request.address != address ? 32 : 0;
+        required_strobe = if lane_shift == 32 ? 8'hf0 : 8'h0f;
+        selected_mask   = 64'hffffffff << value_shift;
+        incoming        = ((request.data >> lane_shift) & 64'hffffffff) << value_shift;
+        if request.address >= address && (request.address as u64) <: (address as u64 + bytes as u64) {
+            result.matched = 1;
+            result.status  = RegisterBus::SLVERR;
+            if request.address[1:0] == 0 {
+                if request.write {
+                    if request.strobe == 0 {
+                        result.status = RegisterBus::OKAY;
+                    } else if writable {
+                        if bytes == 8 && request.wide && request.address == address && request.strobe == 8'hff {
+                            selected_mask   = 64'hffffffffffffffff;
+                            required_strobe = 8'hff;
+                            incoming        = request.data;
+                        }
+                        if request.strobe == required_strobe {
+                            let candidate: u64 = (current & ~selected_mask) | incoming;
+                            if ((candidate ^ current) & ~mask) == 0 {
+                                result.value  = candidate;
+                                result.write  = 1;
+                                result.status = RegisterBus::OKAY;
+                            }
+                        }
+                    }
+                } else if readable {
+                    result.data = ((current >> value_shift) & 64'hffffffff) << lane_shift;
+                    if bytes == 8 && request.wide && request.address == address {
+                        result.data = current;
+                    }
+                    result.status = RegisterBus::OKAY;
+                }
+            }
+        }
+        return result;
+    }
+}

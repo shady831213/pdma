@@ -1,0 +1,14 @@
+// These independent values pin wire geometry, including a channel-bank page change.
+#[test(dma_layout_geometry)]
+module DmaLayoutTest {
+    initial {
+        $assert(ChannelLayout::COMMAND_PRODUCER_OFFSET == 12, "COMMAND_PRODUCER_OFFSET");
+        $assert(ChannelLayout::CONTROL_RECOVERY_RESUME_OFFSET == 60, "RESUME_OFFSET");
+        $assert(!ChannelLayout::CONTROL_RECOVERY_RESUME_READ, "RESUME_IS_WRITE_ONLY");
+        $assert(DmaLayout::channel_base(1) == 4096, "ONE_CHANNEL");
+        $assert(DmaLayout::channel_base(3) == 4096, "NON_POWER_OF_TWO_CHANNELS");
+        $assert(DmaLayout::channel_base(1019) == 4096, "ADMIN_PAGE_END");
+        $assert(DmaLayout::channel_base(1020) == 8192, "ADMIN_NEXT_PAGE");
+        $finish();
+    }
+}

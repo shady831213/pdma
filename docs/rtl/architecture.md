@@ -109,7 +109,8 @@ flowchart LR
 ## 寄存器 32/64 位共同协议
 
 具体访问矩阵、ContextRequest 编码建议、跨域提交路径和实施范围见
-[寄存器接口设计草案](register-interface.md)。该文档同样待评审，尚未修改现有 contract。
+[寄存器接口设计草案](register-interface.md)。寄存器访问切片已有 native 实现与测试，
+未修改现有 wire contract；数据执行、生命周期集成和物理验证仍待完成。
 
 DMA 自身的动作寄存器是 32 位，64 位的是 ring base 配置。外围 `ContextRequest`
 虽然目前要求完整 64 位写，但不属于本阶段 DMA map；其格式改版留到外围阶段，

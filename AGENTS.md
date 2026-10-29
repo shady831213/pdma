@@ -23,7 +23,10 @@ converges. Keep their future interface boundaries, but do not implement them or
 make their register redesign prerequisites for this phase.
 `docs/rtl/architecture.md` records confirmed inputs and unresolved design choices;
 it does not supersede the system specification under `model/modeling/docs`.
-The RTL skeleton has no DMA design implementation or executable design tests yet.
+The DMA register-access slice has native tests: a 32/64-bit AXI4-Lite frontend,
+reg/core CDC and object-owned registers. DMA execution, IRQ/lifecycle owners and
+the AXI5 memory port are not implemented yet. Register reset action/clear ports
+are integration boundaries, not evidence of implemented transaction drain.
 Follow `rtl/README.md` for source and verification ownership. PDMA independently
 pins and maintains Veryl under `tools/rtl-flow`, starting from a verified snapshot
 of pcie_modeling's tool inputs. Do not modify that project's active toolchain or

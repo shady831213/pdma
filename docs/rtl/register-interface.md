@@ -1,8 +1,23 @@
 # 寄存器接口设计草案
 
-状态：2026-10-28，供 RTL 编码前评审。本文件提出具体实现合同，**尚未修改 model、
-contract、生成头文件或 RTL**。当前行为以 [系统规范](../../model/modeling/docs/spec.md)
-和现有 schema 为准；这里标为“建议”的规则必须经评审后再同步实现。
+状态：2026-10-29，DMA 寄存器访问切片已实现，见下方实施状态。Rust model、wire
+contract 和 C 头文件未因总线适配改变。体系结构行为以
+[系统规范](../../model/modeling/docs/spec.md) 和现有 schema 为准；数据执行、IRQ、
+reset 排空及其并发优先级尚需后续 owner 实现验证。
+
+## 实施状态
+
+已实现 32/64 位单 leaf 访问矩阵、独立 AW/W 缓冲、B/R 保持、reg/core 跨域及
+channel/ring 所属寄存器。布局由 contract 导出，未另写地址表。
+具体接口约束见 [DMA RTL](../../rtl/src/dma/README.md)，覆盖见
+[native tests](../../rtl/src/tests/README.md)。
+
+跨域首版使用标准库双向 acknowledged mailbox，每方向容量为一；前端最多保留
+一个未完成读和一个未完成写，core 访问串行。read/write 类别由前端保留，不在
+response 中重复携带。FIFO 是原设计候选，现实现选择下图的 mailbox；尚未承诺
+每拍 producer 更新带宽。生命周期状态来自外部 owner，reset 动作只产生请求，
+清理完成由独立 clear 输入表明。完整 DMA reset、IRQ 竞争、AXI5 outstanding
+排空和物理 CDC/RDC 并未因此得到验证。
 
 ## 目标与现状
 
@@ -99,9 +114,9 @@ flowchart LR
     AR[AR 地址] --> ARBUF[reg_clk: 读请求]
     WPAIR --> ORDER[有界读写仲裁]
     ARBUF --> ORDER
-    ORDER --> REQ[异步请求 FIFO]
+    ORDER --> REQ[异步请求 mailbox]
     REQ --> OWNER[core_clk: decode / validate / commit]
-    OWNER --> RSP[异步响应 FIFO]
+    OWNER --> RSP[异步响应 mailbox]
     RSP --> HOLD[reg_clk: B/R 保持寄存器]
 ```
 
@@ -193,8 +208,8 @@ DMA 可见性屏障**。相关平台 cache/ordering 义务保持不变。
 ## 当前草案选择与边界
 
 本稿按单 leaf 的 64 位总线访问约定及其桥接限制继续展开 DMA 设计。
-它仍是提议，未改变已实现 ABI；下一步需要将适配假设
-落到真实端口验证。内存事务和责任排空分别见 [memory-interface](memory-interface.md)
+访问适配已落到真实 AXI 端口的 native 测试，未改变已有 ABI；尚未实现的并发与
+生命周期约束仍是后续设计要求。内存事务和责任排空分别见 [memory-interface](memory-interface.md)
 与 [reset-cdc](reset-cdc.md)，不要求用户逐项设计握手状态机。
 
 ## 外围阶段待办，不阻塞 DMA

@@ -1,0 +1,130 @@
+#[test(dma_register_bank_channel_isolation)]
+module DmaRegisterBankTest {
+    inst clk : $tb::clock_gen #( period: 10 );
+    inst rst : $tb::reset_gen ( clk );
+    inst port: RegisterPort;
+    var global_reset_busy    : logic                               ;
+    var global_fatal         : logic                               ;
+    var global_clear         : logic                               ;
+    var global_reset_request : logic                               ;
+    var global_irq_enable    : logic                               ;
+    var clear_channels       : logic                        <3>    ;
+    var maintenance          : logic                        <3>    ;
+    var command_advance      : logic                        <3>    ;
+    var event_advance        : logic                        <3>    ;
+    var command_advance_ready: logic                        <3>    ;
+    var event_advance_ready  : logic                        <3>    ;
+    var event_geometry       : logic                        <3>    ;
+    var statuses             : RegisterState::ChannelStatus     [3];
+    var commands             : RegisterState::Ring              [3];
+    var events               : RegisterState::Ring              [3];
+    var configurations       : RegisterState::ChannelConfig     [3];
+    var actions              : RegisterState::ChannelActions    [3];
+    inst dut: DmaRegisterBank #(
+        CHANNEL_COUNT: 3   ,
+        ATOMIC32     : true,
+    ) (
+        clk                       ,
+        rst_n                : rst,
+        port                      ,
+        global_reset_busy         ,
+        global_fatal              ,
+        global_clear              ,
+        global_reset_request      ,
+        global_irq_enable         ,
+        clear_channels            ,
+        maintenance               ,
+        command_advance           ,
+        event_advance             ,
+        command_advance_ready     ,
+        event_advance_ready       ,
+        event_geometry            ,
+        statuses                  ,
+        commands                  ,
+        events                    ,
+        configurations            ,
+        actions                   ,
+    );
+    initial {
+        global_reset_busy   = 0;
+        global_fatal        = 0;
+        global_clear        = 0;
+        clear_channels      = 0;
+        maintenance         = 0;
+        command_advance     = 0;
+        event_advance       = 0;
+        statuses            = '{default: '0};
+        port.request_valid  = 0;
+        port.request        = '0;
+        port.response_ready = 0;
+        rst.assert();
+        clk.next(3);
+        // Real 64-bit bus container: discovery selects one leaf, never the adjacent capability word.
+        port.request.wide    = 1;
+        port.request.address = 0;
+        port.request_valid   = 1;
+        clk.next();
+        port.request_valid = 0;
+        $assert(port.response_valid && port.response.data == 3, "INSTANCE_CHANNEL_COUNT");
+        port.response_ready = 1;
+        clk.next();
+        port.response_ready = 0;
+        // Configure channel 1; channel 0 remains untouched. Exact offsets are independent ABI goldens.
+        port.request.write   = 1;
+        port.request.wide    = 0;
+        port.request.strobe  = 8'h0f;
+        port.request.address = 8192;
+        port.request.data    = 32'h1000;
+        port.request_valid   = 1;
+        clk.next();
+        port.request_valid = 0;
+        $assert(port.response.status == RegisterBus::OKAY && commands[1].base == 32'h1000, "CHANNEL_ONE_BASE");
+        $assert(commands[0].base == 0, "PEER_ISOLATION");
+        port.response_ready = 1;
+        clk.next();
+        port.request.address = 8200;
+        port.request.data    = 4;
+        port.request_valid   = 1;
+        clk.next();
+        port.request_valid = 0;
+        clk.next();
+        port.request.address = 8236;
+        port.request.data    = 1;
+        port.request_valid   = 1;
+        clk.next();
+        port.request_valid = 0;
+        $assert(configurations[1].enable && configurations[1].configured, "ENABLE_LOCKS_CONFIGURATION");
+        clk.next();
+        port.request.address = 8192;
+        port.request.data    = 32'h2000;
+        port.request_valid   = 1;
+        clk.next();
+        port.request_valid = 0;
+        $assert(port.response.status == RegisterBus::SLVERR && commands[1].base == 32'h1000, "LOCK_REJECTS_CHANGE");
+        clk.next();
+        // Channel-1 reset is an action, not automatic storage cleanup or a fabricated completion.
+        port.request.address = 24;
+        port.request.data    = 1;
+        port.request_valid   = 1;
+        $assert(actions[1].reset_request && !actions[0].reset_request, "RESET_TARGET");
+        clk.next();
+        port.request_valid = 0;
+        $assert(configurations[1].configured, "RESET_REQUEST_IS_NOT_COMPLETION");
+        statuses[1].resetting = 1;
+        clk.next();
+        port.request.write   = 0;
+        port.request.address = 24;
+        port.request_valid   = 1;
+        clk.next();
+        port.request_valid = 0;
+        $assert(port.response.data == 1, "REAL_BUSY_READBACK");
+        clk.next();
+        clear_channels = 3'b010;
+        clk.next();
+        clear_channels        = 0;
+        statuses[1].resetting = 0;
+        $assert(!configurations[1].configured && commands[1].capacity == 0, "OWNER_CLEANUP");
+        $assert(commands[0].capacity == 0, "PEER_NOT_REASSIGNED");
+        $finish();
+    }
+}

@@ -1,0 +1,123 @@
+#[test(ring_register_ownership_and_publication)]
+module RingRegistersTest {
+    inst clk: $tb::clock_gen #( period: 10 );
+    inst rst: $tb::reset_gen ( clk );
+    var request         : RegisterBus::Request  ;
+    var commit          : logic                 ;
+    var locked          : logic                 ;
+    var blocked         : logic                 ;
+    var clear           : logic                 ;
+    var consume         : logic                 ;
+    var publish         : logic                 ;
+    var consume_ready   : logic                 ;
+    var publish_ready   : logic                 ;
+    var command         : RegisterState::Ring   ;
+    var events          : RegisterState::Ring   ;
+    var command_result  : RegisterAccess::Result;
+    var event_result    : RegisterAccess::Result;
+    var command_geometry: logic                 ;
+    var event_geometry  : logic                 ;
+    inst cmd: RingRegisters #(
+        BASE             : 0   ,
+        SOFTWARE_PRODUCER: true,
+    ) (
+        clk                             ,
+        rst_n         : rst             ,
+        request                         ,
+        commit                          ,
+        locked                          ,
+        blocked                         ,
+        clear                           ,
+        advance       : consume         ,
+        advance_ready : consume_ready   ,
+        state         : command         ,
+        result        : command_result  ,
+        geometry_valid: command_geometry,
+    );
+    inst evt: RingRegisters #(
+        BASE             : 32   ,
+        SOFTWARE_PRODUCER: false,
+    ) (
+        clk                           ,
+        rst_n         : rst           ,
+        request                       ,
+        commit                        ,
+        locked                        ,
+        blocked                       ,
+        clear                         ,
+        advance       : publish       ,
+        advance_ready : publish_ready ,
+        state         : events        ,
+        result        : event_result  ,
+        geometry_valid: event_geometry,
+    );
+    initial {
+        request = '0;
+        commit  = 0;
+        locked  = 0;
+        blocked = 0;
+        clear   = 0;
+        consume = 0;
+        publish = 0;
+        rst.assert();
+        clk.next(3);
+        $assert(!command_geometry && !consume_ready, "EMPTY_UNCONFIGURED");
+        request.write   = 1;
+        request.strobe  = 8'h0f;
+        request.address = 0;
+        request.data    = 32'h1000;
+        commit          = 1;
+        clk.next();
+        request.address = 4;
+        request.data    = 1;
+        clk.next();
+        $assert(command.base == 64'h00000001_00001000, "ADDRESS_HALVES");
+        request.address = 8;
+        request.data    = 4;
+        clk.next();
+        $assert(command_geometry, "COMMAND_GEOMETRY");
+        request.address = 12;
+        request.data    = 3;
+        clk.next();
+        $assert(command.producer == 3 && consume_ready, "PRODUCER_PUBLISHED");
+        request.data = 2;
+        $assert(command_result.status == RegisterBus::SLVERR, "PRODUCER_CANNOT_REWIND");
+        clk.next();
+        $assert(command.producer == 3, "FAILED_WRITE_ATOMIC");
+        commit  = 0;
+        consume = 1;
+        clk.next(2);
+        consume = 0;
+        $assert(command.consumer == 2, "HARDWARE_CONSUMER");
+        locked          = 1;
+        commit          = 1;
+        request.address = 0;
+        request.data    = 32'h2000;
+        $assert(command_result.status == RegisterBus::SLVERR, "FROZEN_BASE");
+        clk.next();
+        $assert(command.base == 64'h00000001_00001000, "LOCKED_VALUE_PRESERVED");
+        locked          = 0;
+        request.address = 40;
+        request.data    = 4;
+        clk.next();
+        commit  = 0;
+        publish = 1;
+        clk.next(2);
+        publish = 0;
+        $assert(events.producer == 2 && event_geometry, "HARDWARE_EVENT_PRODUCER");
+        request.address = 48;
+        request.data    = 1;
+        commit          = 1;
+        clk.next();
+        $assert(events.consumer == 1, "SOFTWARE_EVENT_CONSUMER");
+        request.address = 44;
+        request.data    = 3;
+        $assert(event_result.status == RegisterBus::SLVERR, "EVENT_PRODUCER_READ_ONLY");
+        clk.next();
+        $assert(events.producer == 2, "READ_ONLY_UNCHANGED");
+        clear = 1;
+        clk.next();
+        $assert(command.producer == 0 && command.consumer == 0 && events.capacity == 0, "CLEANUP_CLEARS_RING_STATE");
+        $finish();
+    }
+}

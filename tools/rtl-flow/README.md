@@ -12,7 +12,8 @@ The initial upstream revision is `bacc44532af83058bdaab97dbe66ca1b89976be2`, bui
 with Rust 1.96.0 and the upstream Cargo.lock. The source archive and ordered patch
 manifest have SHA-256 pins in `toolchain.env`. This is a locally patched compiler,
 not an official Veryl release. Patches cover guarded-read analysis, generic
-parameter forwarding and cross-project generic constant context. See
+parameter forwarding, cross-project generic constant context and simulator
+struct-member width conversion. See
 [patch provenance](patches/README.md).
 
 The launcher checks patch integrity on every invocation, downloads and verifies
@@ -46,12 +47,25 @@ Keep `VERYL_DUT_REUSE=0` explicit for native tests while upstream
 for this pin. The launcher does not disable tests or change simulator defaults.
 The smoke project checks compilation and native execution only; it is not DMA
 RTL, a complete compiler regression or CDC/RDC qualification. Design commands
-will run in `rtl` once actual sources and tests exist there.
+run separately in [rtl](../../rtl/README.md).
 
 For this initial setup, an independently checksummed copy of the already-built
 qualified compiler can seed the local ignored installation. That is artifact
 reuse, not a claim of a fresh local build. An absent installation triggers the
 reproducible source-build path above.
+
+The current four-patch installation was built through this source-build path.
+The struct-width fix has a failing-first upstream simulator regression and is
+also exercised by `smoke/src/struct_width.veryl` and the real DMA frontend test.
+
+## Contract layout
+
+`bash tools/rtl-flow/layout.sh --write` runs the contract's `pdma-rtl-layout`
+binary and writes `rtl/src/dma/layout.veryl`. `--check` rejects absent or stale
+output without overwriting it. The exporter uses the normal Cargo workspace and
+published schema dependency; it introduces no local framework overrides.
+Generated packages use `#[fmt(skip)]` so formatter alignment does not change the
+generator's deterministic output. Handwritten RTL uses normal Veryl formatting.
 
 ## Maintenance boundary
 

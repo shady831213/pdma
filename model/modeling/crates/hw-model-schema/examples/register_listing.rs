@@ -1,10 +1,10 @@
-//! A custom register renderer using no builtin backend feature.
+//! A custom register backend using no builtin backend feature.
 use hw_model_schema::{
-    export::{
-        Artifact, Bindings, DefinitionHeader, ExportId, InMemoryArtifactSink, PreparedMap,
-        PreparedSchema, RegisterLocation, RegisterMapView, RegisterNode, Renderer, generate,
+    ast::{
+        DefinitionId, MapView, Node, PlacementView, RegisterInfo, RegisterLocation, SchemaSet,
+        analysis::{Analysis, Bindings, UnitId},
     },
-    graph::{DefinitionId, SchemaSet},
+    export::{Artifact, Backend, InMemoryArtifactSink, Scope, emit, emit_all, generate},
     register_map, register_schema,
 };
 use std::{error::Error, fmt::Write};
@@ -17,38 +17,34 @@ register_map! { pub map Channel { alignment: 16, placements: [pub status: Status
 register_map! { pub map Device(n: usize) { alignment: 16, placements: [pub channels: Channel[n]] } }
 
 struct RegisterListing {
-    selected: ExportId,
+    selected: UnitId,
     text: String,
-    active: bool,
 }
-impl Renderer for RegisterListing {
+impl Backend for RegisterListing {
     type Error = Box<dyn Error>;
-    fn begin_definition(&mut self, definition: DefinitionHeader<'_>) -> Result<(), Self::Error> {
-        self.active = *definition.id == self.selected;
-        Ok(())
-    }
-    fn begin_map(&mut self, map: &PreparedMap) -> Result<(), Self::Error> {
-        if self.active && map.instance.is_none() {
-            return Err("listing requires a bound map".into());
+    fn definition(&mut self, node: Node<'_>, scope: Scope<'_>) -> Result<(), Self::Error> {
+        if scope.unit.id == self.selected {
+            emit(node, scope, self)?;
         }
         Ok(())
     }
-    fn begin_map_instance(&mut self, _: &RegisterMapView) -> Result<(), Self::Error> {
-        if self.active {
-            self.text.push_str("path\toffset\tbytes\n");
-        }
-        Ok(())
+    fn register_map(&mut self, _: MapView<'_>, scope: Scope<'_>) -> Result<(), Self::Error> {
+        let map = scope
+            .map_layout()
+            .and_then(|layout| layout.instance.as_ref())
+            .ok_or("listing requires a bound map")?;
+        self.text.push_str("path\toffset\tbytes\n");
+        emit_all(MapView::Resolved(map).children(), scope, self)
     }
-    fn begin_register(&mut self, node: RegisterNode<'_>) -> Result<(), Self::Error> {
-        if !self.active {
-            return Ok(());
-        }
-        match node.location {
+    fn register(&mut self, register: &RegisterInfo, scope: Scope<'_>) -> Result<(), Self::Error> {
+        match scope.register_location() {
             RegisterLocation::Root | RegisterLocation::Template { .. } => return Ok(()),
             RegisterLocation::Standalone(_) | RegisterLocation::Instance { .. } => {}
         }
-        let leaf = node.view.ok_or("map register placement expected")?;
-        let path = leaf
+        let Some(PlacementView::Register { view, .. }) = scope.placement else {
+            return Err("map register placement expected".into());
+        };
+        let path = view
             .segments
             .iter()
             .map(|part| {
@@ -59,12 +55,7 @@ impl Renderer for RegisterListing {
             })
             .collect::<Vec<_>>()
             .join(".");
-        writeln!(
-            self.text,
-            "{path}\t{}\t{}",
-            leaf.offset,
-            node.register.width()
-        )?;
+        writeln!(self.text, "{path}\t{}\t{}", view.offset, register.width())?;
         Ok(())
     }
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
@@ -80,14 +71,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     selected.add::<Device>();
     let mut bindings = Bindings::new();
     bindings.bind::<Device>(&[2]);
-    let schema = PreparedSchema::from_graph(&selected.resolve()?, &bindings)?;
-    let renderer = RegisterListing {
+    let schema = Analysis::from_graph(&selected.resolve()?, &bindings)?;
+    let backend = RegisterListing {
         selected: DefinitionId::of::<Device>().into(),
         text: String::new(),
-        active: false,
     };
     let mut sink = InMemoryArtifactSink::new();
-    generate(&schema, renderer, &mut sink).map_err(|error| format!("{error}"))?;
+    generate(&schema, backend, &mut sink).map_err(|error| format!("{error}"))?;
     for artifact in sink.into_artifacts() {
         print!("{}", String::from_utf8(artifact.contents)?);
     }

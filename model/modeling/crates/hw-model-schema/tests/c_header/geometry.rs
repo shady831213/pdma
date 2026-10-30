@@ -1,7 +1,8 @@
+use hw_model_schema::ast::analysis::{Analysis, Bindings};
 use hw_model_schema::{
-    export::backends::c_header::{CHeaderExportError, CHeaderRenderer},
-    export::{Bindings, ExportError, InMemoryArtifactSink, PreparedSchema, generate},
-    graph::{DefinitionId, SchemaSet},
+    ast::{DefinitionId, SchemaSet},
+    export::backends::c_header::{CHeaderBackend, CHeaderExportError},
+    export::{ExportError, InMemoryArtifactSink, generate},
     register_map, register_schema,
 };
 
@@ -23,8 +24,8 @@ fn common_preparation_renders_symbolic_and_bound_nested_geometry_as_strict_c11()
     bound.bind::<Parent>(&[3]);
 
     for (label, bindings) in [("symbolic", Bindings::new()), ("bound", bound)] {
-        let prepared = PreparedSchema::from_graph(&graph, &bindings)?;
-        let renderer = CHeaderRenderer::new()
+        let prepared = Analysis::from_graph(&graph, &bindings)?;
+        let renderer = CHeaderBackend::new()
             .with_name(DefinitionId::of::<Parent>(), "root")
             .with_name(DefinitionId::of::<Child>(), "leaf");
         let mut sink = InMemoryArtifactSink::new();
@@ -53,9 +54,9 @@ fn symbolic_geometry_rejects_aliasing_type_and_function_names() -> super::suppor
     // Given: a symbolic map with a target prefix longer than C11's significant length.
     let mut selected = SchemaSet::new();
     selected.add::<Parent>();
-    let prepared = PreparedSchema::from_graph(&selected.resolve()?, &Bindings::new())?;
+    let prepared = Analysis::from_graph(&selected.resolve()?, &Bindings::new())?;
     let prefix = "a".repeat(64);
-    let renderer = CHeaderRenderer::new().with_name(DefinitionId::of::<Parent>(), &prefix);
+    let renderer = CHeaderBackend::new().with_name(DefinitionId::of::<Parent>(), &prefix);
     let mut sink = InMemoryArtifactSink::new();
 
     // When: its geometry type and function would alias in the ordinary C namespace.

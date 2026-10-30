@@ -40,7 +40,7 @@ const MAP: RegisterMapSpec<u16> = RegisterMapSpec::new(4, &REGISTERS, &[]);
 #[test]
 fn generated_enums_reach_real_c_consumers_from_each_embedding() -> TestResult {
     // Given: macro-generated scalar and shared-bit enums in records and registers.
-    let record = Packet::SPEC.resolve()?;
+    let record = Packet::SPEC;
     let map = MAP.resolve()?;
     // When: both resolved schemas cross their public C exporters.
     let record_artifact = render_record("packet.h", "packet", &record)?;

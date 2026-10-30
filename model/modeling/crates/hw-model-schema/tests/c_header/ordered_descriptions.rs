@@ -1,6 +1,7 @@
-use hw_model_schema::export::{PreparedSchema, generate};
+use hw_model_schema::ast::analysis::Analysis;
+use hw_model_schema::export::generate;
 use hw_model_schema::{
-    bits_schema, export::backends::c_header::CHeaderRenderer, record_schema, register_map,
+    bits_schema, export::backends::c_header::CHeaderBackend, record_schema, register_map,
     register_schema,
 };
 
@@ -68,8 +69,8 @@ fn long_actual_c_prefix_collisions_are_rejected_before_emission() -> TestResult 
     let mut sink = InMemoryArtifactSink::new();
     // When: rendering symbols whose distinguishing suffix lies beyond that length.
     let result = generate(
-        &PreparedSchema::register_map(exporter.0, &resolved),
-        CHeaderRenderer::new().with_name(exporter.0, exporter.1.as_ref()),
+        &Analysis::register_map(exporter.0, &resolved),
+        CHeaderBackend::new().with_name(exporter.0, exporter.1.as_ref()),
         &mut sink,
     );
     // Then: no artifact is emitted and the collision remains a typed error.
@@ -135,7 +136,7 @@ fn nested_map_descriptions_survive_macro_resolution_and_export() -> TestResult {
 #[test]
 fn nested_record_and_shared_bit_descriptions_reach_c_comments() -> TestResult {
     // Given: a nested record containing a reusable bits declaration.
-    let resolved = Packet::SPEC.resolve()?;
+    let resolved = Packet::SPEC;
     // When: the public exporter renders that composed schema.
     let artifact = render_record("packet.h", "packet", &resolved)?;
     let text = std::str::from_utf8(&artifact.contents)?;

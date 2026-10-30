@@ -1,5 +1,5 @@
 //! Shared symbolic layout agrees with generated constructors.
-use hw_model_schema::graph::{
+use hw_model_schema::ast::{
     ChildLayout as PlannedChild, DefinitionBody, DescribeSchema, LayoutError, LayoutExpr,
 };
 use hw_model_schema::{bits_schema, register_map, register_schema};
@@ -71,7 +71,7 @@ fn nested_banks_preserve_holes_and_last_child_extent() -> Result<(), Box<dyn std
 
 #[test]
 fn malformed_layouts_preserve_checked_errors() -> Result<(), Box<dyn std::error::Error>> {
-    use hw_model_schema::graph::{LayoutExpr, MapDefinition, MapPlacement};
+    use hw_model_schema::ast::{LayoutExpr, MapDefinition, MapPlacement};
     // Given: explicit offsets and counts can describe malformed envelopes.
     let place = |offset, count| {
         MapPlacement::new(
@@ -122,8 +122,8 @@ fn malformed_layouts_preserve_checked_errors() -> Result<(), Box<dyn std::error:
 
 struct Cycle;
 impl DescribeSchema for Cycle {
-    fn schema_definition() -> hw_model_schema::graph::Definition {
-        use hw_model_schema::graph::{Definition, LayoutExpr, MapDefinition, MapPlacement};
+    fn schema_definition() -> hw_model_schema::ast::Definition {
+        use hw_model_schema::ast::{Definition, LayoutExpr, MapDefinition, MapPlacement};
         Definition::register_map::<Self>(
             "Cycle",
             hw_model_schema::Documentation::EMPTY,
@@ -159,13 +159,13 @@ fn recursive_layouts_are_rejected() {
 
 #[test]
 fn invalid_bindings_and_child_kinds_keep_their_errors() {
-    use hw_model_schema::graph::{LayoutExpr, MapDefinition, MapPlacement};
+    use hw_model_schema::ast::{LayoutExpr, MapDefinition, MapPlacement};
     // Given: invalid child bindings and unsupported count expressions.
     let cases = [
         (
             MapPlacement::new(
                 "bits",
-                hw_model_schema::graph::Definition::bits::<Flags>,
+                hw_model_schema::ast::Definition::bits::<Flags>,
                 vec![],
                 LayoutExpr::Constant(1),
                 None,
@@ -231,7 +231,7 @@ fn invalid_bindings_and_child_kinds_keep_their_errors() {
 
 #[test]
 fn symbolic_planning_rejects_unbound_child_arguments() {
-    use hw_model_schema::graph::{LayoutExpr, MapDefinition, MapPlacement};
+    use hw_model_schema::ast::{LayoutExpr, MapDefinition, MapPlacement};
     // Given: a symbolic map forwards an undeclared parameter to a valid child.
     let map = MapDefinition::new(
         &["n"],

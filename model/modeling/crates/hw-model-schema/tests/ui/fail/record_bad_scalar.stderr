@@ -15,7 +15,7 @@ note: required because it appears within the type `Bad`
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   |                             ^^^
 note: required by a bound in `DescribeSchema`
- --> src/graph.rs
+ --> src/ast.rs
   |
   | / pub trait DescribeSchema {
   | |     /// Returns the definition without recursively constructing its dependencies.
@@ -362,7 +362,7 @@ note: required by a bound in `SchemaLayout`
   |
   | / pub trait SchemaLayout {
   | |     /// Describes this type for exporters; custom layouts are opaque by default.
-  | |     fn schema_definition() -> crate::graph::Definition
+  | |     fn schema_definition() -> crate::ast::Definition
   | |     where
 ... |
   | |     fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError>;
@@ -391,7 +391,7 @@ note: required by a bound in `SchemaLayout`
   |
   | / pub trait SchemaLayout {
   | |     /// Describes this type for exporters; custom layouts are opaque by default.
-  | |     fn schema_definition() -> crate::graph::Definition
+  | |     fn schema_definition() -> crate::ast::Definition
   | |     where
 ... |
   | |     fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError>;
@@ -532,8 +532,8 @@ note: required because it appears within the type `Bad`
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   |                             ^^^
-note: required by a bound in `hw_model_schema::graph::DescribeSchema::schema_definition`
- --> src/graph.rs
+note: required by a bound in `hw_model_schema::ast::DescribeSchema::schema_definition`
+ --> src/ast.rs
   |
   | / pub trait DescribeSchema {
   | |     /// Returns the definition without recursively constructing its dependencies.
@@ -560,10 +560,10 @@ note: required because it appears within the type `Bad`
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   |                             ^^^
-note: required by a bound in `hw_model_schema::graph::Definition::record`
- --> src/graph/definition.rs
+note: required by a bound in `hw_model_schema::ast::Definition::record`
+ --> src/ast/definition.rs
   |
-  |     pub fn record<T: ?Sized + 'static>(spec: RecordSpec, references: Vec<Reference>) -> Self {
+  |     pub fn record<T: ?Sized + 'static>(spec: RecordSpec, fields: Vec<super::Field>) -> Self {
   |                   ^ required by this bound in `Definition::record`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
@@ -768,8 +768,8 @@ note: required because it appears within the type `Bad`
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   |                             ^^^
-note: required by a bound in `hw_model_schema::graph::DescribeSchema::schema_definition`
- --> src/graph.rs
+note: required by a bound in `hw_model_schema::ast::DescribeSchema::schema_definition`
+ --> src/ast.rs
   |
   | / pub trait DescribeSchema {
   | |     /// Returns the definition without recursively constructing its dependencies.

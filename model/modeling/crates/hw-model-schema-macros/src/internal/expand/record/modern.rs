@@ -67,16 +67,16 @@ pub(super) fn expand(decl: &ModernRecordDecl) -> syn::Result<TokenStream> {
     let values = values::expand(decl, &plan, &facade)?;
     let views = views::expand(decl, &plan, &facade);
     let marker_name = marker.to_string();
-    let graph = crate::internal::expand::graph::record(decl, &facade);
+    let ast = crate::internal::expand::ast::record(decl, &facade);
     Ok(quote! {
-        #graph
+        #ast
         #(#type_items)*
         #metadata
         #values
         #views
         impl #facade::SchemaLayout for #marker {
-            fn schema_definition() -> #facade::graph::Definition {
-                <Self as #facade::graph::DescribeSchema>::schema_definition()
+            fn schema_definition() -> #facade::ast::Definition {
+                <Self as #facade::ast::DescribeSchema>::schema_definition()
             }
             type Value = #values_name;
             type View<'a> = #view_name<'a>;

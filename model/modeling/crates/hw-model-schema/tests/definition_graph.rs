@@ -1,5 +1,5 @@
 //! Definition graph traversal is independent of automatic discovery.
-use hw_model_schema::graph::{ReferenceKind, SchemaSet};
+use hw_model_schema::ast::{ReferenceKind, SchemaSet};
 use hw_model_schema::{record_schema, union_schema};
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -21,15 +21,24 @@ fn inline_union_exposes_its_selector_and_case_fields() -> TestResult {
     // When: references are collected.
     let graph = schemas.resolve()?;
     // Then: an alternative retains the field shape and the original wire tag.
-    let union = graph
+    let record = graph
         .definitions()
-        .find(|node| node.name() == "InlineBodyValues")
-        .ok_or("missing union")?;
-    let alternative = union.references().get(1).ok_or("missing Value case")?;
+        .find(|node| node.name() == "Inline")
+        .ok_or("missing record")?;
+    let field = record
+        .node()
+        .children()
+        .nth(1)
+        .ok_or("missing union field")?;
+    let hw_model_schema::ast::Node::Union(union) =
+        field.children().next().ok_or("missing union")?
+    else {
+        return Err("expected union".into());
+    };
+    let alternative = union.cases().get(1).ok_or("missing Value case")?;
     assert_eq!(alternative.discriminant(), Some(7));
-    let case = alternative.target();
-    let hw_model_schema::graph::DefinitionBody::Record(spec) = case.body() else {
-        return Err("expected case record".into());
+    let hw_model_schema::ast::CaseBody::Inline(spec) = alternative.body() else {
+        return Err("expected inline case fields".into());
     };
     let field = spec.fields().first().ok_or("missing case field")?;
     assert_eq!(field.name(), "number");
@@ -57,14 +66,24 @@ fn tagged_union_preserves_case_references_and_wire_discriminants() -> TestResult
     // When: all type references are traversed.
     let graph = schemas.resolve()?;
     // Then: the branch graph retains the selector, codes and reused records.
-    let union = graph
+    let record = graph
         .definitions()
-        .find(|node| node.name() == "TaggedBodyValues")
-        .ok_or("missing union")?;
+        .find(|node| node.name() == "Tagged")
+        .ok_or("missing record")?;
+    let field = record
+        .node()
+        .children()
+        .nth(1)
+        .ok_or("missing union field")?;
+    let hw_model_schema::ast::Node::Union(union) =
+        field.children().next().ok_or("missing union")?
+    else {
+        return Err("expected union".into());
+    };
     let codes: Vec<_> = union
-        .references()
+        .cases()
         .iter()
-        .map(hw_model_schema::graph::Reference::discriminant)
+        .map(hw_model_schema::ast::Case::discriminant)
         .collect();
     assert_eq!(codes, [Some(1), Some(2)]);
     assert!(graph.definitions().any(|node| node.name() == "Pair"));
@@ -82,14 +101,15 @@ fn manual_union_root_collects_transitive_definitions_and_keeps_both_field_edges(
     // Then: shared definitions are unique, but their distinct references remain.
     let names: Vec<_> = graph
         .definitions()
-        .map(hw_model_schema::graph::Definition::name)
+        .map(hw_model_schema::ast::Definition::name)
         .collect();
     assert_eq!(names, ["Leaf", "Packet", "Pair"]);
     let pair = graph
         .definitions()
         .find(|node| node.name() == "Pair")
         .ok_or("missing pair")?;
-    let [left, right] = pair.references() else {
+    let references = pair.references();
+    let [left, right] = references.as_slice() else {
         return Err("expected two edges".into());
     };
     assert_eq!(left.name(), "left");

@@ -1,12 +1,11 @@
 use super::{DownPair, TelemetryMap};
 use core::convert::Infallible;
-use his::{ResolvedMember, ResolvedRecord};
 use his::{
-    export::{
-        Artifact, ArtifactSink, Bindings, DefinitionHeader, ExportId, PreparedSchema,
-        RegisterLocation, RegisterMapView, RegisterNode, Renderer, generate,
+    ast::{
+        DefinitionId, MapView, Node, RecordDefinition, SchemaSet,
+        analysis::{Analysis, Bindings, Layout, UnitId},
     },
-    graph::{DefinitionId, SchemaSet},
+    export::{Artifact, ArtifactSink, Backend, Scope, emit, generate},
 };
 use std::fmt::Write as _;
 
@@ -15,37 +14,24 @@ use std::fmt::Write as _;
 pub struct TelemetrySink {
     artifacts: Vec<Artifact>,
 }
-
 impl TelemetrySink {
-    /// Returns the artifacts in their downstream-defined emission order.
+    /// Returns artifacts in their downstream-defined emission order.
     #[must_use]
     pub fn artifacts(&self) -> &[Artifact] {
         &self.artifacts
     }
 }
-
 impl ArtifactSink for TelemetrySink {
     type Error = Infallible;
-
     fn emit(&mut self, artifact: Artifact) -> Result<(), Self::Error> {
         self.artifacts.push(artifact);
         Ok(())
     }
 }
-
-/// Application-owned renderer for the selected telemetry definitions.
+/// Application-owned backend for selected telemetry definitions.
 #[derive(Debug, Default)]
 pub struct TelemetryRenderer {
     content: String,
-    target: Target,
-}
-
-#[derive(Debug, Default, PartialEq, Eq)]
-enum Target {
-    #[default]
-    Other,
-    Record,
-    Map,
 }
 
 /// Exports fresh resolved graphs through an application-owned sink.
@@ -53,34 +39,27 @@ pub fn export_resolved(sink: &mut TelemetrySink) -> Option<()> {
     let mut selected = SchemaSet::new();
     selected.add_record::<DownPair>();
     selected.add::<TelemetryMap>();
-    let prepared = PreparedSchema::from_graph(&selected.resolve().ok()?, &Bindings::new()).ok()?;
+    let prepared = Analysis::from_graph(&selected.resolve().ok()?, &Bindings::new()).ok()?;
     generate(&prepared, TelemetryRenderer::default(), sink).ok()
 }
 
-impl Renderer for TelemetryRenderer {
+impl Backend for TelemetryRenderer {
     type Error = std::io::Error;
-
-    fn begin_definition(&mut self, definition: DefinitionHeader<'_>) -> Result<(), Self::Error> {
-        self.target = if *definition.id == ExportId::Definition(DefinitionId::of::<DownPair>()) {
-            Target::Record
-        } else if *definition.id == ExportId::Definition(DefinitionId::of::<TelemetryMap>()) {
-            Target::Map
-        } else {
-            Target::Other
-        };
-        Ok(())
-    }
-
-    fn begin_record(&mut self, record: &ResolvedRecord) -> Result<(), Self::Error> {
-        if self.target == Target::Record {
-            write!(self.content, "record_size={};record=", record.size())
-                .map_err(std::io::Error::other)?;
+    fn definition(&mut self, node: Node<'_>, scope: Scope<'_>) -> Result<(), Self::Error> {
+        if scope.unit.id == UnitId::Definition(DefinitionId::of::<DownPair>())
+            || scope.unit.id == UnitId::Definition(DefinitionId::of::<TelemetryMap>())
+        {
+            emit(node, scope, self)?;
         }
         Ok(())
     }
-
-    fn record_member(&mut self, index: usize, member: &ResolvedMember) -> Result<(), Self::Error> {
-        if self.target == Target::Record {
+    fn record(&mut self, _: &RecordDefinition, scope: Scope<'_>) -> Result<(), Self::Error> {
+        let Layout::Record(record) = &scope.unit.body else {
+            return Err(std::io::Error::other("record layout"));
+        };
+        write!(self.content, "record_size={};record=", record.size())
+            .map_err(std::io::Error::other)?;
+        for (index, member) in record.members().iter().enumerate() {
             if index > 0 {
                 self.content.push(',');
             }
@@ -93,47 +72,28 @@ impl Renderer for TelemetryRenderer {
             )
             .map_err(std::io::Error::other)?;
         }
+        self.content.push(';');
         Ok(())
     }
-
-    fn end_record(&mut self, _: &ResolvedRecord) -> Result<(), Self::Error> {
-        if self.target == Target::Record {
-            self.content.push(';');
-        }
-        Ok(())
-    }
-
-    fn begin_map_instance(&mut self, map: &RegisterMapView) -> Result<(), Self::Error> {
-        if self.target == Target::Map {
-            write!(self.content, "map_size={};registers=", map.extent)
-                .map_err(std::io::Error::other)?;
-        }
-        Ok(())
-    }
-
-    fn begin_register(&mut self, node: RegisterNode<'_>) -> Result<(), Self::Error> {
-        match node.location {
-            RegisterLocation::Standalone(index) if self.target == Target::Map => {
-                let view = node
-                    .view
-                    .ok_or_else(|| std::io::Error::other("map register view"))?;
-                if index > 0 {
-                    self.content.push(',');
-                }
-                let path = view
-                    .path
-                    .strip_prefix("TelemetryMap.")
-                    .unwrap_or(&view.path);
-                write!(self.content, "{path}@{}", view.offset).map_err(std::io::Error::other)?;
+    fn register_map(&mut self, _: MapView<'_>, scope: Scope<'_>) -> Result<(), Self::Error> {
+        let map = scope
+            .map_layout()
+            .and_then(|layout| layout.instance.as_ref())
+            .ok_or_else(|| std::io::Error::other("map instance"))?;
+        write!(self.content, "map_size={};registers=", map.extent)
+            .map_err(std::io::Error::other)?;
+        for (index, view) in map.registers.iter().enumerate() {
+            if index > 0 {
+                self.content.push(',');
             }
-            RegisterLocation::Root
-            | RegisterLocation::Standalone(_)
-            | RegisterLocation::Template { .. }
-            | RegisterLocation::Instance { .. } => {}
+            let path = view
+                .path
+                .strip_prefix("TelemetryMap.")
+                .map_or(view.path.as_str(), |path| path);
+            write!(self.content, "{path}@{}", view.offset).map_err(std::io::Error::other)?;
         }
         Ok(())
     }
-
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(vec![Artifact {
             logical_name: String::from("acme-telemetry-layout.txt"),

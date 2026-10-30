@@ -8,9 +8,9 @@ union_schema! { pub union Packet { cases: { Small(Small), Large(Large) } } }
 #[test]
 fn opaque_extent_and_complete_case_fields_work_in_c11() -> TestResult {
     // Given independent complete record layouts and opaque union metadata.
-    let union = render_record("packet.h", "packet", &Packet::SPEC.resolve()?)?;
-    let small = render_record("small.h", "small", &Small::SPEC.resolve()?)?;
-    let large = render_record("large.h", "large", &Large::SPEC.resolve()?)?;
+    let union = render_record("packet.h", "packet", &Packet::SPEC)?;
+    let small = render_record("small.h", "small", &Small::SPEC)?;
+    let large = render_record("large.h", "large", &Large::SPEC)?;
     // When a real C11 consumer chooses the interpretation explicitly.
     // Then exported extent, offsets and byte-order accessors agree with the wire layout.
     compile_fragments(

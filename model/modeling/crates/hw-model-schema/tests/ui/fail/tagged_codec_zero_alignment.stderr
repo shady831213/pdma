@@ -97,7 +97,7 @@ error[E0080]: evaluation panicked: union case alignment must be a nonzero power 
 20 | |     tag: enum(u8) { variants: { Bad = 0, Wide = 1 } },
 21 | |     payload: tagged_union { tag: self.tag, cases: { Bad(Bad), Wide(Wide) } },
 22 | | } } }
-   | |_____^ evaluation of `ParentPayloadValues::RECORD_SIZE` failed here
+   | |_____^ evaluation of `Parent::PAYLOAD_OFFSET` failed here
 
 error[E0080]: evaluation panicked: union case alignment must be a nonzero power of two
   --> tests/ui/fail/tagged_codec_zero_alignment.rs:19:1
@@ -106,7 +106,7 @@ error[E0080]: evaluation panicked: union case alignment must be a nonzero power 
 20 | |     tag: enum(u8) { variants: { Bad = 0, Wide = 1 } },
 21 | |     payload: tagged_union { tag: self.tag, cases: { Bad(Bad), Wide(Wide) } },
 22 | | } } }
-   | |_____^ evaluation of `Parent::PAYLOAD_OFFSET` failed here
+   | |_____^ evaluation of `ParentPayloadValues::RECORD_SIZE` failed here
 
 error[E0080]: evaluation panicked: union case alignment must be a nonzero power of two
   --> tests/ui/fail/tagged_codec_zero_alignment.rs:19:1

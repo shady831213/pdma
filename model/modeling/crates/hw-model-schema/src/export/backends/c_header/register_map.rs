@@ -1,8 +1,10 @@
 mod names;
 mod register;
 
-use super::{CHeaderExportError, CHeaderRenderer, fragment::Fragment};
-use crate::export::{BankView, RegisterLocation, RegisterNode};
+use super::{CHeaderBackend, CHeaderExportError, fragment::Fragment};
+use crate::ast::analysis::BankView;
+use crate::ast::{PlacementView, RegisterLocation};
+use crate::export::Scope;
 pub(super) use names::{MapNames, map_names};
 pub(super) use register::{RegisterNames, push_register};
 
@@ -21,7 +23,7 @@ pub(super) fn bank_metadata(
     )
 }
 
-impl CHeaderRenderer {
+impl CHeaderBackend {
     pub(super) fn map_constants(&mut self, size: usize) -> Result<(), CHeaderExportError> {
         self.output
             .constants::<64>(&self.prefix, &[("SIZE", size)])?;
@@ -102,13 +104,15 @@ impl CHeaderRenderer {
 
     pub(super) fn register_offset(
         &self,
-        node: RegisterNode<'_>,
+        scope: Scope<'_>,
     ) -> Result<Option<(String, usize)>, CHeaderExportError> {
-        self.register_offset_name(node.location)?
+        self.register_offset_name(scope.register_location())?
             .map(|name| {
-                node.view
-                    .map(|view| (name, view.offset))
-                    .ok_or(CHeaderExportError::InvalidVisit("register view"))
+                match scope.placement {
+                    Some(PlacementView::Register { view, .. }) => Some((name, view.offset)),
+                    _ => None,
+                }
+                .ok_or(CHeaderExportError::InvalidVisit("register view"))
             })
             .transpose()
     }

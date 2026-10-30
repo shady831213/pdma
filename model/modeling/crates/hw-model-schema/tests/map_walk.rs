@@ -1,6 +1,6 @@
 //! Register traversal preserves structural paths and checked layout semantics.
 use hw_model_schema::{
-    graph::{DefinitionBody, DescribeSchema, LayoutError},
+    ast::{DefinitionBody, DescribeSchema, LayoutError},
     register_map, register_schema,
 };
 
@@ -65,7 +65,7 @@ fn register_walk_preserves_nested_bank_paths_and_absolute_addresses()
     for register in &registers {
         assert_eq!(
             register.definition(),
-            hw_model_schema::graph::DefinitionId::of::<Word>()
+            hw_model_schema::ast::DefinitionId::of::<Word>()
         );
         assert_eq!(register.register().endian(), hw_model_schema::Endian::Big);
         assert_eq!(register.register().reset_value(), 7);

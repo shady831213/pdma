@@ -1,5 +1,5 @@
 //! One public expression fold owns recursion for numeric and text consumers.
-use hw_model_schema::graph::{ExpressionOp, ExpressionVisitor, LayoutError, LayoutExpr, PlanValue};
+use hw_model_schema::ast::{ExpressionOp, ExpressionVisitor, LayoutError, LayoutExpr, PlanValue};
 
 #[derive(Default)]
 struct Trace {

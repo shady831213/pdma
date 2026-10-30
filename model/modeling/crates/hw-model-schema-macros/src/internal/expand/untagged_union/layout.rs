@@ -6,12 +6,12 @@ pub(super) fn expand(decl: &UntaggedUnionDecl, facade: &TokenStream) -> TokenStr
     let name = &decl.name;
     let view = format_ident!("{name}View");
     let view_mut = format_ident!("{name}ViewMut");
-    let graph = crate::internal::expand::graph::union(decl, facade);
+    let ast = crate::internal::expand::ast::union(decl, facade);
     quote! {
-        #graph
+        #ast
         impl #facade::SchemaLayout for #name {
-            fn schema_definition() -> #facade::graph::Definition {
-                <Self as #facade::graph::DescribeSchema>::schema_definition()
+            fn schema_definition() -> #facade::ast::Definition {
+                <Self as #facade::ast::DescribeSchema>::schema_definition()
             }
             type Value = Self;
             type View<'a> = #view<'a>;

@@ -1,5 +1,5 @@
 //! Map definitions retain parameter relationships independently of instances.
-use hw_model_schema::graph::{DefinitionBody, DescribeSchema, SchemaSet};
+use hw_model_schema::ast::{DefinitionBody, DescribeSchema, SchemaSet};
 use hw_model_schema::{register_map, register_schema};
 
 register_schema! {
@@ -20,7 +20,7 @@ fn invalid_instance_arguments_are_rejected_without_creating_a_binding()
     // Then: geometry validation fails and the set remains unchanged.
     assert!(matches!(
         result,
-        Err(hw_model_schema::graph::GraphError::InstanceLayout(_))
+        Err(hw_model_schema::ast::GraphError::InstanceLayout(_))
     ));
     let graph = set.resolve()?;
     assert!(graph.instances().is_empty());

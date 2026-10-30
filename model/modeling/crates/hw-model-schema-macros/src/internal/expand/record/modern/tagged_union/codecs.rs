@@ -18,7 +18,7 @@ pub(in crate::internal::expand::record::modern) fn expand(
     let extent = &geometry.extent;
     let alignment = &geometry.storage.width;
     let tag = tag_info(record, &decl.tag, &quote!(value))?.ty;
-    let graph = super::graph::codecs(&name, decl, &tag, facade)?;
+    let ast = super::ast::codecs(&name, decl, &tag, facade)?;
     let owner = &record.name;
     let identity = format_ident!("{}_IDENTITY", field.to_string().to_ascii_uppercase());
     let mut declarations = Vec::new();
@@ -74,7 +74,7 @@ pub(in crate::internal::expand::record::modern) fn expand(
         facade,
     });
     Ok(quote! {
-        #graph
+        #ast
         #[doc = "Generated union of schema codec values."]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         #visibility enum #name { #(#declarations),* }

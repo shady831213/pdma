@@ -1,7 +1,8 @@
+use hw_model_schema::ast::analysis::Analysis;
 use hw_model_schema::{
     FieldSpec, RecordPlacement, RecordSpec, ScalarKind,
-    export::backends::c_header::{CHeaderExportError, CHeaderRenderer},
-    export::{Artifact, ArtifactSink, ExportError, PreparedSchema, generate},
+    export::backends::c_header::{CHeaderBackend, CHeaderExportError},
+    export::{Artifact, ArtifactSink, ExportError, generate},
 };
 
 use super::support::{
@@ -31,7 +32,7 @@ fn c_header_record_is_exact_and_deterministic_when_rendered_twice() -> TestResul
     let exporter = ("packet.fragment.h", "Lab-9 packet");
 
     // When: the record is exported twice through the format-neutral interface.
-    let resolved = RECORD.resolve()?;
+    let resolved = RECORD;
     let first = render_record(exporter.0, exporter.1, &resolved)?;
     let second = render_record(exporter.0, exporter.1, &resolved)?;
 
@@ -46,7 +47,7 @@ fn c_header_record_is_exact_and_deterministic_when_rendered_twice() -> TestResul
 #[test]
 fn c_header_nested_record_uses_resolved_paths_and_absolute_offsets() -> TestResult {
     // Given: one reusable record definition placed twice under a named root.
-    let resolved = NESTED_RECORD.resolve()?;
+    let resolved = NESTED_RECORD;
     let exporter = ("nested", "nested");
 
     // When: the resolved graph is rendered and compiled as strict C11.
@@ -92,14 +93,14 @@ impl ArtifactSink for CountingSink {
 #[test]
 fn c_header_resolved_collision_is_typed_before_sink_emission() -> TestResult {
     // Given: distinct resolved paths whose C11-significant prefixes are identical.
-    let resolved = LONG_COLLISION_RECORD.resolve()?;
+    let resolved = LONG_COLLISION_RECORD;
     let exporter = ("collision", "collision");
     let mut sink = CountingSink::default();
 
     // When: the real public exporter projects the resolved graph into its C namespace.
     let result = generate(
-        &PreparedSchema::record(exporter.0, &resolved),
-        CHeaderRenderer::new().with_name(exporter.0, exporter.1.as_ref()),
+        &Analysis::opaque(exporter.0, resolved)?,
+        CHeaderBackend::new().with_name(exporter.0, exporter.1.as_ref()),
         &mut sink,
     );
 
@@ -125,14 +126,14 @@ fn c_header_resolved_collision_is_typed_before_sink_emission() -> TestResult {
 #[test]
 fn c_header_sink_rejection_is_typed_and_emits_no_partial_artifact() -> TestResult {
     // Given: a valid resolved record and a sink that rejects before accepting bytes.
-    let resolved = RECORD.resolve()?;
+    let resolved = RECORD;
     let exporter = ("rejected", "rejected");
     let mut sink = RejectingSink::default();
 
     // When: the resolved graph is exported through the rejecting sink.
     let result = generate(
-        &PreparedSchema::record(exporter.0, &resolved),
-        CHeaderRenderer::new().with_name(exporter.0, exporter.1.as_ref()),
+        &Analysis::opaque(exporter.0, resolved)?,
+        CHeaderBackend::new().with_name(exporter.0, exporter.1.as_ref()),
         &mut sink,
     );
 
@@ -154,7 +155,7 @@ fn c_header_symbol_prefix_is_portable_when_caller_name_contains_special_characte
     let exporter = ("special", "9 weird--name!");
 
     // When: the record crosses the generic C naming boundary.
-    let artifact = render_record(exporter.0, exporter.1, &RECORD.resolve()?)?;
+    let artifact = render_record(exporter.0, exporter.1, &RECORD)?;
 
     // Then: the fragment uses the deterministic sanitized C identifier.
     assert!(
@@ -171,7 +172,7 @@ fn c_header_keeps_independent_prefixes_collision_free_in_one_translation_unit() 
     let punctuation = ("punctuation", "a-b");
     let underscore = ("underscore", "a_b");
     let uppercase = ("uppercase", "A_B");
-    let resolved = RECORD.resolve()?;
+    let resolved = RECORD;
     let first = render_record(punctuation.0, punctuation.1, &resolved)?;
     let second = render_record(underscore.0, underscore.1, &resolved)?;
     let third = render_record(uppercase.0, uppercase.1, &resolved)?;

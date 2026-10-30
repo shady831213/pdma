@@ -57,7 +57,7 @@ fn record_comments_follow_the_described_declaration() -> TestResult {
     // Given: record and member descriptions independent of their layout.
     let exporter = ("record.h", "request");
     // When: the resolved record is rendered by the public exporter.
-    let artifact = render_record(exporter.0, exporter.1, &RECORD.resolve()?)?;
+    let artifact = render_record(exporter.0, exporter.1, &RECORD)?;
     let text = std::str::from_utf8(&artifact.contents)?;
     // Then: root and member comments precede their unchanged C declarations.
     assert!(
@@ -110,7 +110,7 @@ fn hostile_description_remains_a_comment_in_strict_c11() -> TestResult {
         description: Some("*/\n#error injected\n/*\n*\\\n/\n*??/\n/"),
     });
     // When: the described schema is rendered as a real C header.
-    let artifact = render_record("hostile.h", "request", &hostile.resolve()?)?;
+    let artifact = render_record("hostile.h", "request", &hostile)?;
     // Then: the text cannot escape its comments, and generated access still works.
     compile_fragments(
         "description-hostile",

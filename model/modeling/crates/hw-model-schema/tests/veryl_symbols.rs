@@ -1,13 +1,14 @@
 //! Veryl rejects collisions in emitted declarations before exposing artifacts.
 #![cfg(feature = "export-veryl-layout")]
+use hw_model_schema::ast::analysis::{Analysis, Bindings};
 use hw_model_schema::{
+    ast::SchemaSet,
     bits_schema,
     export::{
-        Bindings, ExportError, InMemoryArtifactSink, PreparedSchema,
-        backends::veryl::{VerylExportError, VerylRenderer},
+        ExportError, InMemoryArtifactSink,
+        backends::veryl::{VerylBackend, VerylExportError},
         generate,
     },
-    graph::SchemaSet,
     register_schema,
 };
 
@@ -24,8 +25,8 @@ fn enum_name_cannot_overwrite_generated_field_metadata() -> Result<(), Box<dyn s
     let mut sink = InMemoryArtifactSink::new();
     // When: the package is rendered.
     let result = generate(
-        &PreparedSchema::from_graph(&set.resolve()?, &Bindings::default())?,
-        VerylRenderer::new(),
+        &Analysis::from_graph(&set.resolve()?, &Bindings::default())?,
+        VerylBackend::new(),
         &mut sink,
     );
     // Then: the conflicting declaration is rejected without emitting a partial package.
@@ -38,12 +39,12 @@ fn enum_name_cannot_overwrite_generated_field_metadata() -> Result<(), Box<dyn s
 
 #[test]
 fn package_alias_collision_rejects_all_artifacts() -> Result<(), Box<dyn std::error::Error>> {
-    use hw_model_schema::graph::DefinitionId;
+    use hw_model_schema::ast::DefinitionId;
     // Given: two prepared definitions alias the same target package.
     let mut set = SchemaSet::new();
     set.add::<Status>();
-    let prepared = PreparedSchema::from_graph(&set.resolve()?, &Bindings::default())?;
-    let renderer = VerylRenderer::new()
+    let prepared = Analysis::from_graph(&set.resolve()?, &Bindings::default())?;
+    let renderer = VerylBackend::new()
         .with_name(DefinitionId::of::<Flags>(), "Shared")
         .with_name(DefinitionId::of::<Status>(), "Shared");
     let mut sink = InMemoryArtifactSink::new();
@@ -64,16 +65,16 @@ register_schema! { pub register Control {
 hw_model_schema::register_map! { pub map Controls { alignment: 4, placements: [pub controls: Control[2]] } }
 
 #[test]
-fn visitor_emits_fields_and_enums_once_for_each_expanded_register()
+fn backend_emits_fields_and_enums_once_for_each_expanded_register()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: a fixed bank whose register has a bit field and enum children.
     let mut set = SchemaSet::new();
     set.add::<Controls>();
-    let prepared = PreparedSchema::from_graph(&set.resolve()?, &Bindings::default())?;
+    let prepared = Analysis::from_graph(&set.resolve()?, &Bindings::default())?;
     let mut sink = InMemoryArtifactSink::new();
-    // When: common generation visits the definition and its expanded instances.
-    generate(&prepared, VerylRenderer::new(), &mut sink)?;
-    // Then: callback ordering retains one set of metadata per placed register.
+    // When: the whole-map handler emits the checked expanded registers.
+    generate(&prepared, VerylBackend::new(), &mut sink)?;
+    // Then: whole-node emission retains one set of metadata per placed register.
     let artifact = sink
         .artifacts()
         .iter()

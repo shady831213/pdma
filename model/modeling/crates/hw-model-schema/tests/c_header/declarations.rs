@@ -1,8 +1,9 @@
+use hw_model_schema::ast::analysis::{Analysis, Bindings};
 use hw_model_schema::{
+    ast::{DefinitionId, SchemaSet},
     bits_schema,
-    export::backends::c_header::{CHeaderExportError, CHeaderRenderer},
-    export::{Bindings, ExportError, InMemoryArtifactSink, PreparedSchema, generate},
-    graph::{DefinitionId, SchemaSet},
+    export::backends::c_header::{CHeaderBackend, CHeaderExportError},
+    export::{ExportError, InMemoryArtifactSink, generate},
 };
 
 bits_schema! { pub bits Flags(u8) { ready: 0..=0, } }
@@ -12,12 +13,12 @@ fn record_macro_declarations_reject_collisions_after_the_significant_prefix()
 -> super::support::TestResult {
     // Given: a valid record with one long caller-owned C prefix.
     let prefix = "a".repeat(64);
-    let renderer = CHeaderRenderer::new().with_name("record", &prefix);
+    let renderer = CHeaderBackend::new().with_name("record", &prefix);
     let mut sink = InMemoryArtifactSink::new();
 
     // When: distinct metadata macros differ only after the C11 significant prefix.
     let failure = generate(
-        &PreparedSchema::record("record", &super::support::RECORD.resolve()?),
+        &Analysis::opaque("record", super::support::RECORD)?,
         renderer,
         &mut sink,
     );
@@ -45,12 +46,12 @@ fn bits_macro_declarations_reject_collisions_after_the_significant_prefix()
     schemas.add::<Flags>();
     let graph = schemas.resolve()?;
     let prefix = "a".repeat(64);
-    let renderer = CHeaderRenderer::new().with_name(DefinitionId::of::<Flags>(), &prefix);
+    let renderer = CHeaderBackend::new().with_name(DefinitionId::of::<Flags>(), &prefix);
     let mut sink = InMemoryArtifactSink::new();
 
     // When: generated size and bit-width macros alias in their significant prefix.
     let failure = generate(
-        &PreparedSchema::from_graph(&graph, &Bindings::new())?,
+        &Analysis::from_graph(&graph, &Bindings::new())?,
         renderer,
         &mut sink,
     );

@@ -14,11 +14,11 @@ pub use bank::{
 /// has not supplied a rule for choosing its active variant.
 pub trait SchemaLayout {
     /// Describes this type for exporters; custom layouts are opaque by default.
-    fn schema_definition() -> crate::graph::Definition
+    fn schema_definition() -> crate::ast::Definition
     where
         Self: 'static,
     {
-        crate::graph::Definition::opaque::<Self>(Self::SPEC)
+        crate::ast::Definition::opaque::<Self>(Self::SPEC)
     }
     /// Owned decoded value for this layout.
     type Value: Clone + Copy + Default + Eq + PartialEq;
@@ -88,11 +88,11 @@ pub trait SchemaCodec: SchemaLayout {
 /// Shared byte-layout contract implemented by generated registers and register maps.
 pub trait RegisterLayout {
     /// Describes a custom fixed layout as opaque unless structural metadata is supplied.
-    fn schema_definition() -> crate::graph::Definition
+    fn schema_definition() -> crate::ast::Definition
     where
         Self: 'static,
     {
-        crate::graph::Definition::opaque::<Self>(
+        crate::ast::Definition::opaque::<Self>(
             crate::RecordSpec::named(Self::NAME, Self::EXTENT, Self::ALIGNMENT, &[], &[])
                 .with_documentation(Self::DOCUMENTATION),
         )

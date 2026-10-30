@@ -1,8 +1,6 @@
 mod scopes;
-use super::{CHeaderExportError, CHeaderRenderer};
-use crate::export::{
-    DefinitionHeader, EnumSite, ExportId, FieldOwner, GeometryMember, RegisterLocation,
-};
+use super::{CHeaderBackend, CHeaderExportError};
+use crate::ast::analysis::{Unit, UnitId};
 pub(super) use scopes::{GeometryNames, Scope};
 
 pub(super) fn c_identifier(input: &str) -> String {
@@ -113,66 +111,22 @@ pub(super) fn check_record(
     reject_collisions(names.iter().map(|(path, name)| (*path, name.as_str())))
 }
 
-impl CHeaderRenderer {
+impl CHeaderBackend {
     pub(super) fn definition_names(
         &mut self,
-        definition: DefinitionHeader<'_>,
+        definition: &Unit,
     ) -> Result<(String, String), CHeaderExportError> {
-        let (logical_name, path) = match definition.id {
-            ExportId::Definition(id) => (definition.name.to_ascii_lowercase(), id.path()),
-            ExportId::View(name) => (definition.name.to_owned(), name.as_str()),
+        let (logical_name, path) = match &definition.id {
+            UnitId::Definition(id) => (definition.name.to_ascii_lowercase(), id.path()),
+            UnitId::View(name) => (definition.name.clone(), name.as_str()),
         };
-        let prefix = self.target_prefix(definition.id, &logical_name);
+        let prefix = self.target_prefix(&definition.id, &logical_name);
         self.symbols.insert(&prefix, path)?;
         Ok((logical_name, prefix))
     }
 
     pub(super) fn record_member_name(&self, member: &crate::ResolvedMember) -> String {
         c_identifier(relative_path(self.record_root, member.path()))
-    }
-
-    pub(super) fn field_owner_prefix(
-        &self,
-        owner: FieldOwner<'_>,
-    ) -> Result<Option<String>, CHeaderExportError> {
-        match owner {
-            FieldOwner::Bits => Ok(Some(self.prefix.clone())),
-            FieldOwner::Record { member, .. } => Ok(Some(format!(
-                "{}_{}",
-                self.prefix,
-                self.record_member_name(member)
-            ))),
-            FieldOwner::Register(node) => match node.location {
-                RegisterLocation::Instance { .. } => Ok(None),
-                RegisterLocation::Root
-                | RegisterLocation::Standalone(_)
-                | RegisterLocation::Template { .. } => self.register_name(node.location).map(Some),
-            },
-        }
-    }
-
-    pub(super) fn enum_name(
-        &self,
-        site: EnumSite<'_>,
-        variant: &str,
-    ) -> Result<Option<String>, CHeaderExportError> {
-        let Some(mut prefix) = self.field_owner_prefix(site.owner)? else {
-            return Ok(None);
-        };
-        if let Some(bit) = site.bit {
-            prefix.push('_');
-            prefix.push_str(&c_identifier(bit));
-        }
-        Ok(Some(format!("{prefix}_{}", c_identifier(variant))))
-    }
-}
-
-pub(super) fn geometry_member_name(member: GeometryMember<'_>) -> String {
-    match member {
-        GeometryMember::Extent => "extent".into(),
-        GeometryMember::Placement { name, property } => {
-            format!("{}_{}", c_identifier(name), property.name())
-        }
     }
 }
 

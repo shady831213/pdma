@@ -1,7 +1,7 @@
 //! Malformed graphs fail with provenance rather than silently dropping definitions.
 use hw_model_schema::{
     RecordSpec,
-    graph::{Definition, GraphError, Reference, ReferenceKind, SchemaSet},
+    ast::{Definition, GraphError, Reference, ReferenceKind, SchemaSet},
 };
 
 struct Recursive;

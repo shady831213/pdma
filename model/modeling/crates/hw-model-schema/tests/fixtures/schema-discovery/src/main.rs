@@ -1,10 +1,10 @@
 //! Cross-crate discovery plus an application-defined dependency-graph backend.
 use schema::{
-    export::{
-        Artifact, Bindings, DefinitionHeader, ExportId, InMemoryArtifactSink, PreparedReference,
-        PreparedSchema, Renderer, generate,
+    ast::{
+        Node, SchemaRegistry,
+        analysis::{Analysis, Bindings, UnitId},
     },
-    graph::SchemaRegistry,
+    export::{Artifact, Backend, InMemoryArtifactSink, Scope, generate},
     record_schema,
 };
 use std::{error::Error, fmt::Write};
@@ -19,30 +19,24 @@ record_schema! {
 /// The renderer needs only prepared references; no builtin backend is enabled.
 struct DependencyGraph {
     text: String,
-    current: Option<ExportId>,
 }
-impl Renderer for DependencyGraph {
+impl Backend for DependencyGraph {
     type Error = std::fmt::Error;
-    fn begin_definition(&mut self, node: DefinitionHeader<'_>) -> Result<(), Self::Error> {
-        let path = match node.id {
-            ExportId::Definition(id) => id.path(),
-            ExportId::View(name) => name,
+    fn definition(&mut self, node: Node<'_>, scope: Scope<'_>) -> Result<(), Self::Error> {
+        let path = match &scope.unit.id {
+            UnitId::Definition(id) => id.path(),
+            UnitId::View(name) => name,
         };
         writeln!(self.text, "  {path:?};")?;
-        self.current = Some(node.id.clone());
+        for edge in node.references() {
+            writeln!(
+                self.text,
+                "  {path:?} -> {:?} [label={:?}];",
+                edge.target().id().path(),
+                edge.name()
+            )?;
+        }
         Ok(())
-    }
-    fn reference(&mut self, edge: &PreparedReference) -> Result<(), Self::Error> {
-        let path = match self.current.as_ref().ok_or(std::fmt::Error)? {
-            ExportId::Definition(id) => id.path(),
-            ExportId::View(name) => name,
-        };
-        writeln!(
-            self.text,
-            "  {path:?} -> {:?} [label={:?}];",
-            edge.target.path(),
-            edge.name
-        )
     }
     fn finish(mut self) -> Result<Vec<Artifact>, Self::Error> {
         self.text.push_str("}\n");
@@ -67,12 +61,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     assert_eq!(peer.definitions().count(), 2);
     assert!(peer.definitions().any(|node| node.name() == "Dormant"));
     let mut sink = InMemoryArtifactSink::new();
-    let schema = PreparedSchema::from_graph(&graph, &Bindings::new())?;
+    let schema = Analysis::from_graph(&graph, &Bindings::new())?;
     generate(
         &schema,
         DependencyGraph {
             text: "digraph schemas {\n".into(),
-            current: None,
         },
         &mut sink,
     )?;

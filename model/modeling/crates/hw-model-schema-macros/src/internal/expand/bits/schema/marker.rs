@@ -31,8 +31,8 @@ pub(super) fn expand(context: &SchemaContext<'_>) -> syn::Result<TokenStream> {
     });
     Ok(quote! {
         #facade::__register_schema!(<#marker as #facade::BitsLayout>::schema_definition);
-        impl #facade::graph::DescribeSchema for #marker {
-            fn schema_definition() -> #facade::graph::Definition {
+        impl #facade::ast::DescribeSchema for #marker {
+            fn schema_definition() -> #facade::ast::Definition {
                 <Self as #facade::BitsLayout>::schema_definition()
             }
         }

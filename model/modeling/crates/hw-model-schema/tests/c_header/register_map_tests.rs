@@ -130,7 +130,7 @@ fn c_header_register_map_includes_independently_declared_fixed_groups() -> TestR
 #[test]
 fn c_header_fragments_compile_and_run_when_wrapped_as_strict_c11() -> TestResult {
     // Given: both generic fragments in a caller-owned C11 translation unit.
-    let record = render_record("record", "Lab-9 packet", &RECORD.resolve()?)?;
+    let record = render_record("record", "Lab-9 packet", &RECORD)?;
     let register_map = render_map("map", "Lab-9 map", &MAP.resolve()?)?;
     // When: a real C compiler builds the wrapper and the resulting binary runs.
     compile_fragments(
@@ -148,7 +148,7 @@ fn c_header_disambiguates_normalization_collisions_when_compiled_as_strict_c11()
     // Given: valid record and map names that collapse at the C identifier boundary.
     let record_exporter = ("collision.record", "collision record");
     let map_exporter = ("collision.map", "collision map");
-    let collision_record = COLLISION_RECORD.resolve()?;
+    let collision_record = COLLISION_RECORD;
     let collision_map = COLLISION_MAP.resolve()?;
     let record = render_record(record_exporter.0, record_exporter.1, &collision_record)?;
     let map = render_map(map_exporter.0, map_exporter.1, &collision_map)?;

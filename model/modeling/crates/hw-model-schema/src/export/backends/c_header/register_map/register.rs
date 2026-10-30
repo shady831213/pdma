@@ -1,5 +1,5 @@
 use super::super::{CHeaderExportError, fragment::Fragment};
-use crate::{Access, ResetKind, graph::RegisterInfo};
+use crate::{Access, ResetKind, ast::RegisterInfo};
 
 #[derive(Clone, Copy)]
 pub(in super::super) struct RegisterNames<'a> {

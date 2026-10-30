@@ -1,5 +1,5 @@
 use super::super::naming::{c_identifier, disambiguate_identifiers};
-use crate::export::RegisterMapView;
+use crate::ast::analysis::RegisterMapView;
 
 pub(in super::super) fn map_names(schema: &RegisterMapView) -> MapNames {
     let bank_names = disambiguate_identifiers(

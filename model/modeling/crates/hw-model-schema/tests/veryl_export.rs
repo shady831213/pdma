@@ -1,18 +1,17 @@
 //! The backend translates generic bank rules rather than application formulas.
 #![cfg(feature = "export-veryl-layout")]
-use hw_model_schema::export::{
-    Bindings, InMemoryArtifactSink, PreparedSchema, backends::veryl::VerylRenderer, generate,
-};
-use hw_model_schema::{graph::SchemaSet, register_map, register_schema};
+use hw_model_schema::ast::analysis::{Analysis, Bindings};
+use hw_model_schema::export::{InMemoryArtifactSink, backends::veryl::VerylBackend, generate};
+use hw_model_schema::{ast::SchemaSet, register_map, register_schema};
 
 register_schema! { pub register Word { width: 4, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff, fields: {} } }
 register_map! { pub map Child { alignment: 64, placements: [pub value: Word] } }
 register_map! { pub map Root(count: usize) { alignment: 64, placements: [pub children: Child[count]] } }
 register_schema! { pub register BigWord { width: 2, endian: Big, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: {} } }
 struct LargeAddressMap;
-impl hw_model_schema::graph::DescribeSchema for LargeAddressMap {
-    fn schema_definition() -> hw_model_schema::graph::Definition {
-        use hw_model_schema::graph::{Definition, LayoutExpr, MapDefinition, MapPlacement};
+impl hw_model_schema::ast::DescribeSchema for LargeAddressMap {
+    fn schema_definition() -> hw_model_schema::ast::Definition {
+        use hw_model_schema::ast::{Definition, LayoutExpr, MapDefinition, MapPlacement};
         // This test needs layout metadata only, not a multi-gigabyte owned value type.
         Definition::register_map::<Self>(
             "LargeAddressMap",
@@ -43,8 +42,8 @@ fn generic_metadata_does_not_truncate_large_register_offsets()
     // When: layout metadata is rendered.
     let mut sink = InMemoryArtifactSink::new();
     generate(
-        &PreparedSchema::from_graph(&set.resolve()?, &Bindings::default())?,
-        VerylRenderer::new(),
+        &Analysis::from_graph(&set.resolve()?, &Bindings::default())?,
+        VerylBackend::new(),
         &mut sink,
     )?;
     // Then: the backend preserves the address; bus-width restrictions belong to the consumer.
@@ -67,8 +66,8 @@ fn layout_backend_preserves_non_pdma_register_width_and_endian()
     // When: generic metadata is exported without a bus implementation.
     let mut sink = InMemoryArtifactSink::new();
     generate(
-        &PreparedSchema::from_graph(&graph, &Bindings::default())?,
-        VerylRenderer::new(),
+        &Analysis::from_graph(&graph, &Bindings::default())?,
+        VerylBackend::new(),
         &mut sink,
     )?;
     // Then: the target describes the original register instead of imposing PDMA restrictions.
@@ -91,8 +90,8 @@ fn veryl_keeps_the_count_parameter_and_child_alignment_rule()
     // When: the generic Veryl backend emits the definition graph.
     let mut sink = InMemoryArtifactSink::new();
     generate(
-        &PreparedSchema::from_graph(&graph, &Bindings::default())?,
-        VerylRenderer::new(),
+        &Analysis::from_graph(&graph, &Bindings::default())?,
+        VerylBackend::new(),
         &mut sink,
     )?;
     // Then: output retains the parameter and references the child package geometry.
@@ -125,10 +124,10 @@ fn veryl_projection_keeps_bank_offsets_and_effective_permissions()
         [RepeatedRegisterBank::new("ports", 32, 3, 16, &MEMBERS)];
     let map = RegisterMapSpec::named("sensor", 128, &[], &BANKS).resolve()?;
     let view = map.project_access(|register| (register.id() == 2).then_some(Access::ReadOnly))?;
-    let prepared = PreparedSchema::register_map("Observer", &view);
+    let prepared = Analysis::register_map("Observer", &view);
     let mut sink = InMemoryArtifactSink::new();
     // When: the same renderer consumes the explicit permission view.
-    generate(&prepared, VerylRenderer::new(), &mut sink)?;
+    generate(&prepared, VerylBackend::new(), &mut sink)?;
     // Then: concrete addresses retain bank holes and no permission is restored.
     let [artifact] = sink.artifacts() else {
         return Err("one package expected".into());
@@ -155,10 +154,10 @@ fn veryl_bound_map_uses_prepared_geometry_and_expanded_members()
     set.add::<Root>();
     let mut bindings = Bindings::new();
     bindings.bind::<Root>(&[2]);
-    let prepared = PreparedSchema::from_graph(&set.resolve()?, &bindings)?;
+    let prepared = Analysis::from_graph(&set.resolve()?, &bindings)?;
     let mut sink = InMemoryArtifactSink::new();
     // When: the same renderer receives the bound prepared schema.
-    generate(&prepared, VerylRenderer::new(), &mut sink)?;
+    generate(&prepared, VerylBackend::new(), &mut sink)?;
     // Then: the root has no parameter and concrete register offsets retain child alignment.
     let artifact = sink
         .artifacts()
@@ -175,9 +174,9 @@ fn veryl_bound_map_uses_prepared_geometry_and_expanded_members()
 }
 
 struct NestedMaximum;
-impl hw_model_schema::graph::DescribeSchema for NestedMaximum {
-    fn schema_definition() -> hw_model_schema::graph::Definition {
-        use hw_model_schema::graph::{Definition, LayoutExpr, MapDefinition, MapPlacement};
+impl hw_model_schema::ast::DescribeSchema for NestedMaximum {
+    fn schema_definition() -> hw_model_schema::ast::Definition {
+        use hw_model_schema::ast::{Definition, LayoutExpr, MapDefinition, MapPlacement};
         Definition::register_map::<Self>(
             "NestedMaximum",
             hw_model_schema::Documentation::EMPTY,
@@ -209,10 +208,10 @@ fn nested_maximum_remains_one_operand_of_addition() -> Result<(), Box<dyn std::e
     // Given: the bank count is max(count, 2) + 1, with addition outside the maximum.
     let mut set = SchemaSet::new();
     set.add::<NestedMaximum>();
-    let prepared = PreparedSchema::from_graph(&set.resolve()?, &Bindings::default())?;
+    let prepared = Analysis::from_graph(&set.resolve()?, &Bindings::default())?;
     let mut sink = InMemoryArtifactSink::new();
     // When: the real renderer formats the nested expression through common generation.
-    generate(&prepared, VerylRenderer::new(), &mut sink)?;
+    generate(&prepared, VerylBackend::new(), &mut sink)?;
     // Then: parentheses keep addition outside both branches of the Veryl conditional.
     let artifact = sink
         .artifacts()

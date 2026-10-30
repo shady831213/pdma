@@ -1,8 +1,8 @@
 use super::{VerylExportError, identifier};
 use crate::{
     Access, Endian,
-    export::{RegisterLocation, RegisterNode, SymbolScope},
-    graph::RegisterInfo,
+    ast::{PlacementView, RegisterInfo, RegisterLocation},
+    export::{Scope, SymbolScope},
 };
 use std::fmt::{Display, Write};
 
@@ -78,22 +78,25 @@ impl Package {
     }
 }
 
-pub(super) fn prefix(node: RegisterNode<'_>) -> Option<String> {
-    match node.location {
+pub(super) fn prefix(scope: Scope<'_>) -> Option<String> {
+    match scope.register_location() {
         RegisterLocation::Root => Some("VALUE".into()),
         RegisterLocation::Template { .. } => None,
         RegisterLocation::Standalone(_) | RegisterLocation::Instance { .. } => {
-            node.view.map(|leaf| {
-                leaf.segments
-                    .iter()
-                    .map(|part| {
-                        let name = part.name.to_ascii_uppercase();
-                        part.index
-                            .map_or_else(|| name.clone(), |index| format!("{name}_{index}"))
-                    })
-                    .collect::<Vec<_>>()
-                    .join("_")
-            })
+            match scope.placement {
+                Some(PlacementView::Register { view: leaf, .. }) => Some({
+                    leaf.segments
+                        .iter()
+                        .map(|part| {
+                            let name = part.name.to_ascii_uppercase();
+                            part.index
+                                .map_or_else(|| name.clone(), |index| format!("{name}_{index}"))
+                        })
+                        .collect::<Vec<_>>()
+                        .join("_")
+                }),
+                Some(PlacementView::Declared(_) | PlacementView::Bank { .. }) | None => None,
+            }
         }
     }
 }

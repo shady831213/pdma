@@ -49,7 +49,7 @@ fn record_enum_codes_and_sanitized_documentation_compile_in_c11() -> TestResult 
     // Given: nested enum metadata with sparse codes and hostile comment delimiters.
     let exporter = ("enum.h", "record");
     // When: the resolved record exports its enum variants.
-    let artifact = render_record(exporter.0, exporter.1, &RECORD.resolve()?)?;
+    let artifact = render_record(exporter.0, exporter.1, &RECORD)?;
     // Then: variant descriptions remain comments and every wire code is C-consumable.
     let text = std::str::from_utf8(&artifact.contents)?;
     assert!(text.contains("Active / * transfer * /"));
@@ -75,7 +75,7 @@ fn nested_record_bit_enum_exports_unshifted_codes() -> TestResult {
     // Given: an enum embedded at bit four within a nested record field.
     let exporter = ("bits.h", "record");
     // When: the nested bit metadata crosses the record exporter.
-    let artifact = render_record(exporter.0, exporter.1, &BIT_RECORD.resolve()?)?;
+    let artifact = render_record(exporter.0, exporter.1, &BIT_RECORD)?;
     // Then: named codes remain local values and hostile docs remain inert comments.
     assert!(std::str::from_utf8(&artifact.contents)?.contains("Active / * transfer * /"));
     compile_fragments(

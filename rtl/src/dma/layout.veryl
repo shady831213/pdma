@@ -23,20 +23,6 @@ pub package ScatterGatherEndpointLayout {
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
-pub package CopyCommandSourceValuesLayout {
-    const EXTENT: u64 = 32;
-    const ALIGNMENT: u64 = 8;
-}
-
-// Generated schema layout; do not edit.
-#[fmt(skip)]
-pub package CopyCommandDestinationValuesLayout {
-    const EXTENT: u64 = 32;
-    const ALIGNMENT: u64 = 8;
-}
-
-// Generated schema layout; do not edit.
-#[fmt(skip)]
 pub package CopyCommandLayout {
     const EXTENT: u64 = 96;
     const ALIGNMENT: u64 = 8;
@@ -74,62 +60,6 @@ pub package FillCommandLayout {
 #[fmt(skip)]
 pub package WaitCommandLayout {
     const EXTENT: u64 = 48;
-    const ALIGNMENT: u64 = 8;
-}
-
-// Generated schema layout; do not edit.
-#[fmt(skip)]
-pub package AtomicCommandOperandsAddValuesLayout {
-    const EXTENT: u64 = 16;
-    const ALIGNMENT: u64 = 8;
-}
-
-// Generated schema layout; do not edit.
-#[fmt(skip)]
-pub package AtomicCommandOperandsSubtractValuesLayout {
-    const EXTENT: u64 = 16;
-    const ALIGNMENT: u64 = 8;
-}
-
-// Generated schema layout; do not edit.
-#[fmt(skip)]
-pub package AtomicCommandOperandsAndValuesLayout {
-    const EXTENT: u64 = 16;
-    const ALIGNMENT: u64 = 8;
-}
-
-// Generated schema layout; do not edit.
-#[fmt(skip)]
-pub package AtomicCommandOperandsOrValuesLayout {
-    const EXTENT: u64 = 16;
-    const ALIGNMENT: u64 = 8;
-}
-
-// Generated schema layout; do not edit.
-#[fmt(skip)]
-pub package AtomicCommandOperandsXorValuesLayout {
-    const EXTENT: u64 = 16;
-    const ALIGNMENT: u64 = 8;
-}
-
-// Generated schema layout; do not edit.
-#[fmt(skip)]
-pub package AtomicCommandOperandsExchangeValuesLayout {
-    const EXTENT: u64 = 16;
-    const ALIGNMENT: u64 = 8;
-}
-
-// Generated schema layout; do not edit.
-#[fmt(skip)]
-pub package AtomicCommandOperandsCompareExchangeValuesLayout {
-    const EXTENT: u64 = 16;
-    const ALIGNMENT: u64 = 8;
-}
-
-// Generated schema layout; do not edit.
-#[fmt(skip)]
-pub package AtomicCommandOperandsValuesLayout {
-    const EXTENT: u64 = 16;
     const ALIGNMENT: u64 = 8;
 }
 
@@ -178,13 +108,6 @@ pub package CommandLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ErrorInfoLayout {
-    const EXTENT: u64 = 8;
-    const ALIGNMENT: u64 = 8;
-}
-
-// Generated schema layout; do not edit.
-#[fmt(skip)]
-pub package EventInfoValuesLayout {
     const EXTENT: u64 = 8;
     const ALIGNMENT: u64 = 8;
 }

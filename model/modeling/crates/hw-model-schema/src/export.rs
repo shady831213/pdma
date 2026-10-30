@@ -3,19 +3,13 @@
 use core::{convert::Infallible, fmt};
 mod symbols;
 pub use symbols::{SymbolCollision, SymbolScope};
-mod schema;
-mod visit;
-mod walk;
-pub use schema::{
-    BankView, Bindings, ExportId, ExportPathSegment, PreparationError, PreparedBody,
-    PreparedDefinition, PreparedMap, PreparedReference, PreparedSchema, RegisterMapView,
-    RegisterView, SchemaKind,
-};
-pub use visit::{
-    BitField, ChildCall, DefinitionHeader, EnumSite, ExpressionReference, FieldOwner,
-    GeometryAssignment, GeometryMember, GeometrySignature, PlacementProperty, RegisterLocation,
-    RegisterNode, Renderer,
-};
+mod backend;
+mod emit;
+/// Shared expression recursion with target-defined syntax.
+pub mod expression;
+use crate::ast::analysis::{Analysis, AnalysisError};
+pub use backend::Backend;
+pub use emit::{Scope, emit, emit_all};
 
 /// Built-in artifact renderers enabled by format-specific crate features.
 #[cfg(any(feature = "export-c-header", feature = "export-veryl-layout"))]
@@ -41,20 +35,23 @@ pub trait ArtifactSink {
     fn emit(&mut self, artifact: Artifact) -> Result<(), Self::Error>;
 }
 
-/// Drives every renderer through the same prepared definition traversal.
+/// Emits analyzed units in dependency order; each backend composes its node output.
 ///
 /// # Errors
 /// Render failures emit no artifacts. A sink failure retains any artifacts it
 /// previously accepted; storage rollback belongs to the sink.
-pub fn generate<R: Renderer, S: ArtifactSink>(
-    schema: &PreparedSchema,
-    mut renderer: R,
+pub fn generate<R: Backend, S: ArtifactSink>(
+    schema: &Analysis,
+    mut backend: R,
     sink: &mut S,
 ) -> Result<(), ExportError<R::Error, S::Error>> {
     for definition in schema.definitions() {
-        walk::definition(&mut renderer, definition)?;
+        let node = definition.node().map_err(ExportError::Analysis)?;
+        backend
+            .definition(node, Scope::root(schema, definition))
+            .map_err(ExportError::Render)?;
     }
-    for artifact in renderer.finish().map_err(ExportError::Render)? {
+    for artifact in backend.finish().map_err(ExportError::Render)? {
         sink.emit(artifact).map_err(ExportError::Sink)?;
     }
     Ok(())
@@ -63,8 +60,8 @@ pub fn generate<R: Renderer, S: ArtifactSink>(
 /// Rendering or storage failure retaining the error owned by its origin.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExportError<R, S> {
-    /// Invalid expression scope encountered by the common walker.
-    Layout(crate::graph::LayoutError),
+    /// Invalid analyzed declaration encountered before target emission.
+    Analysis(AnalysisError),
     /// The renderer could not produce an artifact.
     Render(R),
     /// The sink rejected an artifact.
@@ -74,7 +71,7 @@ pub enum ExportError<R, S> {
 impl<R: fmt::Display, S: fmt::Display> fmt::Display for ExportError<R, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Layout(error) => error.fmt(f),
+            Self::Analysis(error) => error.fmt(f),
             Self::Render(error) => error.fmt(f),
             Self::Sink(error) => error.fmt(f),
         }
@@ -86,7 +83,7 @@ impl<R: std::error::Error + 'static, S: std::error::Error + 'static> std::error:
 {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Layout(error) => Some(error),
+            Self::Analysis(error) => Some(error),
             Self::Render(error) => Some(error),
             Self::Sink(error) => Some(error),
         }

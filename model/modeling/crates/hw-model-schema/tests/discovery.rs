@@ -1,6 +1,6 @@
 //! Discovery and manual roots share exactly the same dependency graph.
 #![cfg(feature = "discovery")]
-use hw_model_schema::{graph::SchemaRegistry, record_schema};
+use hw_model_schema::{ast::SchemaRegistry, record_schema};
 
 mod selected {
     use super::record_schema;

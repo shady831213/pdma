@@ -3,11 +3,9 @@
 use core::convert::Infallible;
 
 use hw_model_schema::{
-    RecordSpec, ResolvedRecord,
-    export::{
-        Artifact, ArtifactSink, DefinitionHeader, ExportError, InMemoryArtifactSink,
-        PreparedSchema, Renderer, generate,
-    },
+    RecordSpec,
+    ast::{Node, analysis::Analysis},
+    export::{Artifact, ArtifactSink, Backend, ExportError, InMemoryArtifactSink, Scope, generate},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,9 +60,9 @@ impl ArtifactSink for CountingSink {
 struct LocalRenderer {
     record_size: Option<usize>,
 }
-impl Renderer for LocalRenderer {
+impl Backend for LocalRenderer {
     type Error = LocalExportError;
-    fn begin_record(&mut self, record: &ResolvedRecord) -> Result<(), Self::Error> {
+    fn opaque(&mut self, record: &RecordSpec, _: Scope<'_>) -> Result<(), Self::Error> {
         self.record_size = Some(record.size());
         Ok(())
     }
@@ -86,9 +84,9 @@ impl Renderer for LocalRenderer {
     }
 }
 struct RejectingRenderer;
-impl Renderer for RejectingRenderer {
+impl Backend for RejectingRenderer {
     type Error = LocalExportError;
-    fn begin_definition(&mut self, _definition: DefinitionHeader<'_>) -> Result<(), Self::Error> {
+    fn definition(&mut self, _: Node<'_>, _: Scope<'_>) -> Result<(), Self::Error> {
         Err(LocalExportError::RendererRejected)
     }
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
@@ -96,7 +94,7 @@ impl Renderer for RejectingRenderer {
     }
 }
 struct InfallibleLocalRenderer;
-impl Renderer for InfallibleLocalRenderer {
+impl Backend for InfallibleLocalRenderer {
     type Error = Infallible;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(vec![Artifact {
@@ -115,8 +113,7 @@ const fn record_schema() -> RecordSpec {
 #[test]
 fn downstream_local_renderer_and_sink_preserve_owned_artifacts_in_emission_order() {
     // Given
-    let record = record_schema().resolve().expect("fixture must resolve");
-    let schema = PreparedSchema::record("record", &record);
+    let schema = Analysis::opaque("record", record_schema()).expect("fixture must resolve");
     let renderer = LocalRenderer::default();
     let mut sink = LocalCollectingSink::default();
 
@@ -145,8 +142,7 @@ fn downstream_local_renderer_and_sink_preserve_owned_artifacts_in_emission_order
 #[test]
 fn in_memory_sink_preserves_owned_odd_contents_after_renderer_locals_drop() {
     // Given
-    let record = record_schema().resolve().expect("fixture must resolve");
-    let schema = PreparedSchema::record("record", &record);
+    let schema = Analysis::opaque("record", record_schema()).expect("fixture must resolve");
     let renderer = InfallibleLocalRenderer;
     let mut sink = InMemoryArtifactSink::new();
 
@@ -168,8 +164,7 @@ fn in_memory_sink_preserves_owned_odd_contents_after_renderer_locals_drop() {
 #[test]
 fn sink_rejection_reaches_the_caller_as_the_exact_typed_error() {
     // Given
-    let record = record_schema().resolve().expect("fixture must resolve");
-    let schema = PreparedSchema::record("record", &record);
+    let schema = Analysis::opaque("record", record_schema()).expect("fixture must resolve");
     let renderer = LocalRenderer::default();
     let mut sink = RejectingSink::default();
 
@@ -187,8 +182,7 @@ fn sink_rejection_reaches_the_caller_as_the_exact_typed_error() {
 #[test]
 fn renderer_rejection_does_not_invoke_the_sink() {
     // Given
-    let record = record_schema().resolve().expect("fixture must resolve");
-    let schema = PreparedSchema::record("record", &record);
+    let schema = Analysis::opaque("record", record_schema()).expect("fixture must resolve");
     let renderer = RejectingRenderer;
     let mut sink = CountingSink::default();
 

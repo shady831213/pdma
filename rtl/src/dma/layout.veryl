@@ -245,20 +245,14 @@ pub package DmaDiscoveryLayout {
     }
     function geometry() -> Geometry {
         var result: Geometry;
-        var cursor: u64;
         result = '0;
-        cursor = 0;
-        result.channel_num_offset = (cursor + ChannelCountLayout::ALIGNMENT - 1) & ~(ChannelCountLayout::ALIGNMENT - 1);
+        result.channel_num_offset = 0;
         result.channel_num_count = 1;
-        result.channel_num_stride = (ChannelCountLayout::EXTENT + ChannelCountLayout::ALIGNMENT - 1) & ~(ChannelCountLayout::ALIGNMENT - 1);
-        let end_channel_num: u64 = result.channel_num_offset + (result.channel_num_count - 1) * result.channel_num_stride + ChannelCountLayout::EXTENT;
-        cursor = if cursor >: end_channel_num ? cursor : end_channel_num;
-        result.capabilities_offset = (cursor + CapabilitiesLayout::ALIGNMENT - 1) & ~(CapabilitiesLayout::ALIGNMENT - 1);
+        result.channel_num_stride = 4;
+        result.capabilities_offset = 4;
         result.capabilities_count = 1;
-        result.capabilities_stride = (CapabilitiesLayout::EXTENT + CapabilitiesLayout::ALIGNMENT - 1) & ~(CapabilitiesLayout::ALIGNMENT - 1);
-        let end_capabilities: u64 = result.capabilities_offset + (result.capabilities_count - 1) * result.capabilities_stride + CapabilitiesLayout::EXTENT;
-        cursor = if cursor >: end_capabilities ? cursor : end_capabilities;
-        result.extent = cursor;
+        result.capabilities_stride = 4;
+        result.extent = 8;
         return result;
     }
     function channel_num_offset() -> u64 {
@@ -379,25 +373,17 @@ pub package DmaControlLayout {
     }
     function geometry() -> Geometry {
         var result: Geometry;
-        var cursor: u64;
         result = '0;
-        cursor = 0;
-        result.irq_enable_offset = (cursor + SwitchLayout::ALIGNMENT - 1) & ~(SwitchLayout::ALIGNMENT - 1);
+        result.irq_enable_offset = 0;
         result.irq_enable_count = 1;
-        result.irq_enable_stride = (SwitchLayout::EXTENT + SwitchLayout::ALIGNMENT - 1) & ~(SwitchLayout::ALIGNMENT - 1);
-        let end_irq_enable: u64 = result.irq_enable_offset + (result.irq_enable_count - 1) * result.irq_enable_stride + SwitchLayout::EXTENT;
-        cursor = if cursor >: end_irq_enable ? cursor : end_irq_enable;
-        result.fatal_offset = (cursor + DmaFatalLayout::ALIGNMENT - 1) & ~(DmaFatalLayout::ALIGNMENT - 1);
+        result.irq_enable_stride = 4;
+        result.fatal_offset = 4;
         result.fatal_count = 1;
-        result.fatal_stride = (DmaFatalLayout::EXTENT + DmaFatalLayout::ALIGNMENT - 1) & ~(DmaFatalLayout::ALIGNMENT - 1);
-        let end_fatal: u64 = result.fatal_offset + (result.fatal_count - 1) * result.fatal_stride + DmaFatalLayout::EXTENT;
-        cursor = if cursor >: end_fatal ? cursor : end_fatal;
-        result.reset_offset = (cursor + ResetLayout::ALIGNMENT - 1) & ~(ResetLayout::ALIGNMENT - 1);
+        result.fatal_stride = 4;
+        result.reset_offset = 8;
         result.reset_count = 1;
-        result.reset_stride = (ResetLayout::EXTENT + ResetLayout::ALIGNMENT - 1) & ~(ResetLayout::ALIGNMENT - 1);
-        let end_reset: u64 = result.reset_offset + (result.reset_count - 1) * result.reset_stride + ResetLayout::EXTENT;
-        cursor = if cursor >: end_reset ? cursor : end_reset;
-        result.extent = cursor;
+        result.reset_stride = 4;
+        result.extent = 12;
         return result;
     }
     function irq_enable_offset() -> u64 {
@@ -483,15 +469,11 @@ pub package ChannelAdminLayout {
     }
     function geometry() -> Geometry {
         var result: Geometry;
-        var cursor: u64;
         result = '0;
-        cursor = 0;
-        result.reset_offset = (cursor + ResetLayout::ALIGNMENT - 1) & ~(ResetLayout::ALIGNMENT - 1);
+        result.reset_offset = 0;
         result.reset_count = 1;
-        result.reset_stride = (ResetLayout::EXTENT + ResetLayout::ALIGNMENT - 1) & ~(ResetLayout::ALIGNMENT - 1);
-        let end_reset: u64 = result.reset_offset + (result.reset_count - 1) * result.reset_stride + ResetLayout::EXTENT;
-        cursor = if cursor >: end_reset ? cursor : end_reset;
-        result.extent = cursor;
+        result.reset_stride = 4;
+        result.extent = 4;
         return result;
     }
     function reset_offset() -> u64 {
@@ -538,17 +520,17 @@ pub package DmaAdminLayout {
         result = '0;
         cursor = 0;
         let child_control: DmaControlLayout::Geometry = DmaControlLayout::geometry();
-        result.control_offset = (cursor + DmaControlLayout::ALIGNMENT - 1) & ~(DmaControlLayout::ALIGNMENT - 1);
+        result.control_offset = ((cursor + 4 - 1) & ~(4 - 1));
         result.control_count = 1;
-        result.control_stride = (child_control.extent + DmaControlLayout::ALIGNMENT - 1) & ~(DmaControlLayout::ALIGNMENT - 1);
-        let end_control: u64 = result.control_offset + (result.control_count - 1) * result.control_stride + child_control.extent;
-        cursor = if cursor >: end_control ? cursor : end_control;
+        result.control_stride = ((child_control.extent + 4 - 1) & ~(4 - 1));
+        let end_control: u64 = ((result.control_offset + ((result.control_count - 1) * result.control_stride)) + child_control.extent);
+        cursor = (if cursor >: end_control ? cursor : end_control);
         let child_channels: ChannelAdminLayout::Geometry = ChannelAdminLayout::geometry();
-        result.channels_offset = (cursor + ChannelAdminLayout::ALIGNMENT - 1) & ~(ChannelAdminLayout::ALIGNMENT - 1);
+        result.channels_offset = ((cursor + 4 - 1) & ~(4 - 1));
         result.channels_count = p_channel_count;
-        result.channels_stride = (child_channels.extent + ChannelAdminLayout::ALIGNMENT - 1) & ~(ChannelAdminLayout::ALIGNMENT - 1);
-        let end_channels: u64 = result.channels_offset + (result.channels_count - 1) * result.channels_stride + child_channels.extent;
-        cursor = if cursor >: end_channels ? cursor : end_channels;
+        result.channels_stride = ((child_channels.extent + 4 - 1) & ~(4 - 1));
+        let end_channels: u64 = ((result.channels_offset + ((result.channels_count - 1) * result.channels_stride)) + child_channels.extent);
+        cursor = (if cursor >: end_channels ? cursor : end_channels);
         result.extent = cursor;
         return result;
     }
@@ -644,30 +626,20 @@ pub package CommandRegistersLayout {
     }
     function geometry() -> Geometry {
         var result: Geometry;
-        var cursor: u64;
         result = '0;
-        cursor = 0;
-        result.base_offset = (cursor + AddressLayout::ALIGNMENT - 1) & ~(AddressLayout::ALIGNMENT - 1);
+        result.base_offset = 0;
         result.base_count = 1;
-        result.base_stride = (AddressLayout::EXTENT + AddressLayout::ALIGNMENT - 1) & ~(AddressLayout::ALIGNMENT - 1);
-        let end_base: u64 = result.base_offset + (result.base_count - 1) * result.base_stride + AddressLayout::EXTENT;
-        cursor = if cursor >: end_base ? cursor : end_base;
-        result.capacity_offset = (cursor + WordLayout::ALIGNMENT - 1) & ~(WordLayout::ALIGNMENT - 1);
+        result.base_stride = 8;
+        result.capacity_offset = 8;
         result.capacity_count = 1;
-        result.capacity_stride = (WordLayout::EXTENT + WordLayout::ALIGNMENT - 1) & ~(WordLayout::ALIGNMENT - 1);
-        let end_capacity: u64 = result.capacity_offset + (result.capacity_count - 1) * result.capacity_stride + WordLayout::EXTENT;
-        cursor = if cursor >: end_capacity ? cursor : end_capacity;
-        result.producer_offset = (cursor + WordLayout::ALIGNMENT - 1) & ~(WordLayout::ALIGNMENT - 1);
+        result.capacity_stride = 4;
+        result.producer_offset = 12;
         result.producer_count = 1;
-        result.producer_stride = (WordLayout::EXTENT + WordLayout::ALIGNMENT - 1) & ~(WordLayout::ALIGNMENT - 1);
-        let end_producer: u64 = result.producer_offset + (result.producer_count - 1) * result.producer_stride + WordLayout::EXTENT;
-        cursor = if cursor >: end_producer ? cursor : end_producer;
-        result.consumer_offset = (cursor + ReadWordLayout::ALIGNMENT - 1) & ~(ReadWordLayout::ALIGNMENT - 1);
+        result.producer_stride = 4;
+        result.consumer_offset = 16;
         result.consumer_count = 1;
-        result.consumer_stride = (ReadWordLayout::EXTENT + ReadWordLayout::ALIGNMENT - 1) & ~(ReadWordLayout::ALIGNMENT - 1);
-        let end_consumer: u64 = result.consumer_offset + (result.consumer_count - 1) * result.consumer_stride + ReadWordLayout::EXTENT;
-        cursor = if cursor >: end_consumer ? cursor : end_consumer;
-        result.extent = cursor;
+        result.consumer_stride = 4;
+        result.extent = 20;
         return result;
     }
     function base_offset() -> u64 {
@@ -774,30 +746,20 @@ pub package EventRegistersLayout {
     }
     function geometry() -> Geometry {
         var result: Geometry;
-        var cursor: u64;
         result = '0;
-        cursor = 0;
-        result.base_offset = (cursor + AddressLayout::ALIGNMENT - 1) & ~(AddressLayout::ALIGNMENT - 1);
+        result.base_offset = 0;
         result.base_count = 1;
-        result.base_stride = (AddressLayout::EXTENT + AddressLayout::ALIGNMENT - 1) & ~(AddressLayout::ALIGNMENT - 1);
-        let end_base: u64 = result.base_offset + (result.base_count - 1) * result.base_stride + AddressLayout::EXTENT;
-        cursor = if cursor >: end_base ? cursor : end_base;
-        result.capacity_offset = (cursor + WordLayout::ALIGNMENT - 1) & ~(WordLayout::ALIGNMENT - 1);
+        result.base_stride = 8;
+        result.capacity_offset = 8;
         result.capacity_count = 1;
-        result.capacity_stride = (WordLayout::EXTENT + WordLayout::ALIGNMENT - 1) & ~(WordLayout::ALIGNMENT - 1);
-        let end_capacity: u64 = result.capacity_offset + (result.capacity_count - 1) * result.capacity_stride + WordLayout::EXTENT;
-        cursor = if cursor >: end_capacity ? cursor : end_capacity;
-        result.producer_offset = (cursor + ReadWordLayout::ALIGNMENT - 1) & ~(ReadWordLayout::ALIGNMENT - 1);
+        result.capacity_stride = 4;
+        result.producer_offset = 12;
         result.producer_count = 1;
-        result.producer_stride = (ReadWordLayout::EXTENT + ReadWordLayout::ALIGNMENT - 1) & ~(ReadWordLayout::ALIGNMENT - 1);
-        let end_producer: u64 = result.producer_offset + (result.producer_count - 1) * result.producer_stride + ReadWordLayout::EXTENT;
-        cursor = if cursor >: end_producer ? cursor : end_producer;
-        result.consumer_offset = (cursor + WordLayout::ALIGNMENT - 1) & ~(WordLayout::ALIGNMENT - 1);
+        result.producer_stride = 4;
+        result.consumer_offset = 16;
         result.consumer_count = 1;
-        result.consumer_stride = (WordLayout::EXTENT + WordLayout::ALIGNMENT - 1) & ~(WordLayout::ALIGNMENT - 1);
-        let end_consumer: u64 = result.consumer_offset + (result.consumer_count - 1) * result.consumer_stride + WordLayout::EXTENT;
-        cursor = if cursor >: end_consumer ? cursor : end_consumer;
-        result.extent = cursor;
+        result.consumer_stride = 4;
+        result.extent = 20;
         return result;
     }
     function base_offset() -> u64 {
@@ -898,20 +860,14 @@ pub package ChannelConfigurationLayout {
     }
     function geometry() -> Geometry {
         var result: Geometry;
-        var cursor: u64;
         result = '0;
-        cursor = 0;
-        result.enable_offset = (cursor + SwitchLayout::ALIGNMENT - 1) & ~(SwitchLayout::ALIGNMENT - 1);
+        result.enable_offset = 0;
         result.enable_count = 1;
-        result.enable_stride = (SwitchLayout::EXTENT + SwitchLayout::ALIGNMENT - 1) & ~(SwitchLayout::ALIGNMENT - 1);
-        let end_enable: u64 = result.enable_offset + (result.enable_count - 1) * result.enable_stride + SwitchLayout::EXTENT;
-        cursor = if cursor >: end_enable ? cursor : end_enable;
-        result.ring_context_offset = (cursor + WordLayout::ALIGNMENT - 1) & ~(WordLayout::ALIGNMENT - 1);
+        result.enable_stride = 4;
+        result.ring_context_offset = 4;
         result.ring_context_count = 1;
-        result.ring_context_stride = (WordLayout::EXTENT + WordLayout::ALIGNMENT - 1) & ~(WordLayout::ALIGNMENT - 1);
-        let end_ring_context: u64 = result.ring_context_offset + (result.ring_context_count - 1) * result.ring_context_stride + WordLayout::EXTENT;
-        cursor = if cursor >: end_ring_context ? cursor : end_ring_context;
-        result.extent = cursor;
+        result.ring_context_stride = 4;
+        result.extent = 8;
         return result;
     }
     function enable_offset() -> u64 {
@@ -1033,25 +989,17 @@ pub package ChannelRecoveryLayout {
     }
     function geometry() -> Geometry {
         var result: Geometry;
-        var cursor: u64;
         result = '0;
-        cursor = 0;
-        result.fatal_offset = (cursor + ChannelFatalLayout::ALIGNMENT - 1) & ~(ChannelFatalLayout::ALIGNMENT - 1);
+        result.fatal_offset = 0;
         result.fatal_count = 1;
-        result.fatal_stride = (ChannelFatalLayout::EXTENT + ChannelFatalLayout::ALIGNMENT - 1) & ~(ChannelFatalLayout::ALIGNMENT - 1);
-        let end_fatal: u64 = result.fatal_offset + (result.fatal_count - 1) * result.fatal_stride + ChannelFatalLayout::EXTENT;
-        cursor = if cursor >: end_fatal ? cursor : end_fatal;
-        result.fault_status_offset = (cursor + FaultStatusLayout::ALIGNMENT - 1) & ~(FaultStatusLayout::ALIGNMENT - 1);
+        result.fatal_stride = 4;
+        result.fault_status_offset = 4;
         result.fault_status_count = 1;
-        result.fault_status_stride = (FaultStatusLayout::EXTENT + FaultStatusLayout::ALIGNMENT - 1) & ~(FaultStatusLayout::ALIGNMENT - 1);
-        let end_fault_status: u64 = result.fault_status_offset + (result.fault_status_count - 1) * result.fault_status_stride + FaultStatusLayout::EXTENT;
-        cursor = if cursor >: end_fault_status ? cursor : end_fault_status;
-        result.resume_offset = (cursor + ResumeLayout::ALIGNMENT - 1) & ~(ResumeLayout::ALIGNMENT - 1);
+        result.fault_status_stride = 4;
+        result.resume_offset = 8;
         result.resume_count = 1;
-        result.resume_stride = (ResumeLayout::EXTENT + ResumeLayout::ALIGNMENT - 1) & ~(ResumeLayout::ALIGNMENT - 1);
-        let end_resume: u64 = result.resume_offset + (result.resume_count - 1) * result.resume_stride + ResumeLayout::EXTENT;
-        cursor = if cursor >: end_resume ? cursor : end_resume;
-        result.extent = cursor;
+        result.resume_stride = 4;
+        result.extent = 12;
         return result;
     }
     function fatal_offset() -> u64 {
@@ -1208,30 +1156,20 @@ pub package ChannelInterruptsLayout {
     }
     function geometry() -> Geometry {
         var result: Geometry;
-        var cursor: u64;
         result = '0;
-        cursor = 0;
-        result.enable_offset = (cursor + SwitchLayout::ALIGNMENT - 1) & ~(SwitchLayout::ALIGNMENT - 1);
+        result.enable_offset = 0;
         result.enable_count = 1;
-        result.enable_stride = (SwitchLayout::EXTENT + SwitchLayout::ALIGNMENT - 1) & ~(SwitchLayout::ALIGNMENT - 1);
-        let end_enable: u64 = result.enable_offset + (result.enable_count - 1) * result.enable_stride + SwitchLayout::EXTENT;
-        cursor = if cursor >: end_enable ? cursor : end_enable;
-        result.cause_offset = (cursor + ChannelIrqCauseLayout::ALIGNMENT - 1) & ~(ChannelIrqCauseLayout::ALIGNMENT - 1);
+        result.enable_stride = 4;
+        result.cause_offset = 4;
         result.cause_count = 1;
-        result.cause_stride = (ChannelIrqCauseLayout::EXTENT + ChannelIrqCauseLayout::ALIGNMENT - 1) & ~(ChannelIrqCauseLayout::ALIGNMENT - 1);
-        let end_cause: u64 = result.cause_offset + (result.cause_count - 1) * result.cause_stride + ChannelIrqCauseLayout::EXTENT;
-        cursor = if cursor >: end_cause ? cursor : end_cause;
-        result.mask_offset = (cursor + ChannelIrqMaskLayout::ALIGNMENT - 1) & ~(ChannelIrqMaskLayout::ALIGNMENT - 1);
+        result.cause_stride = 4;
+        result.mask_offset = 8;
         result.mask_count = 1;
-        result.mask_stride = (ChannelIrqMaskLayout::EXTENT + ChannelIrqMaskLayout::ALIGNMENT - 1) & ~(ChannelIrqMaskLayout::ALIGNMENT - 1);
-        let end_mask: u64 = result.mask_offset + (result.mask_count - 1) * result.mask_stride + ChannelIrqMaskLayout::EXTENT;
-        cursor = if cursor >: end_mask ? cursor : end_mask;
-        result.trap_ack_offset = (cursor + TrapAckLayout::ALIGNMENT - 1) & ~(TrapAckLayout::ALIGNMENT - 1);
+        result.mask_stride = 4;
+        result.trap_ack_offset = 12;
         result.trap_ack_count = 1;
-        result.trap_ack_stride = (TrapAckLayout::EXTENT + TrapAckLayout::ALIGNMENT - 1) & ~(TrapAckLayout::ALIGNMENT - 1);
-        let end_trap_ack: u64 = result.trap_ack_offset + (result.trap_ack_count - 1) * result.trap_ack_stride + TrapAckLayout::EXTENT;
-        cursor = if cursor >: end_trap_ack ? cursor : end_trap_ack;
-        result.extent = cursor;
+        result.trap_ack_stride = 4;
+        result.extent = 16;
         return result;
     }
     function enable_offset() -> u64 {
@@ -1351,28 +1289,17 @@ pub package ChannelRegistersLayout {
     }
     function geometry() -> Geometry {
         var result: Geometry;
-        var cursor: u64;
         result = '0;
-        cursor = 0;
-        let child_config: ChannelConfigurationLayout::Geometry = ChannelConfigurationLayout::geometry();
-        result.config_offset = (cursor + ChannelConfigurationLayout::ALIGNMENT - 1) & ~(ChannelConfigurationLayout::ALIGNMENT - 1);
+        result.config_offset = 0;
         result.config_count = 1;
-        result.config_stride = (child_config.extent + ChannelConfigurationLayout::ALIGNMENT - 1) & ~(ChannelConfigurationLayout::ALIGNMENT - 1);
-        let end_config: u64 = result.config_offset + (result.config_count - 1) * result.config_stride + child_config.extent;
-        cursor = if cursor >: end_config ? cursor : end_config;
-        let child_recovery: ChannelRecoveryLayout::Geometry = ChannelRecoveryLayout::geometry();
-        result.recovery_offset = (cursor + ChannelRecoveryLayout::ALIGNMENT - 1) & ~(ChannelRecoveryLayout::ALIGNMENT - 1);
+        result.config_stride = 8;
+        result.recovery_offset = 8;
         result.recovery_count = 1;
-        result.recovery_stride = (child_recovery.extent + ChannelRecoveryLayout::ALIGNMENT - 1) & ~(ChannelRecoveryLayout::ALIGNMENT - 1);
-        let end_recovery: u64 = result.recovery_offset + (result.recovery_count - 1) * result.recovery_stride + child_recovery.extent;
-        cursor = if cursor >: end_recovery ? cursor : end_recovery;
-        let child_irq: ChannelInterruptsLayout::Geometry = ChannelInterruptsLayout::geometry();
-        result.irq_offset = (cursor + ChannelInterruptsLayout::ALIGNMENT - 1) & ~(ChannelInterruptsLayout::ALIGNMENT - 1);
+        result.recovery_stride = 12;
+        result.irq_offset = 20;
         result.irq_count = 1;
-        result.irq_stride = (child_irq.extent + ChannelInterruptsLayout::ALIGNMENT - 1) & ~(ChannelInterruptsLayout::ALIGNMENT - 1);
-        let end_irq: u64 = result.irq_offset + (result.irq_count - 1) * result.irq_stride + child_irq.extent;
-        cursor = if cursor >: end_irq ? cursor : end_irq;
-        result.extent = cursor;
+        result.irq_stride = 16;
+        result.extent = 36;
         return result;
     }
     function config_offset() -> u64 {
@@ -1533,27 +1460,16 @@ pub package ChannelBlockLayout {
     }
     function geometry() -> Geometry {
         var result: Geometry;
-        var cursor: u64;
         result = '0;
-        cursor = 0;
-        let child_command: CommandRegistersLayout::Geometry = CommandRegistersLayout::geometry();
-        result.command_offset = (cursor + CommandRegistersLayout::ALIGNMENT - 1) & ~(CommandRegistersLayout::ALIGNMENT - 1);
+        result.command_offset = 0;
         result.command_count = 1;
-        result.command_stride = (child_command.extent + CommandRegistersLayout::ALIGNMENT - 1) & ~(CommandRegistersLayout::ALIGNMENT - 1);
-        let end_command: u64 = result.command_offset + (result.command_count - 1) * result.command_stride + child_command.extent;
-        cursor = if cursor >: end_command ? cursor : end_command;
-        let child_event: EventRegistersLayout::Geometry = EventRegistersLayout::geometry();
-        result.event_offset = (cursor + EventRegistersLayout::ALIGNMENT - 1) & ~(EventRegistersLayout::ALIGNMENT - 1);
+        result.command_stride = 24;
+        result.event_offset = 24;
         result.event_count = 1;
-        result.event_stride = (child_event.extent + EventRegistersLayout::ALIGNMENT - 1) & ~(EventRegistersLayout::ALIGNMENT - 1);
-        let end_event: u64 = result.event_offset + (result.event_count - 1) * result.event_stride + child_event.extent;
-        cursor = if cursor >: end_event ? cursor : end_event;
-        let child_control: ChannelRegistersLayout::Geometry = ChannelRegistersLayout::geometry();
-        result.control_offset = (cursor + ChannelRegistersLayout::ALIGNMENT - 1) & ~(ChannelRegistersLayout::ALIGNMENT - 1);
+        result.event_stride = 24;
+        result.control_offset = 44;
         result.control_count = 1;
-        result.control_stride = (child_control.extent + ChannelRegistersLayout::ALIGNMENT - 1) & ~(ChannelRegistersLayout::ALIGNMENT - 1);
-        let end_control: u64 = result.control_offset + (result.control_count - 1) * result.control_stride + child_control.extent;
-        cursor = if cursor >: end_control ? cursor : end_control;
+        result.control_stride = 36;
         result.extent = 4096;
         return result;
     }
@@ -1783,23 +1699,23 @@ pub package DmaRegistersLayout {
         result = '0;
         cursor = 0;
         let child_discovery: DmaDiscoveryLayout::Geometry = DmaDiscoveryLayout::geometry();
-        result.discovery_offset = (cursor + DmaDiscoveryLayout::ALIGNMENT - 1) & ~(DmaDiscoveryLayout::ALIGNMENT - 1);
+        result.discovery_offset = ((cursor + 4 - 1) & ~(4 - 1));
         result.discovery_count = 1;
-        result.discovery_stride = (child_discovery.extent + DmaDiscoveryLayout::ALIGNMENT - 1) & ~(DmaDiscoveryLayout::ALIGNMENT - 1);
-        let end_discovery: u64 = result.discovery_offset + (result.discovery_count - 1) * result.discovery_stride + child_discovery.extent;
-        cursor = if cursor >: end_discovery ? cursor : end_discovery;
+        result.discovery_stride = ((child_discovery.extent + 4 - 1) & ~(4 - 1));
+        let end_discovery: u64 = ((result.discovery_offset + ((result.discovery_count - 1) * result.discovery_stride)) + child_discovery.extent);
+        cursor = (if cursor >: end_discovery ? cursor : end_discovery);
         let child_admin: DmaAdminLayout::Geometry = DmaAdminLayout::geometry(p_channel_count);
-        result.admin_offset = (cursor + DmaAdminLayout::ALIGNMENT - 1) & ~(DmaAdminLayout::ALIGNMENT - 1);
+        result.admin_offset = ((cursor + 4 - 1) & ~(4 - 1));
         result.admin_count = 1;
-        result.admin_stride = (child_admin.extent + DmaAdminLayout::ALIGNMENT - 1) & ~(DmaAdminLayout::ALIGNMENT - 1);
-        let end_admin: u64 = result.admin_offset + (result.admin_count - 1) * result.admin_stride + child_admin.extent;
-        cursor = if cursor >: end_admin ? cursor : end_admin;
+        result.admin_stride = ((child_admin.extent + 4 - 1) & ~(4 - 1));
+        let end_admin: u64 = ((result.admin_offset + ((result.admin_count - 1) * result.admin_stride)) + child_admin.extent);
+        cursor = (if cursor >: end_admin ? cursor : end_admin);
         let child_channels: ChannelBlockLayout::Geometry = ChannelBlockLayout::geometry();
-        result.channels_offset = (cursor + ChannelBlockLayout::ALIGNMENT - 1) & ~(ChannelBlockLayout::ALIGNMENT - 1);
+        result.channels_offset = ((cursor + 4096 - 1) & ~(4096 - 1));
         result.channels_count = p_channel_count;
-        result.channels_stride = (child_channels.extent + ChannelBlockLayout::ALIGNMENT - 1) & ~(ChannelBlockLayout::ALIGNMENT - 1);
-        let end_channels: u64 = result.channels_offset + (result.channels_count - 1) * result.channels_stride + child_channels.extent;
-        cursor = if cursor >: end_channels ? cursor : end_channels;
+        result.channels_stride = ((child_channels.extent + 4096 - 1) & ~(4096 - 1));
+        let end_channels: u64 = ((result.channels_offset + ((result.channels_count - 1) * result.channels_stride)) + child_channels.extent);
+        cursor = (if cursor >: end_channels ? cursor : end_channels);
         result.extent = cursor;
         return result;
     }

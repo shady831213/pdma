@@ -1,7 +1,7 @@
 //! The backend translates generic bank rules rather than application formulas.
 #![cfg(feature = "export-veryl-layout")]
 use hw_model_schema::export::{
-    Exporter, InMemoryArtifactSink, backends::veryl::VerylLayoutExporter,
+    Bindings, InMemoryArtifactSink, PreparedSchema, backends::veryl::VerylRenderer, generate,
 };
 use hw_model_schema::{graph::SchemaSet, register_map, register_schema};
 
@@ -42,7 +42,11 @@ fn generic_metadata_does_not_truncate_large_register_offsets()
     set.add::<LargeAddressMap>();
     // When: layout metadata is rendered.
     let mut sink = InMemoryArtifactSink::new();
-    VerylLayoutExporter::new().export(&set.resolve()?, &mut sink)?;
+    generate(
+        &PreparedSchema::from_graph(&set.resolve()?, &Bindings::default())?,
+        VerylRenderer::new(),
+        &mut sink,
+    )?;
     // Then: the backend preserves the address; bus-width restrictions belong to the consumer.
     let artifact = sink
         .artifacts()
@@ -62,7 +66,11 @@ fn layout_backend_preserves_non_pdma_register_width_and_endian()
     let graph = set.resolve()?;
     // When: generic metadata is exported without a bus implementation.
     let mut sink = InMemoryArtifactSink::new();
-    VerylLayoutExporter::new().export(&graph, &mut sink)?;
+    generate(
+        &PreparedSchema::from_graph(&graph, &Bindings::default())?,
+        VerylRenderer::new(),
+        &mut sink,
+    )?;
     // Then: the target describes the original register instead of imposing PDMA restrictions.
     let [artifact] = sink.artifacts() else {
         return Err("one package expected".into());
@@ -82,7 +90,11 @@ fn veryl_keeps_the_count_parameter_and_child_alignment_rule()
     let graph = set.resolve()?;
     // When: the generic Veryl backend emits the definition graph.
     let mut sink = InMemoryArtifactSink::new();
-    VerylLayoutExporter::new().export(&graph, &mut sink)?;
+    generate(
+        &PreparedSchema::from_graph(&graph, &Bindings::default())?,
+        VerylRenderer::new(),
+        &mut sink,
+    )?;
     // Then: output retains the parameter and references the child package geometry.
     let root = sink
         .artifacts()
@@ -91,8 +103,123 @@ fn veryl_keeps_the_count_parameter_and_child_alignment_rule()
         .ok_or("missing root")?;
     let source = String::from_utf8_lossy(&root.contents);
     assert!(source.contains("p_count: input u64"));
-    assert!(source.contains("ChildLayout::ALIGNMENT"));
+    assert!(source.contains("ChildLayout::geometry()"));
+    assert!(source.contains("& ~(64 - 1)"));
     assert!(source.contains("children_stride"));
     assert!(!source.contains("PDMA"));
+    Ok(())
+}
+
+#[test]
+fn veryl_projection_keeps_bank_offsets_and_effective_permissions()
+-> Result<(), Box<dyn std::error::Error>> {
+    use hw_model_schema::{Access, RegisterMapSpec, RegisterSpec, RepeatedRegisterBank};
+    // Given: a projected bank hides one member and removes writes from the other.
+    const MEMBERS: [RegisterSpec<u8>; 2] = [
+        RegisterSpec::new(1, "private", 0, 4),
+        RegisterSpec::new(2, "public", 8, 4)
+            .with_access(Access::ReadWrite)
+            .with_writable_mask(7),
+    ];
+    const BANKS: [RepeatedRegisterBank<u8>; 1] =
+        [RepeatedRegisterBank::new("ports", 32, 3, 16, &MEMBERS)];
+    let map = RegisterMapSpec::named("sensor", 128, &[], &BANKS).resolve()?;
+    let view = map.project_access(|register| (register.id() == 2).then_some(Access::ReadOnly))?;
+    let prepared = PreparedSchema::register_map("Observer", &view);
+    let mut sink = InMemoryArtifactSink::new();
+    // When: the same renderer consumes the explicit permission view.
+    generate(&prepared, VerylRenderer::new(), &mut sink)?;
+    // Then: concrete addresses retain bank holes and no permission is restored.
+    let [artifact] = sink.artifacts() else {
+        return Err("one package expected".into());
+    };
+    let text = std::str::from_utf8(&artifact.contents)?;
+    assert!(text.contains("EXTENT: u64 = 128"));
+    for (index, offset) in [(0, 40), (1, 56), (2, 72)] {
+        assert!(text.contains(&format!("PORTS_{index}_PUBLIC_OFFSET: u64 = {offset}")));
+        assert!(text.contains(&format!("PORTS_{index}_PUBLIC_WRITE: bbool = false")));
+        assert!(text.contains(&format!(
+            "PORTS_{index}_PUBLIC_WRITABLE: u64 = 64'h0000000000000000"
+        )));
+    }
+    assert!(!text.contains("PRIVATE"));
+    assert!(!text.contains("ALIGNMENT"));
+    Ok(())
+}
+
+#[test]
+fn veryl_bound_map_uses_prepared_geometry_and_expanded_members()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Given: the common preparation binds an instance of the symbolic root map.
+    let mut set = SchemaSet::new();
+    set.add::<Root>();
+    let mut bindings = Bindings::new();
+    bindings.bind::<Root>(&[2]);
+    let prepared = PreparedSchema::from_graph(&set.resolve()?, &bindings)?;
+    let mut sink = InMemoryArtifactSink::new();
+    // When: the same renderer receives the bound prepared schema.
+    generate(&prepared, VerylRenderer::new(), &mut sink)?;
+    // Then: the root has no parameter and concrete register offsets retain child alignment.
+    let artifact = sink
+        .artifacts()
+        .iter()
+        .find(|artifact| artifact.logical_name == "RootLayout.veryl")
+        .ok_or("missing root")?;
+    let text = std::str::from_utf8(&artifact.contents)?;
+    assert!(text.contains("function geometry() -> Geometry"));
+    assert!(text.contains("EXTENT: u64 = 68"));
+    assert!(text.contains("CHILDREN_0_VALUE_OFFSET: u64 = 0"));
+    assert!(text.contains("CHILDREN_1_VALUE_OFFSET: u64 = 64"));
+    assert!(!text.contains("p_count"));
+    Ok(())
+}
+
+struct NestedMaximum;
+impl hw_model_schema::graph::DescribeSchema for NestedMaximum {
+    fn schema_definition() -> hw_model_schema::graph::Definition {
+        use hw_model_schema::graph::{Definition, LayoutExpr, MapDefinition, MapPlacement};
+        Definition::register_map::<Self>(
+            "NestedMaximum",
+            hw_model_schema::Documentation::EMPTY,
+            MapDefinition::new(
+                &["count"],
+                4,
+                None,
+                vec![MapPlacement::new(
+                    "words",
+                    <Word as hw_model_schema::RegisterLayout>::schema_definition,
+                    vec![],
+                    LayoutExpr::Add(
+                        Box::new(LayoutExpr::Maximum(
+                            Box::new(LayoutExpr::Parameter("count")),
+                            Box::new(LayoutExpr::Constant(2)),
+                        )),
+                        Box::new(LayoutExpr::Constant(1)),
+                    ),
+                    None,
+                    true,
+                )],
+            ),
+        )
+    }
+}
+
+#[test]
+fn nested_maximum_remains_one_operand_of_addition() -> Result<(), Box<dyn std::error::Error>> {
+    // Given: the bank count is max(count, 2) + 1, with addition outside the maximum.
+    let mut set = SchemaSet::new();
+    set.add::<NestedMaximum>();
+    let prepared = PreparedSchema::from_graph(&set.resolve()?, &Bindings::default())?;
+    let mut sink = InMemoryArtifactSink::new();
+    // When: the real renderer formats the nested expression through common generation.
+    generate(&prepared, VerylRenderer::new(), &mut sink)?;
+    // Then: parentheses keep addition outside both branches of the Veryl conditional.
+    let artifact = sink
+        .artifacts()
+        .iter()
+        .find(|artifact| artifact.logical_name == "NestedMaximumLayout.veryl")
+        .ok_or("missing nested maximum map")?;
+    let text = std::str::from_utf8(&artifact.contents)?;
+    assert!(text.contains("result.words_count = ((if p_count >: 2 ? p_count : 2) + 1);"));
     Ok(())
 }

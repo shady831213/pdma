@@ -1,3 +1,10 @@
+mod scopes;
+use super::{CHeaderExportError, CHeaderRenderer};
+use crate::export::{
+    DefinitionHeader, EnumSite, ExportId, FieldOwner, GeometryMember, RegisterLocation,
+};
+pub(super) use scopes::{GeometryNames, Scope};
+
 pub(super) fn c_identifier(input: &str) -> String {
     let mut output = String::with_capacity(input.len().saturating_mul(2).saturating_add(2));
     output.push_str("C_");
@@ -52,34 +59,121 @@ pub(super) fn disambiguate_identifiers(identifiers: Vec<String>) -> Vec<String> 
         .collect()
 }
 
-pub(super) fn reject_collisions(
-    paths_and_names: &[(String, String)],
+pub(super) fn reject_collisions<'a>(
+    paths_and_names: impl IntoIterator<Item = (&'a str, &'a str)>,
 ) -> Result<(), super::CHeaderExportError> {
-    for (second_index, (second_path, second_name)) in paths_and_names.iter().enumerate() {
-        if let Some((first_index, (first_path, _))) = paths_and_names
-            .iter()
-            .take(second_index)
-            .enumerate()
-            .find(|(_, (_, first_name))| same_significant_prefix(first_name, second_name))
-        {
-            return Err(super::CHeaderExportError::NameCollision {
-                first_path: first_path.clone(),
-                second_path: second_path.clone(),
-                first_index,
-                second_index,
-            });
-        }
+    let mut symbols = crate::export::SymbolScope::new();
+    for (index, (path, name)) in paths_and_names.into_iter().enumerate() {
+        symbols
+            .insert(significant_prefix(name), (index, path))
+            .map_err(collision)?;
     }
     Ok(())
 }
 
 const C11_SIGNIFICANT_IDENTIFIER_BYTES: usize = 63;
 
-fn same_significant_prefix(first: &str, second: &str) -> bool {
-    first
-        .bytes()
-        .take(C11_SIGNIFICANT_IDENTIFIER_BYTES)
-        .eq(second.bytes().take(C11_SIGNIFICANT_IDENTIFIER_BYTES))
+pub(super) fn significant_prefix(name: &str) -> &str {
+    name.get(..C11_SIGNIFICANT_IDENTIFIER_BYTES).unwrap_or(name)
+}
+
+pub(super) fn collision<S: Into<String>>(
+    collision: crate::export::SymbolCollision<(usize, S)>,
+) -> super::CHeaderExportError {
+    super::CHeaderExportError::NameCollision {
+        first_path: collision.first.1.into(),
+        second_path: collision.second.1.into(),
+        first_index: collision.first.0,
+        second_index: collision.second.0,
+    }
+}
+
+pub(super) fn relative_path<'a>(root: &str, path: &'a str) -> &'a str {
+    if root.is_empty() {
+        path.strip_prefix('.').unwrap_or(path)
+    } else {
+        path.strip_prefix(root)
+            .and_then(|relative| relative.strip_prefix('.'))
+            .unwrap_or(path)
+    }
+}
+
+pub(super) fn check_record(
+    schema: &crate::ResolvedRecord,
+) -> Result<(), super::CHeaderExportError> {
+    let names: Vec<_> = schema
+        .scalar_members()
+        .map(|(member, _)| {
+            (
+                member.path(),
+                c_identifier(relative_path(schema.root(), member.path())),
+            )
+        })
+        .collect();
+    reject_collisions(names.iter().map(|(path, name)| (*path, name.as_str())))
+}
+
+impl CHeaderRenderer {
+    pub(super) fn definition_names(
+        &mut self,
+        definition: DefinitionHeader<'_>,
+    ) -> Result<(String, String), CHeaderExportError> {
+        let (logical_name, path) = match definition.id {
+            ExportId::Definition(id) => (definition.name.to_ascii_lowercase(), id.path()),
+            ExportId::View(name) => (definition.name.to_owned(), name.as_str()),
+        };
+        let prefix = self.target_prefix(definition.id, &logical_name);
+        self.symbols.insert(&prefix, path)?;
+        Ok((logical_name, prefix))
+    }
+
+    pub(super) fn record_member_name(&self, member: &crate::ResolvedMember) -> String {
+        c_identifier(relative_path(self.record_root, member.path()))
+    }
+
+    pub(super) fn field_owner_prefix(
+        &self,
+        owner: FieldOwner<'_>,
+    ) -> Result<Option<String>, CHeaderExportError> {
+        match owner {
+            FieldOwner::Bits => Ok(Some(self.prefix.clone())),
+            FieldOwner::Record { member, .. } => Ok(Some(format!(
+                "{}_{}",
+                self.prefix,
+                self.record_member_name(member)
+            ))),
+            FieldOwner::Register(node) => match node.location {
+                RegisterLocation::Instance { .. } => Ok(None),
+                RegisterLocation::Root
+                | RegisterLocation::Standalone(_)
+                | RegisterLocation::Template { .. } => self.register_name(node.location).map(Some),
+            },
+        }
+    }
+
+    pub(super) fn enum_name(
+        &self,
+        site: EnumSite<'_>,
+        variant: &str,
+    ) -> Result<Option<String>, CHeaderExportError> {
+        let Some(mut prefix) = self.field_owner_prefix(site.owner)? else {
+            return Ok(None);
+        };
+        if let Some(bit) = site.bit {
+            prefix.push('_');
+            prefix.push_str(&c_identifier(bit));
+        }
+        Ok(Some(format!("{prefix}_{}", c_identifier(variant))))
+    }
+}
+
+pub(super) fn geometry_member_name(member: GeometryMember<'_>) -> String {
+    match member {
+        GeometryMember::Extent => "extent".into(),
+        GeometryMember::Placement { name, property } => {
+            format!("{}_{}", c_identifier(name), property.name())
+        }
+    }
 }
 
 #[cfg(test)]

@@ -1,12 +1,12 @@
 use hw_model_schema::{
     FieldSpec, RecordSpec, ScalarKind,
-    export::backends::c_header::{RecordCHeaderExporter, RegisterMapCHeaderExporter},
     register::{Access, RegisterSpec, ResetKind},
     register_map::{RegisterMapSpec, RepeatedRegisterBank},
 };
 
 use super::support::{
-    COLLISION_C_MAIN, HAPPY_C_MAIN, RECORD, TestResult, compile_fragments, render,
+    COLLISION_C_MAIN, HAPPY_C_MAIN, RECORD, TestResult, compile_fragments, render_map,
+    render_record,
 };
 
 const MAP_GOLDEN: &[u8] = include_bytes!("../golden/c_header_register_map.h");
@@ -75,10 +75,10 @@ const COLLISION_MAP: RegisterMapSpec<u8> =
 #[test]
 fn c_header_register_map_is_exact_when_fixed_and_repeated_registers_are_present() -> TestResult {
     // Given: a typed non-PDMA map with fixed registers and a two-instance bank.
-    let exporter = RegisterMapCHeaderExporter::new("map.fragment.h", "Lab-9 map");
+    let exporter = ("map.fragment.h", "Lab-9 map");
 
     // When: the map is exported through the format-neutral interface.
-    let artifact = render(&exporter, &MAP.resolve()?)?;
+    let artifact = render_map(exporter.0, exporter.1, &MAP.resolve()?)?;
 
     // Then: exact metadata and expanded offsets match the reviewed golden fragment.
     assert_eq!(artifact.logical_name, "map.fragment.h");
@@ -115,10 +115,10 @@ fn resolved_bank_retains_single_instance_topology_and_expanded_rows() -> TestRes
 #[test]
 fn c_header_register_map_includes_independently_declared_fixed_groups() -> TestResult {
     // Given: a map whose fixed registers are supplied through a reusable declaration group.
-    let exporter = RegisterMapCHeaderExporter::new("grouped.fragment.h", "grouped map");
+    let exporter = ("grouped.fragment.h", "grouped map");
 
     // When: the grouped map is exported through the generic C backend.
-    let artifact = render(&exporter, &GROUPED_MAP.resolve()?)?;
+    let artifact = render_map(exporter.0, exporter.1, &GROUPED_MAP.resolve()?)?;
 
     // Then: each grouped register contributes its offset and metadata to the fragment.
     let fragment = std::str::from_utf8(&artifact.contents)?;
@@ -130,14 +130,8 @@ fn c_header_register_map_includes_independently_declared_fixed_groups() -> TestR
 #[test]
 fn c_header_fragments_compile_and_run_when_wrapped_as_strict_c11() -> TestResult {
     // Given: both generic fragments in a caller-owned C11 translation unit.
-    let record = render(
-        &RecordCHeaderExporter::new("record", "Lab-9 packet"),
-        &RECORD.resolve()?,
-    )?;
-    let register_map = render(
-        &RegisterMapCHeaderExporter::new("map", "Lab-9 map"),
-        &MAP.resolve()?,
-    )?;
+    let record = render_record("record", "Lab-9 packet", &RECORD.resolve()?)?;
+    let register_map = render_map("map", "Lab-9 map", &MAP.resolve()?)?;
     // When: a real C compiler builds the wrapper and the resulting binary runs.
     compile_fragments(
         "compile",
@@ -152,14 +146,20 @@ fn c_header_fragments_compile_and_run_when_wrapped_as_strict_c11() -> TestResult
 #[test]
 fn c_header_disambiguates_normalization_collisions_when_compiled_as_strict_c11() -> TestResult {
     // Given: valid record and map names that collapse at the C identifier boundary.
-    let record_exporter = RecordCHeaderExporter::new("collision.record", "collision record");
-    let map_exporter = RegisterMapCHeaderExporter::new("collision.map", "collision map");
+    let record_exporter = ("collision.record", "collision record");
+    let map_exporter = ("collision.map", "collision map");
     let collision_record = COLLISION_RECORD.resolve()?;
     let collision_map = COLLISION_MAP.resolve()?;
-    let record = render(&record_exporter, &collision_record)?;
-    let map = render(&map_exporter, &collision_map)?;
-    assert_eq!(record, render(&record_exporter, &collision_record)?);
-    assert_eq!(map, render(&map_exporter, &collision_map)?);
+    let record = render_record(record_exporter.0, record_exporter.1, &collision_record)?;
+    let map = render_map(map_exporter.0, map_exporter.1, &collision_map)?;
+    assert_eq!(
+        record,
+        render_record(record_exporter.0, record_exporter.1, &collision_record)?
+    );
+    assert_eq!(
+        map,
+        render_map(map_exporter.0, map_exporter.1, &collision_map)?
+    );
     assert_eq!(record.contents, COLLISION_RECORD_GOLDEN);
     assert_eq!(map.contents, COLLISION_MAP_GOLDEN);
     // When: the collision-bearing fragments are compiled and their C checks execute.

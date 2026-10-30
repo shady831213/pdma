@@ -1,6 +1,6 @@
 use hw_model_schema::{
-    export::backends::c_header::{CHeaderExporter, RegisterMapCHeaderExporter},
-    export::{Exporter, InMemoryArtifactSink},
+    export::backends::c_header::CHeaderRenderer,
+    export::{Bindings, InMemoryArtifactSink, PreparedSchema, generate as render_schema},
     graph::{DefinitionBody, SchemaRegistry, SchemaSet},
 };
 use pdma_model_contract::dma::DmaRegisters;
@@ -39,7 +39,11 @@ pub fn generate_with_contexts(count: usize, contexts: usize) -> Result<HeaderSet
             records.add_definition(definition.clone());
         }
     }
-    CHeaderExporter::new().export(&records.resolve()?, &mut common)?;
+    render_schema(
+        &PreparedSchema::from_graph(&records.resolve()?, &Bindings::default())?,
+        CHeaderRenderer::new(),
+        &mut common,
+    )?;
     let mut headers = vec![("pdma_common.h", wrap("PDMA_COMMON_H", &common, false))];
     for (role, prefix, filename, guard) in [
         (RegisterView::Host, "h", "pdma_host.h", "PDMA_HOST_H"),
@@ -52,27 +56,46 @@ pub fn generate_with_contexts(count: usize, contexts: usize) -> Result<HeaderSet
     ] {
         let mut sink = InMemoryArtifactSink::new();
         if role == RegisterView::Firmware {
-            RegisterMapCHeaderExporter::new("context", "fctx")
-                .export(&contexts.resolve()?, &mut sink)?;
+            render_schema(
+                &PreparedSchema::register_map("context", &contexts.resolve()?),
+                CHeaderRenderer::new().with_name("context", "fctx"),
+                &mut sink,
+            )?;
         }
-        RegisterMapCHeaderExporter::new("dma", format!("{prefix}dma")).export(
-            &registers.project_access(|r| role.dma_access(r.id(), r.definition().access()))?,
+        render_schema(
+            &PreparedSchema::register_map(
+                "dma",
+                &registers.project_access(|r| role.dma_access(r.id(), r.definition().access()))?,
+            ),
+            CHeaderRenderer::new().with_name("dma", &format!("{prefix}dma")),
             &mut sink,
         )?;
-        RegisterMapCHeaderExporter::new("boot", format!("{prefix}boot")).export(
-            &FirmwareRegisters::resolve()?.project_access(|_| Some(role.boot_access()))?,
+        render_schema(
+            &PreparedSchema::register_map(
+                "boot",
+                &FirmwareRegisters::resolve()?.project_access(|_| Some(role.boot_access()))?,
+            ),
+            CHeaderRenderer::new().with_name("boot", &format!("{prefix}boot")),
             &mut sink,
         )?;
-        RegisterMapCHeaderExporter::new("control", format!("{prefix}ctl")).export(
-            &ControlRegisters::resolve()?.project_access(|r| role.control_access(r.offset()))?,
+        render_schema(
+            &PreparedSchema::register_map(
+                "control",
+                &ControlRegisters::resolve()?
+                    .project_access(|r| role.control_access(r.offset()))?,
+            ),
+            CHeaderRenderer::new().with_name("control", &format!("{prefix}ctl")),
             &mut sink,
         )?;
         let window_view = windows.resolve()?.project_access(|register| {
             let (_, offset) = windows.windows().locate_instance(register.offset())?;
             role.window_access(offset)
         })?;
-        RegisterMapCHeaderExporter::new("window", format!("{prefix}win"))
-            .export(&window_view, &mut sink)?;
+        render_schema(
+            &PreparedSchema::register_map("window", &window_view),
+            CHeaderRenderer::new().with_name("window", &format!("{prefix}win")),
+            &mut sink,
+        )?;
         let mut bytes = wrap(guard, &sink, true);
         bytes.truncate(bytes.len() - b"#endif\n".len());
         let role_name = match role {

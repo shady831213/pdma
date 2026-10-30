@@ -19,6 +19,18 @@ impl RegisterBankInstance {
 }
 
 impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegisterMap<I, F> {
+    /// Returns enclosing banks in outer-to-inner order for a root-qualified path.
+    ///
+    /// Each item contains the bank's position in `banks()`, its metadata and the
+    /// selected instance. This query retains hidden-bank topology after permission
+    /// projection; it does not assert that the final path names an accessible leaf.
+    pub fn enclosing_banks<'a>(
+        &'a self,
+        path: &'a str,
+    ) -> impl DoubleEndedIterator<Item = (usize, &'a ResolvedRegisterBank<I, F>, usize)> {
+        enclosing_banks(&self.banks, path)
+    }
+
     pub(super) fn collect_banks(&mut self) {
         if !self
             .placements
@@ -77,16 +89,10 @@ impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegisterMap<I, F> {
             })
             .collect();
         for leaf in &mut self.registers {
-            leaf.ancestors = self
-                .banks
-                .iter()
-                .filter_map(|bank| {
-                    let suffix = leaf.path().strip_prefix(bank.path())?.strip_prefix('[')?;
-                    let (index, _) = suffix.split_once(']')?;
-                    Some(RegisterBankInstance {
-                        path: bank.path().to_owned(),
-                        index: index.parse().ok()?,
-                    })
+            leaf.ancestors = enclosing_banks(&self.banks, leaf.path())
+                .map(|(_, bank, index)| RegisterBankInstance {
+                    path: bank.path().to_owned(),
+                    index,
                 })
                 .collect();
         }
@@ -102,4 +108,20 @@ impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegisterMap<I, F> {
             }
         }
     }
+}
+
+fn enclosing_banks<'a, I: Copy, F: Copy>(
+    banks: &'a [ResolvedRegisterBank<I, F>],
+    path: &'a str,
+) -> impl DoubleEndedIterator<Item = (usize, &'a ResolvedRegisterBank<I, F>, usize)> {
+    banks
+        .iter()
+        .enumerate()
+        .filter_map(move |(position, bank)| {
+            let suffix = path.strip_prefix(bank.path())?.strip_prefix('[')?;
+            let (index, tail) = suffix.split_once(']')?;
+            let index: usize = index.parse().ok()?;
+            (index < bank.count() && (tail.is_empty() || tail.starts_with('.')))
+                .then_some((position, bank, index))
+        })
 }

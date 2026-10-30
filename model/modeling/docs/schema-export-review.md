@@ -1,40 +1,91 @@
 # Schema export review candidate
 
-Status: unpublished 0.2.0 candidate. The user requested review before publication.
-The pre-change RTL checkpoint is committed and pushed as `63c98c3a` and `1afebd4d`.
-This schema change is checkpointed on `schema-export-review`; master remains at
-the pre-change checkpoint until review and the publication/dependency transition.
-No publish command has been run.
+Status: unpublished 0.2.0 review candidate. Publication requires renewed user
+approval. Normal consumers retain crates.io dependencies; review checks use an
+explicit temporary Cargo-home patch, never a checked-in default override.
 
-## Decisions and code entry points
+## Shared generation contract
 
-- `hw-model-schema/src/graph`: definition identity, typed references, explicit
-  roots, dependency closure/order, optional discovery and separate map instances.
-  Existing codecs and ordinary Rust imports keep their responsibilities.
-- `hw-model-schema-macros/src/internal/expand/graph`: generated metadata; tagged
-  union details are under their existing tagged-union owner. No catalog/scope DSL.
-- `hw-model-schema/src/export`: the existing public exporter/sink traits. Builtin
-  C and Veryl backends remain optional features in this crate; custom consumers
-  can render the graph without either builtin feature.
-- `contract/src/bin/header/mod.rs`: discovers protocol records and preserves
-  explicit permission projection for the Host and firmware register headers.
-- `contract/src/bin/rtl_layout/mod.rs`: selects three DMA roots and collects the
-  generic Veryl backend's artifacts. Application rendering/address formulas removed.
-- `hw-model-schema/tests/fixtures/schema-discovery`: two independent crates,
-  renamed schema dependency, unused-definition discovery under release/LTO,
-  repeated references and a complete application-defined dependency-graph exporter.
+`export::PreparedSchema` is the public, target-independent rendering input.
+`PreparedSchema::from_graph(&graph, &bindings)` validates layouts and prepares
+definitions in dependency order. `Bindings::bind::<Map>(&arguments)` specializes
+selected map roots; an empty `Bindings` keeps parameterized roots symbolic.
+A root also referenced as a generic dependency must be specialized in a separate
+generation request. `PreparedSchema::record` and `::register_map` accept explicit
+resolved views; register permission projection remains application-owned.
 
-`linkme` was tested first. Its generated section declaration fails this workspace's
-`unsafe_code = forbid`. `inventory` passes the same lint without local exceptions;
-its optional registration mechanics are isolated from manual graph collection.
-Discovery sees compiled/linked definitions, including private ones; selection and
-export visibility remain generator policy. Metadata producers are deterministic
-and must describe one definition per Rust type. Instance arguments are separate.
+Named instances selected through `SchemaSet::add_map_instance` are prepared after
+their reusable definitions, preserving separate view identities and arguments.
+`SchemaKind` retains original record/union/opaque distinctions and external union
+selectors alongside normalized storage metadata.
 
-Version 0.2 is intentional: the new macro emits facade metadata API calls. Publishing
-it as 0.1.1 would let the already published 0.1 facade resolve an incompatible macro
-through its old caret dependency. The new facade pins its matching macro version.
-Consumer declarations still use registry versions, with no permanent path overrides.
+Every builtin and custom renderer implements the same `Renderer` callbacks.
+`begin_definition(DefinitionHeader)` supplies identity/name/kind/documentation;
+`reference` supplies one dependency edge. Record, bit/enum, map, bank and register
+callbacks receive one semantic node at a time. Geometry callbacks receive folded
+operands and validated symbolic references. Default callbacks allow a consumer to
+select only the events it formats. `finish(self)` returns owned artifacts.
+`record_member` preserves declaration order including nested containers, while
+field/enum and placement callbacks support their respective output sections.
+Expression operator and reference formatting are overridable; default C-like
+syntax is shared, and custom syntax retains the common recursive fold.
+`generate(&prepared, renderer, &mut sink)` owns all child traversal and emission;
+renderers do not iterate schema children or recurse through expressions. Rendering
+or common-layout failure emits nothing. `ExportError::Layout` preserves common
+expression failures independently of `Render`; sink errors retain their original
+typed cause and do not roll back artifacts already accepted.
+
+The two builtin targets are `CHeaderRenderer` and `VerylRenderer`, behind their
+existing default-off features. Both consume the same public prepared metadata and
+layout representation. This unpublished candidate replaces the former generic
+exporter interface and separate record/map exporter entry points without
+compatibility aliases. Applications select and prepare input, configure target
+names, invoke `generate`, then store the returned artifacts through their sink.
+
+## Ownership and entry points
+
+- `hw-model-schema/src/graph`: definition identity, references, root selection,
+  dependency order, optional discovery and separately named map instances.
+- `graph/map/expression`: one public `LayoutExpr` algebra for arguments and
+  geometry. `LayoutExpr::visit` owns recursive traversal through `ExpressionVisitor`;
+  numeric evaluation and constructor-scope validation use the same fold. Binary
+  callbacks receive folded children; `Value(PlanValue)` is rejected in constructor
+  scope. Backends do not contain another expression visitor or arithmetic evaluator.
+- `graph/map/plan`: symbolic geometry, checked child classification and argument
+  validation. `MapDefinition::layout_plan()` is fallible even without concrete
+  arguments; invalid child kinds, arity, unknown parameters and cycles are rejected.
+  The evaluator owns alignment, offset, count, stride, end, cursor and extent rules.
+  `MapLayoutPlan::bind` uses its checked intermediate results to produce constant
+  expressions and fixed child envelopes while retaining definition identity.
+- `hw-model-schema/src/export/schema`: common preparation of records, registers,
+  structural bank topology, symbolic plans and concrete instances. Renderers use
+  prepared references and child names/identities instead of invoking raw definition
+  callbacks. `SymbolScope` provides shared collision bookkeeping; target escaping
+  and naming rules remain backend-owned.
+- `hw-model-schema/src/export/visit` and the common walker: definition/member,
+  field/enum, bank/instance and geometry callback ordering. Renderers own syntax,
+  identifier rules, section assembly and artifact boundaries only.
+- `hw-model-schema-macros/src/internal/expand/graph`: generated definition metadata.
+  No catalog attribute, scope DSL or source scanner is required.
+- `contract/src/bin/header/mod.rs`: selects protocol records and explicit Host and
+  firmware permission views before common generation.
+- `contract/src/bin/rtl_layout/mod.rs`: selects DMA roots and consumes generic
+  Veryl artifacts without application address formulas.
+- `examples/register_listing.rs` and `tests/fixtures/schema-discovery`: custom
+  renderers formatting register and dependency-reference callbacks respectively,
+  with no builtin backend feature enabled.
+
+Discovery uses optional `inventory` registrations and remains independent of
+manual selection. It sees compiled and linked definitions, including private
+ones; selection is generator policy, not an access-control mechanism. Producers
+must describe one deterministic definition per Rust type. The standalone discovery
+fixture covers renamed facade imports, cross-crate unused definitions, repeated
+references and release/LTO registration.
+
+Version 0.2 is intentional: generated metadata calls require a matching facade.
+The facade pins its macro version rather than permitting the published 0.1 facade
+to resolve incompatible macros through its old caret dependency. Existing codecs
+and ordinary Rust imports retain their responsibilities.
 
 ## Reproducing checks before publication
 
@@ -78,35 +129,79 @@ Exit that review shell before using the normal Cargo home again. Remove the
 task-owned `$schema_preview` directory after preserving any desired logs. Do not
 copy the preview patch configuration into the repository or publish from it.
 
-## Backend boundaries for review
+## Review and validation boundaries
 
-The C graph backend renders record/union/bits definitions; register maps use the
-existing resolved-view exporter, so a graph traversal cannot bypass application
-permission projection. The Veryl backend emits geometry and metadata, not hardware
-state/effects. Map argument expressions support a documented portable arithmetic
-subset; arbitrary Rust functions remain explicit unsupported metadata. Generated
-Veryl geometry functions assume validated static parameters. Wide metadata does
-not expand the DMA RTL's currently supported 32-bit register aperture.
+Review the public prepared representation, shared child/layout validation,
+parameter binding, dependency traversal, error atomicity and target naming.
+Concrete C generation renders values from a bound plan; symbolic Veryl generation
+renders formulas from the same plan. Custom renderers must not reconstruct those
+rules. Existing record codecs, register access behavior and permission projection
+remain independent of generation.
 
-## Pause checkpoint
+Veryl output describes geometry and metadata, not state, bus behavior or side
+effects. Symbolic arguments use the portable arithmetic subset; arbitrary Rust
+expressions are explicit preparation errors. Generated formulas assume valid
+static parameters, so concrete instances must pass the common checked evaluator.
+64-bit metadata does not expand the DMA RTL's supported register aperture.
 
-Validated with the explicit preview configuration above:
+The commands above define the review checks; historical test totals from earlier
+exporter implementations are not evidence for this redesigned interface. Capture
+fresh command output for workspace tests, Clippy, doctests, generator freshness,
+standalone fixtures and native RTL runs. The independent default-feature listing
+must still show `channels[0].status` at offset 0 and `channels[1].status` at offset
+16. The discovery fixture must retain both repeated reference edges in its DOT
+artifact. Strict C consumers and RTL tests validate the generated artifacts through
+their real downstream surfaces.
 
-- Workspace default: 1212 tests passed; all-features: 1267 passed, no failures or
-  ignored tests in either run (Rust test totals, including doctests).
-- Workspace Clippy with warnings denied passed. Rustdoc with warnings denied,
-  all features and private items passed.
-- Both generators' freshness checks passed; contract tests include the strict
-  C11 header consumer and independent ABI layout assertions.
-- Native Veryl CC and Cranelift: 7 design tests passed on each backend.
-- Cross-crate discovery/custom DOT backend passed in release/LTO; the existing
-  independent C exporter and access-tree fixtures each passed their consumer test.
-- Default DMA dependency tree contains neither inventory nor Tokio.
+Publication and the registry-only 0.2 dependency transition remain deferred until
+user approval. After authorized publication, regenerate lockfiles without the
+preview patch and verify resolved source IDs from PDMA roots. Do not use this
+review configuration as the normal workspace build.
 
-Next session: review the public graph/instance API, the optional discovery
-boundary, generated metadata completeness and backend ergonomics. The definition
-graph and symbolic map evaluator are additions, not replacements for the existing
-runtime layouts/codecs. Inspect `header/mod.rs` and `rtl_layout/mod.rs` as the two
-real consumers. Publication and switching the normal build back to registry-only
-0.2 resolution remain explicitly deferred until user approval. After publication,
-regenerate lockfiles without the preview patch and verify source IDs from PDMA roots.
+## Visitor revision review
+
+Both builtin renderers now receive the same structural callbacks. The common
+walker owns definition, member, field, enum, bank, parameter, placement and child
+call ordering. Neither backend has a whole-definition render entry point or a
+private expression walker. Target name preflight, documentation text and scalar
+byte-accessor formatting remain target-owned.
+
+Review also corrected grouping of nested bank instances and parenthesized Veryl
+maximum expressions before their use as operands. Tests cover callback order,
+custom expression syntax, enum emission counts, projected permissions, typed
+errors and atomic artifact publication. Existing compile-fail expectations remain
+unchanged. Source files in the shared exporter and both backends stay below 250
+pure LOC. No production model behavior or protocol layout was changed.
+
+Final validation of this visitor revision used the temporary preview configuration:
+
+- Workspace default: 1233 passed; all-features: 1301 passed; zero failed or ignored.
+- Workspace Clippy and Rustdoc with warnings denied, plus Rust/Veryl formatting,
+  passed.
+- Both real generators passed freshness checks. The visitor migration preserved
+  all three C headers byte-for-byte relative to the preceding prepared-schema
+  revision.
+- Native Veryl CC and Cranelift each passed all 7 register-slice tests.
+- Strict C consumers, the independent downstream renderer fixture, default-feature
+  register listing and release/LTO discovery fixture passed.
+
+All validation processes completed. The external preview cache and ignored evidence
+logs remain available for review. No commit, push or publication was performed for
+this revision.
+
+## Backend callback consolidation
+
+The follow-up cleanup removes private methods that merely mirror Renderer
+callbacks. Veryl geometry is formatted directly in `veryl/visitor.rs`; its former
+`geometry.rs` is deleted. C callbacks likewise own node formatting and section
+boundaries. C's former bits/geometry helper modules are folded into naming and
+scope handling. Shared helpers retain concrete responsibilities: typed constants,
+symbol validation, register metadata and complete scalar byte accessors.
+No new callback trait, dispatch layer or public API was introduced.
+
+Cleanup validation passed 329 schema tests with all features, 10 contract
+generator/C-consumer tests, strict schema Clippy and workspace formatting.
+Both real generator freshness checks passed; all three headers and the Veryl
+layout remain byte-identical to the preceding visitor revision. Existing native
+RTL evidence applies to those unchanged generated bytes. Backend Rust files stay
+below 250 pure LOC. This cleanup remains uncommitted and unpublished.

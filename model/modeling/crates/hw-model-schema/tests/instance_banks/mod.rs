@@ -5,6 +5,39 @@ mod contiguous;
 mod export;
 mod routing;
 
+#[test]
+fn enclosing_banks_preserve_topology_after_all_registers_are_hidden()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Given: permission projection hides every register but retains bank topology.
+    let map = Nested::new(3, 1)?.resolve()?.project_access(|_| None)?;
+    // When: a backend requests the enclosing banks of a nested singleton leaf.
+    let ancestors: Vec<_> = map
+        .enclosing_banks("Nested.groups[2].lanes[0].word")
+        .map(|(position, bank, instance)| (position, bank.path(), instance))
+        .collect();
+    // Then: ancestry uses declaration identity, including empty and singleton banks.
+    assert_eq!(
+        ancestors,
+        [(0, "Nested.groups", 2), (3, "Nested.groups[2].lanes", 0)]
+    );
+    assert!(
+        map.enclosing_banks("Nested.groups[3].word")
+            .next()
+            .is_none()
+    );
+    assert!(
+        map.enclosing_banks("Nested.groups_extra[0].word")
+            .next()
+            .is_none()
+    );
+    assert!(
+        map.enclosing_banks("Nested.groups[0]suffix")
+            .next()
+            .is_none()
+    );
+    Ok(())
+}
+
 register_schema! { pub register Word {
     width: 4, endian: Little, access: ReadWrite,
     reset: Constant(0), writable_mask: 0xffff_ffff, fields: {},

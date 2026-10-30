@@ -1,6 +1,21 @@
 //! Format-neutral, owned artifact export vocabulary.
 
 use core::{convert::Infallible, fmt};
+mod symbols;
+pub use symbols::{SymbolCollision, SymbolScope};
+mod schema;
+mod visit;
+mod walk;
+pub use schema::{
+    BankView, Bindings, ExportId, ExportPathSegment, PreparationError, PreparedBody,
+    PreparedDefinition, PreparedMap, PreparedReference, PreparedSchema, RegisterMapView,
+    RegisterView, SchemaKind,
+};
+pub use visit::{
+    BitField, ChildCall, DefinitionHeader, EnumSite, ExpressionReference, FieldOwner,
+    GeometryAssignment, GeometryMember, GeometrySignature, PlacementProperty, RegisterLocation,
+    RegisterNode, Renderer,
+};
 
 /// Built-in artifact renderers enabled by format-specific crate features.
 #[cfg(any(feature = "export-c-header", feature = "export-veryl-layout"))]
@@ -26,24 +41,30 @@ pub trait ArtifactSink {
     fn emit(&mut self, artifact: Artifact) -> Result<(), Self::Error>;
 }
 
-/// Renders one schema value into artifacts through an application-provided sink.
-pub trait Exporter<S> {
-    /// Failure while rendering the schema, independent of artifact storage.
-    type Error;
-
-    /// Emits this exporter's artifacts for `schema` into `sink`.
-    fn export<Sink>(
-        &self,
-        schema: &S,
-        sink: &mut Sink,
-    ) -> Result<(), ExportError<Self::Error, Sink::Error>>
-    where
-        Sink: ArtifactSink;
+/// Drives every renderer through the same prepared definition traversal.
+///
+/// # Errors
+/// Render failures emit no artifacts. A sink failure retains any artifacts it
+/// previously accepted; storage rollback belongs to the sink.
+pub fn generate<R: Renderer, S: ArtifactSink>(
+    schema: &PreparedSchema,
+    mut renderer: R,
+    sink: &mut S,
+) -> Result<(), ExportError<R::Error, S::Error>> {
+    for definition in schema.definitions() {
+        walk::definition(&mut renderer, definition)?;
+    }
+    for artifact in renderer.finish().map_err(ExportError::Render)? {
+        sink.emit(artifact).map_err(ExportError::Sink)?;
+    }
+    Ok(())
 }
 
 /// Rendering or storage failure retaining the error owned by its origin.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExportError<R, S> {
+    /// Invalid expression scope encountered by the common walker.
+    Layout(crate::graph::LayoutError),
     /// The renderer could not produce an artifact.
     Render(R),
     /// The sink rejected an artifact.
@@ -53,6 +74,7 @@ pub enum ExportError<R, S> {
 impl<R: fmt::Display, S: fmt::Display> fmt::Display for ExportError<R, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Layout(error) => error.fmt(f),
             Self::Render(error) => error.fmt(f),
             Self::Sink(error) => error.fmt(f),
         }
@@ -64,6 +86,7 @@ impl<R: std::error::Error + 'static, S: std::error::Error + 'static> std::error:
 {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Layout(error) => Some(error),
             Self::Render(error) => Some(error),
             Self::Sink(error) => Some(error),
         }

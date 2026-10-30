@@ -203,15 +203,18 @@ fn derived_size_uses_the_codec_extent() {
 #[cfg(feature = "export-c-header")]
 #[test]
 fn opaque_field_metadata_exports_without_describing_internals() {
-    use hw_model_schema::export::backends::c_header::RecordCHeaderExporter;
-    use hw_model_schema::export::{Exporter, InMemoryArtifactSink};
+    use hw_model_schema::export::backends::c_header::CHeaderRenderer;
+    use hw_model_schema::export::{InMemoryArtifactSink, PreparedSchema, generate};
     // Given a parent containing trait-default opaque metadata.
     let resolved = WithMarker::SPEC.resolve().unwrap();
     let mut sink = InMemoryArtifactSink::new();
     // When exporting its validated layout.
-    RecordCHeaderExporter::new("opaque.h", "opaque")
-        .export(&resolved, &mut sink)
-        .unwrap();
+    generate(
+        &PreparedSchema::record("opaque.h", &resolved),
+        CHeaderRenderer::new().with_name("opaque.h", "opaque"),
+        &mut sink,
+    )
+    .unwrap();
     let artifact = sink.into_artifacts().remove(0);
     let header = String::from_utf8(artifact.contents).unwrap();
     // Then the complete parent size and known prefix survive the export.

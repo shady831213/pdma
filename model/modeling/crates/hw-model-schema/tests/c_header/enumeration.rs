@@ -1,12 +1,11 @@
 use hw_model_schema::{
     BitsFieldDefinition, BitsFieldSpec, Documentation, Endian, EnumDefinition, EnumVariantSpec,
     FieldSpec, RecordPlacement, RecordSpec, ScalarKind,
-    export::backends::c_header::{RecordCHeaderExporter, RegisterMapCHeaderExporter},
     register::{RegisterDefinition, RegisterSpec},
     register_map::{RegisterMapSpec, RepeatedRegisterBank},
 };
 
-use super::support::{TestResult, compile_fragments, render};
+use super::support::{TestResult, compile_fragments, render_map, render_record};
 
 const VARIANTS: [EnumVariantSpec; 3] = [
     EnumVariantSpec::new("idle", 0),
@@ -48,9 +47,9 @@ const MAP: RegisterMapSpec<u16> = RegisterMapSpec::new(12, &REGISTERS, &BANKS);
 #[test]
 fn record_enum_codes_and_sanitized_documentation_compile_in_c11() -> TestResult {
     // Given: nested enum metadata with sparse codes and hostile comment delimiters.
-    let exporter = RecordCHeaderExporter::new("enum.h", "record");
+    let exporter = ("enum.h", "record");
     // When: the resolved record exports its enum variants.
-    let artifact = render(&exporter, &RECORD.resolve()?)?;
+    let artifact = render_record(exporter.0, exporter.1, &RECORD.resolve()?)?;
     // Then: variant descriptions remain comments and every wire code is C-consumable.
     let text = std::str::from_utf8(&artifact.contents)?;
     assert!(text.contains("Active / * transfer * /"));
@@ -74,9 +73,9 @@ int main(void) {
 #[test]
 fn nested_record_bit_enum_exports_unshifted_codes() -> TestResult {
     // Given: an enum embedded at bit four within a nested record field.
-    let exporter = RecordCHeaderExporter::new("bits.h", "record");
+    let exporter = ("bits.h", "record");
     // When: the nested bit metadata crosses the record exporter.
-    let artifact = render(&exporter, &BIT_RECORD.resolve()?)?;
+    let artifact = render_record(exporter.0, exporter.1, &BIT_RECORD.resolve()?)?;
     // Then: named codes remain local values and hostile docs remain inert comments.
     assert!(std::str::from_utf8(&artifact.contents)?.contains("Active / * transfer * /"));
     compile_fragments(
@@ -94,9 +93,9 @@ int main(void) { return 0; }
 #[test]
 fn fixed_and_repeated_register_bit_enums_export_the_same_codes() -> TestResult {
     // Given: fixed and repeated registers sharing an enum bit definition.
-    let exporter = RegisterMapCHeaderExporter::new("map.h", "map");
+    let exporter = ("map.h", "map");
     // When: the complete register map exports its field metadata.
-    let artifact = render(&exporter, &MAP.resolve()?)?;
+    let artifact = render_map(exporter.0, exporter.1, &MAP.resolve()?)?;
     // Then: both register forms expose unshifted codes and sanitized variant docs.
     assert_eq!(
         std::str::from_utf8(&artifact.contents)?

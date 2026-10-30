@@ -1,7 +1,10 @@
 //! Cross-crate discovery plus an application-defined dependency-graph backend.
 use schema::{
-    export::{Artifact, ArtifactSink, ExportError, Exporter, InMemoryArtifactSink},
-    graph::{SchemaGraph, SchemaRegistry},
+    export::{
+        Artifact, Bindings, DefinitionHeader, ExportId, InMemoryArtifactSink, PreparedReference,
+        PreparedSchema, Renderer, generate,
+    },
+    graph::SchemaRegistry,
     record_schema,
 };
 use std::{error::Error, fmt::Write};
@@ -13,36 +16,41 @@ record_schema! {
     } }
 }
 
-/// The backend needs only the public graph and artifact interfaces; no builtin backend is enabled.
-struct DependencyGraph;
-impl Exporter<SchemaGraph> for DependencyGraph {
+/// The renderer needs only prepared references; no builtin backend is enabled.
+struct DependencyGraph {
+    text: String,
+    current: Option<ExportId>,
+}
+impl Renderer for DependencyGraph {
     type Error = std::fmt::Error;
-    fn export<Sink: ArtifactSink>(
-        &self,
-        graph: &SchemaGraph,
-        sink: &mut Sink,
-    ) -> Result<(), ExportError<Self::Error, Sink::Error>> {
-        let mut text = String::from("digraph schemas {\n");
-        for node in graph.definitions() {
-            writeln!(text, "  {:?};", node.id().path()).map_err(ExportError::Render)?;
-            for edge in node.references() {
-                writeln!(
-                    text,
-                    "  {:?} -> {:?} [label={:?}];",
-                    node.id().path(),
-                    edge.target().id().path(),
-                    edge.name()
-                )
-                .map_err(ExportError::Render)?;
-            }
-        }
-        text.push_str("}\n");
-        sink.emit(Artifact {
+    fn begin_definition(&mut self, node: DefinitionHeader<'_>) -> Result<(), Self::Error> {
+        let path = match node.id {
+            ExportId::Definition(id) => id.path(),
+            ExportId::View(name) => name,
+        };
+        writeln!(self.text, "  {path:?};")?;
+        self.current = Some(node.id.clone());
+        Ok(())
+    }
+    fn reference(&mut self, edge: &PreparedReference) -> Result<(), Self::Error> {
+        let path = match self.current.as_ref().ok_or(std::fmt::Error)? {
+            ExportId::Definition(id) => id.path(),
+            ExportId::View(name) => name,
+        };
+        writeln!(
+            self.text,
+            "  {path:?} -> {:?} [label={:?}];",
+            edge.target.path(),
+            edge.name
+        )
+    }
+    fn finish(mut self) -> Result<Vec<Artifact>, Self::Error> {
+        self.text.push_str("}\n");
+        Ok(vec![Artifact {
             logical_name: "dependencies.dot".into(),
             media_type: "text/vnd.graphviz".into(),
-            contents: text.into_bytes(),
-        })
-        .map_err(ExportError::Sink)
+            contents: self.text.into_bytes(),
+        }])
     }
 }
 
@@ -59,7 +67,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     assert_eq!(peer.definitions().count(), 2);
     assert!(peer.definitions().any(|node| node.name() == "Dormant"));
     let mut sink = InMemoryArtifactSink::new();
-    DependencyGraph.export(&graph, &mut sink)?;
+    let schema = PreparedSchema::from_graph(&graph, &Bindings::new())?;
+    generate(
+        &schema,
+        DependencyGraph {
+            text: "digraph schemas {\n".into(),
+            current: None,
+        },
+        &mut sink,
+    )?;
     let [artifact] = sink.artifacts() else {
         return Err("one graph artifact expected".into());
     };

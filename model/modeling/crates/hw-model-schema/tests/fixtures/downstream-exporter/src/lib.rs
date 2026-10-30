@@ -1,13 +1,10 @@
 //! A standalone downstream consumer of the schema facade.
 
-use core::convert::Infallible;
+mod telemetry;
+pub use telemetry::{TelemetryRenderer, TelemetrySink, export_resolved};
 
 use his::{
-    bits_schema,
-    export::{Artifact, ArtifactSink, ExportError, Exporter},
-    record_schema, register_map,
-    register_map::RegisterLocation,
-    register_schema,
+    bits_schema, record_schema, register_map, register_map::RegisterLocation, register_schema,
 };
 
 bits_schema! { pub bits DownControlBits(u8) { enable: 0..1, mode: 1..3, } }
@@ -116,99 +113,6 @@ register_map! {
             status: TelemetryStatus { offset: 12 },
             lane: TelemetryLaneMap[2] { offset: 32 },
         ],
-    }
-}
-
-/// Application-owned artifact collector with no filesystem policy.
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct TelemetrySink {
-    artifacts: Vec<Artifact>,
-}
-
-impl TelemetrySink {
-    /// Returns the artifacts in their downstream-defined emission order.
-    #[must_use]
-    pub fn artifacts(&self) -> &[Artifact] {
-        &self.artifacts
-    }
-}
-
-impl ArtifactSink for TelemetrySink {
-    type Error = Infallible;
-
-    fn emit(&mut self, artifact: Artifact) -> Result<(), Self::Error> {
-        self.artifacts.push(artifact);
-        Ok(())
-    }
-}
-
-/// Application-owned exporter that renders the telemetry register-map summary.
-#[derive(Debug, Default)]
-pub struct TelemetryExporter;
-
-/// Application-owned pair of already resolved schema graphs.
-#[derive(Debug)]
-pub struct TelemetryResolved {
-    record: his::ResolvedRecord,
-    map: his::ResolvedRegisterMap<TelemetryMapRegisterId>,
-}
-
-/// Exports fresh resolved graphs through an application-owned sink.
-pub fn export_resolved(sink: &mut TelemetrySink) -> Option<()> {
-    let resolved = TelemetryResolved {
-        record: DownPair::SPEC.resolve().ok()?,
-        map: TelemetryMap::resolve().ok()?,
-    };
-    TelemetryExporter.export(&resolved, sink).ok()
-}
-
-impl Exporter<TelemetryResolved> for TelemetryExporter {
-    type Error = Infallible;
-
-    fn export<Sink>(
-        &self,
-        schema: &TelemetryResolved,
-        sink: &mut Sink,
-    ) -> Result<(), ExportError<Self::Error, Sink::Error>>
-    where
-        Sink: ArtifactSink,
-    {
-        let records = schema
-            .record
-            .members()
-            .iter()
-            .map(|member| {
-                format!(
-                    "{}@{}+{}",
-                    member.path(),
-                    member.absolute_offset(),
-                    member.range().len()
-                )
-            })
-            .collect::<Vec<_>>()
-            .join(",");
-        let registers = schema
-            .map
-            .registers()
-            .iter()
-            .map(|register| {
-                let source = register.path();
-                let path = source.strip_prefix("TelemetryMap.").unwrap_or(source);
-                format!("{path}@{}", register.offset())
-            })
-            .collect::<Vec<_>>()
-            .join(",");
-        sink.emit(Artifact {
-            logical_name: String::from("acme-telemetry-layout.txt"),
-            media_type: String::from("text/vnd.acme.telemetry-layout"),
-            contents: format!(
-                "record_size={};record={records};map_size={};registers={registers}",
-                schema.record.size(),
-                schema.map.size()
-            )
-            .into_bytes(),
-        })
-        .map_err(ExportError::Sink)
     }
 }
 

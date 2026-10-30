@@ -17,7 +17,9 @@ pub use bits::BitsDefinition;
 pub use definition::{Definition, DefinitionBody, DefinitionId, Reference, ReferenceKind};
 pub use instance::MapInstance;
 pub use map::{
-    LayoutError, LayoutExpr, MapDefinition, MapGeometry, MapPlacement, PlacementGeometry,
+    ChildLayout, ExpressionOp, ExpressionVisitor, LayoutError, LayoutExpr, MapDefinition,
+    MapGeometry, MapLayoutPlan, MapPathSegment, MapPlacement, PlacementGeometry, PlacementPlan,
+    PlanValue, RegisterInstance,
 };
 pub use register::RegisterInfo;
 pub use set::{GraphError, SchemaGraph, SchemaSet};

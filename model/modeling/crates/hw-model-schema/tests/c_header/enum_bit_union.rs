@@ -1,8 +1,6 @@
-use hw_model_schema::{
-    bits_schema, export::backends::c_header::RecordCHeaderExporter, record_schema,
-};
+use hw_model_schema::{bits_schema, record_schema};
 
-use super::support::{TestResult, compile_fragments, render};
+use super::support::{TestResult, compile_fragments, render_record};
 
 record_schema! {
     pub record Inline {
@@ -68,14 +66,8 @@ fn bitfield_tag_constants_and_raw_word_accessors_interoperate_with_rust() -> Tes
     assert_eq!(inline.to_bytes()?, [0xb1, 0, 0x34, 0x12, 0x78, 0x56]);
     assert_eq!(named.to_bytes()?, [6, 0x0b, 0x9a, 0xbc, 0xde, 0xf0]);
     // When: their resolved metadata is exported to real C11 consumers.
-    let inline = render(
-        &RecordCHeaderExporter::new("inline.h", "inline"),
-        &Inline::SPEC.resolve()?,
-    )?;
-    let named = render(
-        &RecordCHeaderExporter::new("named.h", "named"),
-        &Named::SPEC.resolve()?,
-    )?;
+    let inline = render_record("inline.h", "inline", &Inline::SPEC.resolve()?)?;
+    let named = render_record("named.h", "named", &Named::SPEC.resolve()?)?;
     // Then: unshifted enum codes and word accessors produce the same independent wire fixtures.
     compile_fragments("enum-bit-union", &[&inline.contents, &named.contents], br"
 #include <string.h>

@@ -1,10 +1,10 @@
+use hw_model_schema::export::{PreparedSchema, generate};
 use hw_model_schema::{
-    bits_schema,
-    export::backends::c_header::{RecordCHeaderExporter, RegisterMapCHeaderExporter},
-    record_schema, register_map, register_schema,
+    bits_schema, export::backends::c_header::CHeaderRenderer, record_schema, register_map,
+    register_schema,
 };
 
-use super::support::{TestResult, compile_fragments, render};
+use super::support::{TestResult, compile_fragments, render_map, render_record};
 
 register_schema! {
     #[short_description = "Status word"]
@@ -52,10 +52,7 @@ fn long_rust_paths_export_when_actual_c_symbols_are_distinct() -> TestResult {
     // Given: repeated nesting whose Rust paths share more than 63 encoded bytes.
     let resolved = DeeplyNestedDeviceRegisterInterface::resolve()?;
     // When: rendering the generated map's short, disambiguated register symbols.
-    let artifact = render(
-        &RegisterMapCHeaderExporter::new("deep.h", "deep"),
-        &resolved,
-    )?;
+    let artifact = render_map("deep.h", "deep", &resolved)?;
     // Then: the actual symbols compile and expose the final repeated register.
     compile_fragments("deep-map", &[&artifact.contents],
         b"_Static_assert(C_DEEP_C_QUSQUTQUAQUTQUUQUS__12_OFFSET == 44, \"last register\");\nint main(void) { return C_DEEP_SIZE != 48; }\n")?;
@@ -64,13 +61,17 @@ fn long_rust_paths_export_when_actual_c_symbols_are_distinct() -> TestResult {
 
 #[test]
 fn long_actual_c_prefix_collisions_are_rejected_before_emission() -> TestResult {
-    use hw_model_schema::export::{Exporter, InMemoryArtifactSink};
+    use hw_model_schema::export::InMemoryArtifactSink;
     // Given: a prefix that consumes C11's complete significant identifier length.
     let resolved = Channels::resolve()?;
-    let exporter = RegisterMapCHeaderExporter::new("long.h", "a".repeat(64));
+    let exporter = ("long.h", "a".repeat(64));
     let mut sink = InMemoryArtifactSink::new();
     // When: rendering symbols whose distinguishing suffix lies beyond that length.
-    let result = exporter.export(&resolved, &mut sink);
+    let result = generate(
+        &PreparedSchema::register_map(exporter.0, &resolved),
+        CHeaderRenderer::new().with_name(exporter.0, exporter.1.as_ref()),
+        &mut sink,
+    );
     // Then: no artifact is emitted and the collision remains a typed error.
     assert!(matches!(
         result,
@@ -116,10 +117,7 @@ fn nested_map_descriptions_survive_macro_resolution_and_export() -> TestResult {
     // Given: one map reused singly and as a repeated placement.
     let resolved = Device::resolve()?;
     // When: its complete resolved structure is exported.
-    let artifact = render(
-        &RegisterMapCHeaderExporter::new("device.h", "device"),
-        &resolved,
-    )?;
+    let artifact = render_map("device.h", "device", &resolved)?;
     let text = std::str::from_utf8(&artifact.contents)?;
     // Then: container comments retain ownership and all six leaves retain their own text.
     assert!(text.contains("Primary channel group"));
@@ -139,7 +137,7 @@ fn nested_record_and_shared_bit_descriptions_reach_c_comments() -> TestResult {
     // Given: a nested record containing a reusable bits declaration.
     let resolved = Packet::SPEC.resolve()?;
     // When: the public exporter renders that composed schema.
-    let artifact = render(&RecordCHeaderExporter::new("packet.h", "packet"), &resolved)?;
+    let artifact = render_record("packet.h", "packet", &resolved)?;
     let text = std::str::from_utf8(&artifact.contents)?;
     // Then: placement, inherited type and bit member descriptions all survive.
     for description in [
@@ -163,10 +161,7 @@ fn ordered_repeated_registers_are_present_in_the_export() -> TestResult {
     // Given: a generated map with two instances, not legacy bank templates.
     let resolved = Channels::resolve()?;
     // When: the public C exporter consumes that map.
-    let artifact = render(
-        &RegisterMapCHeaderExporter::new("channels.h", "channels"),
-        &resolved,
-    )?;
+    let artifact = render_map("channels.h", "channels", &resolved)?;
     let text = std::str::from_utf8(&artifact.contents)?;
     // Then: each expanded register has a declaration at its own address.
     assert_eq!(

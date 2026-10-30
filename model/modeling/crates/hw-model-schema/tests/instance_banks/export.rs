@@ -1,7 +1,7 @@
 use super::*;
 use hw_model_schema::{
     RegisterWindow,
-    export::{Exporter, InMemoryArtifactSink, backends::c_header::RegisterMapCHeaderExporter},
+    export::{InMemoryArtifactSink, PreparedSchema, backends::c_header::CHeaderRenderer, generate},
 };
 use std::{fmt::Write as _, process::Command};
 
@@ -13,7 +13,11 @@ fn strict_c11_retains_nested_singleton_topology_when_members_are_hidden()
         (register.id() == NestedRegisterId::Tail).then_some(hw_model_schema::Access::ReadOnly)
     })?;
     let mut sink = InMemoryArtifactSink::new();
-    RegisterMapCHeaderExporter::new("nested.h", "nested").export(&resolved, &mut sink)?;
+    generate(
+        &PreparedSchema::register_map("nested.h", &resolved),
+        CHeaderRenderer::new().with_name("nested.h", "nested"),
+        &mut sink,
+    )?;
     let directory = std::env::var_os("SCHEMA_BANK_EVIDENCE_DIR")
         .map_or_else(
             || std::env::temp_dir().join(format!("schema-bank-nested-c11-{}", std::process::id())),
@@ -63,7 +67,11 @@ fn strict_c11_addresses_match_routing_for_runtime_counts() -> Result<(), Box<dyn
         let layout = super::contiguous::Grouped::new(count)?;
         let resolved = layout.resolve()?;
         let mut sink = InMemoryArtifactSink::new();
-        RegisterMapCHeaderExporter::new("banks.h", "banks").export(&resolved, &mut sink)?;
+        generate(
+            &PreparedSchema::register_map("banks.h", &resolved),
+            CHeaderRenderer::new().with_name("banks.h", "banks"),
+            &mut sink,
+        )?;
         let header = &sink.artifacts().first().unwrap().contents;
         let mut consumer = String::from(
             "#include <stdint.h>\n#include <stdio.h>\n#include \"banks.h\"\nint main(void) {\n",

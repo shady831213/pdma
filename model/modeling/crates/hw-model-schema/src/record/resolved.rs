@@ -119,6 +119,16 @@ impl<I: Copy> ResolvedRecord<I> {
         &self.members
     }
 
+    /// Borrows scalar placements and their definitions in depth-first declaration order.
+    pub fn scalar_members(&self) -> impl Iterator<Item = (&ResolvedMember<I>, FieldDefinition)> {
+        self.members
+            .iter()
+            .filter_map(|member| match member.kind() {
+                ResolvedMemberKind::Field { definition, .. } => Some((member, definition)),
+                ResolvedMemberKind::Record { .. } => None,
+            })
+    }
+
     /// Returns a checked immutable root-record view.
     pub fn view<'a>(&self, bytes: &'a [u8]) -> Result<&'a [u8], SchemaCodecError> {
         bytes

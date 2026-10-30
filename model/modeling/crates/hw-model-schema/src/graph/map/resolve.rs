@@ -1,5 +1,6 @@
-use super::{LayoutError, MapDefinition};
-use crate::graph::{DefinitionBody, DefinitionId};
+use super::plan::EvaluationValues;
+use super::{ChildLayout, LayoutError, MapDefinition, MapLayoutPlan};
+use crate::graph::DefinitionId;
 
 /// Concrete placement geometry linked to its reusable child definition.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,68 +35,63 @@ pub struct MapGeometry {
 impl MapDefinition {
     /// Resolves the same aligned, noninterleaved bank geometry as generated constructors.
     pub fn resolve(&self, arguments: &[usize]) -> Result<MapGeometry, LayoutError> {
-        self.resolve_inner(arguments, &mut Vec::new())
+        self.layout_plan()?.evaluate(arguments)
     }
-    fn resolve_inner(
+}
+impl MapLayoutPlan {
+    /// Evaluates the plan with checked arithmetic and validates every occupied envelope.
+    pub fn evaluate(&self, arguments: &[usize]) -> Result<MapGeometry, LayoutError> {
+        self.evaluate_values(arguments)
+            .map(|(geometry, _)| geometry)
+    }
+    pub(super) fn evaluate_values(
         &self,
         arguments: &[usize],
-        ancestors: &mut Vec<DefinitionId>,
-    ) -> Result<MapGeometry, LayoutError> {
+    ) -> Result<(MapGeometry, Vec<EvaluationValues>), LayoutError> {
         if arguments.len() != self.parameters.len() {
             return Err(LayoutError::Arguments);
         }
-        if !self.alignment.is_power_of_two() {
-            return Err(LayoutError::Geometry);
-        }
-        let mut cursor = 0;
+        let mut values = EvaluationValues::default();
         let mut placements = Vec::new();
         let mut occupied = Vec::new();
-        for placement in &self.placements {
-            let target = placement.reference.target();
-            if ancestors.contains(&target.id()) {
-                return Err(LayoutError::Cycle(target.id().path().to_owned()));
-            }
-            let bindings: Vec<_> = placement
-                .arguments
-                .iter()
-                .map(|expression| expression.evaluate(self.parameters, arguments))
-                .collect::<Result<_, _>>()?;
-            let (alignment, extent) = match target.body() {
-                DefinitionBody::Register(register) if bindings.is_empty() => {
-                    (register.alignment(), register.width())
+        let mut evaluated = Vec::new();
+        for planned in &self.placements {
+            let (alignment, extent, bindings) = match &planned.child {
+                ChildLayout::Fixed { alignment, extent } => {
+                    (*alignment, *extent, planned.resolved_arguments.clone())
                 }
-                DefinitionBody::RegisterMap(map) => {
-                    ancestors.push(target.id());
-                    let geometry = map.resolve_inner(&bindings, ancestors)?;
-                    ancestors.pop();
-                    (geometry.alignment, geometry.extent)
+                ChildLayout::Call {
+                    arguments: expressions,
+                    plan,
+                } => {
+                    let bindings = expressions
+                        .iter()
+                        .map(|expression| expression.evaluate(self.parameters, arguments))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let geometry = plan.evaluate(&bindings)?;
+                    (geometry.alignment, geometry.extent, bindings)
                 }
-                DefinitionBody::Opaque(spec) if bindings.is_empty() => {
-                    (spec.alignment(), spec.size())
-                }
-                DefinitionBody::Bits(_)
-                | DefinitionBody::Record(_)
-                | DefinitionBody::Union { .. }
-                | DefinitionBody::Register(_)
-                | DefinitionBody::Opaque(_) => return Err(LayoutError::Geometry),
             };
-            if !alignment.is_power_of_two()
-                || !self.alignment.is_multiple_of(alignment)
-                || extent == 0
-            {
+            if extent == 0 {
                 return Err(LayoutError::Geometry);
             }
-            let offset = match placement.offset {
-                Some(value) => value,
-                None => crate::checked_align_up(cursor, alignment).ok_or(LayoutError::Geometry)?,
-            };
-            let count = placement.count.evaluate(self.parameters, arguments)?;
-            let stride = crate::checked_align_up(extent, alignment).ok_or(LayoutError::Geometry)?;
-            if count == 0 || !offset.is_multiple_of(alignment) {
+            values.alignment = alignment;
+            values.extent = extent;
+            let inputs = (self.parameters, arguments);
+            values.offset = values.evaluate(&planned.offset, inputs)?;
+            values.count = values.evaluate(&planned.count, inputs)?;
+            values.stride = values.evaluate(&planned.stride, inputs)?;
+            if values.count == 0 || !values.offset.is_multiple_of(alignment) {
                 return Err(LayoutError::Geometry);
             }
-            let end = crate::checked_placement_end(offset, count, stride, extent)
-                .ok_or(LayoutError::Geometry)?;
+            values.end = values.evaluate(&planned.end, inputs)?;
+            let EvaluationValues {
+                offset,
+                count,
+                stride,
+                end,
+                ..
+            } = values;
             if occupied
                 .iter()
                 .any(|(start, stop)| offset < *stop && end > *start)
@@ -103,10 +99,11 @@ impl MapDefinition {
                 return Err(LayoutError::Overlap);
             }
             occupied.push((offset, end));
-            cursor = cursor.max(end);
+            values.cursor = values.evaluate(&planned.cursor, inputs)?;
+            evaluated.push(values);
             placements.push(PlacementGeometry {
-                name: placement.reference.name(),
-                definition: target.id(),
+                name: planned.reference.name(),
+                definition: planned.child_definition,
                 arguments: bindings,
                 offset,
                 count,
@@ -114,14 +111,17 @@ impl MapDefinition {
                 extent,
             });
         }
-        let extent = self.extent.unwrap_or(cursor);
-        if cursor > extent {
+        let extent = values.evaluate(&self.extent, (self.parameters, arguments))?;
+        if values.cursor > extent {
             return Err(LayoutError::Geometry);
         }
-        Ok(MapGeometry {
-            alignment: self.alignment,
-            extent,
-            placements,
-        })
+        Ok((
+            MapGeometry {
+                alignment: self.alignment,
+                extent,
+                placements,
+            },
+            evaluated,
+        ))
     }
 }

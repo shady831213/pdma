@@ -1,6 +1,7 @@
 use hw_model_schema::{
-    export::backends::c_header::{RecordCHeaderExporter, RegisterMapCHeaderExporter},
-    export::{Artifact, ArtifactSink, ExportError, Exporter},
+    export::backends::c_header::CHeaderRenderer,
+    export::{Artifact, ArtifactSink, Bindings, ExportError, PreparedSchema, generate},
+    graph::{Definition, SchemaSet},
     register::RegisterSpec,
     register_map::RegisterMapSpec,
 };
@@ -40,13 +41,9 @@ impl ArtifactSink for RejectingStorage {
     }
 }
 
-fn retains_storage_error<S>(
-    exporter: &impl Exporter<S, Error: Error + 'static>,
-    schema: &S,
-) -> super::support::TestResult {
+fn retains_storage_error(schema: &PreparedSchema) -> super::support::TestResult {
     let mut sink = RejectingStorage { attempts: 0 };
-    let error = exporter
-        .export(schema, &mut sink)
+    let error = generate(schema, CHeaderRenderer::new(), &mut sink)
         .err()
         .ok_or("sink unexpectedly accepted")?;
     assert_eq!(
@@ -73,9 +70,8 @@ fn retains_storage_error<S>(
 fn record_export_preserves_independent_non_clone_sink_error() -> super::support::TestResult {
     // Given: a resolved record and an exporter unrelated to the storage error type.
     let schema = super::support::RECORD.resolve().unwrap();
-    let exporter = RecordCHeaderExporter::new("record.h", "record");
     // When/Then: rejecting storage receives one artifact and returns its exact typed cause.
-    retains_storage_error(&exporter, &schema)
+    retains_storage_error(&PreparedSchema::record("record", &schema))
 }
 
 #[test]
@@ -83,7 +79,17 @@ fn register_map_export_preserves_independent_non_clone_sink_error() -> super::su
     // Given: a resolved register map and the same independent storage error type.
     const REGISTERS: [RegisterSpec<u8>; 1] = [RegisterSpec::new(0, "status", 0, 4)];
     let schema = RegisterMapSpec::new(4, &REGISTERS, &[]).resolve().unwrap();
-    let exporter = RegisterMapCHeaderExporter::new("map.h", "map");
     // When/Then: rejecting storage receives one artifact and returns its exact typed cause.
-    retains_storage_error(&exporter, &schema)
+    retains_storage_error(&PreparedSchema::register_map("map", &schema))
+}
+
+#[test]
+fn graph_export_preserves_independent_non_clone_sink_error() -> super::support::TestResult {
+    // Given: a selected record graph uses the same independent storage error type.
+    let mut schemas = SchemaSet::new();
+    schemas.add_definition(Definition::opaque::<()>(super::support::RECORD));
+    let graph = schemas.resolve()?;
+
+    // When/Then: graph export returns the original sink failure after one attempt.
+    retains_storage_error(&PreparedSchema::from_graph(&graph, &Bindings::new())?)
 }

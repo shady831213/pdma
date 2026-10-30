@@ -1,10 +1,12 @@
 use hw_model_schema::{
     FieldSpec, RecordPlacement, RecordSpec, ScalarKind,
-    export::backends::c_header::{CHeaderExportError, RecordCHeaderExporter},
-    export::{Artifact, ArtifactSink, ExportError, Exporter},
+    export::backends::c_header::{CHeaderExportError, CHeaderRenderer},
+    export::{Artifact, ArtifactSink, ExportError, PreparedSchema, generate},
 };
 
-use super::support::{NESTED_C_MAIN, PREFIX_C_MAIN, RECORD, TestResult, compile_fragments, render};
+use super::support::{
+    NESTED_C_MAIN, PREFIX_C_MAIN, RECORD, TestResult, compile_fragments, render_record,
+};
 
 const RECORD_GOLDEN: &[u8] = include_bytes!("../golden/c_header_record.h");
 
@@ -26,12 +28,12 @@ const LONG_COLLISION_RECORD: RecordSpec =
 #[test]
 fn c_header_record_is_exact_and_deterministic_when_rendered_twice() -> TestResult {
     // Given: a non-PDMA record with gaps and both byte orders.
-    let exporter = RecordCHeaderExporter::new("packet.fragment.h", "Lab-9 packet");
+    let exporter = ("packet.fragment.h", "Lab-9 packet");
 
     // When: the record is exported twice through the format-neutral interface.
     let resolved = RECORD.resolve()?;
-    let first = render(&exporter, &resolved)?;
-    let second = render(&exporter, &resolved)?;
+    let first = render_record(exporter.0, exporter.1, &resolved)?;
+    let second = render_record(exporter.0, exporter.1, &resolved)?;
 
     // Then: both owned UTF-8 artifacts exactly match the reviewed golden fragment.
     assert_eq!(first, second);
@@ -45,10 +47,10 @@ fn c_header_record_is_exact_and_deterministic_when_rendered_twice() -> TestResul
 fn c_header_nested_record_uses_resolved_paths_and_absolute_offsets() -> TestResult {
     // Given: one reusable record definition placed twice under a named root.
     let resolved = NESTED_RECORD.resolve()?;
-    let exporter = RecordCHeaderExporter::new("nested", "nested");
+    let exporter = ("nested", "nested");
 
     // When: the resolved graph is rendered and compiled as strict C11.
-    let artifact = render(&exporter, &resolved)?;
+    let artifact = render_record(exporter.0, exporter.1, &resolved)?;
     compile_fragments("nested", &[&artifact.contents], NESTED_C_MAIN)?;
 
     // Then: repeated paths name distinct fields at their absolute offsets.
@@ -91,11 +93,15 @@ impl ArtifactSink for CountingSink {
 fn c_header_resolved_collision_is_typed_before_sink_emission() -> TestResult {
     // Given: distinct resolved paths whose C11-significant prefixes are identical.
     let resolved = LONG_COLLISION_RECORD.resolve()?;
-    let exporter = RecordCHeaderExporter::new("collision", "collision");
+    let exporter = ("collision", "collision");
     let mut sink = CountingSink::default();
 
     // When: the real public exporter projects the resolved graph into its C namespace.
-    let result = exporter.export(&resolved, &mut sink);
+    let result = generate(
+        &PreparedSchema::record(exporter.0, &resolved),
+        CHeaderRenderer::new().with_name(exporter.0, exporter.1.as_ref()),
+        &mut sink,
+    );
 
     // Then: collision validation reports both paths and never reaches the sink.
     let expected = CHeaderExportError::NameCollision {
@@ -120,11 +126,15 @@ fn c_header_resolved_collision_is_typed_before_sink_emission() -> TestResult {
 fn c_header_sink_rejection_is_typed_and_emits_no_partial_artifact() -> TestResult {
     // Given: a valid resolved record and a sink that rejects before accepting bytes.
     let resolved = RECORD.resolve()?;
-    let exporter = RecordCHeaderExporter::new("rejected", "rejected");
+    let exporter = ("rejected", "rejected");
     let mut sink = RejectingSink::default();
 
     // When: the resolved graph is exported through the rejecting sink.
-    let result = exporter.export(&resolved, &mut sink);
+    let result = generate(
+        &PreparedSchema::record(exporter.0, &resolved),
+        CHeaderRenderer::new().with_name(exporter.0, exporter.1.as_ref()),
+        &mut sink,
+    );
 
     // Then: the exact sink variant escapes and no artifact was accepted.
     assert_eq!(result, Err(ExportError::Sink(17)));
@@ -141,10 +151,10 @@ fn c_header_sink_rejection_is_typed_and_emits_no_partial_artifact() -> TestResul
 #[test]
 fn c_header_symbol_prefix_is_portable_when_caller_name_contains_special_characters() -> TestResult {
     // Given: a caller prefix beginning with a digit and containing repeated punctuation.
-    let exporter = RecordCHeaderExporter::new("special", "9 weird--name!");
+    let exporter = ("special", "9 weird--name!");
 
     // When: the record crosses the generic C naming boundary.
-    let artifact = render(&exporter, &RECORD.resolve()?)?;
+    let artifact = render_record(exporter.0, exporter.1, &RECORD.resolve()?)?;
 
     // Then: the fragment uses the deterministic sanitized C identifier.
     assert!(
@@ -158,14 +168,17 @@ fn c_header_symbol_prefix_is_portable_when_caller_name_contains_special_characte
 #[test]
 fn c_header_keeps_independent_prefixes_collision_free_in_one_translation_unit() -> TestResult {
     // Given: separately rendered fragments whose punctuation and case used to normalize equally.
-    let punctuation = RecordCHeaderExporter::new("punctuation", "a-b");
-    let underscore = RecordCHeaderExporter::new("underscore", "a_b");
-    let uppercase = RecordCHeaderExporter::new("uppercase", "A_B");
+    let punctuation = ("punctuation", "a-b");
+    let underscore = ("underscore", "a_b");
+    let uppercase = ("uppercase", "A_B");
     let resolved = RECORD.resolve()?;
-    let first = render(&punctuation, &resolved)?;
-    let second = render(&underscore, &resolved)?;
-    let third = render(&uppercase, &resolved)?;
-    assert_eq!(first, render(&punctuation, &resolved)?);
+    let first = render_record(punctuation.0, punctuation.1, &resolved)?;
+    let second = render_record(underscore.0, underscore.1, &resolved)?;
+    let third = render_record(uppercase.0, uppercase.1, &resolved)?;
+    assert_eq!(
+        first,
+        render_record(punctuation.0, punctuation.1, &resolved)?
+    );
 
     // When: all independently rendered fragments share one strict C11 translation unit.
     compile_fragments(

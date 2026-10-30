@@ -1,13 +1,9 @@
 use hw_model_schema::{
-    bits_schema,
-    export::backends::c_header::{RecordCHeaderExporter, RegisterMapCHeaderExporter},
-    record_schema,
-    register::RegisterSpec,
-    register_map::RegisterMapSpec,
+    bits_schema, record_schema, register::RegisterSpec, register_map::RegisterMapSpec,
     register_schema,
 };
 
-use super::support::{TestResult, compile_fragments, render};
+use super::support::{TestResult, compile_fragments, render_map, render_record};
 
 bits_schema! {
     pub bits Codes(u8) {
@@ -47,8 +43,8 @@ fn generated_enums_reach_real_c_consumers_from_each_embedding() -> TestResult {
     let record = Packet::SPEC.resolve()?;
     let map = MAP.resolve()?;
     // When: both resolved schemas cross their public C exporters.
-    let record_artifact = render(&RecordCHeaderExporter::new("packet.h", "packet"), &record)?;
-    let map_artifact = render(&RegisterMapCHeaderExporter::new("map.h", "map"), &map)?;
+    let record_artifact = render_record("packet.h", "packet", &record)?;
+    let map_artifact = render_map("map.h", "map", &map)?;
     // Then: generated metadata retains the same numeric codes and safe descriptions.
     for artifact in [&record_artifact, &map_artifact] {
         assert!(std::str::from_utf8(&artifact.contents)?.contains("Active / * state * /"));

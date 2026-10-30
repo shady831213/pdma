@@ -1,11 +1,10 @@
 use hw_model_schema::{
     BitsFieldDefinition, BitsFieldSpec, Documentation, Endian, FieldSpec, RecordSpec, ScalarKind,
-    export::backends::c_header::{RecordCHeaderExporter, RegisterMapCHeaderExporter},
     register::{RegisterDefinition, RegisterSpec},
     register_map::{RegisterMapSpec, RepeatedRegisterBank},
 };
 
-use super::support::{TestResult, compile_fragments, render};
+use super::support::{TestResult, compile_fragments, render_map, render_record};
 
 const DETAILS: Documentation = Documentation {
     short_description: Some("Transfer length"),
@@ -56,9 +55,9 @@ const MAP: RegisterMapSpec<u16> =
 #[test]
 fn record_comments_follow_the_described_declaration() -> TestResult {
     // Given: record and member descriptions independent of their layout.
-    let exporter = RecordCHeaderExporter::new("record.h", "request");
+    let exporter = ("record.h", "request");
     // When: the resolved record is rendered by the public exporter.
-    let artifact = render(&exporter, &RECORD.resolve()?)?;
+    let artifact = render_record(exporter.0, exporter.1, &RECORD.resolve()?)?;
     let text = std::str::from_utf8(&artifact.contents)?;
     // Then: root and member comments precede their unchanged C declarations.
     assert!(
@@ -83,9 +82,9 @@ fn record_comments_follow_the_described_declaration() -> TestResult {
 #[test]
 fn register_comments_preserve_placement_fallback_bits_and_banks() -> TestResult {
     // Given: documented register placements with an inherited detailed description.
-    let exporter = RegisterMapCHeaderExporter::new("map.h", "device");
+    let exporter = ("map.h", "device");
     // When: fixed registers and repeated banks are exported together.
-    let artifact = render(&exporter, &MAP.resolve()?)?;
+    let artifact = render_map(exporter.0, exporter.1, &MAP.resolve()?)?;
     let text = std::str::from_utf8(&artifact.contents)?;
     // Then: every ownership level and bit field remains documented.
     assert!(text.contains("Device registers"));
@@ -111,10 +110,7 @@ fn hostile_description_remains_a_comment_in_strict_c11() -> TestResult {
         description: Some("*/\n#error injected\n/*\n*\\\n/\n*??/\n/"),
     });
     // When: the described schema is rendered as a real C header.
-    let artifact = render(
-        &RecordCHeaderExporter::new("hostile.h", "request"),
-        &hostile.resolve()?,
-    )?;
+    let artifact = render_record("hostile.h", "request", &hostile.resolve()?)?;
     // Then: the text cannot escape its comments, and generated access still works.
     compile_fragments(
         "description-hostile",

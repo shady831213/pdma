@@ -1,8 +1,12 @@
 use core::fmt;
 
-/// Failure while projecting a resolved C fragment.
+/// Failure rendering a C fragment or selected definition graph.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CHeaderExportError {
+    /// Formatting failed while building an artifact.
+    Format(fmt::Error),
+    /// A callback refers to unavailable target naming metadata.
+    InvalidVisit(&'static str),
     /// Two export origins share one C11-significant identifier prefix.
     NameCollision {
         /// Earlier schema path or emitted symbol.
@@ -19,6 +23,10 @@ pub enum CHeaderExportError {
 impl fmt::Display for CHeaderExportError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Format(error) => error.fmt(formatter),
+            Self::InvalidVisit(context) => {
+                write!(formatter, "invalid C formatting visit: {context}")
+            }
             Self::NameCollision {
                 first_path,
                 second_path,
@@ -32,4 +40,11 @@ impl fmt::Display for CHeaderExportError {
     }
 }
 
-impl std::error::Error for CHeaderExportError {}
+impl std::error::Error for CHeaderExportError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Format(source) => Some(source),
+            Self::InvalidVisit(_) | Self::NameCollision { .. } => None,
+        }
+    }
+}

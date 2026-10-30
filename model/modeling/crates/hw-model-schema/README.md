@@ -59,36 +59,119 @@ cross-crate discovery of unused definitions under release/LTO and a user-written
 DOT dependency-graph backend with **no builtin exporter enabled**. This is the
 tested host configuration, not a qualification of every inventory target.
 
-## Export backend extension
+## Prepared schemas and renderers
 
-`Exporter<S>` and `ArtifactSink` remain public and format-neutral. A backend
-implements one `export(&self, &S, &mut sink)` method, choosing its own error type,
-symbol names, artifact boundaries and contents. It need not use builtin rendering
-models. A dependency-graph backend can simply iterate definitions and references;
-see the standalone consumer above. Sinks own storage policy; exporters do not
-write files implicitly.
+Every target uses the same preparation and generation flow:
 
-- `export-c-header` enables `CHeaderExporter` for complete record/union/bits graphs
-  and the existing `RegisterMapCHeaderExporter` for resolved, permission-projected
-  register views. The graph exporter diagnoses unsupported register roots rather
-  than selecting parameter values or permissions itself. Name overrides are keyed
-  by definition identity; normalized symbol collisions fail before artifact emission.
-- `export-veryl-layout` enables `VerylLayoutExporter`. It emits dependency-ordered
-  packages with record geometry, register offsets/fields/permissions/byte order,
-  and symbolic map geometry functions. It never emits storage, bus behavior or
-  side effects. Output uses 64-bit geometry and must be instantiated only with
-  validated, nonzero, nonoverflowing parameters; physical bus limits belong to its
-  consumer. Generated `#[fmt(skip)]` preserves deterministic artifact checks.
+1. Select definitions with `SchemaSet` and resolve the dependency graph.
+2. Pass that graph and optional root `Bindings` to `PreparedSchema::from_graph`.
+3. Pass the prepared schema, a `Renderer` and an `ArtifactSink` to `generate`.
 
-Map definitions retain child references, bank counts, constructor arguments,
-alignment, explicit offsets and extents. Portable argument expressions currently
-include literals, parameters, constant paths, parentheses and checked addition,
-subtraction and multiplication. Other Rust expressions are retained as
-`LayoutExpr::Unsupported` and produce explicit export/evaluation errors; the
-ordinary generated Rust constructor is not restricted or executed by the exporter.
-`MapDefinition::resolve()` evaluates the portable representation and validates
-alignment, count, overlap and arithmetic. It can be compared with the original
-constructor without an application duplicating placement formulas.
+Preparation owns dependency order, layout validation, child argument binding,
+register expansion and structural bank topology. The common walker calls the
+renderer for definition headers, dependency references, record members, bit fields,
+enum variants, map banks and register instances. Geometry callbacks receive
+already formatted child expressions. A renderer supplies target syntax and names,
+then returns owned artifacts from `finish`; it does not loop over schema children,
+recurse into expressions, resolve geometry or infer bank ancestry. Callbacks have
+default implementations, so a custom renderer implements only the events it needs.
+These APIs are available with no builtin backend feature.
+
+```rust
+use hw_model_schema::{
+    register_map, register_schema,
+    graph::SchemaSet,
+    export::{Bindings, PreparedSchema},
+};
+register_schema! { pub register Status { width: 4, endian: Little,
+    access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: {} } }
+register_map! { pub map Device(n: usize) { alignment: 4,
+    placements: [pub statuses: Status[n]] } }
+let mut selected = SchemaSet::new();
+selected.add::<Device>();
+let graph = selected.resolve()?;
+let symbolic = PreparedSchema::from_graph(&graph, &Bindings::new())?;
+let mut bindings = Bindings::new();
+bindings.bind::<Device>(&[3]);
+let concrete = PreparedSchema::from_graph(&graph, &bindings)?;
+assert_eq!(symbolic.definitions().count(), concrete.definitions().count());
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`Bindings` specializes selected root maps. A definition also referenced as a
+generic dependency cannot be specialized under the same identity in one request;
+prepare a separate root request for that instance. A symbolic map retains its
+parameterized layout plan. A bound map carries the same representation with
+constant geometry, plus prepared register metadata. Binding validates the instance
+before rendering. Merely selecting a map does not choose its parameter values.
+
+For an already resolved record, use `PreparedSchema::record(name, &record)`.
+For application-selected register permissions, use
+`PreparedSchema::register_map(name, &resolved_view)`. This preserves the caller's
+permission projection; graph discovery does not create a permission policy.
+Prepared register views retain effective access, masks, documentation and bank
+topology, including banks whose members are all hidden.
+
+- `export-c-header` enables `CHeaderRenderer` for prepared records, bits,
+  registers and maps. Bound geometry renders as values; unbound geometry renders
+  the shared formulas. Definition or view identity keys name overrides.
+- `export-veryl-layout` enables `VerylRenderer` for dependency-ordered metadata
+  packages and map geometry. It emits no storage, bus behavior or side effects.
+  Geometry uses 64-bit values; physical bus limits remain consumer policy.
+
+`MapDefinition::layout_plan()` validates child kinds, arity, parameter references
+and cycles before returning the public plan. `ChildLayout` explicitly describes
+fixed envelopes or validated nested map calls, including their bindings.
+`MapLayoutPlan::evaluate(arguments)` checks count, alignment, arithmetic, overlap
+and extent. `bind(arguments)` uses those checked results to replace every geometry
+expression with a constant and each child call with its fixed envelope, retaining
+identity and documentation. `MapDefinition::resolve(arguments)` delegates to the
+same evaluator. The symbolic formula order is offset, count, stride, end, cursor
+for each placement, followed by map extent.
+
+`LayoutExpr` is the single public algebra for constructor arguments, counts and
+geometry. It contains constants, parameters, `Value(PlanValue)` references,
+addition, subtraction, multiplication, alignment and maximum operations.
+`LayoutExpr::visit` owns recursive traversal through `ExpressionVisitor`, visiting
+left then right before invoking a binary callback with the folded children.
+Checked numeric evaluation and constructor-scope validation use this same fold;
+constructor arguments reject placement intermediates. Backend formatting receives
+already folded operands and resolved symbolic references.
+
+`Renderer::expression_binary` and `expression_reference` may override operator
+and reference spelling without taking over recursion or scope resolution. Their
+defaults share C-like syntax; the builtin targets only override differing syntax,
+such as literals, identifiers and Veryl's maximum expression. A custom prefix
+notation renderer is covered by `tests/visitor.rs`.
+
+Portable macro constructor expressions support literals, parameters, constant
+paths, parentheses and checked addition, subtraction and multiplication. Other
+Rust expressions remain explicit `Unsupported` errors. The ordinary generated
+Rust constructor is not executed by preparation and is not restricted to this
+portable expression subset.
+
+`MapDefinition::registers(arguments)` provides checked register expansion for
+non-rendering consumers. `ResolvedRecord::scalar_members()` exposes record leaves,
+and `ResolvedRegisterMap::enclosing_banks(path)` exposes resolved topology.
+The common walker supplies this information through formatting callbacks, without
+requiring renderer traversal or reconstruction. `SymbolScope` shares collision bookkeeping while each target owns escaping,
+reserved words and identifier comparison rules. C uses its significant identifier
+prefix; Veryl uses the complete name. Collisions fail before artifact emission.
+
+`examples/register_listing.rs` implements a complete custom tabular renderer that
+formats register callbacks from the prepared map instance, with no builtin
+backend, child traversal or layout algorithms:
+
+```sh
+cargo run -p hw-model-schema --example register_listing
+```
+
+The discovery fixture's custom DOT renderer implements `begin_definition` and
+`reference`. The walker supplies each edge, including repeated references. Neither
+consumer traverses schema children inside its renderer.
+Generated Veryl geometry assumes valid static instance arguments: there is no
+added runtime hardware validation. Use the checked common evaluator for concrete
+instances before integrating them.
 
 ## What it owns
 
@@ -411,58 +494,48 @@ Those checks belong to the application runtime.
 ## Export without a storage policy
 
 `Artifact` is one owned `{ logical_name, media_type, contents }` result.
-`ArtifactSink` receives artifacts, and `Exporter<S>` renders a schema `S` into a caller
-provided sink. They are format-neutral: applications may define their own sinks and
-exporters without changing this crate. `ExportError<RenderError, SinkError>` keeps rendering
-and storage failures distinct and preserves each typed cause. `Exporter::Error` describes
-rendering only; sinks choose their own error type. `InMemoryArtifactSink` is infallible.
+`Renderer` formats walker events; `ArtifactSink` owns storage policy.
+`generate` finishes all rendering before emitting artifacts, so a render error
+emits none. A sink error stops emission and preserves any previously accepted
+artifacts; rollback belongs to the sink. `ExportError<RenderError, SinkError>`
+retains the original typed cause. Its `Layout` variant reports common expression
+failures independently of renderer errors. `InMemoryArtifactSink` is infallible.
 
 ```rust
 use core::convert::Infallible;
 use hw_model_schema::{
-    export::{Artifact, ArtifactSink, ExportError, Exporter},
-    register_map::RegisterMapSpec,
+    RecordSpec,
+    export::{Artifact, InMemoryArtifactSink, DefinitionHeader, PreparedSchema,
+             Renderer, generate},
 };
 
 #[derive(Default)]
-struct MemorySink(Vec<Artifact>);
-
-impl ArtifactSink for MemorySink {
+struct NameListing { names: String }
+impl Renderer for NameListing {
     type Error = Infallible;
-
-    fn emit(&mut self, artifact: Artifact) -> Result<(), Self::Error> {
-        self.0.push(artifact);
+    fn begin_definition(&mut self, definition: DefinitionHeader<'_>) -> Result<(), Self::Error> {
+        self.names.push_str(definition.name);
+        self.names.push('\n');
         Ok(())
     }
-}
-
-struct LayoutExporter;
-
-impl<I> Exporter<RegisterMapSpec<I>> for LayoutExporter
-where
-    I: Copy + Eq + 'static,
-{
-    type Error = Infallible;
-
-    fn export<Sink>(
-        &self,
-        schema: &RegisterMapSpec<I>,
-        sink: &mut Sink,
-    ) -> Result<(), ExportError<Self::Error, Sink::Error>>
-    where
-        Sink: ArtifactSink,
-    {
-        sink.emit(Artifact {
-            logical_name: String::from("layout.txt"),
-            media_type: String::from("text/plain"),
-            contents: format!("map-bytes={}", schema.size()).into_bytes(),
-        }).map_err(ExportError::Sink)
+    fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
+        Ok(vec![Artifact {
+            logical_name: "names.txt".into(),
+            media_type: "text/plain".into(),
+            contents: self.names.into_bytes(),
+        }])
     }
 }
+let record = RecordSpec::new(0, 1, &[]).resolve()?;
+let schema = PreparedSchema::record("Empty", &record);
+let mut sink = InMemoryArtifactSink::new();
+generate(&schema, NameListing::default(), &mut sink)?;
+assert_eq!(sink.artifacts().first().map(|a| a.contents.as_slice()), Some(b"Empty\n".as_slice()));
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-The sink decides whether artifacts stay in memory, go to a filesystem, or travel to
-another application boundary. The crate never writes files for an exporter.
+The sink decides whether artifacts stay in memory, go to a filesystem, or travel
+to another application boundary. The crate never writes files implicitly.
 
 ## Optional C11 fragments
 
@@ -487,8 +560,8 @@ file layout, and integration policy to the caller.
 #[cfg(feature = "export-c-header")]
 fn main() {
     use hw_model_schema::{
-        export::{Exporter, InMemoryArtifactSink},
-        export::backends::c_header::RecordCHeaderExporter,
+        export::{generate, PreparedSchema, InMemoryArtifactSink},
+        export::backends::c_header::CHeaderRenderer,
         record_schema,
     };
 
@@ -500,10 +573,11 @@ fn main() {
         }
     }
 
-    let exporter = RecordCHeaderExporter::new("header.fragment.h", "demo header");
+    let renderer = CHeaderRenderer::new().with_name("header.fragment.h", "demo header");
     let mut sink = InMemoryArtifactSink::new();
     let resolved = Header::SPEC.resolve().expect("example schema must resolve");
-    assert!(exporter.export(&resolved, &mut sink).is_ok());
+    let schema = PreparedSchema::record("header.fragment.h", &resolved);
+    assert!(generate(&schema, renderer, &mut sink).is_ok());
     let artifacts = sink.into_artifacts();
     assert_eq!(artifacts.len(), 1);
     assert_eq!(artifacts[0].logical_name, "header.fragment.h");

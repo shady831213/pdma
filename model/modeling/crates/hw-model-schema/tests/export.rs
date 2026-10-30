@@ -4,12 +4,15 @@ use core::convert::Infallible;
 
 use hw_model_schema::{
     RecordSpec, ResolvedRecord,
-    export::{Artifact, ArtifactSink, ExportError, Exporter, InMemoryArtifactSink},
+    export::{
+        Artifact, ArtifactSink, DefinitionHeader, ExportError, InMemoryArtifactSink,
+        PreparedSchema, Renderer, generate,
+    },
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LocalExportError {
-    ExporterRejected,
+    RendererRejected,
     SinkRejected,
 }
 
@@ -55,73 +58,52 @@ impl ArtifactSink for CountingSink {
     }
 }
 
-struct LocalExporter;
-
-impl Exporter<ResolvedRecord> for LocalExporter {
+#[derive(Default)]
+struct LocalRenderer {
+    record_size: Option<usize>,
+}
+impl Renderer for LocalRenderer {
     type Error = LocalExportError;
-
-    fn export<Sink>(
-        &self,
-        _schema: &ResolvedRecord,
-        sink: &mut Sink,
-    ) -> Result<(), ExportError<Self::Error, Sink::Error>>
-    where
-        Sink: ArtifactSink,
-    {
-        let logical_name = String::from("record-layout.bin");
-        let media_type = String::from("application/x-local-schema");
-        let contents = vec![0, 255, 7];
-        sink.emit(Artifact {
-            logical_name,
-            media_type,
-            contents,
-        })
-        .map_err(ExportError::Sink)?;
-        sink.emit(Artifact {
-            logical_name: String::from("record-layout.note"),
-            media_type: String::from("text/plain"),
-            contents: Vec::new(),
-        })
-        .map_err(ExportError::Sink)
+    fn begin_record(&mut self, record: &ResolvedRecord) -> Result<(), Self::Error> {
+        self.record_size = Some(record.size());
+        Ok(())
+    }
+    fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
+        let size = self.record_size.ok_or(LocalExportError::RendererRejected)?;
+        let size = u8::try_from(size).map_err(|_| LocalExportError::RendererRejected)?;
+        Ok(vec![
+            Artifact {
+                logical_name: "record-layout.bin".into(),
+                media_type: "application/x-local-schema".into(),
+                contents: vec![size, 255, 7],
+            },
+            Artifact {
+                logical_name: "record-layout.note".into(),
+                media_type: "text/plain".into(),
+                contents: Vec::new(),
+            },
+        ])
     }
 }
-
-struct RejectingExporter;
-
-impl Exporter<ResolvedRecord> for RejectingExporter {
+struct RejectingRenderer;
+impl Renderer for RejectingRenderer {
     type Error = LocalExportError;
-
-    fn export<Sink>(
-        &self,
-        _schema: &ResolvedRecord,
-        _sink: &mut Sink,
-    ) -> Result<(), ExportError<Self::Error, Sink::Error>>
-    where
-        Sink: ArtifactSink,
-    {
-        Err(ExportError::Render(LocalExportError::ExporterRejected))
+    fn begin_definition(&mut self, _definition: DefinitionHeader<'_>) -> Result<(), Self::Error> {
+        Err(LocalExportError::RendererRejected)
+    }
+    fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
+        Ok(Vec::new())
     }
 }
-
-struct InfallibleLocalExporter;
-
-impl Exporter<ResolvedRecord> for InfallibleLocalExporter {
+struct InfallibleLocalRenderer;
+impl Renderer for InfallibleLocalRenderer {
     type Error = Infallible;
-
-    fn export<Sink>(
-        &self,
-        _schema: &ResolvedRecord,
-        sink: &mut Sink,
-    ) -> Result<(), ExportError<Self::Error, Sink::Error>>
-    where
-        Sink: ArtifactSink,
-    {
-        sink.emit(Artifact {
-            logical_name: String::from("odd-content"),
-            media_type: String::from("application/x-local-schema"),
+    fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
+        Ok(vec![Artifact {
+            logical_name: "odd-content".into(),
+            media_type: "application/x-local-schema".into(),
             contents: vec![0, 255, 7],
-        })
-        .map_err(ExportError::Sink)
+        }])
     }
 }
 
@@ -131,14 +113,15 @@ const fn record_schema() -> RecordSpec {
 }
 
 #[test]
-fn downstream_local_exporter_and_sink_preserve_owned_artifacts_in_emission_order() {
+fn downstream_local_renderer_and_sink_preserve_owned_artifacts_in_emission_order() {
     // Given
-    let schema = record_schema().resolve().expect("fixture must resolve");
-    let exporter = LocalExporter;
+    let record = record_schema().resolve().expect("fixture must resolve");
+    let schema = PreparedSchema::record("record", &record);
+    let renderer = LocalRenderer::default();
     let mut sink = LocalCollectingSink::default();
 
     // When
-    let result = exporter.export(&schema, &mut sink);
+    let result = generate(&schema, renderer, &mut sink);
 
     // Then
     assert_eq!(result, Ok(()));
@@ -160,14 +143,15 @@ fn downstream_local_exporter_and_sink_preserve_owned_artifacts_in_emission_order
 }
 
 #[test]
-fn in_memory_sink_preserves_owned_odd_contents_after_exporter_locals_drop() {
+fn in_memory_sink_preserves_owned_odd_contents_after_renderer_locals_drop() {
     // Given
-    let schema = record_schema().resolve().expect("fixture must resolve");
-    let exporter = InfallibleLocalExporter;
+    let record = record_schema().resolve().expect("fixture must resolve");
+    let schema = PreparedSchema::record("record", &record);
+    let renderer = InfallibleLocalRenderer;
     let mut sink = InMemoryArtifactSink::new();
 
     // When
-    let result = exporter.export(&schema, &mut sink);
+    let result = generate(&schema, renderer, &mut sink);
 
     // Then
     assert_eq!(result, Ok(()));
@@ -184,12 +168,13 @@ fn in_memory_sink_preserves_owned_odd_contents_after_exporter_locals_drop() {
 #[test]
 fn sink_rejection_reaches_the_caller_as_the_exact_typed_error() {
     // Given
-    let schema = record_schema().resolve().expect("fixture must resolve");
-    let exporter = LocalExporter;
+    let record = record_schema().resolve().expect("fixture must resolve");
+    let schema = PreparedSchema::record("record", &record);
+    let renderer = LocalRenderer::default();
     let mut sink = RejectingSink::default();
 
     // When
-    let result = exporter.export(&schema, &mut sink);
+    let result = generate(&schema, renderer, &mut sink);
 
     // Then
     assert_eq!(
@@ -200,19 +185,20 @@ fn sink_rejection_reaches_the_caller_as_the_exact_typed_error() {
 }
 
 #[test]
-fn exporter_rejection_does_not_invoke_the_sink() {
+fn renderer_rejection_does_not_invoke_the_sink() {
     // Given
-    let schema = record_schema().resolve().expect("fixture must resolve");
-    let exporter = RejectingExporter;
+    let record = record_schema().resolve().expect("fixture must resolve");
+    let schema = PreparedSchema::record("record", &record);
+    let renderer = RejectingRenderer;
     let mut sink = CountingSink::default();
 
     // When
-    let result = exporter.export(&schema, &mut sink);
+    let result = generate(&schema, renderer, &mut sink);
 
     // Then
     assert_eq!(
         result,
-        Err(ExportError::Render(LocalExportError::ExporterRejected))
+        Err(ExportError::Render(LocalExportError::RendererRejected))
     );
     assert_eq!(sink.emitted, 0);
 }

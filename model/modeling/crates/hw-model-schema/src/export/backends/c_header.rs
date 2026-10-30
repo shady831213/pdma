@@ -1,42 +1,50 @@
-//! Generic C11 fragment exporters.
-//!
-//! This module exists only with the default-off `export-c-header` feature and remains
-//! below [`crate::export`]'s format-neutral extension boundary. Its renderers emit owned,
-//! deterministic C11 fragments through an [`crate::export::ArtifactSink`]; callers own
-//! files, include guards, and integration. See the crate-level optional-C11 example for
-//! the feature declaration and executable `RecordCHeaderExporter` workflow.
+//! C11 formatting callbacks for the common prepared-schema walker.
 
-mod documentation;
-mod enumeration;
 mod error;
-mod graph;
-mod model;
+mod fragment;
 mod naming;
 mod record;
 mod register_map;
+mod visit;
+
+use crate::export::{Artifact, ExportId};
+use std::collections::HashMap;
 
 pub use error::CHeaderExportError;
-pub use graph::{CHeaderExporter, CHeaderGraphError};
-pub use model::{
-    RecordCHeaderField, RecordCHeaderModel, RegisterCHeaderBank, RegisterCHeaderModel,
-    RegisterMapCHeaderModel,
-};
-pub use record::RecordCHeaderExporter;
-pub use register_map::RegisterMapCHeaderExporter;
 
-const C_MEDIA_TYPE: &str = "text/x-c; charset=utf-8";
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct FragmentConfig {
+/// Formats records, bits, registers and concrete or symbolic maps as C11.
+#[derive(Debug, Default)]
+pub struct CHeaderRenderer {
+    names: HashMap<ExportId, String>,
+    symbols: naming::Scope,
+    artifacts: Vec<Artifact>,
     logical_name: String,
-    symbol_prefix: String,
+    prefix: String,
+    output: fragment::Fragment,
+    record_root: &'static str,
+    map_names: register_map::MapNames,
+    geometry_names: naming::GeometryNames,
 }
 
-impl FragmentConfig {
-    fn new(logical_name: impl Into<String>, symbol_prefix: impl AsRef<str>) -> Self {
-        Self {
-            logical_name: logical_name.into(),
-            symbol_prefix: naming::c_identifier(symbol_prefix.as_ref()),
-        }
+impl CHeaderRenderer {
+    /// Creates a renderer using schema names for target symbols.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Overrides one prepared definition's target prefix.
+    #[must_use]
+    pub fn with_name(mut self, source: impl Into<ExportId>, target: &str) -> Self {
+        self.set_name(source, target);
+        self
+    }
+
+    /// Overrides one prepared definition's target prefix.
+    pub fn set_name(&mut self, source: impl Into<ExportId>, target: &str) {
+        self.names.insert(source.into(), target.into());
+    }
+
+    fn target_prefix(&self, source: &ExportId, fallback: &str) -> String {
+        naming::c_identifier(self.names.get(source).map_or(fallback, String::as_str))
     }
 }

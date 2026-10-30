@@ -1,3 +1,7 @@
+mod evaluate;
+mod visitor;
+pub use visitor::{ExpressionOp, ExpressionVisitor};
+
 /// Portable arithmetic supported by parameterized layout exporters.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LayoutExpr {
@@ -5,12 +9,18 @@ pub enum LayoutExpr {
     Constant(usize),
     /// Named parameter of the enclosing map.
     Parameter(&'static str),
+    /// A child property or previously computed placement intermediate.
+    Value(PlanValue),
     /// Checked sum.
     Add(Box<Self>, Box<Self>),
     /// Checked difference.
     Subtract(Box<Self>, Box<Self>),
     /// Checked product.
     Multiply(Box<Self>, Box<Self>),
+    /// Round the first operand up to the second operand's alignment.
+    AlignUp(Box<Self>, Box<Self>),
+    /// Greater of two values.
+    Maximum(Box<Self>, Box<Self>),
     /// Rust expressions outside the portable subset remain visible and are rejected by evaluators.
     Unsupported(&'static str),
 }
@@ -38,33 +48,21 @@ impl std::fmt::Display for LayoutError {
 }
 impl std::error::Error for LayoutError {}
 
-impl LayoutExpr {
-    /// Evaluates using explicit arguments without executing source-language expressions.
-    pub fn evaluate(&self, parameters: &[&str], arguments: &[usize]) -> Result<usize, LayoutError> {
-        if parameters.len() != arguments.len() {
-            return Err(LayoutError::Arguments);
-        }
-        match self {
-            Self::Constant(value) => Ok(*value),
-            Self::Parameter(name) => parameters
-                .iter()
-                .position(|parameter| parameter == name)
-                .and_then(|index| arguments.get(index))
-                .copied()
-                .ok_or(LayoutError::Parameter(name)),
-            Self::Add(left, right) => left
-                .evaluate(parameters, arguments)?
-                .checked_add(right.evaluate(parameters, arguments)?)
-                .ok_or(LayoutError::Geometry),
-            Self::Subtract(left, right) => left
-                .evaluate(parameters, arguments)?
-                .checked_sub(right.evaluate(parameters, arguments)?)
-                .ok_or(LayoutError::Geometry),
-            Self::Multiply(left, right) => left
-                .evaluate(parameters, arguments)?
-                .checked_mul(right.evaluate(parameters, arguments)?)
-                .ok_or(LayoutError::Geometry),
-            Self::Unsupported(source) => Err(LayoutError::Unsupported(source)),
-        }
-    }
+/// Values available while evaluating an ordered placement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlanValue {
+    /// Maximum occupied end before this placement.
+    Cursor,
+    /// Referenced child's required alignment.
+    ChildAlignment,
+    /// Referenced child's occupied extent.
+    ChildExtent,
+    /// Current placement's computed offset.
+    Offset,
+    /// Current placement's computed count.
+    Count,
+    /// Current placement's computed stride.
+    Stride,
+    /// Current placement's computed end.
+    End,
 }

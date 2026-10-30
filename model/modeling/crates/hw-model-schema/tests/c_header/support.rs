@@ -5,8 +5,8 @@ use std::{
     process::{Command, Output},
 };
 
-use hw_model_schema::export::backends::c_header::CHeaderExportError;
-use hw_model_schema::export::{Exporter, InMemoryArtifactSink};
+use hw_model_schema::export::backends::c_header::CHeaderRenderer;
+use hw_model_schema::export::{InMemoryArtifactSink, PreparedSchema, generate};
 use hw_model_schema::{Endian, FieldSpec, RecordSpec, ScalarKind};
 
 pub type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -29,12 +29,34 @@ const STRICT_C11_FLAGS: [&str; 5] = [
     "-Werror",
 ];
 
-pub fn render<S, E>(exporter: &E, schema: &S) -> TestResult<hw_model_schema::export::Artifact>
-where
-    E: Exporter<S, Error = CHeaderExportError>,
-{
+pub fn render_record(
+    name: &str,
+    prefix: &str,
+    schema: &hw_model_schema::ResolvedRecord,
+) -> TestResult<hw_model_schema::export::Artifact> {
+    render(
+        &PreparedSchema::record(name, schema),
+        CHeaderRenderer::new().with_name(name, prefix),
+    )
+}
+
+pub fn render_map<I: Copy + Eq, F: Copy + Eq + core::fmt::Debug>(
+    name: &str,
+    prefix: &str,
+    schema: &hw_model_schema::ResolvedRegisterMap<I, F>,
+) -> TestResult<hw_model_schema::export::Artifact> {
+    render(
+        &PreparedSchema::register_map(name, schema),
+        CHeaderRenderer::new().with_name(name, prefix),
+    )
+}
+
+fn render(
+    schema: &PreparedSchema,
+    renderer: CHeaderRenderer,
+) -> TestResult<hw_model_schema::export::Artifact> {
     let mut sink = InMemoryArtifactSink::new();
-    exporter.export(schema, &mut sink)?;
+    generate(schema, renderer, &mut sink)?;
     let mut artifacts = sink.into_artifacts().into_iter();
     let artifact = artifacts
         .next()

@@ -1,0 +1,75 @@
+use std::fmt::{Display, Write as _};
+
+use crate::Documentation;
+
+use super::{CHeaderExportError, naming};
+
+#[derive(Debug, Default)]
+pub(super) struct Fragment {
+    pub(super) text: String,
+    symbols: naming::Scope,
+}
+
+impl Fragment {
+    pub(super) fn define(
+        &mut self,
+        name: &str,
+        value: impl Display,
+    ) -> Result<(), CHeaderExportError> {
+        self.symbols.insert(name, name)?;
+        writeln!(self.text, "#define {name} {value}").map_err(CHeaderExportError::Format)
+    }
+
+    pub(super) fn constants<const WIDTH: usize>(
+        &mut self,
+        prefix: &str,
+        values: &[(&str, impl Display)],
+    ) -> Result<(), CHeaderExportError> {
+        for (name, value) in values {
+            self.unsigned::<WIDTH>(&format!("{prefix}_{name}"), value)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn unsigned<const WIDTH: usize>(
+        &mut self,
+        name: &str,
+        value: impl Display,
+    ) -> Result<(), CHeaderExportError> {
+        self.define(name, format_args!("UINT{WIDTH}_C({value})"))
+    }
+
+    pub(super) fn line(&mut self, line: impl Display) -> Result<(), CHeaderExportError> {
+        writeln!(self.text, "{line}").map_err(CHeaderExportError::Format)
+    }
+
+    pub(super) fn documentation(
+        &mut self,
+        name: &str,
+        docs: Documentation,
+    ) -> Result<(), CHeaderExportError> {
+        if docs == Documentation::EMPTY {
+            return Ok(());
+        }
+        self.text.push_str("/*\n");
+        for text in [
+            Some(name).filter(|name| !name.is_empty()),
+            docs.short_description,
+            docs.description,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            for line in text.lines() {
+                // Keep C preprocessing, comment delimiters and line splicing inert.
+                let line = line
+                    .replace('\\', "\\ ")
+                    .replace('?', "? ")
+                    .replace("/*", "/ *")
+                    .replace("*/", "* /");
+                self.line(format_args!(" * {line}"))?;
+            }
+        }
+        self.line(" */")
+    }
+}

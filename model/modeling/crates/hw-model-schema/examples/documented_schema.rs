@@ -7,8 +7,8 @@
 use std::io::{self, Write};
 
 use hw_model_schema::{
-    export::backends::c_header::{RecordCHeaderExporter, RegisterMapCHeaderExporter},
-    export::{Exporter, InMemoryArtifactSink},
+    export::backends::c_header::CHeaderRenderer,
+    export::{InMemoryArtifactSink, PreparedSchema, generate},
     record_schema, register_map, register_schema,
 };
 
@@ -58,10 +58,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Resolve metadata once, then export to an injected sink. No output files are
     // created: this program writes the resulting headers to standard output.
     let mut sink = InMemoryArtifactSink::new();
-    RecordCHeaderExporter::new("request.h", "copy")
-        .export(&CopyRequest::SPEC.resolve()?, &mut sink)?;
-    RegisterMapCHeaderExporter::new("channel.h", "channel")
-        .export(&Channel::resolve()?, &mut sink)?;
+    generate(
+        &PreparedSchema::record("request.h", &CopyRequest::SPEC.resolve()?),
+        CHeaderRenderer::new().with_name("request.h", "copy"),
+        &mut sink,
+    )?;
+    generate(
+        &PreparedSchema::register_map("channel.h", &Channel::resolve()?),
+        CHeaderRenderer::new().with_name("channel.h", "channel"),
+        &mut sink,
+    )?;
     let mut output = io::stdout().lock();
     output.write_all(b"#include <stdint.h>\n\n")?;
     for artifact in sink.artifacts() {

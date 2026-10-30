@@ -1,10 +1,14 @@
 //! Symbolic register-map placement rules and checked instance evaluation.
 mod expression;
+mod plan;
 mod resolve;
+mod walk;
 use super::{Definition, Reference, ReferenceKind};
 use crate::Documentation;
-pub use expression::{LayoutError, LayoutExpr};
+pub use expression::{ExpressionOp, ExpressionVisitor, LayoutError, LayoutExpr, PlanValue};
+pub use plan::{ChildLayout, MapLayoutPlan, PlacementPlan};
 pub use resolve::{MapGeometry, PlacementGeometry};
+pub use walk::{MapPathSegment, RegisterInstance};
 
 /// One ordered placement, retaining its child type and parameter bindings.
 #[derive(Debug, Clone)]

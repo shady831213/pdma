@@ -1,9 +1,12 @@
 //! Consumers can render a graph without knowing how roots were discovered.
 #![cfg(feature = "export-c-header")]
-use hw_model_schema::export::backends::c_header::CHeaderExporter;
+use hw_model_schema::export::backends::c_header::{CHeaderExportError, CHeaderRenderer};
 use hw_model_schema::{
-    export::{Exporter, InMemoryArtifactSink},
-    graph::SchemaSet,
+    Endian, RecordSpec, RegisterDefinition,
+    export::{
+        Bindings, ExportError, InMemoryArtifactSink, PreparationError, PreparedSchema, generate,
+    },
+    graph::{Definition, DefinitionId, SchemaSet},
 };
 use hw_model_schema::{record_schema, union_schema};
 
@@ -27,21 +30,24 @@ fn distinct_same_named_types_require_an_explicit_backend_name_override()
     let graph = set.resolve()?;
     // When: the default backend would emit the same C prefix twice.
     let mut sink = InMemoryArtifactSink::new();
-    let mut exporter = CHeaderExporter::new();
-    let failure = exporter.export(&graph, &mut sink);
+    let prepared = PreparedSchema::from_graph(&graph, &Bindings::new())?;
+    let failure = generate(&prepared, CHeaderRenderer::new(), &mut sink);
     // Then: no partial header is emitted; identity-based renaming resolves the collision.
-    assert!(matches!(
+    assert_eq!(
         failure,
-        Err(hw_model_schema::export::ExportError::Render(
-            hw_model_schema::export::backends::c_header::CHeaderGraphError::Render(_)
-        ))
-    ));
+        Err(ExportError::Render(CHeaderExportError::NameCollision {
+            first_path: DefinitionId::of::<left::Entry>().path().into(),
+            second_path: DefinitionId::of::<right::Entry>().path().into(),
+            first_index: 0,
+            second_index: 1,
+        }))
+    );
     assert!(sink.artifacts().is_empty());
-    exporter.set_name(
+    let renderer = CHeaderRenderer::new().with_name(
         hw_model_schema::graph::DefinitionId::of::<right::Entry>(),
         "right_entry",
     );
-    exporter.export(&graph, &mut sink)?;
+    generate(&prepared, renderer, &mut sink)?;
     assert_eq!(sink.artifacts().len(), 2);
     Ok(())
 }
@@ -54,7 +60,11 @@ fn c_header_exports_reachable_records_once() -> Result<(), Box<dyn std::error::E
     let graph = set.resolve()?;
     // When: the built-in C backend renders its complete dependency set.
     let mut sink = InMemoryArtifactSink::new();
-    CHeaderExporter::new().export(&graph, &mut sink)?;
+    generate(
+        &PreparedSchema::from_graph(&graph, &Bindings::new())?,
+        CHeaderRenderer::new(),
+        &mut sink,
+    )?;
     // Then: both storage geometry and the referenced record's accessors are present.
     let output = sink
         .artifacts()
@@ -65,5 +75,64 @@ fn c_header_exports_reachable_records_once() -> Result<(), Box<dyn std::error::E
     assert_eq!(output.matches("#define C_PAYLOAD_SIZE ").count(), 1);
     assert!(output.contains("C_PAYLOAD_LOAD_C_VALUE"));
     assert!(output.contains("#define C_MESSAGE_SIZE "));
+    Ok(())
+}
+
+struct ZInvalid;
+
+#[test]
+fn invalid_record_retains_layout_error_during_preparation() -> Result<(), Box<dyn std::error::Error>>
+{
+    // Given: a valid record precedes an opaque record with invalid alignment.
+    let malformed = RecordSpec::named("Invalid", 4, 0, &[], &[]);
+    let expected = malformed.resolve().unwrap_err();
+    let mut set = SchemaSet::new();
+    set.add_record::<Payload>();
+    set.add_definition(Definition::opaque::<ZInvalid>(malformed));
+    let graph = set.resolve()?;
+    assert_eq!(
+        graph.definitions().next().unwrap().id(),
+        DefinitionId::of::<Payload>()
+    );
+    // When: preparation resolves the later record before rendering begins.
+    let failure = PreparedSchema::from_graph(&graph, &Bindings::new());
+
+    // Then: the exact layout cause and defining path survive, with no partial output.
+    let Err(PreparationError::Record { path, source }) = failure else {
+        return Err("expected typed record layout error".into());
+    };
+    assert_eq!(path, DefinitionId::of::<ZInvalid>().path());
+    assert_eq!(source, expected);
+    Ok(())
+}
+
+#[test]
+fn graph_register_uses_prepared_register_metadata() -> Result<(), Box<dyn std::error::Error>> {
+    // Given: a valid record precedes a whole register in the selected graph.
+    let mut set = SchemaSet::new();
+    set.add_record::<Payload>();
+    set.add_definition(Definition::register::<ZInvalid, u16>(
+        RegisterDefinition::new("Control", 4, Endian::Little),
+    ));
+    let graph = set.resolve()?;
+    let mut sink = InMemoryArtifactSink::new();
+
+    // When: the common preparer supplies register metadata to the C renderer.
+    generate(
+        &PreparedSchema::from_graph(&graph, &Bindings::new())?,
+        CHeaderRenderer::new(),
+        &mut sink,
+    )?;
+
+    // Then: both selected definitions are rendered, including the register width.
+    assert_eq!(sink.artifacts().len(), 2);
+    let register = sink
+        .artifacts()
+        .iter()
+        .find(|artifact| artifact.logical_name == "control")
+        .ok_or("register artifact")?;
+    assert!(
+        std::str::from_utf8(&register.contents)?.contains("#define C_CONTROL_WIDTH UINT64_C(4)")
+    );
     Ok(())
 }

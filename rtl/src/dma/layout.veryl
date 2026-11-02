@@ -3,104 +3,248 @@
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package CommandHeaderLayout {
+    // Shared command discriminator
+    // One byte at the start of every complete command record. The protocol selects the complete union member using this opcode.
     const EXTENT: u64 = 1;
     const ALIGNMENT: u64 = 1;
+    // Command opcode
+    // Assigned opcodes 0 through 8; all other values are invalid.
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package LinearEndpointLayout {
+    // Linear copy endpoint
+    // Base address and full-width byte offset in the selected payload context.
     const EXTENT: u64 = 16;
     const ALIGNMENT: u64 = 8;
+    // Payload base
+    // Payload base address.
+    // Byte offset
+    // Full-width base-relative byte offset.
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ScatterGatherEndpointLayout {
+    // Scatter/gather copy endpoint
+    // Original list geometry and full-width starting position. Lists remain stable until retirement.
     const EXTENT: u64 = 32;
     const ALIGNMENT: u64 = 8;
+    // Original table address
+    // Original table address in the SG context.
+    // Total entry count
+    // Full-width total entry count.
+    // Starting entry
+    // Full-width original table entry index.
+    // Entry offset
+    // Full-width entry-local byte offset.
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package CopyCommandLayout {
+    // Complete independent-endpoint copy command
+    // A 96-byte command with independently selected linear or scatter/gather endpoints; both ranges are validated before writes.
     const EXTENT: u64 = 96;
     const ALIGNMENT: u64 = 8;
+    // Shared command header
+    // Copy opcode in the shared header.
+    // Independent endpoint selectors
+    // Source and destination selectors; other bits are reserved zero.
+    // Source representation
+    // Linear zero or scatter/gather one.
+    // Destination representation
+    // Linear zero or scatter/gather one.
+    // List address space
+    // Context shared by source and destination scatter/gather tables.
+    // Software identifier
+    // Identifier retained in error events.
+    // Copy byte count
+    // Selected full-width byte count.
+    // Source payload context
+    // Source payload address-space selector.
+    // Destination payload context
+    // Destination payload address-space selector.
+    // Source stream
+    // Source geometry and start; inactive bytes are zero.
+    // Destination stream
+    // Destination geometry and start; inactive bytes are zero.
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package WordTargetLayout {
+    // Shared scalar target
+    // Shared scalar target.
     const EXTENT: u64 = 16;
     const ALIGNMENT: u64 = 8;
+    // Naturally aligned little-endian word address
+    // Naturally aligned little-endian word address.
+    // Target address-space selector
+    // Target address-space selector.
+    // Word width; values and operands truncate to that width
+    // Word width; values and operands truncate to that width.
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package WordWriteLayout {
+    // Write payload; Fence additionally publishes prior channel access completion with release semantics
+    // Write payload; Fence additionally publishes prior channel access completion with release semantics.
     const EXTENT: u64 = 24;
     const ALIGNMENT: u64 = 8;
+    // Destination word
+    // Destination word.
+    // Low selected-width bits to store
+    // Low selected-width bits to store.
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package WriteCommandLayout {
+    // Complete Write command
+    // Complete Write command including shared header and software identifier.
     const EXTENT: u64 = 40;
     const ALIGNMENT: u64 = 8;
+    // Shared command header
+    // Opcode selecting this complete command.
+    // Software identifier
+    // Software identifier retained in error events.
+    // Word store
+    // Target and value of the word store.
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package FillCommandLayout {
+    // Repeated pattern fill with arbitrary byte length
+    // Repeated pattern fill with arbitrary byte length.
     const EXTENT: u64 = 48;
     const ALIGNMENT: u64 = 8;
+    // Shared command header
+    // Opcode selecting this complete command.
+    // Software identifier
+    // Software identifier retained in error events.
+    // Byte-aligned destination address
+    // Byte-aligned destination address.
+    // Byte count including any partial final pattern
+    // Byte count including any partial final pattern.
+    // Repeated low little-endian pattern bytes
+    // Repeated low little-endian pattern bytes.
+    // Destination address-space selector
+    // Destination address-space selector.
+    // Pattern width
+    // Pattern width.
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package WaitCommandLayout {
+    // Retained polling dependency; successful observation has acquire semantics
+    // Retained polling dependency; successful observation has acquire semantics.
     const EXTENT: u64 = 48;
     const ALIGNMENT: u64 = 8;
+    // Shared command header
+    // Opcode selecting this complete command.
+    // Software identifier
+    // Software identifier retained in error events.
+    // Word loaded for the comparison
+    // Word loaded for the comparison.
+    // Comparison value truncated to selected width
+    // Comparison value truncated to selected width.
+    // Reached uses signed-width modular observed minus value; software distance must remain below half range
+    // Reached uses signed-width modular observed minus value; software distance must remain below half range.
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package AtomicCommandLayout {
+    // One atomic effect with no returned-result storage
+    // One atomic effect with no returned-result storage.
     const EXTENT: u64 = 56;
     const ALIGNMENT: u64 = 8;
+    // Shared command header
+    // Opcode selecting this complete command.
+    // Software identifier
+    // Software identifier retained in error events.
+    // RMW target; requires discovered width capability
+    // RMW target; requires discovered width capability.
+    // Memory ordering for the atomic operation
+    // Memory ordering for the atomic operation.
+    // Selected atomic read-modify-write operation
+    // Selected atomic read-modify-write operation.
+    // Width-truncated bit patterns
+    // Width-truncated bit patterns. Arithmetic wraps. CAS mismatch succeeds unchanged; no software old-value destination.
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package SemaphoreCommandLayout {
+    // Atomic semaphore; requires selected-width RMW capability
+    // Atomic semaphore; requires selected-width RMW capability.
     const EXTENT: u64 = 40;
     const ALIGNMENT: u64 = 8;
+    // Shared command header
+    // Opcode selecting this complete command.
+    // Software identifier
+    // Software identifier retained in error events.
+    // Unsigned permit counter
+    // Unsigned permit counter.
+    // Signal increments with release and rejects overflow before mutation; Wait atomically consumes one positive permit with acquire
+    // Signal increments with release and rejects overflow before mutation; Wait atomically consumes one positive permit with acquire.
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package FenceCommandLayout {
+    // Complete Fence command
+    // Complete Fence command including shared header and software identifier.
     const EXTENT: u64 = 40;
     const ALIGNMENT: u64 = 8;
+    // Shared command header
+    // Opcode selecting this complete command.
+    // Software identifier
+    // Software identifier retained in error events.
+    // Word store
+    // Target and value of the word store.
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package TrapCommandLayout {
+    // Complete Trap command
+    // Complete Trap command including shared header and software identifier.
     const EXTENT: u64 = 16;
     const ALIGNMENT: u64 = 8;
+    // Shared command header
+    // Opcode selecting this complete command.
+    // Software identifier
+    // Software identifier retained in error events.
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package TimestampCommandLayout {
+    // External timer sample destination
+    // Writes one little-endian 64-bit external timer sample. A target PageFault retains the original sample until resume or cancellation; units and timer progression belong to the platform.
     const EXTENT: u64 = 32;
     const ALIGNMENT: u64 = 8;
+    // Shared command header
+    // Opcode selecting this complete command.
+    // Software identifier
+    // Software identifier retained in error events.
+    // Eight-byte-aligned destination address
+    // Eight-byte-aligned destination address for one 64-bit timer sample.
+    // Destination address-space selector
+    // Destination context, authorized through the ordinary DMA memory path and retained through command retirement.
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package CommandLayout {
+    // Complete copy-engine command union
+    // Untagged 96-byte union of complete command records. PDMA selects a member using the shared header opcode at byte zero.
     const EXTENT: u64 = 96;
     const ALIGNMENT: u64 = 8;
 }
@@ -108,47 +252,65 @@ pub package CommandLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ErrorInfoLayout {
+    // Stopping command progress
+    // Stopping command progress.
     const EXTENT: u64 = 8;
     const ALIGNMENT: u64 = 8;
+    // Committed write prefix before the stopping error; never rolled back
+    // Committed write prefix before the stopping error; never rolled back.
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package EventLayout {
+    // Error-only event
+    // Error-only event. Error stop latches before publication; ring failure escalates to channel fatal.
     const EXTENT: u64 = 24;
     const ALIGNMENT: u64 = 8;
+    // Original command identifier
+    // Original command identifier.
+    // Stopping error code
+    // Stopping error code. Zero is invalid; successful commands produce no event.
+    // Code-selected error progress
+    // Code-selected error progress.
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ChannelCountLayout {
+    // Hardware channel count
+    // Read-only count supplied by this hardware instance. Hardware initializes the value after construction and preserves it across device reset.
+    const VALUE_OFFSET: u64 = 0;
     const EXTENT: u64 = 4;
+    const VALUE_BYTES: u32 = 4;
     const ALIGNMENT: u64 = 4;
     const VALUE_ENDIAN_LITTLE: bbool = true;
-    // Hardware channel count
-    const VALUE_OFFSET: u64 = 0;
-    const VALUE_BYTES: u32 = 4;
-    const VALUE_RESET: u64 = 64'h0000000000000000;
-    const VALUE_WRITABLE: u64 = 64'h0000000000000000;
     const VALUE_READ: bbool = true;
     const VALUE_WRITE: bbool = false;
+    const VALUE_RESET: u64 = 64'h0000000000000000;
+    const VALUE_WRITABLE: u64 = 64'h0000000000000000;
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package CapabilitiesLayout {
+    // Immutable hardware RMW capabilities, preserved across reset
+    // Immutable hardware RMW capabilities, preserved across reset. Wait and Fence do not require these bits.
+    const VALUE_OFFSET: u64 = 0;
     const EXTENT: u64 = 4;
+    const VALUE_BYTES: u32 = 4;
     const ALIGNMENT: u64 = 4;
     const VALUE_ENDIAN_LITTLE: bbool = true;
-    // Immutable hardware RMW capabilities, preserved across reset
-    const VALUE_OFFSET: u64 = 0;
-    const VALUE_BYTES: u32 = 4;
-    const VALUE_RESET: u64 = 64'h0000000000000000;
-    const VALUE_WRITABLE: u64 = 64'h0000000000000000;
     const VALUE_READ: bbool = true;
     const VALUE_WRITE: bbool = false;
+    const VALUE_RESET: u64 = 64'h0000000000000000;
+    const VALUE_WRITABLE: u64 = 64'h0000000000000000;
+    // 32-bit atomic and semaphore operations are supported
+    // 32-bit atomic and semaphore operations are supported.
     const VALUE_ATOMIC32_LSB: u32 = 0;
     const VALUE_ATOMIC32_BITS: u32 = 1;
+    // 64-bit atomic and semaphore operations are supported
+    // 64-bit atomic and semaphore operations are supported.
     const VALUE_ATOMIC64_LSB: u32 = 1;
     const VALUE_ATOMIC64_BITS: u32 = 1;
 }
@@ -156,71 +318,59 @@ pub package CapabilitiesLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package DmaDiscoveryLayout {
+    // DMA discovery
+    // Read-only hardware instance configuration, independent of privileged DMA controls.
     const ALIGNMENT: u64 = 4;
-    struct Geometry {
-        extent: u64,
-        channel_num_offset: u64,
-        channel_num_count: u64,
-        channel_num_stride: u64,
-        capabilities_offset: u64,
-        capabilities_count: u64,
-        capabilities_stride: u64,
-    }
-    function geometry() -> Geometry {
-        var result: Geometry;
-        result = '0;
-        result.channel_num_offset = 0;
-        result.channel_num_count = 1;
-        result.channel_num_stride = 4;
-        result.capabilities_offset = 4;
-        result.capabilities_count = 1;
-        result.capabilities_stride = 4;
-        result.extent = 8;
-        return result;
-    }
     function channel_num_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.channel_num_offset;
+        return 0;
     }
     function channel_num_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.channel_num_count;
+        return 1;
     }
     function channel_num_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.channel_num_stride;
+        return 4;
     }
     function capabilities_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.capabilities_offset;
+        return 4;
     }
     function capabilities_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.capabilities_count;
+        return 1;
     }
     function capabilities_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.capabilities_stride;
+        return 4;
     }
+    function extent() -> u64 {
+        return 8;
+    }
+    // Implemented channel count
+    // Number of implemented channels, preserved across DMA reset.
+    // Immutable native or exclusive atomic operation support by word width
+    // Immutable native or exclusive atomic operation support by word width.
     const EXTENT: u64 = 8;
-    const CHANNEL_NUM_ENDIAN_LITTLE: bbool = true;
-    // Hardware channel count
+    // Implemented channel count
+    // Number of implemented channels, preserved across DMA reset.
     const CHANNEL_NUM_OFFSET: u64 = 0;
     const CHANNEL_NUM_BYTES: u32 = 4;
-    const CHANNEL_NUM_RESET: u64 = 64'h0000000000000000;
-    const CHANNEL_NUM_WRITABLE: u64 = 64'h0000000000000000;
+    const CHANNEL_NUM_ENDIAN_LITTLE: bbool = true;
     const CHANNEL_NUM_READ: bbool = true;
     const CHANNEL_NUM_WRITE: bbool = false;
-    const CAPABILITIES_ENDIAN_LITTLE: bbool = true;
-    // Immutable hardware RMW capabilities, preserved across reset
+    const CHANNEL_NUM_RESET: u64 = 64'h0000000000000000;
+    const CHANNEL_NUM_WRITABLE: u64 = 64'h0000000000000000;
+    // Immutable native or exclusive atomic operation support by word width
+    // Immutable native or exclusive atomic operation support by word width.
     const CAPABILITIES_OFFSET: u64 = 4;
     const CAPABILITIES_BYTES: u32 = 4;
-    const CAPABILITIES_RESET: u64 = 64'h0000000000000000;
-    const CAPABILITIES_WRITABLE: u64 = 64'h0000000000000000;
+    const CAPABILITIES_ENDIAN_LITTLE: bbool = true;
     const CAPABILITIES_READ: bbool = true;
     const CAPABILITIES_WRITE: bbool = false;
+    const CAPABILITIES_RESET: u64 = 64'h0000000000000000;
+    const CAPABILITIES_WRITABLE: u64 = 64'h0000000000000000;
+    // 32-bit atomic and semaphore operations are supported
+    // 32-bit atomic and semaphore operations are supported.
     const CAPABILITIES_ATOMIC32_LSB: u32 = 0;
     const CAPABILITIES_ATOMIC32_BITS: u32 = 1;
+    // 64-bit atomic and semaphore operations are supported
+    // 64-bit atomic and semaphore operations are supported.
     const CAPABILITIES_ATOMIC64_LSB: u32 = 1;
     const CAPABILITIES_ATOMIC64_BITS: u32 = 1;
 }
@@ -228,16 +378,19 @@ pub package DmaDiscoveryLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package SwitchLayout {
+    // Enable control
+    // A 32-bit little-endian control register, initially disabled. Only bit zero is writable; bits 1 through 31 are reserved and remain zero.
+    const VALUE_OFFSET: u64 = 0;
     const EXTENT: u64 = 4;
+    const VALUE_BYTES: u32 = 4;
     const ALIGNMENT: u64 = 4;
     const VALUE_ENDIAN_LITTLE: bbool = true;
-    // Enable control
-    const VALUE_OFFSET: u64 = 0;
-    const VALUE_BYTES: u32 = 4;
-    const VALUE_RESET: u64 = 64'h0000000000000000;
-    const VALUE_WRITABLE: u64 = 64'h0000000000000001;
     const VALUE_READ: bbool = true;
     const VALUE_WRITE: bbool = true;
+    const VALUE_RESET: u64 = 64'h0000000000000000;
+    const VALUE_WRITABLE: u64 = 64'h0000000000000001;
+    // Enabled
+    // Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
     const VALUE_ENABLED_LSB: u32 = 0;
     const VALUE_ENABLED_BITS: u32 = 1;
 }
@@ -245,16 +398,19 @@ pub package SwitchLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package DmaFatalLayout {
+    // Dma fatal state
+    // A device-wide hardware fatal stops all channels. Only device reset clears it; channel reset does not. This is a hardware fatal input, not a software memory-management error.
+    const VALUE_OFFSET: u64 = 0;
     const EXTENT: u64 = 4;
+    const VALUE_BYTES: u32 = 4;
     const ALIGNMENT: u64 = 4;
     const VALUE_ENDIAN_LITTLE: bbool = true;
-    // Dma fatal state
-    const VALUE_OFFSET: u64 = 0;
-    const VALUE_BYTES: u32 = 4;
-    const VALUE_RESET: u64 = 64'h0000000000000000;
-    const VALUE_WRITABLE: u64 = 64'h0000000000000000;
     const VALUE_READ: bbool = true;
     const VALUE_WRITE: bbool = false;
+    const VALUE_RESET: u64 = 64'h0000000000000000;
+    const VALUE_WRITABLE: u64 = 64'h0000000000000000;
+    // Zero is healthy; Internal is a device-wide unrecoverable hardware fatal
+    // Zero is healthy; Internal is a device-wide unrecoverable hardware fatal.
     const VALUE_CODE_LSB: u32 = 0;
     const VALUE_CODE_BITS: u32 = 32;
     const VALUE_CODE_NONE: u64 = 0;
@@ -264,16 +420,19 @@ pub package DmaFatalLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ResetLayout {
+    // Hardware reset request and busy state
+    // Writing one to bit zero requests reset of the owning hardware scope. Reading one means reset is busy; only hardware clears it to zero after draining all prior command-ring reads, SG-list reads, payload reads/writes and event-ring writes, invalidating retained work and clearing configuration, cursors, errors and device-owned notification state. Once zero is observed, no further memory access can belong to pre-reset work in that scope. Writing zero has no effect, and repeated requests while busy coalesce. Configuration writes are rejected while reset is busy. External memory is neither cleared nor rolled back; platform-pending notifications remain claimable. Software must keep affected memory valid until completion, even if it cancels or times out its wait. Other bits are reserved.
+    const VALUE_OFFSET: u64 = 0;
     const EXTENT: u64 = 4;
+    const VALUE_BYTES: u32 = 4;
     const ALIGNMENT: u64 = 4;
     const VALUE_ENDIAN_LITTLE: bbool = true;
-    // Hardware reset request and busy state
-    const VALUE_OFFSET: u64 = 0;
-    const VALUE_BYTES: u32 = 4;
-    const VALUE_RESET: u64 = 64'h0000000000000000;
-    const VALUE_WRITABLE: u64 = 64'h0000000000000001;
     const VALUE_READ: bbool = true;
     const VALUE_WRITE: bbool = true;
+    const VALUE_RESET: u64 = 64'h0000000000000000;
+    const VALUE_WRITABLE: u64 = 64'h0000000000000001;
+    // Write one to request reset; read one while busy and zero after hardware cleanup
+    // Write one to request reset; read one while busy and zero after hardware cleanup. Writing zero cannot clear a pending request.
     const VALUE_REQUEST_LSB: u32 = 0;
     const VALUE_REQUEST_BITS: u32 = 1;
 }
@@ -281,101 +440,85 @@ pub package ResetLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package DmaControlLayout {
+    // Dma-wide controls
+    // Owns the device fatal input, its interrupt enable and whole-device reset. Channel causes and enables remain channel-owned.
     const ALIGNMENT: u64 = 4;
-    struct Geometry {
-        extent: u64,
-        irq_enable_offset: u64,
-        irq_enable_count: u64,
-        irq_enable_stride: u64,
-        fatal_offset: u64,
-        fatal_count: u64,
-        fatal_stride: u64,
-        reset_offset: u64,
-        reset_count: u64,
-        reset_stride: u64,
-    }
-    function geometry() -> Geometry {
-        var result: Geometry;
-        result = '0;
-        result.irq_enable_offset = 0;
-        result.irq_enable_count = 1;
-        result.irq_enable_stride = 4;
-        result.fatal_offset = 4;
-        result.fatal_count = 1;
-        result.fatal_stride = 4;
-        result.reset_offset = 8;
-        result.reset_count = 1;
-        result.reset_stride = 4;
-        result.extent = 12;
-        return result;
-    }
     function irq_enable_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.irq_enable_offset;
+        return 0;
     }
     function irq_enable_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.irq_enable_count;
+        return 1;
     }
     function irq_enable_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.irq_enable_stride;
+        return 4;
     }
     function fatal_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.fatal_offset;
+        return 4;
     }
     function fatal_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.fatal_count;
+        return 1;
     }
     function fatal_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.fatal_stride;
+        return 4;
     }
     function reset_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.reset_offset;
+        return 8;
     }
     function reset_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.reset_count;
+        return 1;
     }
     function reset_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.reset_stride;
+        return 4;
     }
+    function extent() -> u64 {
+        return 12;
+    }
+    // Enables notification of device fatal independently of channel IRQ enable
+    // Enables notification of device fatal independently of channel IRQ enable.
+    // Dma fatal cause; read-only and sticky until device reset
+    // Dma fatal cause; read-only and sticky until device reset.
+    // Requests reset of device controls and every channel, including retained execution
+    // Requests reset of device controls and every channel, including retained execution. Reads busy until all affected memory accesses drain and cleanup completes. Hardware channel count is preserved.
     const EXTENT: u64 = 12;
-    const IRQ_ENABLE_ENDIAN_LITTLE: bbool = true;
-    // Enable control
+    // Enables notification of device fatal independently of channel IRQ enable
+    // Enables notification of device fatal independently of channel IRQ enable.
     const IRQ_ENABLE_OFFSET: u64 = 0;
     const IRQ_ENABLE_BYTES: u32 = 4;
-    const IRQ_ENABLE_RESET: u64 = 64'h0000000000000000;
-    const IRQ_ENABLE_WRITABLE: u64 = 64'h0000000000000001;
+    const IRQ_ENABLE_ENDIAN_LITTLE: bbool = true;
     const IRQ_ENABLE_READ: bbool = true;
     const IRQ_ENABLE_WRITE: bbool = true;
+    const IRQ_ENABLE_RESET: u64 = 64'h0000000000000000;
+    const IRQ_ENABLE_WRITABLE: u64 = 64'h0000000000000001;
+    // Enabled
+    // Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
     const IRQ_ENABLE_ENABLED_LSB: u32 = 0;
     const IRQ_ENABLE_ENABLED_BITS: u32 = 1;
-    const FATAL_ENDIAN_LITTLE: bbool = true;
-    // Dma fatal state
+    // Dma fatal cause; read-only and sticky until device reset
+    // Dma fatal cause; read-only and sticky until device reset.
     const FATAL_OFFSET: u64 = 4;
     const FATAL_BYTES: u32 = 4;
-    const FATAL_RESET: u64 = 64'h0000000000000000;
-    const FATAL_WRITABLE: u64 = 64'h0000000000000000;
+    const FATAL_ENDIAN_LITTLE: bbool = true;
     const FATAL_READ: bbool = true;
     const FATAL_WRITE: bbool = false;
+    const FATAL_RESET: u64 = 64'h0000000000000000;
+    const FATAL_WRITABLE: u64 = 64'h0000000000000000;
+    // Zero is healthy; Internal is a device-wide unrecoverable hardware fatal
+    // Zero is healthy; Internal is a device-wide unrecoverable hardware fatal.
     const FATAL_CODE_LSB: u32 = 0;
     const FATAL_CODE_BITS: u32 = 32;
     const FATAL_CODE_NONE: u64 = 0;
     const FATAL_CODE_INTERNAL: u64 = 1;
-    const RESET_ENDIAN_LITTLE: bbool = true;
-    // Hardware reset request and busy state
+    // Requests reset of device controls and every channel, including retained execution
+    // Requests reset of device controls and every channel, including retained execution. Reads busy until all affected memory accesses drain and cleanup completes. Hardware channel count is preserved.
     const RESET_OFFSET: u64 = 8;
     const RESET_BYTES: u32 = 4;
-    const RESET_RESET: u64 = 64'h0000000000000000;
-    const RESET_WRITABLE: u64 = 64'h0000000000000001;
+    const RESET_ENDIAN_LITTLE: bbool = true;
     const RESET_READ: bbool = true;
     const RESET_WRITE: bbool = true;
+    const RESET_RESET: u64 = 64'h0000000000000000;
+    const RESET_WRITABLE: u64 = 64'h0000000000000001;
+    // Write one to request reset; read one while busy and zero after hardware cleanup
+    // Write one to request reset; read one while busy and zero after hardware cleanup. Writing zero cannot clear a pending request.
     const RESET_REQUEST_LSB: u32 = 0;
     const RESET_REQUEST_BITS: u32 = 1;
 }
@@ -383,43 +526,35 @@ pub package DmaControlLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ChannelAdminLayout {
+    // Channel administration
+    // Privileged recovery aperture, separate from channel data registers.
     const ALIGNMENT: u64 = 4;
-    struct Geometry {
-        extent: u64,
-        reset_offset: u64,
-        reset_count: u64,
-        reset_stride: u64,
-    }
-    function geometry() -> Geometry {
-        var result: Geometry;
-        result = '0;
-        result.reset_offset = 0;
-        result.reset_count = 1;
-        result.reset_stride = 4;
-        result.extent = 4;
-        return result;
-    }
     function reset_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.reset_offset;
+        return 0;
     }
     function reset_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.reset_count;
+        return 1;
     }
     function reset_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.reset_stride;
+        return 4;
     }
+    function extent() -> u64 {
+        return 4;
+    }
+    // Channel reset request and busy state
+    // Requests channel cleanup; reads busy until accepted work retires. Other channels and DMA fatal state are unaffected.
     const EXTENT: u64 = 4;
-    const RESET_ENDIAN_LITTLE: bbool = true;
-    // Hardware reset request and busy state
+    // Channel reset request and busy state
+    // Requests channel cleanup; reads busy until accepted work retires. Other channels and DMA fatal state are unaffected.
     const RESET_OFFSET: u64 = 0;
     const RESET_BYTES: u32 = 4;
-    const RESET_RESET: u64 = 64'h0000000000000000;
-    const RESET_WRITABLE: u64 = 64'h0000000000000001;
+    const RESET_ENDIAN_LITTLE: bbool = true;
     const RESET_READ: bbool = true;
     const RESET_WRITE: bbool = true;
+    const RESET_RESET: u64 = 64'h0000000000000000;
+    const RESET_WRITABLE: u64 = 64'h0000000000000001;
+    // Write one to request reset; read one while busy and zero after hardware cleanup
+    // Write one to request reset; read one while busy and zero after hardware cleanup. Writing zero cannot clear a pending request.
     const RESET_REQUEST_LSB: u32 = 0;
     const RESET_REQUEST_BITS: u32 = 1;
 }
@@ -427,452 +562,375 @@ pub package ChannelAdminLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package DmaAdminLayout {
+    // DMA administration aperture
+    // Contiguous privileged DMA controls and per-channel reset registers, separate from discovery and data apertures.
     const ALIGNMENT: u64 = 4;
-    struct Geometry {
-        extent: u64,
-        control_offset: u64,
-        control_count: u64,
-        control_stride: u64,
-        channels_offset: u64,
-        channels_count: u64,
-        channels_stride: u64,
-    }
-    function geometry(p_channel_count: input u64) -> Geometry {
-        var result: Geometry;
-        var cursor: u64;
-        result = '0;
-        cursor = 0;
-        let child_control: DmaControlLayout::Geometry = DmaControlLayout::geometry();
-        result.control_offset = ((cursor + 4 - 1) & ~(4 - 1));
-        result.control_count = 1;
-        result.control_stride = ((child_control.extent + 4 - 1) & ~(4 - 1));
-        let end_control: u64 = ((result.control_offset + ((result.control_count - 1) * result.control_stride)) + child_control.extent);
-        cursor = (if cursor >: end_control ? cursor : end_control);
-        let child_channels: ChannelAdminLayout::Geometry = ChannelAdminLayout::geometry();
-        result.channels_offset = ((cursor + 4 - 1) & ~(4 - 1));
-        result.channels_count = p_channel_count;
-        result.channels_stride = ((child_channels.extent + 4 - 1) & ~(4 - 1));
-        let end_channels: u64 = ((result.channels_offset + ((result.channels_count - 1) * result.channels_stride)) + child_channels.extent);
-        cursor = (if cursor >: end_channels ? cursor : end_channels);
-        result.extent = cursor;
-        return result;
-    }
+    // DMA-wide administration
+    // Global interrupt control, fatal state and whole-DMA reset.
     function control_offset(p_channel_count: input u64) -> u64 {
-        let shape: Geometry = geometry(p_channel_count);
-        return shape.control_offset;
+        return 0;
     }
     function control_count(p_channel_count: input u64) -> u64 {
-        let shape: Geometry = geometry(p_channel_count);
-        return shape.control_count;
+        return 1;
     }
     function control_stride(p_channel_count: input u64) -> u64 {
-        let shape: Geometry = geometry(p_channel_count);
-        return shape.control_stride;
+        return 12;
     }
+    // Channel administration bank
+    // One privileged recovery block for each implemented channel.
     function channels_offset(p_channel_count: input u64) -> u64 {
-        let shape: Geometry = geometry(p_channel_count);
-        return shape.channels_offset;
+        return 12;
     }
     function channels_count(p_channel_count: input u64) -> u64 {
-        let shape: Geometry = geometry(p_channel_count);
-        return shape.channels_count;
+        return p_channel_count;
     }
     function channels_stride(p_channel_count: input u64) -> u64 {
-        let shape: Geometry = geometry(p_channel_count);
-        return shape.channels_stride;
+        return 4;
+    }
+    function extent(p_channel_count: input u64) -> u64 {
+        return ((12 + ((p_channel_count - 1) * 4)) + 4);
     }
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package AddressLayout {
+    // Memory address
+    // A 64-bit little-endian address in the device's attached memory backend. The backend determines address interpretation; the value need not be a host pointer.
+    const VALUE_OFFSET: u64 = 0;
     const EXTENT: u64 = 8;
+    const VALUE_BYTES: u32 = 8;
     const ALIGNMENT: u64 = 8;
     const VALUE_ENDIAN_LITTLE: bbool = true;
-    // Memory address
-    const VALUE_OFFSET: u64 = 0;
-    const VALUE_BYTES: u32 = 8;
-    const VALUE_RESET: u64 = 64'h0000000000000000;
-    const VALUE_WRITABLE: u64 = 64'hffffffffffffffff;
     const VALUE_READ: bbool = true;
     const VALUE_WRITE: bbool = true;
+    const VALUE_RESET: u64 = 64'h0000000000000000;
+    const VALUE_WRITABLE: u64 = 64'hffffffffffffffff;
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package WordLayout {
+    // Read/write word
+    // A 32-bit little-endian register, initially zero. Software may read or write all bits; its placement defines their hardware meaning.
+    const VALUE_OFFSET: u64 = 0;
     const EXTENT: u64 = 4;
+    const VALUE_BYTES: u32 = 4;
     const ALIGNMENT: u64 = 4;
     const VALUE_ENDIAN_LITTLE: bbool = true;
-    // Read/write word
-    const VALUE_OFFSET: u64 = 0;
-    const VALUE_BYTES: u32 = 4;
-    const VALUE_RESET: u64 = 64'h0000000000000000;
-    const VALUE_WRITABLE: u64 = 64'h00000000ffffffff;
     const VALUE_READ: bbool = true;
     const VALUE_WRITE: bbool = true;
+    const VALUE_RESET: u64 = 64'h0000000000000000;
+    const VALUE_WRITABLE: u64 = 64'h00000000ffffffff;
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ReadWordLayout {
+    // Read-only word
+    // A 32-bit little-endian register, initially zero. Hardware updates the value; software may read it but cannot write it.
+    const VALUE_OFFSET: u64 = 0;
     const EXTENT: u64 = 4;
+    const VALUE_BYTES: u32 = 4;
     const ALIGNMENT: u64 = 4;
     const VALUE_ENDIAN_LITTLE: bbool = true;
-    // Read-only word
-    const VALUE_OFFSET: u64 = 0;
-    const VALUE_BYTES: u32 = 4;
-    const VALUE_RESET: u64 = 64'h0000000000000000;
-    const VALUE_WRITABLE: u64 = 64'h0000000000000000;
     const VALUE_READ: bbool = true;
     const VALUE_WRITE: bbool = false;
+    const VALUE_RESET: u64 = 64'h0000000000000000;
+    const VALUE_WRITABLE: u64 = 64'h0000000000000000;
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package CommandRegistersLayout {
+    // Command ring registers
+    // Software writes command records and publishes the producer cursor; hardware fetches records and advances the consumer cursor. Cursors are wrapping 32-bit entry counts, not byte offsets.
     const ALIGNMENT: u64 = 8;
-    struct Geometry {
-        extent: u64,
-        base_offset: u64,
-        base_count: u64,
-        base_stride: u64,
-        capacity_offset: u64,
-        capacity_count: u64,
-        capacity_stride: u64,
-        producer_offset: u64,
-        producer_count: u64,
-        producer_stride: u64,
-        consumer_offset: u64,
-        consumer_count: u64,
-        consumer_stride: u64,
-    }
-    function geometry() -> Geometry {
-        var result: Geometry;
-        result = '0;
-        result.base_offset = 0;
-        result.base_count = 1;
-        result.base_stride = 8;
-        result.capacity_offset = 8;
-        result.capacity_count = 1;
-        result.capacity_stride = 4;
-        result.producer_offset = 12;
-        result.producer_count = 1;
-        result.producer_stride = 4;
-        result.consumer_offset = 16;
-        result.consumer_count = 1;
-        result.consumer_stride = 4;
-        result.extent = 20;
-        return result;
-    }
     function base_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.base_offset;
+        return 0;
     }
     function base_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.base_count;
+        return 1;
     }
     function base_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.base_stride;
+        return 8;
     }
     function capacity_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.capacity_offset;
+        return 8;
     }
     function capacity_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.capacity_count;
+        return 1;
     }
     function capacity_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.capacity_stride;
+        return 4;
     }
     function producer_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.producer_offset;
+        return 12;
     }
     function producer_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.producer_count;
+        return 1;
     }
     function producer_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.producer_stride;
+        return 4;
     }
     function consumer_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.consumer_offset;
+        return 16;
     }
     function consumer_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.consumer_count;
+        return 1;
     }
     function consumer_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.consumer_stride;
+        return 4;
     }
+    function extent() -> u64 {
+        return 20;
+    }
+    // Command ring base address
+    // Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset.
+    // Command ring capacity
+    // Number of command slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
+    // Published command count
+    // Software advances this wrapping cursor only after writing command records to memory. Publication may not exceed the ring's free capacity; hardware reads entries between consumer and producer.
+    // Fetched command count
+    // Hardware advances this wrapping cursor after successfully reading and decoding a command. It releases the command slot; it does not indicate that the copy has completed.
     const EXTENT: u64 = 20;
-    const BASE_ENDIAN_LITTLE: bbool = true;
-    // Memory address
+    // Command ring base address
+    // Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset.
     const BASE_OFFSET: u64 = 0;
     const BASE_BYTES: u32 = 8;
-    const BASE_RESET: u64 = 64'h0000000000000000;
-    const BASE_WRITABLE: u64 = 64'hffffffffffffffff;
+    const BASE_ENDIAN_LITTLE: bbool = true;
     const BASE_READ: bbool = true;
     const BASE_WRITE: bbool = true;
-    const CAPACITY_ENDIAN_LITTLE: bbool = true;
-    // Read/write word
+    const BASE_RESET: u64 = 64'h0000000000000000;
+    const BASE_WRITABLE: u64 = 64'hffffffffffffffff;
+    // Command ring capacity
+    // Number of command slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
     const CAPACITY_OFFSET: u64 = 8;
     const CAPACITY_BYTES: u32 = 4;
-    const CAPACITY_RESET: u64 = 64'h0000000000000000;
-    const CAPACITY_WRITABLE: u64 = 64'h00000000ffffffff;
+    const CAPACITY_ENDIAN_LITTLE: bbool = true;
     const CAPACITY_READ: bbool = true;
     const CAPACITY_WRITE: bbool = true;
-    const PRODUCER_ENDIAN_LITTLE: bbool = true;
-    // Read/write word
+    const CAPACITY_RESET: u64 = 64'h0000000000000000;
+    const CAPACITY_WRITABLE: u64 = 64'h00000000ffffffff;
+    // Published command count
+    // Software advances this wrapping cursor only after writing command records to memory. Publication may not exceed the ring's free capacity; hardware reads entries between consumer and producer.
     const PRODUCER_OFFSET: u64 = 12;
     const PRODUCER_BYTES: u32 = 4;
-    const PRODUCER_RESET: u64 = 64'h0000000000000000;
-    const PRODUCER_WRITABLE: u64 = 64'h00000000ffffffff;
+    const PRODUCER_ENDIAN_LITTLE: bbool = true;
     const PRODUCER_READ: bbool = true;
     const PRODUCER_WRITE: bbool = true;
-    const CONSUMER_ENDIAN_LITTLE: bbool = true;
-    // Read-only word
+    const PRODUCER_RESET: u64 = 64'h0000000000000000;
+    const PRODUCER_WRITABLE: u64 = 64'h00000000ffffffff;
+    // Fetched command count
+    // Hardware advances this wrapping cursor after successfully reading and decoding a command. It releases the command slot; it does not indicate that the copy has completed.
     const CONSUMER_OFFSET: u64 = 16;
     const CONSUMER_BYTES: u32 = 4;
-    const CONSUMER_RESET: u64 = 64'h0000000000000000;
-    const CONSUMER_WRITABLE: u64 = 64'h0000000000000000;
+    const CONSUMER_ENDIAN_LITTLE: bbool = true;
     const CONSUMER_READ: bbool = true;
     const CONSUMER_WRITE: bbool = false;
+    const CONSUMER_RESET: u64 = 64'h0000000000000000;
+    const CONSUMER_WRITABLE: u64 = 64'h0000000000000000;
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package EventRegistersLayout {
+    // Event ring registers
+    // Hardware writes event records and publishes the producer cursor; software consumes records and advances the consumer cursor. A full ring is fatal only when an error event must be published; successful work needs no event capacity.
     const ALIGNMENT: u64 = 8;
-    struct Geometry {
-        extent: u64,
-        base_offset: u64,
-        base_count: u64,
-        base_stride: u64,
-        capacity_offset: u64,
-        capacity_count: u64,
-        capacity_stride: u64,
-        producer_offset: u64,
-        producer_count: u64,
-        producer_stride: u64,
-        consumer_offset: u64,
-        consumer_count: u64,
-        consumer_stride: u64,
-    }
-    function geometry() -> Geometry {
-        var result: Geometry;
-        result = '0;
-        result.base_offset = 0;
-        result.base_count = 1;
-        result.base_stride = 8;
-        result.capacity_offset = 8;
-        result.capacity_count = 1;
-        result.capacity_stride = 4;
-        result.producer_offset = 12;
-        result.producer_count = 1;
-        result.producer_stride = 4;
-        result.consumer_offset = 16;
-        result.consumer_count = 1;
-        result.consumer_stride = 4;
-        result.extent = 20;
-        return result;
-    }
     function base_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.base_offset;
+        return 0;
     }
     function base_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.base_count;
+        return 1;
     }
     function base_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.base_stride;
+        return 8;
     }
     function capacity_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.capacity_offset;
+        return 8;
     }
     function capacity_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.capacity_count;
+        return 1;
     }
     function capacity_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.capacity_stride;
+        return 4;
     }
     function producer_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.producer_offset;
+        return 12;
     }
     function producer_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.producer_count;
+        return 1;
     }
     function producer_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.producer_stride;
+        return 4;
     }
     function consumer_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.consumer_offset;
+        return 16;
     }
     function consumer_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.consumer_count;
+        return 1;
     }
     function consumer_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.consumer_stride;
+        return 4;
     }
+    function extent() -> u64 {
+        return 20;
+    }
+    // Event ring base address
+    // Start of event storage in the attached memory backend, aligned to eight bytes. Event slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
+    // Event ring capacity
+    // Number of event slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
+    // Published event count
+    // Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
+    // Consumed event count
+    // Software advances this wrapping cursor after reading and decoding events. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
     const EXTENT: u64 = 20;
-    const BASE_ENDIAN_LITTLE: bbool = true;
-    // Memory address
+    // Event ring base address
+    // Start of event storage in the attached memory backend, aligned to eight bytes. Event slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
     const BASE_OFFSET: u64 = 0;
     const BASE_BYTES: u32 = 8;
-    const BASE_RESET: u64 = 64'h0000000000000000;
-    const BASE_WRITABLE: u64 = 64'hffffffffffffffff;
+    const BASE_ENDIAN_LITTLE: bbool = true;
     const BASE_READ: bbool = true;
     const BASE_WRITE: bbool = true;
-    const CAPACITY_ENDIAN_LITTLE: bbool = true;
-    // Read/write word
+    const BASE_RESET: u64 = 64'h0000000000000000;
+    const BASE_WRITABLE: u64 = 64'hffffffffffffffff;
+    // Event ring capacity
+    // Number of event slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
     const CAPACITY_OFFSET: u64 = 8;
     const CAPACITY_BYTES: u32 = 4;
-    const CAPACITY_RESET: u64 = 64'h0000000000000000;
-    const CAPACITY_WRITABLE: u64 = 64'h00000000ffffffff;
+    const CAPACITY_ENDIAN_LITTLE: bbool = true;
     const CAPACITY_READ: bbool = true;
     const CAPACITY_WRITE: bbool = true;
-    const PRODUCER_ENDIAN_LITTLE: bbool = true;
-    // Read-only word
+    const CAPACITY_RESET: u64 = 64'h0000000000000000;
+    const CAPACITY_WRITABLE: u64 = 64'h00000000ffffffff;
+    // Published event count
+    // Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
     const PRODUCER_OFFSET: u64 = 12;
     const PRODUCER_BYTES: u32 = 4;
-    const PRODUCER_RESET: u64 = 64'h0000000000000000;
-    const PRODUCER_WRITABLE: u64 = 64'h0000000000000000;
+    const PRODUCER_ENDIAN_LITTLE: bbool = true;
     const PRODUCER_READ: bbool = true;
     const PRODUCER_WRITE: bbool = false;
-    const CONSUMER_ENDIAN_LITTLE: bbool = true;
-    // Read/write word
+    const PRODUCER_RESET: u64 = 64'h0000000000000000;
+    const PRODUCER_WRITABLE: u64 = 64'h0000000000000000;
+    // Consumed event count
+    // Software advances this wrapping cursor after reading and decoding events. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
     const CONSUMER_OFFSET: u64 = 16;
     const CONSUMER_BYTES: u32 = 4;
-    const CONSUMER_RESET: u64 = 64'h0000000000000000;
-    const CONSUMER_WRITABLE: u64 = 64'h00000000ffffffff;
+    const CONSUMER_ENDIAN_LITTLE: bbool = true;
     const CONSUMER_READ: bbool = true;
     const CONSUMER_WRITE: bbool = true;
+    const CONSUMER_RESET: u64 = 64'h0000000000000000;
+    const CONSUMER_WRITABLE: u64 = 64'h00000000ffffffff;
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ChannelConfigurationLayout {
+    // Channel configuration
+    // Processing enable remains writable; ring context freezes after the first successful enable.
     const ALIGNMENT: u64 = 4;
-    struct Geometry {
-        extent: u64,
-        enable_offset: u64,
-        enable_count: u64,
-        enable_stride: u64,
-        ring_context_offset: u64,
-        ring_context_count: u64,
-        ring_context_stride: u64,
-    }
-    function geometry() -> Geometry {
-        var result: Geometry;
-        result = '0;
-        result.enable_offset = 0;
-        result.enable_count = 1;
-        result.enable_stride = 4;
-        result.ring_context_offset = 4;
-        result.ring_context_count = 1;
-        result.ring_context_stride = 4;
-        result.extent = 8;
-        return result;
-    }
     function enable_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.enable_offset;
+        return 0;
     }
     function enable_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.enable_count;
+        return 1;
     }
     function enable_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.enable_stride;
+        return 4;
     }
     function ring_context_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.ring_context_offset;
+        return 4;
     }
     function ring_context_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.ring_context_count;
+        return 1;
     }
     function ring_context_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.ring_context_stride;
+        return 4;
     }
+    function extent() -> u64 {
+        return 8;
+    }
+    // Channel processing enable
+    // One permits pipeline progress and validates command ring geometry; the first successful enable locks both rings' base addresses and capacities. Event geometry is checked when publishing an error event. Zero pauses processing without clearing cursors, retained work or errors.
+    // Context shared by command and event ring accesses
+    // Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
     const EXTENT: u64 = 8;
-    const ENABLE_ENDIAN_LITTLE: bbool = true;
-    // Enable control
+    // Channel processing enable
+    // One permits pipeline progress and validates command ring geometry; the first successful enable locks both rings' base addresses and capacities. Event geometry is checked when publishing an error event. Zero pauses processing without clearing cursors, retained work or errors.
     const ENABLE_OFFSET: u64 = 0;
     const ENABLE_BYTES: u32 = 4;
-    const ENABLE_RESET: u64 = 64'h0000000000000000;
-    const ENABLE_WRITABLE: u64 = 64'h0000000000000001;
+    const ENABLE_ENDIAN_LITTLE: bbool = true;
     const ENABLE_READ: bbool = true;
     const ENABLE_WRITE: bbool = true;
+    const ENABLE_RESET: u64 = 64'h0000000000000000;
+    const ENABLE_WRITABLE: u64 = 64'h0000000000000001;
+    // Enabled
+    // Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
     const ENABLE_ENABLED_LSB: u32 = 0;
     const ENABLE_ENABLED_BITS: u32 = 1;
-    const RING_CONTEXT_ENDIAN_LITTLE: bbool = true;
-    // Read/write word
+    // Context shared by command and event ring accesses
+    // Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
     const RING_CONTEXT_OFFSET: u64 = 4;
     const RING_CONTEXT_BYTES: u32 = 4;
-    const RING_CONTEXT_RESET: u64 = 64'h0000000000000000;
-    const RING_CONTEXT_WRITABLE: u64 = 64'h00000000ffffffff;
+    const RING_CONTEXT_ENDIAN_LITTLE: bbool = true;
     const RING_CONTEXT_READ: bbool = true;
     const RING_CONTEXT_WRITE: bbool = true;
+    const RING_CONTEXT_RESET: u64 = 64'h0000000000000000;
+    const RING_CONTEXT_WRITABLE: u64 = 64'h00000000ffffffff;
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ChannelFatalLayout {
+    // Channel fatal state
+    // Hardware-owned sticky failure state. Software can observe the code; only channel or device reset clears it.
+    const VALUE_OFFSET: u64 = 0;
     const EXTENT: u64 = 4;
+    const VALUE_BYTES: u32 = 4;
     const ALIGNMENT: u64 = 4;
     const VALUE_ENDIAN_LITTLE: bbool = true;
-    // Channel fatal state
-    const VALUE_OFFSET: u64 = 0;
-    const VALUE_BYTES: u32 = 4;
-    const VALUE_RESET: u64 = 64'h0000000000000000;
-    const VALUE_WRITABLE: u64 = 64'h0000000000000000;
     const VALUE_READ: bbool = true;
     const VALUE_WRITE: bbool = false;
+    const VALUE_RESET: u64 = 64'h0000000000000000;
+    const VALUE_WRITABLE: u64 = 64'h0000000000000000;
+    // Fatal code
+    // Distinguishes normal operation from command-fetch and event-publication failures. Other encodings are invalid.
     const VALUE_CODE_LSB: u32 = 0;
     const VALUE_CODE_BITS: u32 = 32;
+    // No channel fatal
+    // Neither ring has latched a hardware access failure.
     const VALUE_CODE_NONE: u64 = 0;
+    // Command fetch failed
+    // Hardware could not fetch or decode a command ring entry; its consumer cursor was not advanced.
     const VALUE_CODE_COMMANDREAD: u64 = 1;
+    // Event publication failed
+    // Hardware could not publish an event ring entry; its producer cursor was not advanced. The payload copy may already have completed.
     const VALUE_CODE_EVENTWRITE: u64 = 2;
+    // Error publication encountered a full event ring
+    // Error publication encountered a full event ring.
     const VALUE_CODE_EVENTFULL: u64 = 3;
+    // Error publication encountered invalid event geometry or cursors
+    // Error publication encountered invalid event geometry or cursors.
     const VALUE_CODE_EVENTCONFIGURATION: u64 = 4;
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package FaultStatusLayout {
+    // Payload fault status
+    // Hardware sets faulted when a payload access returns a recoverable page fault. Resume clears it; a later fault sets it again. Zero is not command completion. Reset or matching Abort discards parked work and clears the bit.
+    const VALUE_OFFSET: u64 = 0;
     const EXTENT: u64 = 4;
+    const VALUE_BYTES: u32 = 4;
     const ALIGNMENT: u64 = 4;
     const VALUE_ENDIAN_LITTLE: bbool = true;
-    // Payload fault status
-    const VALUE_OFFSET: u64 = 0;
-    const VALUE_BYTES: u32 = 4;
-    const VALUE_RESET: u64 = 64'h0000000000000000;
-    const VALUE_WRITABLE: u64 = 64'h0000000000000000;
     const VALUE_READ: bbool = true;
     const VALUE_WRITE: bbool = false;
+    const VALUE_RESET: u64 = 64'h0000000000000000;
+    const VALUE_WRITABLE: u64 = 64'h0000000000000000;
+    // A payload page fault awaits software repair and an explicit resume request
+    // A payload page fault awaits software repair and an explicit resume request.
     const VALUE_FAULTED_LSB: u32 = 0;
     const VALUE_FAULTED_BITS: u32 = 1;
 }
@@ -880,16 +938,19 @@ pub package FaultStatusLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ResumeLayout {
+    // Payload resume request
+    // Write-one action for the current channel fault. Zero writes have no effect; requests made while not faulted are discarded, not saved for later faults. No request identity or duplicate suppression is provided.
+    const VALUE_OFFSET: u64 = 0;
     const EXTENT: u64 = 4;
+    const VALUE_BYTES: u32 = 4;
     const ALIGNMENT: u64 = 4;
     const VALUE_ENDIAN_LITTLE: bbool = true;
-    // Payload resume request
-    const VALUE_OFFSET: u64 = 0;
-    const VALUE_BYTES: u32 = 4;
-    const VALUE_RESET: u64 = 64'h0000000000000000;
-    const VALUE_WRITABLE: u64 = 64'h0000000000000001;
     const VALUE_READ: bbool = false;
     const VALUE_WRITE: bbool = true;
+    const VALUE_RESET: u64 = 64'h0000000000000000;
+    const VALUE_WRITABLE: u64 = 64'h0000000000000001;
+    // Write one to clear faulted after mapping repair; reserved bits must be zero
+    // Write one to clear faulted after mapping repair; reserved bits must be zero.
     const VALUE_REQUEST_LSB: u32 = 0;
     const VALUE_REQUEST_BITS: u32 = 1;
 }
@@ -897,104 +958,98 @@ pub package ResumeLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ChannelRecoveryLayout {
+    // Channel failure and resume
+    // Channel-owned fatal status and recoverable payload suspension. Privileged reset remains in ChannelAdmin.
     const ALIGNMENT: u64 = 4;
-    struct Geometry {
-        extent: u64,
-        fatal_offset: u64,
-        fatal_count: u64,
-        fatal_stride: u64,
-        fault_status_offset: u64,
-        fault_status_count: u64,
-        fault_status_stride: u64,
-        resume_offset: u64,
-        resume_count: u64,
-        resume_stride: u64,
-    }
-    function geometry() -> Geometry {
-        var result: Geometry;
-        result = '0;
-        result.fatal_offset = 0;
-        result.fatal_count = 1;
-        result.fatal_stride = 4;
-        result.fault_status_offset = 4;
-        result.fault_status_count = 1;
-        result.fault_status_stride = 4;
-        result.resume_offset = 8;
-        result.resume_count = 1;
-        result.resume_stride = 4;
-        result.extent = 12;
-        return result;
-    }
     function fatal_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.fatal_offset;
+        return 0;
     }
     function fatal_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.fatal_count;
+        return 1;
     }
     function fatal_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.fatal_stride;
+        return 4;
     }
     function fault_status_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.fault_status_offset;
+        return 4;
     }
     function fault_status_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.fault_status_count;
+        return 1;
     }
     function fault_status_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.fault_status_stride;
+        return 4;
     }
     function resume_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.resume_offset;
+        return 8;
     }
     function resume_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.resume_count;
+        return 1;
     }
     function resume_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.resume_stride;
+        return 4;
     }
+    function extent() -> u64 {
+        return 12;
+    }
+    // Sticky channel fatal
+    // A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
+    // Payload fault status
+    // The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
+    // Resume suspended command
+    // Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
     const EXTENT: u64 = 12;
-    const FATAL_ENDIAN_LITTLE: bbool = true;
-    // Channel fatal state
+    // Sticky channel fatal
+    // A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
     const FATAL_OFFSET: u64 = 0;
     const FATAL_BYTES: u32 = 4;
-    const FATAL_RESET: u64 = 64'h0000000000000000;
-    const FATAL_WRITABLE: u64 = 64'h0000000000000000;
+    const FATAL_ENDIAN_LITTLE: bbool = true;
     const FATAL_READ: bbool = true;
     const FATAL_WRITE: bbool = false;
+    const FATAL_RESET: u64 = 64'h0000000000000000;
+    const FATAL_WRITABLE: u64 = 64'h0000000000000000;
+    // Fatal code
+    // Distinguishes normal operation from command-fetch and event-publication failures. Other encodings are invalid.
     const FATAL_CODE_LSB: u32 = 0;
     const FATAL_CODE_BITS: u32 = 32;
+    // No channel fatal
+    // Neither ring has latched a hardware access failure.
     const FATAL_CODE_NONE: u64 = 0;
+    // Command fetch failed
+    // Hardware could not fetch or decode a command ring entry; its consumer cursor was not advanced.
     const FATAL_CODE_COMMANDREAD: u64 = 1;
+    // Event publication failed
+    // Hardware could not publish an event ring entry; its producer cursor was not advanced. The payload copy may already have completed.
     const FATAL_CODE_EVENTWRITE: u64 = 2;
+    // Error publication encountered a full event ring
+    // Error publication encountered a full event ring.
     const FATAL_CODE_EVENTFULL: u64 = 3;
+    // Error publication encountered invalid event geometry or cursors
+    // Error publication encountered invalid event geometry or cursors.
     const FATAL_CODE_EVENTCONFIGURATION: u64 = 4;
-    const FAULT_STATUS_ENDIAN_LITTLE: bbool = true;
     // Payload fault status
+    // The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
     const FAULT_STATUS_OFFSET: u64 = 4;
     const FAULT_STATUS_BYTES: u32 = 4;
-    const FAULT_STATUS_RESET: u64 = 64'h0000000000000000;
-    const FAULT_STATUS_WRITABLE: u64 = 64'h0000000000000000;
+    const FAULT_STATUS_ENDIAN_LITTLE: bbool = true;
     const FAULT_STATUS_READ: bbool = true;
     const FAULT_STATUS_WRITE: bbool = false;
+    const FAULT_STATUS_RESET: u64 = 64'h0000000000000000;
+    const FAULT_STATUS_WRITABLE: u64 = 64'h0000000000000000;
+    // A payload page fault awaits software repair and an explicit resume request
+    // A payload page fault awaits software repair and an explicit resume request.
     const FAULT_STATUS_FAULTED_LSB: u32 = 0;
     const FAULT_STATUS_FAULTED_BITS: u32 = 1;
-    const RESUME_ENDIAN_LITTLE: bbool = true;
-    // Payload resume request
+    // Resume suspended command
+    // Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
     const RESUME_OFFSET: u64 = 8;
     const RESUME_BYTES: u32 = 4;
-    const RESUME_RESET: u64 = 64'h0000000000000000;
-    const RESUME_WRITABLE: u64 = 64'h0000000000000001;
+    const RESUME_ENDIAN_LITTLE: bbool = true;
     const RESUME_READ: bbool = false;
     const RESUME_WRITE: bbool = true;
+    const RESUME_RESET: u64 = 64'h0000000000000000;
+    const RESUME_WRITABLE: u64 = 64'h0000000000000001;
+    // Write one to clear faulted after mapping repair; reserved bits must be zero
+    // Write one to clear faulted after mapping repair; reserved bits must be zero.
     const RESUME_REQUEST_LSB: u32 = 0;
     const RESUME_REQUEST_BITS: u32 = 1;
 }
@@ -1002,22 +1057,31 @@ pub package ChannelRecoveryLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ChannelIrqCauseLayout {
+    // Channel interrupt causes
+    // Hardware causes visible regardless of masks. Reading does not acknowledge notifications. Non-empty follows occupancy, Trap clears on write-one acknowledgment, and error/fatal require channel reset.
+    const VALUE_OFFSET: u64 = 0;
     const EXTENT: u64 = 4;
+    const VALUE_BYTES: u32 = 4;
     const ALIGNMENT: u64 = 4;
     const VALUE_ENDIAN_LITTLE: bbool = true;
-    // Channel interrupt causes
-    const VALUE_OFFSET: u64 = 0;
-    const VALUE_BYTES: u32 = 4;
-    const VALUE_RESET: u64 = 64'h0000000000000000;
-    const VALUE_WRITABLE: u64 = 64'h0000000000000000;
     const VALUE_READ: bbool = true;
     const VALUE_WRITE: bbool = false;
+    const VALUE_RESET: u64 = 64'h0000000000000000;
+    const VALUE_WRITABLE: u64 = 64'h0000000000000000;
+    // The event ring currently contains unread entries
+    // The event ring currently contains unread entries.
     const VALUE_EVENT_NON_EMPTY_LSB: u32 = 0;
     const VALUE_EVENT_NON_EMPTY_BITS: u32 = 1;
+    // A Trap command executed since the last Trap acknowledgment
+    // A Trap command executed since the last Trap acknowledgment.
     const VALUE_TRAP_LSB: u32 = 1;
     const VALUE_TRAP_BITS: u32 = 1;
+    // A stopping command error is latched before event publication; processing remains stopped until reset
+    // A stopping command error is latched before event publication; processing remains stopped until reset. Payload suspension does not set this cause.
     const VALUE_ERROR_LSB: u32 = 2;
     const VALUE_ERROR_BITS: u32 = 1;
+    // The channel fatal register contains a fatal error
+    // The channel fatal register contains a fatal error.
     const VALUE_CHANNEL_FATAL_LSB: u32 = 3;
     const VALUE_CHANNEL_FATAL_BITS: u32 = 1;
 }
@@ -1025,18 +1089,23 @@ pub package ChannelIrqCauseLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ChannelIrqMaskLayout {
+    // Channel event notification masks
+    // One suppresses that source's future notifications without clearing causes. Unmask does not replay past events; software must check queue and error state before waiting. Error and fatal notifications bypass these two masks.
+    const VALUE_OFFSET: u64 = 0;
     const EXTENT: u64 = 4;
+    const VALUE_BYTES: u32 = 4;
     const ALIGNMENT: u64 = 4;
     const VALUE_ENDIAN_LITTLE: bbool = true;
-    // Channel event notification masks
-    const VALUE_OFFSET: u64 = 0;
-    const VALUE_BYTES: u32 = 4;
-    const VALUE_RESET: u64 = 64'h0000000000000000;
-    const VALUE_WRITABLE: u64 = 64'h0000000000000003;
     const VALUE_READ: bbool = true;
     const VALUE_WRITE: bbool = true;
+    const VALUE_RESET: u64 = 64'h0000000000000000;
+    const VALUE_WRITABLE: u64 = 64'h0000000000000003;
+    // Mask notifications on event empty-to-non-empty transitions
+    // Mask notifications on event empty-to-non-empty transitions.
     const VALUE_EVENT_NON_EMPTY_LSB: u32 = 0;
     const VALUE_EVENT_NON_EMPTY_BITS: u32 = 1;
+    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
+    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
     const VALUE_TRAP_LSB: u32 = 1;
     const VALUE_TRAP_BITS: u32 = 1;
 }
@@ -1044,16 +1113,19 @@ pub package ChannelIrqMaskLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package TrapAckLayout {
+    // Write-one acknowledgment of sticky Trap cause; zero is ignored and pending platform notifications survive
+    // Write-one acknowledgment of sticky Trap cause; zero is ignored and pending platform notifications survive.
+    const VALUE_OFFSET: u64 = 0;
     const EXTENT: u64 = 4;
+    const VALUE_BYTES: u32 = 4;
     const ALIGNMENT: u64 = 4;
     const VALUE_ENDIAN_LITTLE: bbool = true;
-    // Write-one acknowledgment of sticky Trap cause; zero is ignored and pending platform notifications survive
-    const VALUE_OFFSET: u64 = 0;
-    const VALUE_BYTES: u32 = 4;
-    const VALUE_RESET: u64 = 64'h0000000000000000;
-    const VALUE_WRITABLE: u64 = 64'h0000000000000001;
     const VALUE_READ: bbool = false;
     const VALUE_WRITE: bbool = true;
+    const VALUE_RESET: u64 = 64'h0000000000000000;
+    const VALUE_WRITABLE: u64 = 64'h0000000000000001;
+    // Write one to clear the sticky Trap cause
+    // Write one to clear the sticky Trap cause.
     const VALUE_REQUEST_LSB: u32 = 0;
     const VALUE_REQUEST_BITS: u32 = 1;
 }
@@ -1061,135 +1133,123 @@ pub package TrapAckLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ChannelInterruptsLayout {
+    // Channel interrupt controls
+    // Independent channel notification enable, causes, masks and Trap acknowledgment.
     const ALIGNMENT: u64 = 4;
-    struct Geometry {
-        extent: u64,
-        enable_offset: u64,
-        enable_count: u64,
-        enable_stride: u64,
-        cause_offset: u64,
-        cause_count: u64,
-        cause_stride: u64,
-        mask_offset: u64,
-        mask_count: u64,
-        mask_stride: u64,
-        trap_ack_offset: u64,
-        trap_ack_count: u64,
-        trap_ack_stride: u64,
-    }
-    function geometry() -> Geometry {
-        var result: Geometry;
-        result = '0;
-        result.enable_offset = 0;
-        result.enable_count = 1;
-        result.enable_stride = 4;
-        result.cause_offset = 4;
-        result.cause_count = 1;
-        result.cause_stride = 4;
-        result.mask_offset = 8;
-        result.mask_count = 1;
-        result.mask_stride = 4;
-        result.trap_ack_offset = 12;
-        result.trap_ack_count = 1;
-        result.trap_ack_stride = 4;
-        result.extent = 16;
-        return result;
-    }
     function enable_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.enable_offset;
+        return 0;
     }
     function enable_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.enable_count;
+        return 1;
     }
     function enable_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.enable_stride;
+        return 4;
     }
     function cause_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.cause_offset;
+        return 4;
     }
     function cause_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.cause_count;
+        return 1;
     }
     function cause_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.cause_stride;
+        return 4;
     }
     function mask_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.mask_offset;
+        return 8;
     }
     function mask_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.mask_count;
+        return 1;
     }
     function mask_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.mask_stride;
+        return 4;
     }
     function trap_ack_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.trap_ack_offset;
+        return 12;
     }
     function trap_ack_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.trap_ack_count;
+        return 1;
     }
     function trap_ack_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.trap_ack_stride;
+        return 4;
     }
+    function extent() -> u64 {
+        return 16;
+    }
+    // Channel interrupt enable
+    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked
+    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
+    // Independent non-empty and Trap notification masks
+    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
+    // Write one to clear sticky Trap cause without retracting platform notifications
+    // Write one to clear sticky Trap cause without retracting platform notifications.
     const EXTENT: u64 = 16;
-    const ENABLE_ENDIAN_LITTLE: bbool = true;
-    // Enable control
+    // Channel interrupt enable
+    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
     const ENABLE_OFFSET: u64 = 0;
     const ENABLE_BYTES: u32 = 4;
-    const ENABLE_RESET: u64 = 64'h0000000000000000;
-    const ENABLE_WRITABLE: u64 = 64'h0000000000000001;
+    const ENABLE_ENDIAN_LITTLE: bbool = true;
     const ENABLE_READ: bbool = true;
     const ENABLE_WRITE: bbool = true;
+    const ENABLE_RESET: u64 = 64'h0000000000000000;
+    const ENABLE_WRITABLE: u64 = 64'h0000000000000001;
+    // Enabled
+    // Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
     const ENABLE_ENABLED_LSB: u32 = 0;
     const ENABLE_ENABLED_BITS: u32 = 1;
-    const CAUSE_ENDIAN_LITTLE: bbool = true;
-    // Channel interrupt causes
+    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked
+    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
     const CAUSE_OFFSET: u64 = 4;
     const CAUSE_BYTES: u32 = 4;
-    const CAUSE_RESET: u64 = 64'h0000000000000000;
-    const CAUSE_WRITABLE: u64 = 64'h0000000000000000;
+    const CAUSE_ENDIAN_LITTLE: bbool = true;
     const CAUSE_READ: bbool = true;
     const CAUSE_WRITE: bbool = false;
+    const CAUSE_RESET: u64 = 64'h0000000000000000;
+    const CAUSE_WRITABLE: u64 = 64'h0000000000000000;
+    // The event ring currently contains unread entries
+    // The event ring currently contains unread entries.
     const CAUSE_EVENT_NON_EMPTY_LSB: u32 = 0;
     const CAUSE_EVENT_NON_EMPTY_BITS: u32 = 1;
+    // A Trap command executed since the last Trap acknowledgment
+    // A Trap command executed since the last Trap acknowledgment.
     const CAUSE_TRAP_LSB: u32 = 1;
     const CAUSE_TRAP_BITS: u32 = 1;
+    // A stopping command error is latched before event publication; processing remains stopped until reset
+    // A stopping command error is latched before event publication; processing remains stopped until reset. Payload suspension does not set this cause.
     const CAUSE_ERROR_LSB: u32 = 2;
     const CAUSE_ERROR_BITS: u32 = 1;
+    // The channel fatal register contains a fatal error
+    // The channel fatal register contains a fatal error.
     const CAUSE_CHANNEL_FATAL_LSB: u32 = 3;
     const CAUSE_CHANNEL_FATAL_BITS: u32 = 1;
-    const MASK_ENDIAN_LITTLE: bbool = true;
-    // Channel event notification masks
+    // Independent non-empty and Trap notification masks
+    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
     const MASK_OFFSET: u64 = 8;
     const MASK_BYTES: u32 = 4;
-    const MASK_RESET: u64 = 64'h0000000000000000;
-    const MASK_WRITABLE: u64 = 64'h0000000000000003;
+    const MASK_ENDIAN_LITTLE: bbool = true;
     const MASK_READ: bbool = true;
     const MASK_WRITE: bbool = true;
+    const MASK_RESET: u64 = 64'h0000000000000000;
+    const MASK_WRITABLE: u64 = 64'h0000000000000003;
+    // Mask notifications on event empty-to-non-empty transitions
+    // Mask notifications on event empty-to-non-empty transitions.
     const MASK_EVENT_NON_EMPTY_LSB: u32 = 0;
     const MASK_EVENT_NON_EMPTY_BITS: u32 = 1;
+    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
+    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
     const MASK_TRAP_LSB: u32 = 1;
     const MASK_TRAP_BITS: u32 = 1;
-    const TRAP_ACK_ENDIAN_LITTLE: bbool = true;
-    // Write-one acknowledgment of sticky Trap cause; zero is ignored and pending platform notifications survive
+    // Write one to clear sticky Trap cause without retracting platform notifications
+    // Write one to clear sticky Trap cause without retracting platform notifications.
     const TRAP_ACK_OFFSET: u64 = 12;
     const TRAP_ACK_BYTES: u32 = 4;
-    const TRAP_ACK_RESET: u64 = 64'h0000000000000000;
-    const TRAP_ACK_WRITABLE: u64 = 64'h0000000000000001;
+    const TRAP_ACK_ENDIAN_LITTLE: bbool = true;
     const TRAP_ACK_READ: bbool = false;
     const TRAP_ACK_WRITE: bbool = true;
+    const TRAP_ACK_RESET: u64 = 64'h0000000000000000;
+    const TRAP_ACK_WRITABLE: u64 = 64'h0000000000000001;
+    // Write one to clear the sticky Trap cause
+    // Write one to clear the sticky Trap cause.
     const TRAP_ACK_REQUEST_LSB: u32 = 0;
     const TRAP_ACK_REQUEST_BITS: u32 = 1;
 }
@@ -1197,170 +1257,203 @@ pub package ChannelInterruptsLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ChannelRegistersLayout {
+    // Channel controls and fatal state
+    // Channel-owned configuration, recovery and interrupt groups. Stopping errors require reset; recoverable payload faults retain the command until explicit resume.
     const ALIGNMENT: u64 = 4;
-    struct Geometry {
-        extent: u64,
-        config_offset: u64,
-        config_count: u64,
-        config_stride: u64,
-        recovery_offset: u64,
-        recovery_count: u64,
-        recovery_stride: u64,
-        irq_offset: u64,
-        irq_count: u64,
-        irq_stride: u64,
-    }
-    function geometry() -> Geometry {
-        var result: Geometry;
-        result = '0;
-        result.config_offset = 0;
-        result.config_count = 1;
-        result.config_stride = 8;
-        result.recovery_offset = 8;
-        result.recovery_count = 1;
-        result.recovery_stride = 12;
-        result.irq_offset = 20;
-        result.irq_count = 1;
-        result.irq_stride = 16;
-        result.extent = 36;
-        return result;
-    }
     function config_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.config_offset;
+        return 0;
     }
     function config_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.config_count;
+        return 1;
     }
     function config_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.config_stride;
+        return 8;
     }
     function recovery_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.recovery_offset;
+        return 8;
     }
     function recovery_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.recovery_count;
+        return 1;
     }
     function recovery_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.recovery_stride;
+        return 12;
     }
     function irq_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.irq_offset;
+        return 20;
     }
     function irq_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.irq_count;
+        return 1;
     }
     function irq_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.irq_stride;
+        return 16;
     }
+    function extent() -> u64 {
+        return 36;
+    }
+    // Processing enable and locked ring context.
+    // Channel processing enable
+    // One permits pipeline progress and validates command ring geometry; the first successful enable locks both rings' base addresses and capacities. Event geometry is checked when publishing an error event. Zero pauses processing without clearing cursors, retained work or errors.
+    // Context shared by command and event ring accesses
+    // Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
+    // Sticky fatal status and payload fault recovery.
+    // Sticky channel fatal
+    // A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
+    // Payload fault status
+    // The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
+    // Resume suspended command
+    // Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
+    // Notification enable, causes, masks and Trap acknowledgment.
+    // Channel interrupt enable
+    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked
+    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
+    // Independent non-empty and Trap notification masks
+    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
+    // Write one to clear sticky Trap cause without retracting platform notifications
+    // Write one to clear sticky Trap cause without retracting platform notifications.
     const EXTENT: u64 = 36;
-    const CONFIG_ENABLE_ENDIAN_LITTLE: bbool = true;
-    // Enable control
+    // Channel processing enable
+    // One permits pipeline progress and validates command ring geometry; the first successful enable locks both rings' base addresses and capacities. Event geometry is checked when publishing an error event. Zero pauses processing without clearing cursors, retained work or errors.
     const CONFIG_ENABLE_OFFSET: u64 = 0;
     const CONFIG_ENABLE_BYTES: u32 = 4;
-    const CONFIG_ENABLE_RESET: u64 = 64'h0000000000000000;
-    const CONFIG_ENABLE_WRITABLE: u64 = 64'h0000000000000001;
+    const CONFIG_ENABLE_ENDIAN_LITTLE: bbool = true;
     const CONFIG_ENABLE_READ: bbool = true;
     const CONFIG_ENABLE_WRITE: bbool = true;
+    const CONFIG_ENABLE_RESET: u64 = 64'h0000000000000000;
+    const CONFIG_ENABLE_WRITABLE: u64 = 64'h0000000000000001;
+    // Enabled
+    // Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
     const CONFIG_ENABLE_ENABLED_LSB: u32 = 0;
     const CONFIG_ENABLE_ENABLED_BITS: u32 = 1;
-    const CONFIG_RING_CONTEXT_ENDIAN_LITTLE: bbool = true;
-    // Read/write word
+    // Context shared by command and event ring accesses
+    // Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
     const CONFIG_RING_CONTEXT_OFFSET: u64 = 4;
     const CONFIG_RING_CONTEXT_BYTES: u32 = 4;
-    const CONFIG_RING_CONTEXT_RESET: u64 = 64'h0000000000000000;
-    const CONFIG_RING_CONTEXT_WRITABLE: u64 = 64'h00000000ffffffff;
+    const CONFIG_RING_CONTEXT_ENDIAN_LITTLE: bbool = true;
     const CONFIG_RING_CONTEXT_READ: bbool = true;
     const CONFIG_RING_CONTEXT_WRITE: bbool = true;
-    const RECOVERY_FATAL_ENDIAN_LITTLE: bbool = true;
-    // Channel fatal state
+    const CONFIG_RING_CONTEXT_RESET: u64 = 64'h0000000000000000;
+    const CONFIG_RING_CONTEXT_WRITABLE: u64 = 64'h00000000ffffffff;
+    // Sticky channel fatal
+    // A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
     const RECOVERY_FATAL_OFFSET: u64 = 8;
     const RECOVERY_FATAL_BYTES: u32 = 4;
-    const RECOVERY_FATAL_RESET: u64 = 64'h0000000000000000;
-    const RECOVERY_FATAL_WRITABLE: u64 = 64'h0000000000000000;
+    const RECOVERY_FATAL_ENDIAN_LITTLE: bbool = true;
     const RECOVERY_FATAL_READ: bbool = true;
     const RECOVERY_FATAL_WRITE: bbool = false;
+    const RECOVERY_FATAL_RESET: u64 = 64'h0000000000000000;
+    const RECOVERY_FATAL_WRITABLE: u64 = 64'h0000000000000000;
+    // Fatal code
+    // Distinguishes normal operation from command-fetch and event-publication failures. Other encodings are invalid.
     const RECOVERY_FATAL_CODE_LSB: u32 = 0;
     const RECOVERY_FATAL_CODE_BITS: u32 = 32;
+    // No channel fatal
+    // Neither ring has latched a hardware access failure.
     const RECOVERY_FATAL_CODE_NONE: u64 = 0;
+    // Command fetch failed
+    // Hardware could not fetch or decode a command ring entry; its consumer cursor was not advanced.
     const RECOVERY_FATAL_CODE_COMMANDREAD: u64 = 1;
+    // Event publication failed
+    // Hardware could not publish an event ring entry; its producer cursor was not advanced. The payload copy may already have completed.
     const RECOVERY_FATAL_CODE_EVENTWRITE: u64 = 2;
+    // Error publication encountered a full event ring
+    // Error publication encountered a full event ring.
     const RECOVERY_FATAL_CODE_EVENTFULL: u64 = 3;
+    // Error publication encountered invalid event geometry or cursors
+    // Error publication encountered invalid event geometry or cursors.
     const RECOVERY_FATAL_CODE_EVENTCONFIGURATION: u64 = 4;
-    const RECOVERY_FAULT_STATUS_ENDIAN_LITTLE: bbool = true;
     // Payload fault status
+    // The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
     const RECOVERY_FAULT_STATUS_OFFSET: u64 = 12;
     const RECOVERY_FAULT_STATUS_BYTES: u32 = 4;
-    const RECOVERY_FAULT_STATUS_RESET: u64 = 64'h0000000000000000;
-    const RECOVERY_FAULT_STATUS_WRITABLE: u64 = 64'h0000000000000000;
+    const RECOVERY_FAULT_STATUS_ENDIAN_LITTLE: bbool = true;
     const RECOVERY_FAULT_STATUS_READ: bbool = true;
     const RECOVERY_FAULT_STATUS_WRITE: bbool = false;
+    const RECOVERY_FAULT_STATUS_RESET: u64 = 64'h0000000000000000;
+    const RECOVERY_FAULT_STATUS_WRITABLE: u64 = 64'h0000000000000000;
+    // A payload page fault awaits software repair and an explicit resume request
+    // A payload page fault awaits software repair and an explicit resume request.
     const RECOVERY_FAULT_STATUS_FAULTED_LSB: u32 = 0;
     const RECOVERY_FAULT_STATUS_FAULTED_BITS: u32 = 1;
-    const RECOVERY_RESUME_ENDIAN_LITTLE: bbool = true;
-    // Payload resume request
+    // Resume suspended command
+    // Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
     const RECOVERY_RESUME_OFFSET: u64 = 16;
     const RECOVERY_RESUME_BYTES: u32 = 4;
-    const RECOVERY_RESUME_RESET: u64 = 64'h0000000000000000;
-    const RECOVERY_RESUME_WRITABLE: u64 = 64'h0000000000000001;
+    const RECOVERY_RESUME_ENDIAN_LITTLE: bbool = true;
     const RECOVERY_RESUME_READ: bbool = false;
     const RECOVERY_RESUME_WRITE: bbool = true;
+    const RECOVERY_RESUME_RESET: u64 = 64'h0000000000000000;
+    const RECOVERY_RESUME_WRITABLE: u64 = 64'h0000000000000001;
+    // Write one to clear faulted after mapping repair; reserved bits must be zero
+    // Write one to clear faulted after mapping repair; reserved bits must be zero.
     const RECOVERY_RESUME_REQUEST_LSB: u32 = 0;
     const RECOVERY_RESUME_REQUEST_BITS: u32 = 1;
-    const IRQ_ENABLE_ENDIAN_LITTLE: bbool = true;
-    // Enable control
+    // Channel interrupt enable
+    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
     const IRQ_ENABLE_OFFSET: u64 = 20;
     const IRQ_ENABLE_BYTES: u32 = 4;
-    const IRQ_ENABLE_RESET: u64 = 64'h0000000000000000;
-    const IRQ_ENABLE_WRITABLE: u64 = 64'h0000000000000001;
+    const IRQ_ENABLE_ENDIAN_LITTLE: bbool = true;
     const IRQ_ENABLE_READ: bbool = true;
     const IRQ_ENABLE_WRITE: bbool = true;
+    const IRQ_ENABLE_RESET: u64 = 64'h0000000000000000;
+    const IRQ_ENABLE_WRITABLE: u64 = 64'h0000000000000001;
+    // Enabled
+    // Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
     const IRQ_ENABLE_ENABLED_LSB: u32 = 0;
     const IRQ_ENABLE_ENABLED_BITS: u32 = 1;
-    const IRQ_CAUSE_ENDIAN_LITTLE: bbool = true;
-    // Channel interrupt causes
+    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked
+    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
     const IRQ_CAUSE_OFFSET: u64 = 24;
     const IRQ_CAUSE_BYTES: u32 = 4;
-    const IRQ_CAUSE_RESET: u64 = 64'h0000000000000000;
-    const IRQ_CAUSE_WRITABLE: u64 = 64'h0000000000000000;
+    const IRQ_CAUSE_ENDIAN_LITTLE: bbool = true;
     const IRQ_CAUSE_READ: bbool = true;
     const IRQ_CAUSE_WRITE: bbool = false;
+    const IRQ_CAUSE_RESET: u64 = 64'h0000000000000000;
+    const IRQ_CAUSE_WRITABLE: u64 = 64'h0000000000000000;
+    // The event ring currently contains unread entries
+    // The event ring currently contains unread entries.
     const IRQ_CAUSE_EVENT_NON_EMPTY_LSB: u32 = 0;
     const IRQ_CAUSE_EVENT_NON_EMPTY_BITS: u32 = 1;
+    // A Trap command executed since the last Trap acknowledgment
+    // A Trap command executed since the last Trap acknowledgment.
     const IRQ_CAUSE_TRAP_LSB: u32 = 1;
     const IRQ_CAUSE_TRAP_BITS: u32 = 1;
+    // A stopping command error is latched before event publication; processing remains stopped until reset
+    // A stopping command error is latched before event publication; processing remains stopped until reset. Payload suspension does not set this cause.
     const IRQ_CAUSE_ERROR_LSB: u32 = 2;
     const IRQ_CAUSE_ERROR_BITS: u32 = 1;
+    // The channel fatal register contains a fatal error
+    // The channel fatal register contains a fatal error.
     const IRQ_CAUSE_CHANNEL_FATAL_LSB: u32 = 3;
     const IRQ_CAUSE_CHANNEL_FATAL_BITS: u32 = 1;
-    const IRQ_MASK_ENDIAN_LITTLE: bbool = true;
-    // Channel event notification masks
+    // Independent non-empty and Trap notification masks
+    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
     const IRQ_MASK_OFFSET: u64 = 28;
     const IRQ_MASK_BYTES: u32 = 4;
-    const IRQ_MASK_RESET: u64 = 64'h0000000000000000;
-    const IRQ_MASK_WRITABLE: u64 = 64'h0000000000000003;
+    const IRQ_MASK_ENDIAN_LITTLE: bbool = true;
     const IRQ_MASK_READ: bbool = true;
     const IRQ_MASK_WRITE: bbool = true;
+    const IRQ_MASK_RESET: u64 = 64'h0000000000000000;
+    const IRQ_MASK_WRITABLE: u64 = 64'h0000000000000003;
+    // Mask notifications on event empty-to-non-empty transitions
+    // Mask notifications on event empty-to-non-empty transitions.
     const IRQ_MASK_EVENT_NON_EMPTY_LSB: u32 = 0;
     const IRQ_MASK_EVENT_NON_EMPTY_BITS: u32 = 1;
+    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
+    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
     const IRQ_MASK_TRAP_LSB: u32 = 1;
     const IRQ_MASK_TRAP_BITS: u32 = 1;
-    const IRQ_TRAP_ACK_ENDIAN_LITTLE: bbool = true;
-    // Write-one acknowledgment of sticky Trap cause; zero is ignored and pending platform notifications survive
+    // Write one to clear sticky Trap cause without retracting platform notifications
+    // Write one to clear sticky Trap cause without retracting platform notifications.
     const IRQ_TRAP_ACK_OFFSET: u64 = 32;
     const IRQ_TRAP_ACK_BYTES: u32 = 4;
-    const IRQ_TRAP_ACK_RESET: u64 = 64'h0000000000000000;
-    const IRQ_TRAP_ACK_WRITABLE: u64 = 64'h0000000000000001;
+    const IRQ_TRAP_ACK_ENDIAN_LITTLE: bbool = true;
     const IRQ_TRAP_ACK_READ: bbool = false;
     const IRQ_TRAP_ACK_WRITE: bbool = true;
+    const IRQ_TRAP_ACK_RESET: u64 = 64'h0000000000000000;
+    const IRQ_TRAP_ACK_WRITABLE: u64 = 64'h0000000000000001;
+    // Write one to clear the sticky Trap cause
+    // Write one to clear the sticky Trap cause.
     const IRQ_TRAP_ACK_REQUEST_LSB: u32 = 0;
     const IRQ_TRAP_ACK_REQUEST_BITS: u32 = 1;
 }
@@ -1368,234 +1461,297 @@ pub package ChannelRegistersLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ChannelBlockLayout {
+    // PDMA channel register block
+    // One independent channel's command/event rings, notification controls and sticky fatal. DmaRegisters repeats this data block for every implemented channel; privileged reset lives in ChannelAdmin.
     const ALIGNMENT: u64 = 4096;
-    struct Geometry {
-        extent: u64,
-        command_offset: u64,
-        command_count: u64,
-        command_stride: u64,
-        event_offset: u64,
-        event_count: u64,
-        event_stride: u64,
-        control_offset: u64,
-        control_count: u64,
-        control_stride: u64,
-    }
-    function geometry() -> Geometry {
-        var result: Geometry;
-        result = '0;
-        result.command_offset = 0;
-        result.command_count = 1;
-        result.command_stride = 24;
-        result.event_offset = 24;
-        result.event_count = 1;
-        result.event_stride = 24;
-        result.control_offset = 44;
-        result.control_count = 1;
-        result.control_stride = 36;
-        result.extent = 4096;
-        return result;
-    }
     function command_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.command_offset;
+        return 0;
     }
     function command_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.command_count;
+        return 1;
     }
     function command_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.command_stride;
+        return 24;
     }
     function event_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.event_offset;
+        return 24;
     }
     function event_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.event_count;
+        return 1;
     }
     function event_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.event_stride;
+        return 24;
     }
     function control_offset() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.control_offset;
+        return 44;
     }
     function control_count() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.control_count;
+        return 1;
     }
     function control_stride() -> u64 {
-        let shape: Geometry = geometry();
-        return shape.control_stride;
+        return 36;
     }
+    function extent() -> u64 {
+        return 4096;
+    }
+    // Command queue interface
+    // Registers owned by the software-produced, hardware-consumed command ring. Software programs storage before enabling the channel and publishes descriptors through its producer cursor.
+    // Command ring base address
+    // Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset.
+    // Command ring capacity
+    // Number of command slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
+    // Published command count
+    // Software advances this wrapping cursor only after writing command records to memory. Publication may not exceed the ring's free capacity; hardware reads entries between consumer and producer.
+    // Fetched command count
+    // Hardware advances this wrapping cursor after successfully reading and decoding a command. It releases the command slot; it does not indicate that the copy has completed.
+    // Event queue interface
+    // Registers owned by the hardware-produced, software-consumed event ring. Software programs storage before enabling the channel and releases events through its consumer cursor.
+    // Event ring base address
+    // Start of event storage in the attached memory backend, aligned to eight bytes. Event slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
+    // Event ring capacity
+    // Number of event slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
+    // Published event count
+    // Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
+    // Consumed event count
+    // Software advances this wrapping cursor after reading and decoding events. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
+    // Channel management interface
+    // Processing enable, interrupt causes and sticky channel fatal. Trap notifications do not use event storage.
+    // Processing enable and locked ring context.
+    // Channel processing enable
+    // One permits pipeline progress and validates command ring geometry; the first successful enable locks both rings' base addresses and capacities. Event geometry is checked when publishing an error event. Zero pauses processing without clearing cursors, retained work or errors.
+    // Context shared by command and event ring accesses
+    // Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
+    // Sticky fatal status and payload fault recovery.
+    // Sticky channel fatal
+    // A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
+    // Payload fault status
+    // The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
+    // Resume suspended command
+    // Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
+    // Notification enable, causes, masks and Trap acknowledgment.
+    // Channel interrupt enable
+    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked
+    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
+    // Independent non-empty and Trap notification masks
+    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
+    // Write one to clear sticky Trap cause without retracting platform notifications
+    // Write one to clear sticky Trap cause without retracting platform notifications.
     const EXTENT: u64 = 4096;
-    const COMMAND_BASE_ENDIAN_LITTLE: bbool = true;
-    // Memory address
+    // Command ring base address
+    // Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset.
     const COMMAND_BASE_OFFSET: u64 = 0;
     const COMMAND_BASE_BYTES: u32 = 8;
-    const COMMAND_BASE_RESET: u64 = 64'h0000000000000000;
-    const COMMAND_BASE_WRITABLE: u64 = 64'hffffffffffffffff;
+    const COMMAND_BASE_ENDIAN_LITTLE: bbool = true;
     const COMMAND_BASE_READ: bbool = true;
     const COMMAND_BASE_WRITE: bbool = true;
-    const COMMAND_CAPACITY_ENDIAN_LITTLE: bbool = true;
-    // Read/write word
+    const COMMAND_BASE_RESET: u64 = 64'h0000000000000000;
+    const COMMAND_BASE_WRITABLE: u64 = 64'hffffffffffffffff;
+    // Command ring capacity
+    // Number of command slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
     const COMMAND_CAPACITY_OFFSET: u64 = 8;
     const COMMAND_CAPACITY_BYTES: u32 = 4;
-    const COMMAND_CAPACITY_RESET: u64 = 64'h0000000000000000;
-    const COMMAND_CAPACITY_WRITABLE: u64 = 64'h00000000ffffffff;
+    const COMMAND_CAPACITY_ENDIAN_LITTLE: bbool = true;
     const COMMAND_CAPACITY_READ: bbool = true;
     const COMMAND_CAPACITY_WRITE: bbool = true;
-    const COMMAND_PRODUCER_ENDIAN_LITTLE: bbool = true;
-    // Read/write word
+    const COMMAND_CAPACITY_RESET: u64 = 64'h0000000000000000;
+    const COMMAND_CAPACITY_WRITABLE: u64 = 64'h00000000ffffffff;
+    // Published command count
+    // Software advances this wrapping cursor only after writing command records to memory. Publication may not exceed the ring's free capacity; hardware reads entries between consumer and producer.
     const COMMAND_PRODUCER_OFFSET: u64 = 12;
     const COMMAND_PRODUCER_BYTES: u32 = 4;
-    const COMMAND_PRODUCER_RESET: u64 = 64'h0000000000000000;
-    const COMMAND_PRODUCER_WRITABLE: u64 = 64'h00000000ffffffff;
+    const COMMAND_PRODUCER_ENDIAN_LITTLE: bbool = true;
     const COMMAND_PRODUCER_READ: bbool = true;
     const COMMAND_PRODUCER_WRITE: bbool = true;
-    const COMMAND_CONSUMER_ENDIAN_LITTLE: bbool = true;
-    // Read-only word
+    const COMMAND_PRODUCER_RESET: u64 = 64'h0000000000000000;
+    const COMMAND_PRODUCER_WRITABLE: u64 = 64'h00000000ffffffff;
+    // Fetched command count
+    // Hardware advances this wrapping cursor after successfully reading and decoding a command. It releases the command slot; it does not indicate that the copy has completed.
     const COMMAND_CONSUMER_OFFSET: u64 = 16;
     const COMMAND_CONSUMER_BYTES: u32 = 4;
-    const COMMAND_CONSUMER_RESET: u64 = 64'h0000000000000000;
-    const COMMAND_CONSUMER_WRITABLE: u64 = 64'h0000000000000000;
+    const COMMAND_CONSUMER_ENDIAN_LITTLE: bbool = true;
     const COMMAND_CONSUMER_READ: bbool = true;
     const COMMAND_CONSUMER_WRITE: bbool = false;
-    const EVENT_BASE_ENDIAN_LITTLE: bbool = true;
-    // Memory address
+    const COMMAND_CONSUMER_RESET: u64 = 64'h0000000000000000;
+    const COMMAND_CONSUMER_WRITABLE: u64 = 64'h0000000000000000;
+    // Event ring base address
+    // Start of event storage in the attached memory backend, aligned to eight bytes. Event slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
     const EVENT_BASE_OFFSET: u64 = 24;
     const EVENT_BASE_BYTES: u32 = 8;
-    const EVENT_BASE_RESET: u64 = 64'h0000000000000000;
-    const EVENT_BASE_WRITABLE: u64 = 64'hffffffffffffffff;
+    const EVENT_BASE_ENDIAN_LITTLE: bbool = true;
     const EVENT_BASE_READ: bbool = true;
     const EVENT_BASE_WRITE: bbool = true;
-    const EVENT_CAPACITY_ENDIAN_LITTLE: bbool = true;
-    // Read/write word
+    const EVENT_BASE_RESET: u64 = 64'h0000000000000000;
+    const EVENT_BASE_WRITABLE: u64 = 64'hffffffffffffffff;
+    // Event ring capacity
+    // Number of event slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
     const EVENT_CAPACITY_OFFSET: u64 = 32;
     const EVENT_CAPACITY_BYTES: u32 = 4;
-    const EVENT_CAPACITY_RESET: u64 = 64'h0000000000000000;
-    const EVENT_CAPACITY_WRITABLE: u64 = 64'h00000000ffffffff;
+    const EVENT_CAPACITY_ENDIAN_LITTLE: bbool = true;
     const EVENT_CAPACITY_READ: bbool = true;
     const EVENT_CAPACITY_WRITE: bbool = true;
-    const EVENT_PRODUCER_ENDIAN_LITTLE: bbool = true;
-    // Read-only word
+    const EVENT_CAPACITY_RESET: u64 = 64'h0000000000000000;
+    const EVENT_CAPACITY_WRITABLE: u64 = 64'h00000000ffffffff;
+    // Published event count
+    // Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
     const EVENT_PRODUCER_OFFSET: u64 = 36;
     const EVENT_PRODUCER_BYTES: u32 = 4;
-    const EVENT_PRODUCER_RESET: u64 = 64'h0000000000000000;
-    const EVENT_PRODUCER_WRITABLE: u64 = 64'h0000000000000000;
+    const EVENT_PRODUCER_ENDIAN_LITTLE: bbool = true;
     const EVENT_PRODUCER_READ: bbool = true;
     const EVENT_PRODUCER_WRITE: bbool = false;
-    const EVENT_CONSUMER_ENDIAN_LITTLE: bbool = true;
-    // Read/write word
+    const EVENT_PRODUCER_RESET: u64 = 64'h0000000000000000;
+    const EVENT_PRODUCER_WRITABLE: u64 = 64'h0000000000000000;
+    // Consumed event count
+    // Software advances this wrapping cursor after reading and decoding events. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
     const EVENT_CONSUMER_OFFSET: u64 = 40;
     const EVENT_CONSUMER_BYTES: u32 = 4;
-    const EVENT_CONSUMER_RESET: u64 = 64'h0000000000000000;
-    const EVENT_CONSUMER_WRITABLE: u64 = 64'h00000000ffffffff;
+    const EVENT_CONSUMER_ENDIAN_LITTLE: bbool = true;
     const EVENT_CONSUMER_READ: bbool = true;
     const EVENT_CONSUMER_WRITE: bbool = true;
-    const CONTROL_CONFIG_ENABLE_ENDIAN_LITTLE: bbool = true;
-    // Enable control
+    const EVENT_CONSUMER_RESET: u64 = 64'h0000000000000000;
+    const EVENT_CONSUMER_WRITABLE: u64 = 64'h00000000ffffffff;
+    // Channel processing enable
+    // One permits pipeline progress and validates command ring geometry; the first successful enable locks both rings' base addresses and capacities. Event geometry is checked when publishing an error event. Zero pauses processing without clearing cursors, retained work or errors.
     const CONTROL_CONFIG_ENABLE_OFFSET: u64 = 44;
     const CONTROL_CONFIG_ENABLE_BYTES: u32 = 4;
-    const CONTROL_CONFIG_ENABLE_RESET: u64 = 64'h0000000000000000;
-    const CONTROL_CONFIG_ENABLE_WRITABLE: u64 = 64'h0000000000000001;
+    const CONTROL_CONFIG_ENABLE_ENDIAN_LITTLE: bbool = true;
     const CONTROL_CONFIG_ENABLE_READ: bbool = true;
     const CONTROL_CONFIG_ENABLE_WRITE: bbool = true;
+    const CONTROL_CONFIG_ENABLE_RESET: u64 = 64'h0000000000000000;
+    const CONTROL_CONFIG_ENABLE_WRITABLE: u64 = 64'h0000000000000001;
+    // Enabled
+    // Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
     const CONTROL_CONFIG_ENABLE_ENABLED_LSB: u32 = 0;
     const CONTROL_CONFIG_ENABLE_ENABLED_BITS: u32 = 1;
-    const CONTROL_CONFIG_RING_CONTEXT_ENDIAN_LITTLE: bbool = true;
-    // Read/write word
+    // Context shared by command and event ring accesses
+    // Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
     const CONTROL_CONFIG_RING_CONTEXT_OFFSET: u64 = 48;
     const CONTROL_CONFIG_RING_CONTEXT_BYTES: u32 = 4;
-    const CONTROL_CONFIG_RING_CONTEXT_RESET: u64 = 64'h0000000000000000;
-    const CONTROL_CONFIG_RING_CONTEXT_WRITABLE: u64 = 64'h00000000ffffffff;
+    const CONTROL_CONFIG_RING_CONTEXT_ENDIAN_LITTLE: bbool = true;
     const CONTROL_CONFIG_RING_CONTEXT_READ: bbool = true;
     const CONTROL_CONFIG_RING_CONTEXT_WRITE: bbool = true;
-    const CONTROL_RECOVERY_FATAL_ENDIAN_LITTLE: bbool = true;
-    // Channel fatal state
+    const CONTROL_CONFIG_RING_CONTEXT_RESET: u64 = 64'h0000000000000000;
+    const CONTROL_CONFIG_RING_CONTEXT_WRITABLE: u64 = 64'h00000000ffffffff;
+    // Sticky channel fatal
+    // A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
     const CONTROL_RECOVERY_FATAL_OFFSET: u64 = 52;
     const CONTROL_RECOVERY_FATAL_BYTES: u32 = 4;
-    const CONTROL_RECOVERY_FATAL_RESET: u64 = 64'h0000000000000000;
-    const CONTROL_RECOVERY_FATAL_WRITABLE: u64 = 64'h0000000000000000;
+    const CONTROL_RECOVERY_FATAL_ENDIAN_LITTLE: bbool = true;
     const CONTROL_RECOVERY_FATAL_READ: bbool = true;
     const CONTROL_RECOVERY_FATAL_WRITE: bbool = false;
+    const CONTROL_RECOVERY_FATAL_RESET: u64 = 64'h0000000000000000;
+    const CONTROL_RECOVERY_FATAL_WRITABLE: u64 = 64'h0000000000000000;
+    // Fatal code
+    // Distinguishes normal operation from command-fetch and event-publication failures. Other encodings are invalid.
     const CONTROL_RECOVERY_FATAL_CODE_LSB: u32 = 0;
     const CONTROL_RECOVERY_FATAL_CODE_BITS: u32 = 32;
+    // No channel fatal
+    // Neither ring has latched a hardware access failure.
     const CONTROL_RECOVERY_FATAL_CODE_NONE: u64 = 0;
+    // Command fetch failed
+    // Hardware could not fetch or decode a command ring entry; its consumer cursor was not advanced.
     const CONTROL_RECOVERY_FATAL_CODE_COMMANDREAD: u64 = 1;
+    // Event publication failed
+    // Hardware could not publish an event ring entry; its producer cursor was not advanced. The payload copy may already have completed.
     const CONTROL_RECOVERY_FATAL_CODE_EVENTWRITE: u64 = 2;
+    // Error publication encountered a full event ring
+    // Error publication encountered a full event ring.
     const CONTROL_RECOVERY_FATAL_CODE_EVENTFULL: u64 = 3;
+    // Error publication encountered invalid event geometry or cursors
+    // Error publication encountered invalid event geometry or cursors.
     const CONTROL_RECOVERY_FATAL_CODE_EVENTCONFIGURATION: u64 = 4;
-    const CONTROL_RECOVERY_FAULT_STATUS_ENDIAN_LITTLE: bbool = true;
     // Payload fault status
+    // The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
     const CONTROL_RECOVERY_FAULT_STATUS_OFFSET: u64 = 56;
     const CONTROL_RECOVERY_FAULT_STATUS_BYTES: u32 = 4;
-    const CONTROL_RECOVERY_FAULT_STATUS_RESET: u64 = 64'h0000000000000000;
-    const CONTROL_RECOVERY_FAULT_STATUS_WRITABLE: u64 = 64'h0000000000000000;
+    const CONTROL_RECOVERY_FAULT_STATUS_ENDIAN_LITTLE: bbool = true;
     const CONTROL_RECOVERY_FAULT_STATUS_READ: bbool = true;
     const CONTROL_RECOVERY_FAULT_STATUS_WRITE: bbool = false;
+    const CONTROL_RECOVERY_FAULT_STATUS_RESET: u64 = 64'h0000000000000000;
+    const CONTROL_RECOVERY_FAULT_STATUS_WRITABLE: u64 = 64'h0000000000000000;
+    // A payload page fault awaits software repair and an explicit resume request
+    // A payload page fault awaits software repair and an explicit resume request.
     const CONTROL_RECOVERY_FAULT_STATUS_FAULTED_LSB: u32 = 0;
     const CONTROL_RECOVERY_FAULT_STATUS_FAULTED_BITS: u32 = 1;
-    const CONTROL_RECOVERY_RESUME_ENDIAN_LITTLE: bbool = true;
-    // Payload resume request
+    // Resume suspended command
+    // Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
     const CONTROL_RECOVERY_RESUME_OFFSET: u64 = 60;
     const CONTROL_RECOVERY_RESUME_BYTES: u32 = 4;
-    const CONTROL_RECOVERY_RESUME_RESET: u64 = 64'h0000000000000000;
-    const CONTROL_RECOVERY_RESUME_WRITABLE: u64 = 64'h0000000000000001;
+    const CONTROL_RECOVERY_RESUME_ENDIAN_LITTLE: bbool = true;
     const CONTROL_RECOVERY_RESUME_READ: bbool = false;
     const CONTROL_RECOVERY_RESUME_WRITE: bbool = true;
+    const CONTROL_RECOVERY_RESUME_RESET: u64 = 64'h0000000000000000;
+    const CONTROL_RECOVERY_RESUME_WRITABLE: u64 = 64'h0000000000000001;
+    // Write one to clear faulted after mapping repair; reserved bits must be zero
+    // Write one to clear faulted after mapping repair; reserved bits must be zero.
     const CONTROL_RECOVERY_RESUME_REQUEST_LSB: u32 = 0;
     const CONTROL_RECOVERY_RESUME_REQUEST_BITS: u32 = 1;
-    const CONTROL_IRQ_ENABLE_ENDIAN_LITTLE: bbool = true;
-    // Enable control
+    // Channel interrupt enable
+    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
     const CONTROL_IRQ_ENABLE_OFFSET: u64 = 64;
     const CONTROL_IRQ_ENABLE_BYTES: u32 = 4;
-    const CONTROL_IRQ_ENABLE_RESET: u64 = 64'h0000000000000000;
-    const CONTROL_IRQ_ENABLE_WRITABLE: u64 = 64'h0000000000000001;
+    const CONTROL_IRQ_ENABLE_ENDIAN_LITTLE: bbool = true;
     const CONTROL_IRQ_ENABLE_READ: bbool = true;
     const CONTROL_IRQ_ENABLE_WRITE: bbool = true;
+    const CONTROL_IRQ_ENABLE_RESET: u64 = 64'h0000000000000000;
+    const CONTROL_IRQ_ENABLE_WRITABLE: u64 = 64'h0000000000000001;
+    // Enabled
+    // Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
     const CONTROL_IRQ_ENABLE_ENABLED_LSB: u32 = 0;
     const CONTROL_IRQ_ENABLE_ENABLED_BITS: u32 = 1;
-    const CONTROL_IRQ_CAUSE_ENDIAN_LITTLE: bbool = true;
-    // Channel interrupt causes
+    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked
+    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
     const CONTROL_IRQ_CAUSE_OFFSET: u64 = 68;
     const CONTROL_IRQ_CAUSE_BYTES: u32 = 4;
-    const CONTROL_IRQ_CAUSE_RESET: u64 = 64'h0000000000000000;
-    const CONTROL_IRQ_CAUSE_WRITABLE: u64 = 64'h0000000000000000;
+    const CONTROL_IRQ_CAUSE_ENDIAN_LITTLE: bbool = true;
     const CONTROL_IRQ_CAUSE_READ: bbool = true;
     const CONTROL_IRQ_CAUSE_WRITE: bbool = false;
+    const CONTROL_IRQ_CAUSE_RESET: u64 = 64'h0000000000000000;
+    const CONTROL_IRQ_CAUSE_WRITABLE: u64 = 64'h0000000000000000;
+    // The event ring currently contains unread entries
+    // The event ring currently contains unread entries.
     const CONTROL_IRQ_CAUSE_EVENT_NON_EMPTY_LSB: u32 = 0;
     const CONTROL_IRQ_CAUSE_EVENT_NON_EMPTY_BITS: u32 = 1;
+    // A Trap command executed since the last Trap acknowledgment
+    // A Trap command executed since the last Trap acknowledgment.
     const CONTROL_IRQ_CAUSE_TRAP_LSB: u32 = 1;
     const CONTROL_IRQ_CAUSE_TRAP_BITS: u32 = 1;
+    // A stopping command error is latched before event publication; processing remains stopped until reset
+    // A stopping command error is latched before event publication; processing remains stopped until reset. Payload suspension does not set this cause.
     const CONTROL_IRQ_CAUSE_ERROR_LSB: u32 = 2;
     const CONTROL_IRQ_CAUSE_ERROR_BITS: u32 = 1;
+    // The channel fatal register contains a fatal error
+    // The channel fatal register contains a fatal error.
     const CONTROL_IRQ_CAUSE_CHANNEL_FATAL_LSB: u32 = 3;
     const CONTROL_IRQ_CAUSE_CHANNEL_FATAL_BITS: u32 = 1;
-    const CONTROL_IRQ_MASK_ENDIAN_LITTLE: bbool = true;
-    // Channel event notification masks
+    // Independent non-empty and Trap notification masks
+    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
     const CONTROL_IRQ_MASK_OFFSET: u64 = 72;
     const CONTROL_IRQ_MASK_BYTES: u32 = 4;
-    const CONTROL_IRQ_MASK_RESET: u64 = 64'h0000000000000000;
-    const CONTROL_IRQ_MASK_WRITABLE: u64 = 64'h0000000000000003;
+    const CONTROL_IRQ_MASK_ENDIAN_LITTLE: bbool = true;
     const CONTROL_IRQ_MASK_READ: bbool = true;
     const CONTROL_IRQ_MASK_WRITE: bbool = true;
+    const CONTROL_IRQ_MASK_RESET: u64 = 64'h0000000000000000;
+    const CONTROL_IRQ_MASK_WRITABLE: u64 = 64'h0000000000000003;
+    // Mask notifications on event empty-to-non-empty transitions
+    // Mask notifications on event empty-to-non-empty transitions.
     const CONTROL_IRQ_MASK_EVENT_NON_EMPTY_LSB: u32 = 0;
     const CONTROL_IRQ_MASK_EVENT_NON_EMPTY_BITS: u32 = 1;
+    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
+    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
     const CONTROL_IRQ_MASK_TRAP_LSB: u32 = 1;
     const CONTROL_IRQ_MASK_TRAP_BITS: u32 = 1;
-    const CONTROL_IRQ_TRAP_ACK_ENDIAN_LITTLE: bbool = true;
-    // Write-one acknowledgment of sticky Trap cause; zero is ignored and pending platform notifications survive
+    // Write one to clear sticky Trap cause without retracting platform notifications
+    // Write one to clear sticky Trap cause without retracting platform notifications.
     const CONTROL_IRQ_TRAP_ACK_OFFSET: u64 = 76;
     const CONTROL_IRQ_TRAP_ACK_BYTES: u32 = 4;
-    const CONTROL_IRQ_TRAP_ACK_RESET: u64 = 64'h0000000000000000;
-    const CONTROL_IRQ_TRAP_ACK_WRITABLE: u64 = 64'h0000000000000001;
+    const CONTROL_IRQ_TRAP_ACK_ENDIAN_LITTLE: bbool = true;
     const CONTROL_IRQ_TRAP_ACK_READ: bbool = false;
     const CONTROL_IRQ_TRAP_ACK_WRITE: bbool = true;
+    const CONTROL_IRQ_TRAP_ACK_RESET: u64 = 64'h0000000000000000;
+    const CONTROL_IRQ_TRAP_ACK_WRITABLE: u64 = 64'h0000000000000001;
+    // Write one to clear the sticky Trap cause
+    // Write one to clear the sticky Trap cause.
     const CONTROL_IRQ_TRAP_ACK_REQUEST_LSB: u32 = 0;
     const CONTROL_IRQ_TRAP_ACK_REQUEST_BITS: u32 = 1;
 }
@@ -1603,79 +1759,43 @@ pub package ChannelBlockLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package DmaRegistersLayout {
+    // PDMA register apertures
+    // Read-only discovery followed by contiguous administration and page-aligned channel data apertures. Layout gaps are reserved, not registers.
     const ALIGNMENT: u64 = 4096;
-    struct Geometry {
-        extent: u64,
-        discovery_offset: u64,
-        discovery_count: u64,
-        discovery_stride: u64,
-        admin_offset: u64,
-        admin_count: u64,
-        admin_stride: u64,
-        channels_offset: u64,
-        channels_count: u64,
-        channels_stride: u64,
-    }
-    function geometry(p_channel_count: input u64) -> Geometry {
-        var result: Geometry;
-        var cursor: u64;
-        result = '0;
-        cursor = 0;
-        let child_discovery: DmaDiscoveryLayout::Geometry = DmaDiscoveryLayout::geometry();
-        result.discovery_offset = ((cursor + 4 - 1) & ~(4 - 1));
-        result.discovery_count = 1;
-        result.discovery_stride = ((child_discovery.extent + 4 - 1) & ~(4 - 1));
-        let end_discovery: u64 = ((result.discovery_offset + ((result.discovery_count - 1) * result.discovery_stride)) + child_discovery.extent);
-        cursor = (if cursor >: end_discovery ? cursor : end_discovery);
-        let child_admin: DmaAdminLayout::Geometry = DmaAdminLayout::geometry(p_channel_count);
-        result.admin_offset = ((cursor + 4 - 1) & ~(4 - 1));
-        result.admin_count = 1;
-        result.admin_stride = ((child_admin.extent + 4 - 1) & ~(4 - 1));
-        let end_admin: u64 = ((result.admin_offset + ((result.admin_count - 1) * result.admin_stride)) + child_admin.extent);
-        cursor = (if cursor >: end_admin ? cursor : end_admin);
-        let child_channels: ChannelBlockLayout::Geometry = ChannelBlockLayout::geometry();
-        result.channels_offset = ((cursor + 4096 - 1) & ~(4096 - 1));
-        result.channels_count = p_channel_count;
-        result.channels_stride = ((child_channels.extent + 4096 - 1) & ~(4096 - 1));
-        let end_channels: u64 = ((result.channels_offset + ((result.channels_count - 1) * result.channels_stride)) + child_channels.extent);
-        cursor = (if cursor >: end_channels ? cursor : end_channels);
-        result.extent = cursor;
-        return result;
-    }
+    // Hardware discovery aperture
+    // Read-only DMA configuration visible independently of administrative permissions.
     function discovery_offset(p_channel_count: input u64) -> u64 {
-        let shape: Geometry = geometry(p_channel_count);
-        return shape.discovery_offset;
+        return 0;
     }
     function discovery_count(p_channel_count: input u64) -> u64 {
-        let shape: Geometry = geometry(p_channel_count);
-        return shape.discovery_count;
+        return 1;
     }
     function discovery_stride(p_channel_count: input u64) -> u64 {
-        let shape: Geometry = geometry(p_channel_count);
-        return shape.discovery_stride;
+        return 8;
     }
+    // Privileged DMA administration
+    // Complete global and per-channel administration aperture, hidden from managed Host software.
     function admin_offset(p_channel_count: input u64) -> u64 {
-        let shape: Geometry = geometry(p_channel_count);
-        return shape.admin_offset;
+        return 8;
     }
     function admin_count(p_channel_count: input u64) -> u64 {
-        let shape: Geometry = geometry(p_channel_count);
-        return shape.admin_count;
+        return 1;
     }
     function admin_stride(p_channel_count: input u64) -> u64 {
-        let shape: Geometry = geometry(p_channel_count);
-        return shape.admin_stride;
+        return ((((12 + ((p_channel_count - 1) * 4)) + 4) + 4 - 1) & ~(4 - 1));
     }
+    // Independent channel data interfaces
+    // Page-aligned complete channel blocks containing rings, configuration, fatal failures and notifications. Unused bytes are reserved to their owning block.
     function channels_offset(p_channel_count: input u64) -> u64 {
-        let shape: Geometry = geometry(p_channel_count);
-        return shape.channels_offset;
+        return ((((8 + (0 * ((((12 + ((p_channel_count - 1) * 4)) + 4) + 4 - 1) & ~(4 - 1)))) + ((12 + ((p_channel_count - 1) * 4)) + 4)) + 4096 - 1) & ~(4096 - 1));
     }
     function channels_count(p_channel_count: input u64) -> u64 {
-        let shape: Geometry = geometry(p_channel_count);
-        return shape.channels_count;
+        return p_channel_count;
     }
     function channels_stride(p_channel_count: input u64) -> u64 {
-        let shape: Geometry = geometry(p_channel_count);
-        return shape.channels_stride;
+        return 4096;
+    }
+    function extent(p_channel_count: input u64) -> u64 {
+        return ((((((8 + (0 * ((((12 + ((p_channel_count - 1) * 4)) + 4) + 4 - 1) & ~(4 - 1)))) + ((12 + ((p_channel_count - 1) * 4)) + 4)) + 4096 - 1) & ~(4096 - 1)) + ((p_channel_count - 1) * 4096)) + 4096);
     }
 }

@@ -1,10 +1,7 @@
 //! Cross-crate discovery plus an application-defined dependency-graph backend.
 use schema::{
-    ast::{
-        Node, SchemaRegistry,
-        analysis::{Analysis, Bindings, UnitId},
-    },
-    export::{Artifact, Backend, InMemoryArtifactSink, Scope, generate},
+    ast::{SchemaGraph, SchemaRegistry},
+    export::Artifact,
     record_schema,
 };
 use std::{error::Error, fmt::Write};
@@ -16,36 +13,27 @@ record_schema! {
     } }
 }
 
-/// The renderer needs only prepared references; no builtin backend is enabled.
-struct DependencyGraph {
-    text: String,
-}
-impl Backend for DependencyGraph {
-    type Error = std::fmt::Error;
-    fn definition(&mut self, node: Node<'_>, scope: Scope<'_>) -> Result<(), Self::Error> {
-        let path = match &scope.unit.id {
-            UnitId::Definition(id) => id.path(),
-            UnitId::View(name) => name,
-        };
-        writeln!(self.text, "  {path:?};")?;
-        for edge in node.references() {
+/// Dependency graph rendering consumes reusable schema identities directly.
+fn dependency_graph(graph: &SchemaGraph) -> Result<Artifact, std::fmt::Error> {
+    let mut text = String::from("digraph schemas {\n");
+    for definition in graph.definitions() {
+        let path = definition.id().path();
+        writeln!(text, "  {path:?};")?;
+        for edge in definition.node().references() {
             writeln!(
-                self.text,
+                text,
                 "  {path:?} -> {:?} [label={:?}];",
                 edge.target().id().path(),
                 edge.name()
             )?;
         }
-        Ok(())
     }
-    fn finish(mut self) -> Result<Vec<Artifact>, Self::Error> {
-        self.text.push_str("}\n");
-        Ok(vec![Artifact {
-            logical_name: "dependencies.dot".into(),
-            media_type: "text/vnd.graphviz".into(),
-            contents: self.text.into_bytes(),
-        }])
-    }
+    text.push_str("}\n");
+    Ok(Artifact {
+        logical_name: "dependencies.dot".into(),
+        media_type: "text/vnd.graphviz".into(),
+        contents: text.into_bytes(),
+    })
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -60,18 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let peer = registry.select_module("schema_peer").resolve()?;
     assert_eq!(peer.definitions().count(), 2);
     assert!(peer.definitions().any(|node| node.name() == "Dormant"));
-    let mut sink = InMemoryArtifactSink::new();
-    let schema = Analysis::from_graph(&graph, &Bindings::new())?;
-    generate(
-        &schema,
-        DependencyGraph {
-            text: "digraph schemas {\n".into(),
-        },
-        &mut sink,
-    )?;
-    let [artifact] = sink.artifacts() else {
-        return Err("one graph artifact expected".into());
-    };
+    let artifact = dependency_graph(&graph)?;
     let text = std::str::from_utf8(&artifact.contents)?;
     assert_eq!(text.matches(" -> ").count(), 2);
     print!("{text}");

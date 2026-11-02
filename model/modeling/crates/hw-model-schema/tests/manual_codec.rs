@@ -203,15 +203,15 @@ fn derived_size_uses_the_codec_extent() {
 #[cfg(feature = "export-c-header")]
 #[test]
 fn opaque_field_metadata_exports_without_describing_internals() {
-    use hw_model_schema::ast::analysis::Analysis;
-    use hw_model_schema::export::backends::c_header::CHeaderBackend;
+    use hw_model_schema::analysis::AnalyzedSchema;
+    use hw_model_schema::export::backends::c_header::CRecordBackend;
     use hw_model_schema::export::{InMemoryArtifactSink, generate};
     // Given a parent containing trait-default opaque metadata.
     let mut sink = InMemoryArtifactSink::new();
     // When exporting its validated layout.
     generate(
-        &Analysis::opaque("opaque.h", WithMarker::SPEC).unwrap(),
-        CHeaderBackend::new().with_name("opaque.h", "opaque"),
+        &AnalyzedSchema::opaque("opaque.h", WithMarker::SPEC).unwrap(),
+        CRecordBackend::new().with_name("opaque.h", "opaque"),
         &mut sink,
     )
     .unwrap();

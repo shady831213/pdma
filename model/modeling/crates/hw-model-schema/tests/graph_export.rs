@@ -1,7 +1,7 @@
 //! Consumers can render a graph without knowing how roots were discovered.
 #![cfg(feature = "export-c-header")]
-use hw_model_schema::ast::analysis::{Analysis, AnalysisError, Bindings};
-use hw_model_schema::export::backends::c_header::{CHeaderBackend, CHeaderExportError};
+use hw_model_schema::analysis::{AnalysisError, AnalyzedSchema, Bindings};
+use hw_model_schema::export::backends::c_header::{CHeaderExportError, CRecordBackend};
 use hw_model_schema::{
     Endian, RecordSpec, RegisterDefinition,
     ast::{Definition, DefinitionId, SchemaSet},
@@ -29,8 +29,8 @@ fn distinct_same_named_types_require_an_explicit_backend_name_override()
     let graph = set.resolve()?;
     // When: the default backend would emit the same C prefix twice.
     let mut sink = InMemoryArtifactSink::new();
-    let prepared = Analysis::from_graph(&graph, &Bindings::new())?;
-    let failure = generate(&prepared, CHeaderBackend::new(), &mut sink);
+    let prepared = AnalyzedSchema::from_graph(&graph, &Bindings::new())?;
+    let failure = generate(&prepared, CRecordBackend::new(), &mut sink);
     // Then: no partial header is emitted; identity-based renaming resolves the collision.
     assert_eq!(
         failure,
@@ -42,7 +42,7 @@ fn distinct_same_named_types_require_an_explicit_backend_name_override()
         }))
     );
     assert!(sink.artifacts().is_empty());
-    let renderer = CHeaderBackend::new().with_name(
+    let renderer = CRecordBackend::new().with_name(
         hw_model_schema::ast::DefinitionId::of::<right::Entry>(),
         "right_entry",
     );
@@ -60,8 +60,8 @@ fn c_header_exports_reachable_records_once() -> Result<(), Box<dyn std::error::E
     // When: the built-in C backend renders its complete dependency set.
     let mut sink = InMemoryArtifactSink::new();
     generate(
-        &Analysis::from_graph(&graph, &Bindings::new())?,
-        CHeaderBackend::new(),
+        &AnalyzedSchema::from_graph(&graph, &Bindings::new())?,
+        CRecordBackend::new(),
         &mut sink,
     )?;
     // Then: both storage geometry and the referenced record's accessors are present.
@@ -94,7 +94,7 @@ fn invalid_record_retains_layout_error_during_preparation() -> Result<(), Box<dy
         DefinitionId::of::<Payload>()
     );
     // When: preparation resolves the later record before rendering begins.
-    let failure = Analysis::from_graph(&graph, &Bindings::new());
+    let failure = AnalyzedSchema::from_graph(&graph, &Bindings::new());
 
     // Then: the exact layout cause and defining path survive, with no partial output.
     let Err(AnalysisError::Record { path, source }) = failure else {
@@ -109,17 +109,23 @@ fn invalid_record_retains_layout_error_during_preparation() -> Result<(), Box<dy
 fn graph_register_uses_prepared_register_metadata() -> Result<(), Box<dyn std::error::Error>> {
     // Given: a valid record precedes a whole register in the selected graph.
     let mut set = SchemaSet::new();
-    set.add_record::<Payload>();
     set.add_definition(Definition::register::<ZInvalid, u16>(
         RegisterDefinition::new("Control", 4, Endian::Little),
     ));
     let graph = set.resolve()?;
     let mut sink = InMemoryArtifactSink::new();
+    let mut records = SchemaSet::new();
+    records.add_record::<Payload>();
+    generate(
+        &AnalyzedSchema::from_graph(&records.resolve()?, &Bindings::new())?,
+        CRecordBackend::new(),
+        &mut sink,
+    )?;
 
     // When: the common preparer supplies register metadata to the C renderer.
-    generate(
-        &Analysis::from_graph(&graph, &Bindings::new())?,
-        CHeaderBackend::new(),
+    hw_model_schema::export::generate(
+        &AnalyzedSchema::from_graph(&graph, &Bindings::new())?,
+        hw_model_schema::export::backends::c_header::CRegisterBackend::new(),
         &mut sink,
     )?;
 

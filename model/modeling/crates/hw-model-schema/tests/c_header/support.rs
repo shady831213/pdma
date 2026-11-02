@@ -1,4 +1,4 @@
-use hw_model_schema::ast::analysis::Analysis;
+use hw_model_schema::analysis::AnalyzedSchema;
 use std::{
     error::Error,
     fs, io,
@@ -6,7 +6,7 @@ use std::{
     process::{Command, Output},
 };
 
-use hw_model_schema::export::backends::c_header::CHeaderBackend;
+use hw_model_schema::export::backends::c_header::{CRecordBackend, CRegisterBackend};
 use hw_model_schema::export::{InMemoryArtifactSink, generate};
 use hw_model_schema::{Endian, FieldSpec, RecordSpec, ScalarKind};
 
@@ -35,10 +35,13 @@ pub fn render_record(
     prefix: &str,
     schema: &hw_model_schema::RecordSpec,
 ) -> TestResult<hw_model_schema::export::Artifact> {
-    render(
-        &Analysis::opaque(name, *schema)?,
-        CHeaderBackend::new().with_name(name, prefix),
-    )
+    let mut sink = InMemoryArtifactSink::new();
+    generate(
+        &AnalyzedSchema::opaque(name, *schema)?,
+        CRecordBackend::new().with_name(name, prefix),
+        &mut sink,
+    )?;
+    one_artifact(sink)
 }
 
 pub fn render_map<I: Copy + Eq, F: Copy + Eq + core::fmt::Debug>(
@@ -46,18 +49,16 @@ pub fn render_map<I: Copy + Eq, F: Copy + Eq + core::fmt::Debug>(
     prefix: &str,
     schema: &hw_model_schema::ResolvedRegisterMap<I, F>,
 ) -> TestResult<hw_model_schema::export::Artifact> {
-    render(
-        &Analysis::register_map(name, schema),
-        CHeaderBackend::new().with_name(name, prefix),
-    )
+    let mut sink = InMemoryArtifactSink::new();
+    generate(
+        &AnalyzedSchema::register_map(name, schema)?,
+        CRegisterBackend::new().with_name(name, prefix),
+        &mut sink,
+    )?;
+    one_artifact(sink)
 }
 
-fn render(
-    schema: &Analysis,
-    renderer: CHeaderBackend,
-) -> TestResult<hw_model_schema::export::Artifact> {
-    let mut sink = InMemoryArtifactSink::new();
-    generate(schema, renderer, &mut sink)?;
+fn one_artifact(sink: InMemoryArtifactSink) -> TestResult<hw_model_schema::export::Artifact> {
     let mut artifacts = sink.into_artifacts().into_iter();
     let artifact = artifacts
         .next()

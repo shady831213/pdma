@@ -23,7 +23,6 @@ impl Scope {
 
 #[derive(Debug, Default)]
 pub(in super::super) struct GeometryNames {
-    pub(in super::super) members: Scope,
     pub(in super::super) parameters: Scope,
 }
 

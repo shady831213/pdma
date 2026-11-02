@@ -1,7 +1,9 @@
 //! A standalone downstream consumer of the schema facade.
 
 mod telemetry;
-pub use telemetry::{TelemetryRenderer, TelemetrySink, export_resolved};
+pub use telemetry::{
+    TelemetryRecordRenderer, TelemetryRegisterRenderer, TelemetrySink, export_resolved,
+};
 
 use his::{
     bits_schema, record_schema, register_map, register_map::RegisterLocation, register_schema,

@@ -28,10 +28,26 @@ fn inline_union_exposes_its_selector_and_case_fields() -> TestResult {
     let field = record
         .node()
         .children()
+        .filter(|node| {
+            matches!(
+                node,
+                hw_model_schema::ast::Node::Record(hw_model_schema::ast::record::Node::Field(_))
+            )
+        })
         .nth(1)
         .ok_or("missing union field")?;
-    let hw_model_schema::ast::Node::Union(union) =
-        field.children().next().ok_or("missing union")?
+    let hw_model_schema::ast::Node::Record(hw_model_schema::ast::record::Node::Union(union)) =
+        field
+            .children()
+            .find(|node| {
+                matches!(
+                    node,
+                    hw_model_schema::ast::Node::Record(hw_model_schema::ast::record::Node::Union(
+                        _
+                    ))
+                )
+            })
+            .ok_or("missing union")?
     else {
         return Err("expected union".into());
     };
@@ -73,10 +89,26 @@ fn tagged_union_preserves_case_references_and_wire_discriminants() -> TestResult
     let field = record
         .node()
         .children()
+        .filter(|node| {
+            matches!(
+                node,
+                hw_model_schema::ast::Node::Record(hw_model_schema::ast::record::Node::Field(_))
+            )
+        })
         .nth(1)
         .ok_or("missing union field")?;
-    let hw_model_schema::ast::Node::Union(union) =
-        field.children().next().ok_or("missing union")?
+    let hw_model_schema::ast::Node::Record(hw_model_schema::ast::record::Node::Union(union)) =
+        field
+            .children()
+            .find(|node| {
+                matches!(
+                    node,
+                    hw_model_schema::ast::Node::Record(hw_model_schema::ast::record::Node::Union(
+                        _
+                    ))
+                )
+            })
+            .ok_or("missing union")?
     else {
         return Err("expected union".into());
     };

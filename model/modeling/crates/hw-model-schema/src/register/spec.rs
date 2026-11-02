@@ -13,6 +13,17 @@ pub enum Access {
     WriteOnly,
 }
 
+impl Access {
+    /// Whether software may read the register.
+    pub const fn readable(self) -> bool {
+        matches!(self, Self::ReadOnly | Self::ReadWrite)
+    }
+    /// Whether software may write the register.
+    pub const fn writable(self) -> bool {
+        matches!(self, Self::ReadWrite | Self::WriteOnly)
+    }
+}
+
 /// Application-defined reset classification attached to a register.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResetKind {

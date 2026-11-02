@@ -1,11 +1,23 @@
-use super::analysis::{BankView, RegisterMapView, RegisterView};
-use super::{MapDefinition, MapPlacement, Node};
+use super::register::Node;
+use super::{MapDefinition, MapPlacement};
+use crate::analysis::{BankView, RegisterMapView, RegisterView};
+use crate::analysis::{CompleteMapLayout, CompletePlacementLayout};
+mod semantic;
 
 /// A register map declaration or a concrete permission projection of one.
 #[derive(Debug, Clone, Copy)]
 pub enum MapView<'a> {
     /// Original declaration, retaining parameters and references.
     Declared(&'a MapDefinition),
+    /// Source declaration with checked mathematical layout properties.
+    Analyzed {
+        /// Original declaration.
+        declaration: &'a MapDefinition,
+        /// Checked layout formulas.
+        plan: &'a CompleteMapLayout,
+        /// Concrete constructor bindings for this root.
+        arguments: Option<&'a [usize]>,
+    },
     /// Checked concrete layout with effective permissions.
     Resolved(&'a RegisterMapView),
 }
@@ -40,6 +52,13 @@ pub enum RegisterLocation {
 pub enum PlacementView<'a> {
     /// A placement in the source declaration.
     Declared(&'a MapPlacement),
+    /// Source placement with checked mathematical layout properties.
+    Analyzed {
+        /// Original source placement.
+        declaration: &'a MapPlacement,
+        /// Checked properties of the same placement.
+        plan: &'a CompletePlacementLayout,
+    },
     /// A concrete register placement.
     Register {
         /// Effective register layout and permissions.
@@ -62,11 +81,12 @@ impl<'a> MapView<'a> {
     /// Iterates members without following their reusable definition references.
     pub fn children(self) -> std::vec::IntoIter<Node<'a>> {
         match self {
-            Self::Declared(map) => map
-                .placements()
-                .iter()
-                .map(|p| Node::Placement(PlacementView::Declared(p)))
-                .collect::<Vec<_>>(),
+            Self::Declared(map) => semantic::map(map, None, None),
+            Self::Analyzed {
+                declaration,
+                plan,
+                arguments,
+            } => semantic::map(declaration, Some(plan), arguments),
             Self::Resolved(map) => map
                 .registers
                 .iter()
@@ -94,7 +114,9 @@ impl<'a> PlacementView<'a> {
     /// Iterates concrete contained registers; a declared child remains a reference.
     pub fn children(self) -> std::vec::IntoIter<Node<'a>> {
         let nodes = match self {
-            Self::Declared(_) | Self::Bank { expanded: true, .. } => Vec::new(),
+            Self::Declared(placement) => semantic::placement(placement, None),
+            Self::Analyzed { declaration, plan } => semantic::placement(declaration, Some(plan)),
+            Self::Bank { expanded: true, .. } => Vec::new(),
             Self::Register { view, .. } => vec![Node::Register(&view.register)],
             Self::Bank {
                 view,

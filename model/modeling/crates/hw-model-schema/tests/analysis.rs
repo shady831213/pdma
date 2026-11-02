@@ -1,10 +1,15 @@
 //! Source-field validation is independent of physical storage lowering.
+use hw_model_schema::analysis::{AnalysisError, AnalyzedSchema};
 use hw_model_schema::ast::{
-    Definition, DefinitionId, Field, FieldType, GraphError, Node, RecordDefinition, Reference,
+    Definition, DefinitionId, Field, FieldType, GraphError, RecordDefinition, Reference,
     ReferenceKind,
-    analysis::{Analysis, AnalysisError},
 };
-use hw_model_schema::export::{Artifact, Backend, InMemoryArtifactSink, Scope, generate};
+use hw_model_schema::export::generate;
+use hw_model_schema::export::{
+    Artifact, InMemoryArtifactSink,
+    record::{Backend, EmitContext},
+    value,
+};
 use hw_model_schema::{Endian, FieldDefinition, RecordSpec, ScalarKind};
 
 const fn field(name: &'static str, offset: usize) -> Field {
@@ -24,11 +29,11 @@ const fn field(name: &'static str, offset: usize) -> Field {
 fn manual_source_fields_are_checked_independently_of_storage_lowering() {
     let storage = RecordSpec::new(8, 4, &[]);
     let valid = RecordDefinition::new(storage, vec![field("left", 0), field("right", 4)]);
-    assert!(Analysis::record("valid", valid).is_ok());
+    assert!(AnalyzedSchema::record("valid", valid).is_ok());
     let outside = RecordDefinition::new(storage, vec![field("outside", 6)]);
-    assert!(Analysis::record("outside", outside).is_err());
+    assert!(AnalyzedSchema::record("outside", outside).is_err());
     let overlap = RecordDefinition::new(storage, vec![field("left", 0), field("right", 2)]);
-    assert!(Analysis::record("overlap", overlap).is_err());
+    assert!(AnalyzedSchema::record("overlap", overlap).is_err());
 }
 
 struct Leaf;
@@ -76,11 +81,15 @@ fn manual_record() -> RecordDefinition {
 #[derive(Default)]
 struct DefinitionList(Vec<String>);
 impl Backend for DefinitionList {
-    type Error = std::convert::Infallible;
-    fn definition(&mut self, _: Node<'_>, scope: Scope<'_>) -> Result<(), Self::Error> {
-        self.0.push(scope.unit.name.clone());
+    fn root(&mut self, ctx: EmitContext<'_>) -> Result<(), Self::Error> {
+        self.0.push(ctx.unit().name.clone());
         Ok(())
     }
+}
+impl value::Backend for DefinitionList {
+    type Domain = hw_model_schema::export::record::Domain;
+    type Error = std::convert::Infallible;
+    type Context<'a> = EmitContext<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(vec![Artifact {
             logical_name: "definitions.txt".into(),
@@ -93,7 +102,7 @@ impl Backend for DefinitionList {
 #[test]
 fn manual_record_emits_transitive_dependencies_once_before_its_own_definition() {
     // Given: two fields share a dependency which itself references another record.
-    let analysis = Analysis::record("Manual", manual_record()).expect("valid record");
+    let analysis = AnalyzedSchema::record("Manual", manual_record()).expect("valid record");
     let mut sink = InMemoryArtifactSink::new();
     // When: a downstream backend generates the selected manual record.
     generate(&analysis, DefinitionList::default(), &mut sink).expect("generation");
@@ -109,9 +118,9 @@ fn manual_record_keeps_each_reference_to_a_shared_dependency() {
     // Given: the same type occurs in two independently named fields.
     let record = manual_record();
     // When: the manual record is analyzed.
-    let analysis = Analysis::record("Manual", record).expect("valid record");
+    let analysis = AnalyzedSchema::record("Manual", record).expect("valid record");
     // Then: deduplicating definitions does not discard referring field identities.
-    let root = analysis.definitions().last().expect("root");
+    let root = analysis.units().last().expect("root");
     let edges: Vec<_> = root
         .references
         .iter()
@@ -134,7 +143,7 @@ fn manual_record_rejects_cycles_in_referenced_definitions() {
         vec![reference("root", 0, recursive)],
     );
     // When: analysis follows its dependencies.
-    let result = Analysis::record("Manual", record);
+    let result = AnalyzedSchema::record("Manual", record);
     // Then: invalid dependencies cannot reach emission.
     assert!(
         matches!(result, Err(AnalysisError::Dependencies(GraphError::Cycle(path)))

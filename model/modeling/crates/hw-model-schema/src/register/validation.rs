@@ -43,7 +43,7 @@ pub(super) fn validate_definition<I: Copy + Eq + fmt::Debug>(
     validate_writable_coverage(definition, root, path, declaration_index)
 }
 
-fn validate_shape<I: Copy>(
+pub(super) fn validate_shape<I: Copy>(
     definition: RegisterDefinition<I>,
     root: &'static str,
     path: &str,

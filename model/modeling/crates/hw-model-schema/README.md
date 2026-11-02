@@ -76,13 +76,22 @@ may be sorted without changing source declaration order.
 Generation has three steps:
 
 1. Resolve a `SchemaSet` dependency graph.
-2. Build `ast::analysis::Analysis` with optional root `Bindings`.
-3. Call `export::generate(&analysis, backend, sink)`.
+2. Build `analysis::AnalyzedSchema` with optional root `Bindings`.
+3. Call `export::generate(&schema, backend, sink)` with a record or register
+   backend and an artifact sink.
+
+`AnalyzedSchema::analyze` runs the default sequence directly from a `SchemaSet`.
+The sequence in `analysis/pipeline.rs` calls separate resolve, validate, layout
+and simplify passes. Their preconditions and results follow explicit Rust calls;
+adding or splitting a pass does not change the backend protocol. The completed
+schema has no public constructor or mutable access to its units. Source edits
+require another analysis, so stale layout results cannot be emitted accidentally.
 
 ```rust
 use hw_model_schema::{
     register_map, register_schema,
-    ast::{SchemaSet, analysis::{Analysis, Bindings}},
+    ast::SchemaSet,
+    analysis::{AnalyzedSchema, Bindings},
 };
 register_schema! { pub register Status { width: 4, endian: Little,
     access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: {} } }
@@ -91,11 +100,11 @@ register_map! { pub map Device(n: usize) { alignment: 4,
 let mut selected = SchemaSet::new();
 selected.add::<Device>();
 let graph = selected.resolve()?;
-let symbolic = Analysis::from_graph(&graph, &Bindings::new())?;
+let symbolic = AnalyzedSchema::from_graph(&graph, &Bindings::new())?;
 let mut bindings = Bindings::new();
 bindings.bind::<Device>(&[3]);
-let concrete = Analysis::from_graph(&graph, &bindings)?;
-assert_eq!(symbolic.definitions().count(), concrete.definitions().count());
+let concrete = AnalyzedSchema::from_graph(&graph, &bindings)?;
+assert_eq!(symbolic.units().count(), concrete.units().count());
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
@@ -105,40 +114,86 @@ specialize selected unreferenced roots; shared generic definitions need separate
 named instances or separate requests. Instance identity remains distinct from
 definition identity.
 
-`Analysis::record` accepts an explicit `RecordDefinition`.
-`Analysis::opaque` accepts manual `RecordSpec` storage without inventing source
-fields. Both validate before emission. `Analysis::register_map` accepts a
-resolved permission projection. `MapView` and `PlacementView` borrow original
-declarations or checked concrete projections of the same schema kind, retaining
-effective access, masks, bank identity and holes.
+`AnalyzedSchema::record` accepts an explicit `RecordDefinition`.
+`AnalyzedSchema::opaque` accepts manual `RecordSpec` storage without inventing source
+fields. Both validate before emission. `AnalyzedSchema::register_map` accepts a
+resolved permission projection. Export callbacks receive complete mathematical
+layouts or concrete register maps, retaining effective access, masks, bank identity
+and holes. Source `MapView`/`PlacementView` analysis states are not backend inputs.
 
-A `Backend` handler formats one complete original node. It chooses where to
-recurse through `emit` and `emit_all`; shared dispatch passes immutable per-call
-`Scope`. Recursion supplies the call stack. No begin/end events, per-type Render
-forwarding traits, mutable render stack or Geometry node family are involved.
+Record and register domains have independent `Backend` traits and typed nodes.
+Shared bits/enums use `export::value::Backend`, implemented independently by each
+domain renderer. A handler formats one complete original node. It chooses where to
+recurse through `self.emit(ctx.current())` and `self.emit_all(ctx.children())`.
+Shared dispatch supplies a read-only `EmitContext` bound to the current node. Its
+`value::Backend::Domain` selects the record or register dispatcher
+for the unified generation entry. Recursion supplies the call stack. No begin/end
+events, per-type Render forwarding traits or mutable render stack are involved.
 Definition dependencies are generated once; referring members remain distinct.
 
-- `export-c-header` enables `CHeaderBackend`. Byte accessors use checked
+Contexts and `Visit` handles are created by the generator. Root and child nodes use
+the same visit type; `root(ctx)` is the entry callback for each selected unit, not
+a separate node-access protocol. An analyzed `Unit` can represent a source definition
+or a projected view; `AnalyzedSchema::units()` iterates both in dependency order.
+Filtering or sorting visits preserves their lexical context; backends cannot rebind
+a raw node to another context. Read-only `node()`, `unit()`, `analysis()`, `ancestors()`
+and `resolve()` queries retain structural and dependency information. Register contexts also expose
+normalized register paths and locations. Target-specific naming and selection of
+template or concrete output remain backend choices.
+
+Register-context `parameters()` returns the active unbound parameters, independently of
+which children have been visited. `declared_parameters()` and `bindings()` retain
+the original declaration and concrete arguments. Backends need no parameter cache
+or mutable semantic scope stack.
+
+Common dispatch expands attribute and layout-property variants into typed leaf
+callbacks such as `register_width`, `register_reset`, `map_alignment`,
+`field_size`, `layout_offset` and `layout_stride`. Backends do not reconstruct
+attribute lists or match those semantic enums. Default register traversal exposes
+effective fields for both inline and referenced field definitions.
+The default `layout_offset/count/stride/extent` callbacks delegate to one
+`layout_property` method, with a completed expression, property kind/name and optional
+relative placement owner. Backends can format layout members uniformly without
+recovering their ownership from raw placement nodes.
+
+Documentation participates in the same dispatch: `short_description` and
+`description` receive present source text with a `DocumentationOwner` and the
+current domain scope. Summary precedes detail, explicit empty text is retained,
+and placement fallback is preserved. Targets own comment syntax, line splitting
+and escaping. `value::emit_documentation` and `documentation_fragments` also serve
+physical-storage renderers that consume resolved members instead of source nodes.
+Documentation lines are not separate IR nodes.
+
+- `export-c-header` enables `CRecordBackend` and `CRegisterBackend`. Byte accessors use checked
   physical storage layout; semantic backends retain the original AST.
-- `export-veryl-layout` enables `VerylBackend`. Its metadata packages describe
+- `export-veryl-layout` enables `VerylRecordBackend` and `VerylRegisterBackend`. Their metadata packages describe
   layout, not register storage, bus behavior or hardware effects.
 - Both features are default-off; custom backends need neither builtin.
 
-`MapLayoutPlan` owns checked placement formulas, child arguments, alignment,
-offset/count/stride and extent. `evaluate` binds values; `bind` produces constant
-formulas while retaining identities. Analysis lowers the selected plan to
-`LayoutProgram`: result members, parameters, locals and ordered child calls,
-definitions and assignments. Its expressions contain resolved symbols, not
-placement-dependent operands. Bound programs contain concrete result assignments.
-This computation is an analyzed attribute of the map, not another source node kind.
+Veryl emits direct scalar layout functions (`extent`, member `offset`, `count`
+and `stride`) from completed expressions; it does not emit a `Geometry` structure
+or an aggregate `geometry()` function. C retains its aggregate `_Geometry` API,
+whose fields and assignments are collected through the same leaf callbacks.
+
+The layout pass resolves the source `MapLayoutPlan` into complete mathematical
+attributes attached to the same declarations. Child arguments, extents and ordered
+placement dependencies are substituted before generation. The simplify pass
+folds constants and arithmetic identities. `CompleteMapLayout` and each placement
+expose formulas evaluable with only root parameter values; backends never resolve
+`ChildLayout` or `PlanValue`. Original parameter bindings and references remain
+available. Read-only constraints retain positive counts, alignment, bounds and
+nonoverlap requirements for unbound parameters; `evaluate` checks these as well.
+Generated layout helpers assume arguments satisfying those constraints.
+
+These are semantic layout attributes and borrowed traversal views, not another
+target-code IR. Target functions, local variables, assignments and byte access
+algorithms remain backend implementation choices.
 
 `LayoutExpr::visit` owns left-to-right source expression folding. Checked evaluation,
 constructor-scope validation and analysis share it. The nonrecursive
 `export::expression::ExpressionSyntax` supplies spelling for analyzed expressions;
-`format_expression` owns their recursive formatting. `export::program::emit_body`
-emits the analyzed statement sequence through `ProgramSyntax`. Backends spell each
-call, definition or assignment without reconstructing layout calculations or deciding
-which intermediates exist. Portable constructor
+`format_expression` owns their recursive formatting. Backends choose target syntax
+and any intermediates needed to render those formulas. Portable constructor
 expressions support literals, parameters, constant paths, parentheses and checked
 addition/subtraction/multiplication. Unsupported Rust expressions remain explicit
 errors; ordinary generated Rust constructors are not restricted to that subset.
@@ -481,18 +536,22 @@ distinguishes analysis, backend and sink failures.
 use core::convert::Infallible;
 use hw_model_schema::{
     RecordSpec,
-    ast::{Node, analysis::Analysis},
-    export::{Artifact, Backend, Scope, InMemoryArtifactSink, generate},
+    analysis::AnalyzedSchema,
+    export::{Artifact, InMemoryArtifactSink, generate, record::{self, EmitContext}, value},
 };
 #[derive(Default)]
 struct NameListing { names: String }
-impl Backend for NameListing {
-    type Error = Infallible;
-    fn definition(&mut self, _: Node<'_>, scope: Scope<'_>) -> Result<(), Self::Error> {
-        self.names.push_str(&scope.unit.name);
+impl record::Backend for NameListing {
+    fn root(&mut self, ctx: EmitContext<'_>) -> Result<(), Self::Error> {
+        self.names.push_str(&ctx.unit().name);
         self.names.push('\n');
         Ok(())
     }
+}
+impl value::Backend for NameListing {
+    type Error = Infallible;
+    type Context<'a> = EmitContext<'a>;
+    type Domain = record::Domain;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(vec![Artifact {
             logical_name: "names.txt".into(),
@@ -501,7 +560,7 @@ impl Backend for NameListing {
         }])
     }
 }
-let schema = Analysis::opaque("Empty", RecordSpec::new(0, 1, &[]))?;
+let schema = AnalyzedSchema::opaque("Empty", RecordSpec::new(0, 1, &[]))?;
 let mut sink = InMemoryArtifactSink::new();
 generate(&schema, NameListing::default(), &mut sink)?;
 assert_eq!(sink.artifacts().first().map(|a| a.contents.as_slice()), Some(b"Empty\n".as_slice()));
@@ -535,8 +594,9 @@ file layout, and integration policy to the caller.
 fn main() {
     use hw_model_schema::{
         export::{generate, InMemoryArtifactSink},
-        ast::{DefinitionId, SchemaSet, analysis::{Analysis, Bindings}},
-        export::backends::c_header::CHeaderBackend,
+        ast::{DefinitionId, SchemaSet},
+        analysis::{AnalyzedSchema, Bindings},
+        export::backends::c_header::CRecordBackend,
         record_schema,
     };
 
@@ -548,12 +608,12 @@ fn main() {
         }
     }
 
-    let renderer = CHeaderBackend::new().with_name(DefinitionId::of::<Header>(), "demo header");
+    let renderer = CRecordBackend::new().with_name(DefinitionId::of::<Header>(), "demo header");
     let mut sink = InMemoryArtifactSink::new();
     let mut selected = SchemaSet::new();
     selected.add::<Header>();
     let graph = selected.resolve().expect("example references must resolve");
-    let schema = Analysis::from_graph(&graph, &Bindings::new()).expect("example layout must resolve");
+    let schema = AnalyzedSchema::from_graph(&graph, &Bindings::new()).expect("example layout must resolve");
     assert!(generate(&schema, renderer, &mut sink).is_ok());
     let artifacts = sink.into_artifacts();
     assert_eq!(artifacts.len(), 1);

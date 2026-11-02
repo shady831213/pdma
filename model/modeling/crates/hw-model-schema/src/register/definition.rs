@@ -130,6 +130,14 @@ impl<I: Copy> RegisterDefinition<I> {
         self.fields
     }
 
+    /// Validates width, alignment, writable mask and reset value without field-identity bounds.
+    ///
+    /// # Errors
+    /// Returns the first invalid whole-register shape attribute.
+    pub fn validate_shape(self) -> Result<(), RegisterDefinitionError<I>> {
+        super::validation::validate_shape(self, self.name, self.name, 0)
+    }
+
     /// Creates a checked immutable whole-register value view.
     pub fn view(self, bytes: &[u8]) -> Result<RegisterValueView<'_, I>, RegisterValueError> {
         RegisterValueView::new(self, bytes)

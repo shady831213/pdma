@@ -1,7 +1,4 @@
-use crate::ast::{
-    ExpressionOp,
-    analysis::program::{Expression, Symbol},
-};
+use crate::ast::{ExpressionOp, LayoutError, LayoutExpr};
 
 /// Nonrecursive target spelling for already analyzed expressions.
 pub trait ExpressionSyntax: Sized {
@@ -30,30 +27,31 @@ pub trait ExpressionSyntax: Sized {
             }
         }
     }
-    /// Formats a resolved symbol without consulting source layout rules.
-    fn reference(&mut self, reference: Symbol) -> String {
-        match reference {
-            Symbol::Parameter(name) => format!("p_{}", self.identifier(name)),
-            Symbol::Cursor => "cursor".into(),
-            Symbol::Placement { name, property } => {
-                format!("result.{}_{}", self.identifier(name), property.name())
-            }
-            Symbol::ChildExtent(name) => format!("child_{}.extent", self.identifier(name)),
-            Symbol::End(name) => format!("end_{}", self.identifier(name)),
-            Symbol::Extent => "result.extent".into(),
-        }
+    /// Formats a schema parameter use.
+    fn parameter(&mut self, name: &str) -> String {
+        self.identifier(name)
     }
 }
 
-/// Folds analyzed operands through target syntax; no layout resolution remains.
-pub fn format_expression<S: ExpressionSyntax>(expression: &Expression, syntax: &mut S) -> String {
+/// Folds semantic operands through target syntax without introducing target constructs.
+pub fn format_expression<S: ExpressionSyntax>(
+    expression: &LayoutExpr,
+    syntax: &mut S,
+) -> Result<String, LayoutError> {
+    let mut binary = |op, left: &LayoutExpr, right: &LayoutExpr| {
+        let left = format_expression(left, syntax)?;
+        let right = format_expression(right, syntax)?;
+        Ok(syntax.binary(op, &left, &right))
+    };
     match expression {
-        Expression::Literal(value) => syntax.literal(*value),
-        Expression::Reference(symbol) => syntax.reference(*symbol),
-        Expression::Binary { op, left, right } => {
-            let left = format_expression(left, syntax);
-            let right = format_expression(right, syntax);
-            syntax.binary(*op, &left, &right)
-        }
+        LayoutExpr::Constant(value) => Ok(syntax.literal(*value)),
+        LayoutExpr::Parameter(name) => Ok(syntax.parameter(name)),
+        LayoutExpr::Value(_) => Err(LayoutError::Geometry),
+        LayoutExpr::Add(a, b) => binary(ExpressionOp::Add, a, b),
+        LayoutExpr::Subtract(a, b) => binary(ExpressionOp::Subtract, a, b),
+        LayoutExpr::Multiply(a, b) => binary(ExpressionOp::Multiply, a, b),
+        LayoutExpr::Maximum(a, b) => binary(ExpressionOp::Maximum, a, b),
+        LayoutExpr::AlignUp(a, b) => binary(ExpressionOp::AlignUp, a, b),
+        LayoutExpr::Unsupported(source) => Err(LayoutError::Unsupported(source)),
     }
 }

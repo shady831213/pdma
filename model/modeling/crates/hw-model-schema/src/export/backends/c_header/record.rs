@@ -1,112 +1,104 @@
-use super::{CHeaderExportError, fragment::Fragment};
-use crate::{Endian, FieldDefinition, ScalarKind};
-use std::fmt::Write as _;
+mod accessors;
 
-pub(super) fn scalar_accessors(
-    output: &mut Fragment,
-    names: FieldNames<'_>,
-    field: FieldDefinition,
-) -> Result<(), CHeaderExportError> {
-    output.constants::<64>(names.metadata, &[("WIDTH", field.width())])?;
-    let endian = match field.endian() {
-        Endian::Little => "LITTLE",
-        Endian::Big => "BIG",
-    };
-    output.define(
-        &format!("{}_ENDIAN", names.metadata),
-        format_args!("{}_ENDIAN_{endian}", names.prefix),
-    )?;
-    push_load(&mut output.text, names, field);
-    push_store(&mut output.text, names, field);
-    Ok(())
-}
-
-fn push_load(output: &mut String, names: FieldNames<'_>, field: FieldDefinition) {
-    let c_type = c_type(field.scalar());
-    let FieldNames {
-        prefix,
-        field: field_name,
-        metadata,
-    } = names;
-    let _ = writeln!(
-        output,
-        "static inline {c_type} {prefix}_LOAD_{field_name}(const uint8_t bytes[{prefix}_SIZE]) {{"
-    );
-    if field.width() == 1 {
-        let _ = writeln!(output, "    return ({c_type})bytes[{metadata}_OFFSET];\n}}");
-        return;
+use super::{CHeaderExportError, CRecordBackend, fragment::Fragment, naming};
+use crate::analysis::Layout;
+use crate::ast::{RecordDefinition, UnionDefinition};
+use crate::export::value::Backend as _;
+use crate::export::{
+    Artifact,
+    record::{Backend, EmitContext},
+};
+use crate::{EnumDefinition, ResolvedMemberKind};
+type CResult<T = ()> = Result<T, CHeaderExportError>;
+impl Backend for CRecordBackend {
+    fn root(&mut self, ctx: EmitContext<'_>) -> CResult {
+        (self.logical_name, self.prefix) = self.names.unit(ctx.unit())?;
+        self.output = Fragment::default();
+        self.emit(ctx.current())?;
+        self.artifacts.push(Artifact {
+            logical_name: self.logical_name.clone(),
+            media_type: "text/x-c; charset=utf-8".into(),
+            contents: std::mem::take(&mut self.output.text).into_bytes(),
+        });
+        Ok(())
     }
-    let _ = write!(output, "    return ({c_type})(");
-    for byte_index in 0..field.width() {
-        if byte_index > 0 {
-            output.push_str(" | ");
-        }
-        let shift = shift(field, byte_index);
-        if shift == 0 {
-            let _ = write!(output, "({c_type})bytes[{metadata}_OFFSET");
-        } else {
-            let _ = write!(output, "(({c_type})bytes[{metadata}_OFFSET");
-        }
-        if byte_index > 0 {
-            let _ = write!(output, " + UINT64_C({byte_index})");
-        }
-        if shift == 0 {
-            output.push(']');
-        } else {
-            let _ = write!(output, "] << UINT32_C({shift}))");
-        }
+    fn record(&mut self, _: &RecordDefinition, ctx: EmitContext<'_>) -> CResult {
+        self.storage(&ctx)
     }
-    output.push_str(");\n}\n");
-}
-
-fn push_store(output: &mut String, names: FieldNames<'_>, field: FieldDefinition) {
-    let c_type = c_type(field.scalar());
-    let FieldNames {
-        prefix,
-        field: field_name,
-        metadata,
-    } = names;
-    let _ = writeln!(
-        output,
-        "static inline void {prefix}_STORE_{field_name}(uint8_t bytes[{prefix}_SIZE], {c_type} value) {{"
-    );
-    for byte_index in 0..field.width() {
-        let _ = write!(output, "    bytes[{metadata}_OFFSET");
-        if byte_index > 0 {
-            let _ = write!(output, " + UINT64_C({byte_index})");
-        }
-        let shift = shift(field, byte_index);
-        if shift == 0 {
-            output.push_str("] = (uint8_t)(value & UINT64_C(255));\n");
-        } else {
-            let _ = writeln!(
-                output,
-                "] = (uint8_t)((value >> UINT32_C({shift})) & UINT64_C(255));"
-            );
-        }
-    }
-    output.push_str("}\n");
-}
-
-#[derive(Clone, Copy)]
-pub(super) struct FieldNames<'a> {
-    pub(super) prefix: &'a str,
-    pub(super) field: &'a str,
-    pub(super) metadata: &'a str,
-}
-
-const fn shift(field: FieldDefinition, byte_index: usize) -> usize {
-    match field.endian() {
-        Endian::Little => byte_index * 8,
-        Endian::Big => (field.width() - byte_index - 1) * 8,
+    fn union(&mut self, _: &UnionDefinition, ctx: EmitContext<'_>) -> CResult {
+        self.storage(&ctx)
     }
 }
 
-const fn c_type(scalar: ScalarKind) -> &'static str {
-    match scalar {
-        ScalarKind::U8 => "uint8_t",
-        ScalarKind::U16 => "uint16_t",
-        ScalarKind::U32 => "uint32_t",
-        ScalarKind::U64 => "uint64_t",
+impl CRecordBackend {
+    pub(super) fn storage(&mut self, ctx: &EmitContext<'_>) -> Result<(), CHeaderExportError> {
+        let Layout::Record(schema) = &ctx.unit().body else {
+            return Err(CHeaderExportError::InvalidVisit("record layout"));
+        };
+        naming::check_record(schema)?;
+        self.output.documentation("", schema.documentation())?;
+        self.output.constants::<64>(
+            &self.prefix,
+            &[("SIZE", schema.size()), ("ALIGNMENT", schema.alignment())],
+        )?;
+        self.output
+            .constants::<32>(&self.prefix, &[("ENDIAN_LITTLE", 0), ("ENDIAN_BIG", 1)])?;
+        for member in schema.members() {
+            let name = naming::c_identifier(naming::relative_path(schema.root(), member.path()));
+            match member.kind() {
+                ResolvedMemberKind::Record { definition, .. } => {
+                    self.output
+                        .documentation(member.path(), member.documentation())?;
+                    self.output.constants::<64>(
+                        &format!("{}_RECORD_{name}", self.prefix),
+                        &[
+                            ("OFFSET", member.absolute_offset()),
+                            ("SIZE", definition.size()),
+                        ],
+                    )?;
+                }
+                ResolvedMemberKind::Field { definition, .. } => {
+                    self.output.text.push('\n');
+                    self.output.documentation("", member.documentation())?;
+                    let metadata = format!("{}_{name}", self.prefix);
+                    if let Some(enumeration) = definition.enum_definition() {
+                        self.enum_constants(&metadata, enumeration)?;
+                    }
+                    for bit in definition.bits() {
+                        self.output.documentation(bit.name(), bit.documentation())?;
+                        if let Some(enumeration) = bit.definition().enum_definition() {
+                            self.enum_constants(
+                                &format!("{metadata}_{}", naming::c_identifier(bit.name())),
+                                enumeration,
+                            )?;
+                        }
+                    }
+                    self.output
+                        .constants::<64>(&metadata, &[("OFFSET", member.absolute_offset())])?;
+                    let names = accessors::FieldNames {
+                        prefix: &self.prefix,
+                        field: &name,
+                        metadata: &metadata,
+                    };
+                    accessors::scalar_accessors(&mut self.output, names, definition)?;
+                }
+            }
+        }
+        Ok(())
+    }
+    pub(super) fn enum_constants(
+        &mut self,
+        prefix: &str,
+        enumeration: EnumDefinition,
+    ) -> Result<(), CHeaderExportError> {
+        for variant in enumeration.variants() {
+            self.output
+                .documentation(variant.name(), variant.documentation())?;
+            self.output.unsigned::<64>(
+                &format!("{prefix}_{}", naming::c_identifier(variant.name())),
+                variant.value(),
+            )?;
+        }
+        Ok(())
     }
 }

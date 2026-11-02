@@ -1,5 +1,9 @@
+mod node;
+mod semantic;
 use super::Reference;
 use crate::{Documentation, Endian, FieldDefinition, RecordSpec};
+pub use node::Node;
+pub use semantic::Attribute;
 
 /// A declared constant constraint, including its original Rust symbol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

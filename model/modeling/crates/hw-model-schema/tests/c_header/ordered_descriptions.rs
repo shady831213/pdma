@@ -1,7 +1,7 @@
-use hw_model_schema::ast::analysis::Analysis;
+use hw_model_schema::analysis::AnalyzedSchema;
 use hw_model_schema::export::generate;
 use hw_model_schema::{
-    bits_schema, export::backends::c_header::CHeaderBackend, record_schema, register_map,
+    bits_schema, export::backends::c_header::CRegisterBackend, record_schema, register_map,
     register_schema,
 };
 
@@ -69,8 +69,8 @@ fn long_actual_c_prefix_collisions_are_rejected_before_emission() -> TestResult 
     let mut sink = InMemoryArtifactSink::new();
     // When: rendering symbols whose distinguishing suffix lies beyond that length.
     let result = generate(
-        &Analysis::register_map(exporter.0, &resolved),
-        CHeaderBackend::new().with_name(exporter.0, exporter.1.as_ref()),
+        &AnalyzedSchema::register_map(exporter.0, &resolved)?,
+        CRegisterBackend::new().with_name(exporter.0, exporter.1.as_ref()),
         &mut sink,
     );
     // Then: no artifact is emitted and the collision remains a typed error.

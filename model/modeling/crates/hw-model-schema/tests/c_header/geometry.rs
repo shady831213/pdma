@@ -1,7 +1,7 @@
-use hw_model_schema::ast::analysis::{Analysis, Bindings};
+use hw_model_schema::analysis::{AnalyzedSchema, Bindings};
 use hw_model_schema::{
     ast::{DefinitionId, SchemaSet},
-    export::backends::c_header::{CHeaderBackend, CHeaderExportError},
+    export::backends::c_header::{CHeaderExportError, CRegisterBackend},
     export::{ExportError, InMemoryArtifactSink, generate},
     register_map, register_schema,
 };
@@ -24,8 +24,8 @@ fn common_preparation_renders_symbolic_and_bound_nested_geometry_as_strict_c11()
     bound.bind::<Parent>(&[3]);
 
     for (label, bindings) in [("symbolic", Bindings::new()), ("bound", bound)] {
-        let prepared = Analysis::from_graph(&graph, &bindings)?;
-        let renderer = CHeaderBackend::new()
+        let prepared = AnalyzedSchema::from_graph(&graph, &bindings)?;
+        let renderer = CRegisterBackend::new()
             .with_name(DefinitionId::of::<Parent>(), "root")
             .with_name(DefinitionId::of::<Child>(), "leaf");
         let mut sink = InMemoryArtifactSink::new();
@@ -54,9 +54,9 @@ fn symbolic_geometry_rejects_aliasing_type_and_function_names() -> super::suppor
     // Given: a symbolic map with a target prefix longer than C11's significant length.
     let mut selected = SchemaSet::new();
     selected.add::<Parent>();
-    let prepared = Analysis::from_graph(&selected.resolve()?, &Bindings::new())?;
+    let prepared = AnalyzedSchema::from_graph(&selected.resolve()?, &Bindings::new())?;
     let prefix = "a".repeat(64);
-    let renderer = CHeaderBackend::new().with_name(DefinitionId::of::<Parent>(), &prefix);
+    let renderer = CRegisterBackend::new().with_name(DefinitionId::of::<Parent>(), &prefix);
     let mut sink = InMemoryArtifactSink::new();
 
     // When: its geometry type and function would alias in the ordinary C namespace.
@@ -75,4 +75,77 @@ fn symbolic_geometry_rejects_aliasing_type_and_function_names() -> super::suppor
     );
     assert!(sink.artifacts().is_empty());
     Ok(())
+}
+
+register_map! { pub map EmptyImplicit(_n: usize) { alignment: 4, placements: [] } }
+register_map! { pub map EmptyExplicit(_n: usize) { alignment: 4, extent: 8, placements: [] } }
+
+#[test]
+fn empty_parameterized_maps_compile_and_preserve_implicit_and_explicit_extents()
+-> super::support::TestResult {
+    // Given: two empty maps retain an unused constructor parameter.
+    let mut selected = SchemaSet::new();
+    selected.add::<EmptyImplicit>();
+    selected.add::<EmptyExplicit>();
+    let prepared = AnalyzedSchema::from_graph(&selected.resolve()?, &Bindings::new())?;
+    let renderer = CRegisterBackend::new()
+        .with_name(DefinitionId::of::<EmptyImplicit>(), "implicit")
+        .with_name(DefinitionId::of::<EmptyExplicit>(), "explicit");
+    let mut sink = InMemoryArtifactSink::new();
+    // When: their symbolic geometry is emitted for a strict native C11 consumer.
+    generate(&prepared, renderer, &mut sink)?;
+    let fragments: Vec<_> = sink
+        .artifacts()
+        .iter()
+        .map(|artifact| artifact.contents.as_slice())
+        .collect();
+    // Then: implicit extent remains zero and explicit extent remains eight for any input.
+    super::support::compile_fragments("empty-parameterized", &fragments,
+        b"int main(void) { return C_IMPLICIT_GEOMETRY(0).extent != 0 || C_IMPLICIT_GEOMETRY(17).extent != 0 || C_EXPLICIT_GEOMETRY(0).extent != 8 || C_EXPLICIT_GEOMETRY(17).extent != 8; }\n")
+}
+
+register_map! { pub map Independent(width: usize, depth: usize) {
+    alignment: 4, placements: [columns: Word[width], rows: Word[depth]],
+} }
+
+#[test]
+fn geometry_parameters_remain_local_across_bound_and_unbound_definitions()
+-> super::support::TestResult {
+    // Given: a bound nested map precedes an independent map with two lexical parameters.
+    let mut selected = SchemaSet::new();
+    selected.add::<Parent>();
+    selected.add::<Independent>();
+    let mut bindings = Bindings::new();
+    bindings.bind::<Parent>(&[3]);
+    let prepared = AnalyzedSchema::from_graph(&selected.resolve()?, &bindings)?;
+    let renderer = CRegisterBackend::new()
+        .with_name(DefinitionId::of::<Parent>(), "root")
+        .with_name(DefinitionId::of::<Child>(), "leaf")
+        .with_name(DefinitionId::of::<Independent>(), "independent");
+    let mut sink = InMemoryArtifactSink::new();
+
+    // When: one backend emits all definitions into a native C consumer.
+    generate(&prepared, renderer, &mut sink)?;
+    let fragments: Vec<_> = sink
+        .artifacts()
+        .iter()
+        .map(|artifact| artifact.contents.as_slice())
+        .collect();
+
+    // Then: each function accepts only its own ordered, unbound parameters.
+    super::support::compile_fragments(
+        "lexical-parameters",
+        &fragments,
+        br"
+int main(void) {
+    C_INDEPENDENT_Geometry first = C_INDEPENDENT_GEOMETRY(2, 5);
+    C_INDEPENDENT_Geometry second = C_INDEPENDENT_GEOMETRY(5, 2);
+    return C_ROOT_GEOMETRY().extent != 32 || C_LEAF_GEOMETRY(7).extent != 28
+        || first.C_COLUMNS_count != 2 || first.C_ROWS_count != 5
+        || first.C_ROWS_offset != 8 || first.extent != 28
+        || second.C_COLUMNS_count != 5 || second.C_ROWS_count != 2
+        || second.C_ROWS_offset != 20 || second.extent != 28;
+}
+",
+    )
 }

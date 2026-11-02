@@ -1,17 +1,19 @@
 //! Format-neutral, owned artifact export vocabulary.
 
 use core::{convert::Infallible, fmt};
+mod generate;
 mod symbols;
+pub use generate::{Domain, generate};
 pub use symbols::{SymbolCollision, SymbolScope};
-mod backend;
-mod emit;
-/// Shared expression recursion with target-defined syntax.
+/// Shared mathematical expression folding with target-defined spelling.
 pub mod expression;
-/// Shared layout-body emission with target-owned statement syntax.
-pub mod program;
-use crate::ast::analysis::{Analysis, AnalysisError};
-pub use backend::Backend;
-pub use emit::{Scope, emit, emit_all};
+/// Record-only recursive export capability.
+pub mod record;
+/// Register-only recursive export capability.
+pub mod register;
+/// Shared value callbacks, independently implemented by each domain target.
+pub mod value;
+use crate::analysis::AnalysisError;
 
 /// Built-in artifact renderers enabled by format-specific crate features.
 #[cfg(any(feature = "export-c-header", feature = "export-veryl-layout"))]
@@ -35,28 +37,6 @@ pub trait ArtifactSink {
 
     /// Receives one owned artifact.
     fn emit(&mut self, artifact: Artifact) -> Result<(), Self::Error>;
-}
-
-/// Emits analyzed units in dependency order; each backend composes its node output.
-///
-/// # Errors
-/// Render failures emit no artifacts. A sink failure retains any artifacts it
-/// previously accepted; storage rollback belongs to the sink.
-pub fn generate<R: Backend, S: ArtifactSink>(
-    schema: &Analysis,
-    mut backend: R,
-    sink: &mut S,
-) -> Result<(), ExportError<R::Error, S::Error>> {
-    for definition in schema.definitions() {
-        let node = definition.node().map_err(ExportError::Analysis)?;
-        backend
-            .definition(node, Scope::root(schema, definition))
-            .map_err(ExportError::Render)?;
-    }
-    for artifact in backend.finish().map_err(ExportError::Render)? {
-        sink.emit(artifact).map_err(ExportError::Sink)?;
-    }
-    Ok(())
 }
 
 /// Rendering or storage failure retaining the error owned by its origin.

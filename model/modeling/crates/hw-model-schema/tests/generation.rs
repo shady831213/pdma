@@ -1,10 +1,12 @@
 //! Common preparation binds layouts and owns rendering order.
+use hw_model_schema::analysis::{AnalyzedSchema, Bindings, Layout, UnitId};
+use hw_model_schema::export::generate;
 use hw_model_schema::{
-    ast::{
-        Node,
-        analysis::{Analysis, Bindings, Layout, UnitId},
+    export::{
+        Artifact, InMemoryArtifactSink,
+        register::{Backend, EmitContext},
+        value,
     },
-    export::{Artifact, Backend, InMemoryArtifactSink, Scope, generate},
     register_map, register_schema,
 };
 register_schema! { pub register Word {width:4,endian:Little,access:ReadWrite,reset:Zero(0),writable_mask:0xffff_ffff,fields:{}} }
@@ -21,23 +23,14 @@ fn bound_and_symbolic_preparation_share_definition_identity()
     let mut bindings = Bindings::new();
     bindings.bind::<Root>(&[3]);
     // When: the same graph is prepared with and without bindings.
-    let symbolic = Analysis::from_graph(&graph, &Bindings::new())?;
-    let concrete = Analysis::from_graph(&graph, &bindings)?;
+    let symbolic = AnalyzedSchema::from_graph(&graph, &Bindings::new())?;
+    let concrete = AnalyzedSchema::from_graph(&graph, &bindings)?;
     // Then: only evaluation differs; definition identity and dependencies remain.
     assert_eq!(
-        symbolic
-            .definitions()
-            .map(|d| d.id.clone())
-            .collect::<Vec<_>>(),
-        concrete
-            .definitions()
-            .map(|d| d.id.clone())
-            .collect::<Vec<_>>()
+        symbolic.units().map(|d| d.id.clone()).collect::<Vec<_>>(),
+        concrete.units().map(|d| d.id.clone()).collect::<Vec<_>>()
     );
-    let root = concrete
-        .definitions()
-        .find(|d| d.name == "Root")
-        .ok_or("root")?;
+    let root = concrete.units().find(|d| d.name == "Root").ok_or("root")?;
     let Layout::Map(map) = &root.body else {
         return Err("map".into());
     };
@@ -56,9 +49,9 @@ fn projected_nested_bank_instances_use_their_own_ancestry() -> Result<(), Box<dy
         .resolve()?
         .project_access(|_| Some(hw_model_schema::Access::ReadOnly))?;
     // When: the resolved permission view is prepared for any backend.
-    let schema = Analysis::register_map("view", &map);
+    let schema = AnalyzedSchema::register_map("view", &map)?;
     // Then: outer-bank groups follow outer indices and retain projected permissions.
-    let Layout::Map(map) = &schema.definitions().next().ok_or("view")?.body else {
+    let Layout::Map(map) = &schema.units().next().ok_or("view")?.body else {
         return Err("map".into());
     };
     let bank = map
@@ -93,10 +86,10 @@ fn named_instances_survive_preparation_with_independent_geometry()
     set.add_map_instance::<Root>("small", &[1])?;
     set.add_map_instance::<Root>("large", &[3])?;
     // When: the complete selection is prepared for any renderer.
-    let schema = Analysis::from_graph(&set.resolve()?, &Bindings::new())?;
+    let schema = AnalyzedSchema::from_graph(&set.resolve()?, &Bindings::new())?;
     // Then: both named instances retain their concrete extent.
     let instances = schema
-        .definitions()
+        .units()
         .filter_map(|d| match (&d.id, &d.body) {
             (UnitId::View(name), Layout::Map(map)) => {
                 Some((name.as_str(), map.instance.as_ref().map(|i| i.extent)))
@@ -108,8 +101,7 @@ fn named_instances_survive_preparation_with_independent_geometry()
     Ok(())
 }
 impl Backend for FailsAfterOne {
-    type Error = &'static str;
-    fn definition(&mut self, _: Node<'_>, _: Scope<'_>) -> Result<(), Self::Error> {
+    fn root(&mut self, _: EmitContext<'_>) -> Result<(), Self::Error> {
         self.0 += 1;
         if self.0 == 2 {
             Err("render failure")
@@ -117,6 +109,11 @@ impl Backend for FailsAfterOne {
             Ok(())
         }
     }
+}
+impl value::Backend for FailsAfterOne {
+    type Domain = hw_model_schema::export::register::Domain;
+    type Error = &'static str;
+    type Context<'a> = EmitContext<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(Vec::new())
     }
@@ -126,7 +123,7 @@ fn rendering_failure_never_reaches_the_sink() -> Result<(), Box<dyn std::error::
     // Given: multiple definitions and a renderer failing on the second definition.
     let mut set = hw_model_schema::ast::SchemaSet::new();
     set.add::<Root>();
-    let schema = Analysis::from_graph(&set.resolve()?, &Bindings::new())?;
+    let schema = AnalyzedSchema::from_graph(&set.resolve()?, &Bindings::new())?;
     let mut sink = InMemoryArtifactSink::new();
     // When: the common driver traverses the prepared definitions.
     let result = generate(&schema, FailsAfterOne(0), &mut sink);
@@ -137,6 +134,53 @@ fn rendering_failure_never_reaches_the_sink() -> Result<(), Box<dyn std::error::
             "render failure"
         ))
     );
+    assert!(sink.artifacts().is_empty());
+    Ok(())
+}
+
+struct CountCallbacks<'a>(&'a std::cell::Cell<usize>);
+impl Backend for CountCallbacks<'_> {
+    fn root(&mut self, _: EmitContext<'_>) -> Result<(), Self::Error> {
+        self.0.set(self.0.get() + 1);
+        Ok(())
+    }
+}
+impl value::Backend for CountCallbacks<'_> {
+    type Domain = hw_model_schema::export::register::Domain;
+    type Error = core::convert::Infallible;
+    type Context<'a> = EmitContext<'a>;
+    fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
+        Ok(Vec::new())
+    }
+}
+hw_model_schema::record_schema! { pub record ZRecord { endian: Little, fields: { value: u32 } } }
+#[test]
+fn wrong_domain_is_rejected_before_any_renderer_callback() -> Result<(), Box<dyn std::error::Error>>
+{
+    // Given: a valid register sorts before a record in one mixed closure.
+    let mut set = hw_model_schema::ast::SchemaSet::new();
+    set.add::<Word>();
+    set.add::<ZRecord>();
+    let schema = AnalyzedSchema::from_graph(&set.resolve()?, &Bindings::new())?;
+    assert_eq!(
+        schema.units().next().ok_or("first definition")?.name,
+        "Word"
+    );
+    let callbacks = std::cell::Cell::new(0);
+    let mut sink = InMemoryArtifactSink::new();
+    // When: register generation receives the incompatible closure.
+    let result = generate(&schema, CountCallbacks(&callbacks), &mut sink);
+    // Then: preflight rejects the record without invoking the earlier valid callback.
+    assert!(matches!(
+        result,
+        Err(hw_model_schema::export::ExportError::Analysis(
+            hw_model_schema::analysis::AnalysisError::Domain {
+                domain: "register",
+                ..
+            }
+        ))
+    ));
+    assert_eq!(callbacks.get(), 0);
     assert!(sink.artifacts().is_empty());
     Ok(())
 }

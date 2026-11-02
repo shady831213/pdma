@@ -4,8 +4,228 @@
 #include <stdint.h>
 #include "pdma_common.h"
 /*
+ * dma
  * PDMA register apertures
+ */
+/*
+ * dma
  * Read-only discovery followed by contiguous administration and page-aligned channel data apertures. Layout gaps are reserved, not registers.
+ */
+/*
+ * DmaRegisters.discovery
+ * Hardware discovery aperture
+ */
+/*
+ * DmaRegisters.discovery
+ * Read-only DMA configuration visible independently of administrative permissions.
+ */
+/*
+ * DmaRegisters.admin
+ * Privileged DMA administration
+ */
+/*
+ * DmaRegisters.admin
+ * Complete global and per-channel administration aperture, hidden from managed Host software.
+ */
+/*
+ * DmaRegisters.admin.control
+ * DMA-wide administration
+ */
+/*
+ * DmaRegisters.admin.control
+ * Global interrupt control, fatal state and whole-DMA reset.
+ */
+/*
+ * DmaRegisters.admin.channels[0]
+ * Channel administration bank
+ */
+/*
+ * DmaRegisters.admin.channels[0]
+ * One privileged recovery block for each implemented channel.
+ */
+/*
+ * DmaRegisters.admin.channels[1]
+ * Channel administration bank
+ */
+/*
+ * DmaRegisters.admin.channels[1]
+ * One privileged recovery block for each implemented channel.
+ */
+/*
+ * DmaRegisters.admin.channels[2]
+ * Channel administration bank
+ */
+/*
+ * DmaRegisters.admin.channels[2]
+ * One privileged recovery block for each implemented channel.
+ */
+/*
+ * DmaRegisters.channels[0]
+ * Independent channel data interfaces
+ */
+/*
+ * DmaRegisters.channels[0]
+ * Page-aligned complete channel blocks containing rings, configuration, fatal failures and notifications. Unused bytes are reserved to their owning block.
+ */
+/*
+ * DmaRegisters.channels[0].command
+ * Command queue interface
+ */
+/*
+ * DmaRegisters.channels[0].command
+ * Registers owned by the software-produced, hardware-consumed command ring. Software programs storage before enabling the channel and publishes descriptors through its producer cursor.
+ */
+/*
+ * DmaRegisters.channels[0].event
+ * Event queue interface
+ */
+/*
+ * DmaRegisters.channels[0].event
+ * Registers owned by the hardware-produced, software-consumed event ring. Software programs storage before enabling the channel and releases events through its consumer cursor.
+ */
+/*
+ * DmaRegisters.channels[0].control
+ * Channel management interface
+ */
+/*
+ * DmaRegisters.channels[0].control
+ * Processing enable, interrupt causes and sticky channel fatal. Trap notifications do not use event storage.
+ */
+/*
+ * DmaRegisters.channels[0].control.config
+ * Channel configuration
+ */
+/*
+ * DmaRegisters.channels[0].control.config
+ * Processing enable and locked ring context.
+ */
+/*
+ * DmaRegisters.channels[0].control.recovery
+ * Channel failure and resume
+ */
+/*
+ * DmaRegisters.channels[0].control.recovery
+ * Sticky fatal status and payload fault recovery.
+ */
+/*
+ * DmaRegisters.channels[0].control.irq
+ * Channel interrupt controls
+ */
+/*
+ * DmaRegisters.channels[0].control.irq
+ * Notification enable, causes, masks and Trap acknowledgment.
+ */
+/*
+ * DmaRegisters.channels[1]
+ * Independent channel data interfaces
+ */
+/*
+ * DmaRegisters.channels[1]
+ * Page-aligned complete channel blocks containing rings, configuration, fatal failures and notifications. Unused bytes are reserved to their owning block.
+ */
+/*
+ * DmaRegisters.channels[1].command
+ * Command queue interface
+ */
+/*
+ * DmaRegisters.channels[1].command
+ * Registers owned by the software-produced, hardware-consumed command ring. Software programs storage before enabling the channel and publishes descriptors through its producer cursor.
+ */
+/*
+ * DmaRegisters.channels[1].event
+ * Event queue interface
+ */
+/*
+ * DmaRegisters.channels[1].event
+ * Registers owned by the hardware-produced, software-consumed event ring. Software programs storage before enabling the channel and releases events through its consumer cursor.
+ */
+/*
+ * DmaRegisters.channels[1].control
+ * Channel management interface
+ */
+/*
+ * DmaRegisters.channels[1].control
+ * Processing enable, interrupt causes and sticky channel fatal. Trap notifications do not use event storage.
+ */
+/*
+ * DmaRegisters.channels[1].control.config
+ * Channel configuration
+ */
+/*
+ * DmaRegisters.channels[1].control.config
+ * Processing enable and locked ring context.
+ */
+/*
+ * DmaRegisters.channels[1].control.recovery
+ * Channel failure and resume
+ */
+/*
+ * DmaRegisters.channels[1].control.recovery
+ * Sticky fatal status and payload fault recovery.
+ */
+/*
+ * DmaRegisters.channels[1].control.irq
+ * Channel interrupt controls
+ */
+/*
+ * DmaRegisters.channels[1].control.irq
+ * Notification enable, causes, masks and Trap acknowledgment.
+ */
+/*
+ * DmaRegisters.channels[2]
+ * Independent channel data interfaces
+ */
+/*
+ * DmaRegisters.channels[2]
+ * Page-aligned complete channel blocks containing rings, configuration, fatal failures and notifications. Unused bytes are reserved to their owning block.
+ */
+/*
+ * DmaRegisters.channels[2].command
+ * Command queue interface
+ */
+/*
+ * DmaRegisters.channels[2].command
+ * Registers owned by the software-produced, hardware-consumed command ring. Software programs storage before enabling the channel and publishes descriptors through its producer cursor.
+ */
+/*
+ * DmaRegisters.channels[2].event
+ * Event queue interface
+ */
+/*
+ * DmaRegisters.channels[2].event
+ * Registers owned by the hardware-produced, software-consumed event ring. Software programs storage before enabling the channel and releases events through its consumer cursor.
+ */
+/*
+ * DmaRegisters.channels[2].control
+ * Channel management interface
+ */
+/*
+ * DmaRegisters.channels[2].control
+ * Processing enable, interrupt causes and sticky channel fatal. Trap notifications do not use event storage.
+ */
+/*
+ * DmaRegisters.channels[2].control.config
+ * Channel configuration
+ */
+/*
+ * DmaRegisters.channels[2].control.config
+ * Processing enable and locked ring context.
+ */
+/*
+ * DmaRegisters.channels[2].control.recovery
+ * Channel failure and resume
+ */
+/*
+ * DmaRegisters.channels[2].control.recovery
+ * Sticky fatal status and payload fault recovery.
+ */
+/*
+ * DmaRegisters.channels[2].control.irq
+ * Channel interrupt controls
+ */
+/*
+ * DmaRegisters.channels[2].control.irq
+ * Notification enable, causes, masks and Trap acknowledgment.
  */
 #define C_HDMA_SIZE UINT64_C(16384)
 #define C_HDMA_ACCESS_READ_ONLY UINT32_C(0)
@@ -15,164 +235,43 @@
 #define C_HDMA_RESET_ZERO UINT32_C(1)
 #define C_HDMA_RESET_POST_RESET UINT32_C(2)
 /*
- * DmaRegisters.discovery
- * Hardware discovery aperture
- * Read-only DMA configuration visible independently of administrative permissions.
- */
-/*
- * DmaRegisters.admin
- * Privileged DMA administration
- * Complete global and per-channel administration aperture, hidden from managed Host software.
- */
-/*
- * DmaRegisters.admin.control
- * DMA-wide administration
- * Global interrupt control, fatal state and whole-DMA reset.
- */
-/*
- * DmaRegisters.admin.channels[0]
- * Channel administration bank
- * One privileged recovery block for each implemented channel.
- */
-/*
- * DmaRegisters.admin.channels[1]
- * Channel administration bank
- * One privileged recovery block for each implemented channel.
- */
-/*
- * DmaRegisters.admin.channels[2]
- * Channel administration bank
- * One privileged recovery block for each implemented channel.
- */
-/*
- * DmaRegisters.channels[0]
- * Independent channel data interfaces
- * Page-aligned complete channel blocks containing rings, configuration, fatal failures and notifications. Unused bytes are reserved to their owning block.
- */
-/*
- * DmaRegisters.channels[0].command
- * Command queue interface
- * Registers owned by the software-produced, hardware-consumed command ring. Software programs storage before enabling the channel and publishes descriptors through its producer cursor.
- */
-/*
- * DmaRegisters.channels[0].event
- * Event queue interface
- * Registers owned by the hardware-produced, software-consumed event ring. Software programs storage before enabling the channel and releases events through its consumer cursor.
- */
-/*
- * DmaRegisters.channels[0].control
- * Channel management interface
- * Processing enable, interrupt causes and sticky channel fatal. Trap notifications do not use event storage.
- */
-/*
- * DmaRegisters.channels[0].control.config
- * Channel configuration
- * Processing enable and locked ring context.
- */
-/*
- * DmaRegisters.channels[0].control.recovery
- * Channel failure and resume
- * Sticky fatal status and payload fault recovery.
- */
-/*
- * DmaRegisters.channels[0].control.irq
- * Channel interrupt controls
- * Notification enable, causes, masks and Trap acknowledgment.
- */
-/*
- * DmaRegisters.channels[1]
- * Independent channel data interfaces
- * Page-aligned complete channel blocks containing rings, configuration, fatal failures and notifications. Unused bytes are reserved to their owning block.
- */
-/*
- * DmaRegisters.channels[1].command
- * Command queue interface
- * Registers owned by the software-produced, hardware-consumed command ring. Software programs storage before enabling the channel and publishes descriptors through its producer cursor.
- */
-/*
- * DmaRegisters.channels[1].event
- * Event queue interface
- * Registers owned by the hardware-produced, software-consumed event ring. Software programs storage before enabling the channel and releases events through its consumer cursor.
- */
-/*
- * DmaRegisters.channels[1].control
- * Channel management interface
- * Processing enable, interrupt causes and sticky channel fatal. Trap notifications do not use event storage.
- */
-/*
- * DmaRegisters.channels[1].control.config
- * Channel configuration
- * Processing enable and locked ring context.
- */
-/*
- * DmaRegisters.channels[1].control.recovery
- * Channel failure and resume
- * Sticky fatal status and payload fault recovery.
- */
-/*
- * DmaRegisters.channels[1].control.irq
- * Channel interrupt controls
- * Notification enable, causes, masks and Trap acknowledgment.
- */
-/*
- * DmaRegisters.channels[2]
- * Independent channel data interfaces
- * Page-aligned complete channel blocks containing rings, configuration, fatal failures and notifications. Unused bytes are reserved to their owning block.
- */
-/*
- * DmaRegisters.channels[2].command
- * Command queue interface
- * Registers owned by the software-produced, hardware-consumed command ring. Software programs storage before enabling the channel and publishes descriptors through its producer cursor.
- */
-/*
- * DmaRegisters.channels[2].event
- * Event queue interface
- * Registers owned by the hardware-produced, software-consumed event ring. Software programs storage before enabling the channel and releases events through its consumer cursor.
- */
-/*
- * DmaRegisters.channels[2].control
- * Channel management interface
- * Processing enable, interrupt causes and sticky channel fatal. Trap notifications do not use event storage.
- */
-/*
- * DmaRegisters.channels[2].control.config
- * Channel configuration
- * Processing enable and locked ring context.
- */
-/*
- * DmaRegisters.channels[2].control.recovery
- * Channel failure and resume
- * Sticky fatal status and payload fault recovery.
- */
-/*
- * DmaRegisters.channels[2].control.irq
- * Channel interrupt controls
- * Notification enable, causes, masks and Trap acknowledgment.
- */
-
-/*
+ * CHANNEL_NUM
  * Implemented channel count
+ */
+/*
+ * CHANNEL_NUM
  * Number of implemented channels, preserved across DMA reset.
  */
+
 #define C_HDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_OFFSET UINT64_C(0)
 #define C_HDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_ACCESS C_HDMA_ACCESS_READ_ONLY
 #define C_HDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_RESET_KIND C_HDMA_RESET_POST_RESET
 #define C_HDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * CAPABILITIES
  * Immutable native or exclusive atomic operation support by word width
+ */
+/*
+ * CAPABILITIES
  * Immutable native or exclusive atomic operation support by word width.
  */
+
 /*
  * atomic32
  * 32-bit atomic and semaphore operations are supported
+ */
+/*
+ * atomic32
  * 32-bit atomic and semaphore operations are supported.
  */
 /*
  * atomic64
  * 64-bit atomic and semaphore operations are supported
+ */
+/*
+ * atomic64
  * 64-bit atomic and semaphore operations are supported.
  */
 #define C_HDMA_C_QUCQUAQUPQUAQUBQUIQULQUIQUTQUIQUEQUS_OFFSET UINT64_C(4)
@@ -181,102 +280,141 @@
 #define C_HDMA_C_QUCQUAQUPQUAQUBQUIQULQUIQUTQUIQUEQUS_RESET_KIND C_HDMA_RESET_POST_RESET
 #define C_HDMA_C_QUCQUAQUPQUAQUBQUIQULQUIQUTQUIQUEQUS_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUCQUAQUPQUAQUBQUIQULQUIQUTQUIQUEQUS_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * BASE
  * Command ring base address
+ */
+/*
+ * BASE
  * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset.
  */
+
 #define C_HDMA_C_QUBQUAQUSQUE__1_OFFSET UINT64_C(4096)
 #define C_HDMA_C_QUBQUAQUSQUE__1_WIDTH UINT64_C(8)
 #define C_HDMA_C_QUBQUAQUSQUE__1_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUBQUAQUSQUE__1_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUBQUAQUSQUE__1_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUBQUAQUSQUE__1_WRITABLE_MASK UINT64_C(18446744073709551615)
-
 /*
+ * CAPACITY
  * Command ring capacity
+ */
+/*
+ * CAPACITY
  * Number of command slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
  */
+
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_OFFSET UINT64_C(4104)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_WRITABLE_MASK UINT64_C(4294967295)
-
 /*
+ * PRODUCER
  * Published command count
+ */
+/*
+ * PRODUCER
  * Software advances this wrapping cursor only after writing command records to memory. Publication may not exceed the ring's free capacity; hardware reads entries between consumer and producer.
  */
+
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__1_OFFSET UINT64_C(4108)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__1_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__1_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__1_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__1_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__1_WRITABLE_MASK UINT64_C(4294967295)
-
 /*
+ * CONSUMER
  * Fetched command count
+ */
+/*
+ * CONSUMER
  * Hardware advances this wrapping cursor after successfully reading and decoding a command. It releases the command slot; it does not indicate that the copy has completed.
  */
+
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_OFFSET UINT64_C(4112)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_ACCESS C_HDMA_ACCESS_READ_ONLY
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * BASE
  * Event ring base address
+ */
+/*
+ * BASE
  * Start of event storage in the attached memory backend, aligned to eight bytes. Event slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
  */
+
 #define C_HDMA_C_QUBQUAQUSQUE__2_OFFSET UINT64_C(4120)
 #define C_HDMA_C_QUBQUAQUSQUE__2_WIDTH UINT64_C(8)
 #define C_HDMA_C_QUBQUAQUSQUE__2_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUBQUAQUSQUE__2_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUBQUAQUSQUE__2_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUBQUAQUSQUE__2_WRITABLE_MASK UINT64_C(18446744073709551615)
-
 /*
+ * CAPACITY
  * Event ring capacity
+ */
+/*
+ * CAPACITY
  * Number of event slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
  */
+
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_OFFSET UINT64_C(4128)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_WRITABLE_MASK UINT64_C(4294967295)
-
 /*
+ * PRODUCER
  * Published event count
+ */
+/*
+ * PRODUCER
  * Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
  */
+
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_OFFSET UINT64_C(4132)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_ACCESS C_HDMA_ACCESS_READ_ONLY
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * CONSUMER
  * Consumed event count
+ */
+/*
+ * CONSUMER
  * Software advances this wrapping cursor after reading and decoding events. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
  */
+
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_OFFSET UINT64_C(4136)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_WRITABLE_MASK UINT64_C(4294967295)
-
 /*
+ * ENABLE
  * Channel processing enable
+ */
+/*
+ * ENABLE
  * One permits pipeline progress and validates command ring geometry; the first successful enable locks both rings' base addresses and capacities. Event geometry is checked when publishing an error event. Zero pauses processing without clearing cursors, retained work or errors.
  */
+
 /*
  * enabled
  * Enabled
+ */
+/*
+ * enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__1_OFFSET UINT64_C(4140)
@@ -285,54 +423,80 @@
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__1_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__1_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__1_WRITABLE_MASK UINT64_C(1)
-
 /*
+ * RING_CONTEXT
  * Context shared by command and event ring accesses
+ */
+/*
+ * RING_CONTEXT
  * Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
  */
+
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_OFFSET UINT64_C(4144)
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_WIDTH UINT64_C(4)
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_WRITABLE_MASK UINT64_C(4294967295)
-
 /*
+ * FATAL
  * Sticky channel fatal
+ */
+/*
+ * FATAL
  * A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
  */
+
 /*
  * code
  * Fatal code
+ */
+/*
+ * code
  * Distinguishes normal operation from command-fetch and event-publication failures. Other encodings are invalid.
  */
 /*
  * None
  * No channel fatal
+ */
+/*
+ * None
  * Neither ring has latched a hardware access failure.
  */
 #define C_HDMA_C_QUFQUAQUTQUAQUL__1_C_CODE_C_QUNONE UINT64_C(0)
 /*
  * CommandRead
  * Command fetch failed
+ */
+/*
+ * CommandRead
  * Hardware could not fetch or decode a command ring entry; its consumer cursor was not advanced.
  */
 #define C_HDMA_C_QUFQUAQUTQUAQUL__1_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
 /*
  * EventWrite
  * Event publication failed
+ */
+/*
+ * EventWrite
  * Hardware could not publish an event ring entry; its producer cursor was not advanced. The payload copy may already have completed.
  */
 #define C_HDMA_C_QUFQUAQUTQUAQUL__1_C_CODE_C_QUEVENTQUWRITE UINT64_C(2)
 /*
  * EventFull
  * Error publication encountered a full event ring
+ */
+/*
+ * EventFull
  * Error publication encountered a full event ring.
  */
 #define C_HDMA_C_QUFQUAQUTQUAQUL__1_C_CODE_C_QUEVENTQUFULL UINT64_C(3)
 /*
  * EventConfiguration
  * Error publication encountered invalid event geometry or cursors
+ */
+/*
+ * EventConfiguration
  * Error publication encountered invalid event geometry or cursors.
  */
 #define C_HDMA_C_QUFQUAQUTQUAQUL__1_C_CODE_C_QUEVENTQUCONFIGURATION UINT64_C(4)
@@ -342,14 +506,21 @@
 #define C_HDMA_C_QUFQUAQUTQUAQUL__1_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUFQUAQUTQUAQUL__1_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUFQUAQUTQUAQUL__1_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * FAULT_STATUS
  * Payload fault status
+ */
+/*
+ * FAULT_STATUS
  * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
  */
+
 /*
  * faulted
  * A payload page fault awaits software repair and an explicit resume request
+ */
+/*
+ * faulted
  * A payload page fault awaits software repair and an explicit resume request.
  */
 #define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_OFFSET UINT64_C(4152)
@@ -358,14 +529,21 @@
 #define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * RESUME
  * Resume suspended command
+ */
+/*
+ * RESUME
  * Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
  */
+
 /*
  * request
  * Write one to clear faulted after mapping repair; reserved bits must be zero
+ */
+/*
+ * request
  * Write one to clear faulted after mapping repair; reserved bits must be zero.
  */
 #define C_HDMA_C_QURQUEQUSQUUQUMQUE__1_OFFSET UINT64_C(4156)
@@ -374,14 +552,21 @@
 #define C_HDMA_C_QURQUEQUSQUUQUMQUE__1_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QURQUEQUSQUUQUMQUE__1_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QURQUEQUSQUUQUMQUE__1_WRITABLE_MASK UINT64_C(1)
-
 /*
+ * ENABLE
  * Channel interrupt enable
+ */
+/*
+ * ENABLE
  * One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
  */
+
 /*
  * enabled
  * Enabled
+ */
+/*
+ * enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__2_OFFSET UINT64_C(4160)
@@ -390,29 +575,45 @@
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__2_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__2_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__2_WRITABLE_MASK UINT64_C(1)
-
 /*
+ * CAUSE
  * Event non-empty, Trap, event error and channel fatal causes, visible even while masked
+ */
+/*
+ * CAUSE
  * Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
  */
+
 /*
  * event_non_empty
  * The event ring currently contains unread entries
+ */
+/*
+ * event_non_empty
  * The event ring currently contains unread entries.
  */
 /*
  * trap
  * A Trap command executed since the last Trap acknowledgment
+ */
+/*
+ * trap
  * A Trap command executed since the last Trap acknowledgment.
  */
 /*
  * error
  * A stopping command error is latched before event publication; processing remains stopped until reset
+ */
+/*
+ * error
  * A stopping command error is latched before event publication; processing remains stopped until reset. Payload suspension does not set this cause.
  */
 /*
  * channel_fatal
  * The channel fatal register contains a fatal error
+ */
+/*
+ * channel_fatal
  * The channel fatal register contains a fatal error.
  */
 #define C_HDMA_C_QUCQUAQUUQUSQUE__1_OFFSET UINT64_C(4164)
@@ -421,19 +622,29 @@
 #define C_HDMA_C_QUCQUAQUUQUSQUE__1_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUCQUAQUUQUSQUE__1_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUCQUAQUUQUSQUE__1_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * MASK
  * Independent non-empty and Trap notification masks
+ */
+/*
+ * MASK
  * Independent non-empty and Trap notification masks. Unmask does not replay past events.
  */
+
 /*
  * event_non_empty
  * Mask notifications on event empty-to-non-empty transitions
+ */
+/*
+ * event_non_empty
  * Mask notifications on event empty-to-non-empty transitions.
  */
 /*
  * trap
  * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
+ */
+/*
+ * trap
  * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
  */
 #define C_HDMA_C_QUMQUAQUSQUK__1_OFFSET UINT64_C(4168)
@@ -442,14 +653,21 @@
 #define C_HDMA_C_QUMQUAQUSQUK__1_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUMQUAQUSQUK__1_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUMQUAQUSQUK__1_WRITABLE_MASK UINT64_C(3)
-
 /*
+ * TRAP_ACK
  * Write one to clear sticky Trap cause without retracting platform notifications
+ */
+/*
+ * TRAP_ACK
  * Write one to clear sticky Trap cause without retracting platform notifications.
  */
+
 /*
  * request
  * Write one to clear the sticky Trap cause
+ */
+/*
+ * request
  * Write one to clear the sticky Trap cause.
  */
 #define C_HDMA_C_QUTQURQUAQUPQSQUAQUCQUK__1_OFFSET UINT64_C(4172)
@@ -458,102 +676,141 @@
 #define C_HDMA_C_QUTQURQUAQUPQSQUAQUCQUK__1_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUTQURQUAQUPQSQUAQUCQUK__1_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUTQURQUAQUPQSQUAQUCQUK__1_WRITABLE_MASK UINT64_C(1)
-
 /*
+ * BASE
  * Command ring base address
+ */
+/*
+ * BASE
  * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset.
  */
+
 #define C_HDMA_C_QUBQUAQUSQUE__3_OFFSET UINT64_C(8192)
 #define C_HDMA_C_QUBQUAQUSQUE__3_WIDTH UINT64_C(8)
 #define C_HDMA_C_QUBQUAQUSQUE__3_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUBQUAQUSQUE__3_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUBQUAQUSQUE__3_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUBQUAQUSQUE__3_WRITABLE_MASK UINT64_C(18446744073709551615)
-
 /*
+ * CAPACITY
  * Command ring capacity
+ */
+/*
+ * CAPACITY
  * Number of command slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
  */
+
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__3_OFFSET UINT64_C(8200)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__3_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__3_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__3_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__3_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__3_WRITABLE_MASK UINT64_C(4294967295)
-
 /*
+ * PRODUCER
  * Published command count
+ */
+/*
+ * PRODUCER
  * Software advances this wrapping cursor only after writing command records to memory. Publication may not exceed the ring's free capacity; hardware reads entries between consumer and producer.
  */
+
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__3_OFFSET UINT64_C(8204)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__3_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__3_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__3_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__3_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__3_WRITABLE_MASK UINT64_C(4294967295)
-
 /*
+ * CONSUMER
  * Fetched command count
+ */
+/*
+ * CONSUMER
  * Hardware advances this wrapping cursor after successfully reading and decoding a command. It releases the command slot; it does not indicate that the copy has completed.
  */
+
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__3_OFFSET UINT64_C(8208)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__3_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__3_ACCESS C_HDMA_ACCESS_READ_ONLY
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__3_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__3_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__3_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * BASE
  * Event ring base address
+ */
+/*
+ * BASE
  * Start of event storage in the attached memory backend, aligned to eight bytes. Event slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
  */
+
 #define C_HDMA_C_QUBQUAQUSQUE__4_OFFSET UINT64_C(8216)
 #define C_HDMA_C_QUBQUAQUSQUE__4_WIDTH UINT64_C(8)
 #define C_HDMA_C_QUBQUAQUSQUE__4_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUBQUAQUSQUE__4_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUBQUAQUSQUE__4_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUBQUAQUSQUE__4_WRITABLE_MASK UINT64_C(18446744073709551615)
-
 /*
+ * CAPACITY
  * Event ring capacity
+ */
+/*
+ * CAPACITY
  * Number of event slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
  */
+
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__4_OFFSET UINT64_C(8224)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__4_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__4_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__4_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__4_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__4_WRITABLE_MASK UINT64_C(4294967295)
-
 /*
+ * PRODUCER
  * Published event count
+ */
+/*
+ * PRODUCER
  * Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
  */
+
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_OFFSET UINT64_C(8228)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_ACCESS C_HDMA_ACCESS_READ_ONLY
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * CONSUMER
  * Consumed event count
+ */
+/*
+ * CONSUMER
  * Software advances this wrapping cursor after reading and decoding events. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
  */
+
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__4_OFFSET UINT64_C(8232)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__4_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__4_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__4_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__4_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__4_WRITABLE_MASK UINT64_C(4294967295)
-
 /*
+ * ENABLE
  * Channel processing enable
+ */
+/*
+ * ENABLE
  * One permits pipeline progress and validates command ring geometry; the first successful enable locks both rings' base addresses and capacities. Event geometry is checked when publishing an error event. Zero pauses processing without clearing cursors, retained work or errors.
  */
+
 /*
  * enabled
  * Enabled
+ */
+/*
+ * enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__3_OFFSET UINT64_C(8236)
@@ -562,54 +819,80 @@
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__3_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__3_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__3_WRITABLE_MASK UINT64_C(1)
-
 /*
+ * RING_CONTEXT
  * Context shared by command and event ring accesses
+ */
+/*
+ * RING_CONTEXT
  * Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
  */
+
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_OFFSET UINT64_C(8240)
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_WIDTH UINT64_C(4)
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_WRITABLE_MASK UINT64_C(4294967295)
-
 /*
+ * FATAL
  * Sticky channel fatal
+ */
+/*
+ * FATAL
  * A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
  */
+
 /*
  * code
  * Fatal code
+ */
+/*
+ * code
  * Distinguishes normal operation from command-fetch and event-publication failures. Other encodings are invalid.
  */
 /*
  * None
  * No channel fatal
+ */
+/*
+ * None
  * Neither ring has latched a hardware access failure.
  */
 #define C_HDMA_C_QUFQUAQUTQUAQUL__2_C_CODE_C_QUNONE UINT64_C(0)
 /*
  * CommandRead
  * Command fetch failed
+ */
+/*
+ * CommandRead
  * Hardware could not fetch or decode a command ring entry; its consumer cursor was not advanced.
  */
 #define C_HDMA_C_QUFQUAQUTQUAQUL__2_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
 /*
  * EventWrite
  * Event publication failed
+ */
+/*
+ * EventWrite
  * Hardware could not publish an event ring entry; its producer cursor was not advanced. The payload copy may already have completed.
  */
 #define C_HDMA_C_QUFQUAQUTQUAQUL__2_C_CODE_C_QUEVENTQUWRITE UINT64_C(2)
 /*
  * EventFull
  * Error publication encountered a full event ring
+ */
+/*
+ * EventFull
  * Error publication encountered a full event ring.
  */
 #define C_HDMA_C_QUFQUAQUTQUAQUL__2_C_CODE_C_QUEVENTQUFULL UINT64_C(3)
 /*
  * EventConfiguration
  * Error publication encountered invalid event geometry or cursors
+ */
+/*
+ * EventConfiguration
  * Error publication encountered invalid event geometry or cursors.
  */
 #define C_HDMA_C_QUFQUAQUTQUAQUL__2_C_CODE_C_QUEVENTQUCONFIGURATION UINT64_C(4)
@@ -619,14 +902,21 @@
 #define C_HDMA_C_QUFQUAQUTQUAQUL__2_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUFQUAQUTQUAQUL__2_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUFQUAQUTQUAQUL__2_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * FAULT_STATUS
  * Payload fault status
+ */
+/*
+ * FAULT_STATUS
  * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
  */
+
 /*
  * faulted
  * A payload page fault awaits software repair and an explicit resume request
+ */
+/*
+ * faulted
  * A payload page fault awaits software repair and an explicit resume request.
  */
 #define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_OFFSET UINT64_C(8248)
@@ -635,14 +925,21 @@
 #define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * RESUME
  * Resume suspended command
+ */
+/*
+ * RESUME
  * Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
  */
+
 /*
  * request
  * Write one to clear faulted after mapping repair; reserved bits must be zero
+ */
+/*
+ * request
  * Write one to clear faulted after mapping repair; reserved bits must be zero.
  */
 #define C_HDMA_C_QURQUEQUSQUUQUMQUE__2_OFFSET UINT64_C(8252)
@@ -651,14 +948,21 @@
 #define C_HDMA_C_QURQUEQUSQUUQUMQUE__2_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QURQUEQUSQUUQUMQUE__2_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QURQUEQUSQUUQUMQUE__2_WRITABLE_MASK UINT64_C(1)
-
 /*
+ * ENABLE
  * Channel interrupt enable
+ */
+/*
+ * ENABLE
  * One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
  */
+
 /*
  * enabled
  * Enabled
+ */
+/*
+ * enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__4_OFFSET UINT64_C(8256)
@@ -667,29 +971,45 @@
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__4_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__4_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__4_WRITABLE_MASK UINT64_C(1)
-
 /*
+ * CAUSE
  * Event non-empty, Trap, event error and channel fatal causes, visible even while masked
+ */
+/*
+ * CAUSE
  * Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
  */
+
 /*
  * event_non_empty
  * The event ring currently contains unread entries
+ */
+/*
+ * event_non_empty
  * The event ring currently contains unread entries.
  */
 /*
  * trap
  * A Trap command executed since the last Trap acknowledgment
+ */
+/*
+ * trap
  * A Trap command executed since the last Trap acknowledgment.
  */
 /*
  * error
  * A stopping command error is latched before event publication; processing remains stopped until reset
+ */
+/*
+ * error
  * A stopping command error is latched before event publication; processing remains stopped until reset. Payload suspension does not set this cause.
  */
 /*
  * channel_fatal
  * The channel fatal register contains a fatal error
+ */
+/*
+ * channel_fatal
  * The channel fatal register contains a fatal error.
  */
 #define C_HDMA_C_QUCQUAQUUQUSQUE__2_OFFSET UINT64_C(8260)
@@ -698,19 +1018,29 @@
 #define C_HDMA_C_QUCQUAQUUQUSQUE__2_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUCQUAQUUQUSQUE__2_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUCQUAQUUQUSQUE__2_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * MASK
  * Independent non-empty and Trap notification masks
+ */
+/*
+ * MASK
  * Independent non-empty and Trap notification masks. Unmask does not replay past events.
  */
+
 /*
  * event_non_empty
  * Mask notifications on event empty-to-non-empty transitions
+ */
+/*
+ * event_non_empty
  * Mask notifications on event empty-to-non-empty transitions.
  */
 /*
  * trap
  * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
+ */
+/*
+ * trap
  * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
  */
 #define C_HDMA_C_QUMQUAQUSQUK__2_OFFSET UINT64_C(8264)
@@ -719,14 +1049,21 @@
 #define C_HDMA_C_QUMQUAQUSQUK__2_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUMQUAQUSQUK__2_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUMQUAQUSQUK__2_WRITABLE_MASK UINT64_C(3)
-
 /*
+ * TRAP_ACK
  * Write one to clear sticky Trap cause without retracting platform notifications
+ */
+/*
+ * TRAP_ACK
  * Write one to clear sticky Trap cause without retracting platform notifications.
  */
+
 /*
  * request
  * Write one to clear the sticky Trap cause
+ */
+/*
+ * request
  * Write one to clear the sticky Trap cause.
  */
 #define C_HDMA_C_QUTQURQUAQUPQSQUAQUCQUK__2_OFFSET UINT64_C(8268)
@@ -735,102 +1072,141 @@
 #define C_HDMA_C_QUTQURQUAQUPQSQUAQUCQUK__2_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUTQURQUAQUPQSQUAQUCQUK__2_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUTQURQUAQUPQSQUAQUCQUK__2_WRITABLE_MASK UINT64_C(1)
-
 /*
+ * BASE
  * Command ring base address
+ */
+/*
+ * BASE
  * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset.
  */
+
 #define C_HDMA_C_QUBQUAQUSQUE__5_OFFSET UINT64_C(12288)
 #define C_HDMA_C_QUBQUAQUSQUE__5_WIDTH UINT64_C(8)
 #define C_HDMA_C_QUBQUAQUSQUE__5_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUBQUAQUSQUE__5_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUBQUAQUSQUE__5_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUBQUAQUSQUE__5_WRITABLE_MASK UINT64_C(18446744073709551615)
-
 /*
+ * CAPACITY
  * Command ring capacity
+ */
+/*
+ * CAPACITY
  * Number of command slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
  */
+
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__5_OFFSET UINT64_C(12296)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__5_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__5_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__5_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__5_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__5_WRITABLE_MASK UINT64_C(4294967295)
-
 /*
+ * PRODUCER
  * Published command count
+ */
+/*
+ * PRODUCER
  * Software advances this wrapping cursor only after writing command records to memory. Publication may not exceed the ring's free capacity; hardware reads entries between consumer and producer.
  */
+
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__5_OFFSET UINT64_C(12300)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__5_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__5_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__5_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__5_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__5_WRITABLE_MASK UINT64_C(4294967295)
-
 /*
+ * CONSUMER
  * Fetched command count
+ */
+/*
+ * CONSUMER
  * Hardware advances this wrapping cursor after successfully reading and decoding a command. It releases the command slot; it does not indicate that the copy has completed.
  */
+
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__5_OFFSET UINT64_C(12304)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__5_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__5_ACCESS C_HDMA_ACCESS_READ_ONLY
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__5_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__5_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__5_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * BASE
  * Event ring base address
+ */
+/*
+ * BASE
  * Start of event storage in the attached memory backend, aligned to eight bytes. Event slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
  */
+
 #define C_HDMA_C_QUBQUAQUSQUE__6_OFFSET UINT64_C(12312)
 #define C_HDMA_C_QUBQUAQUSQUE__6_WIDTH UINT64_C(8)
 #define C_HDMA_C_QUBQUAQUSQUE__6_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUBQUAQUSQUE__6_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUBQUAQUSQUE__6_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUBQUAQUSQUE__6_WRITABLE_MASK UINT64_C(18446744073709551615)
-
 /*
+ * CAPACITY
  * Event ring capacity
+ */
+/*
+ * CAPACITY
  * Number of event slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
  */
+
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__6_OFFSET UINT64_C(12320)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__6_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__6_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__6_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__6_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__6_WRITABLE_MASK UINT64_C(4294967295)
-
 /*
+ * PRODUCER
  * Published event count
+ */
+/*
+ * PRODUCER
  * Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
  */
+
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_OFFSET UINT64_C(12324)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_ACCESS C_HDMA_ACCESS_READ_ONLY
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * CONSUMER
  * Consumed event count
+ */
+/*
+ * CONSUMER
  * Software advances this wrapping cursor after reading and decoding events. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
  */
+
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__6_OFFSET UINT64_C(12328)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__6_WIDTH UINT64_C(4)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__6_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__6_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__6_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__6_WRITABLE_MASK UINT64_C(4294967295)
-
 /*
+ * ENABLE
  * Channel processing enable
+ */
+/*
+ * ENABLE
  * One permits pipeline progress and validates command ring geometry; the first successful enable locks both rings' base addresses and capacities. Event geometry is checked when publishing an error event. Zero pauses processing without clearing cursors, retained work or errors.
  */
+
 /*
  * enabled
  * Enabled
+ */
+/*
+ * enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__5_OFFSET UINT64_C(12332)
@@ -839,54 +1215,80 @@
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__5_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__5_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__5_WRITABLE_MASK UINT64_C(1)
-
 /*
+ * RING_CONTEXT
  * Context shared by command and event ring accesses
+ */
+/*
+ * RING_CONTEXT
  * Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
  */
+
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_OFFSET UINT64_C(12336)
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_WIDTH UINT64_C(4)
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_ACCESS C_HDMA_ACCESS_READ_WRITE
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_WRITABLE_MASK UINT64_C(4294967295)
-
 /*
+ * FATAL
  * Sticky channel fatal
+ */
+/*
+ * FATAL
  * A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
  */
+
 /*
  * code
  * Fatal code
+ */
+/*
+ * code
  * Distinguishes normal operation from command-fetch and event-publication failures. Other encodings are invalid.
  */
 /*
  * None
  * No channel fatal
+ */
+/*
+ * None
  * Neither ring has latched a hardware access failure.
  */
 #define C_HDMA_C_QUFQUAQUTQUAQUL__3_C_CODE_C_QUNONE UINT64_C(0)
 /*
  * CommandRead
  * Command fetch failed
+ */
+/*
+ * CommandRead
  * Hardware could not fetch or decode a command ring entry; its consumer cursor was not advanced.
  */
 #define C_HDMA_C_QUFQUAQUTQUAQUL__3_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
 /*
  * EventWrite
  * Event publication failed
+ */
+/*
+ * EventWrite
  * Hardware could not publish an event ring entry; its producer cursor was not advanced. The payload copy may already have completed.
  */
 #define C_HDMA_C_QUFQUAQUTQUAQUL__3_C_CODE_C_QUEVENTQUWRITE UINT64_C(2)
 /*
  * EventFull
  * Error publication encountered a full event ring
+ */
+/*
+ * EventFull
  * Error publication encountered a full event ring.
  */
 #define C_HDMA_C_QUFQUAQUTQUAQUL__3_C_CODE_C_QUEVENTQUFULL UINT64_C(3)
 /*
  * EventConfiguration
  * Error publication encountered invalid event geometry or cursors
+ */
+/*
+ * EventConfiguration
  * Error publication encountered invalid event geometry or cursors.
  */
 #define C_HDMA_C_QUFQUAQUTQUAQUL__3_C_CODE_C_QUEVENTQUCONFIGURATION UINT64_C(4)
@@ -896,14 +1298,21 @@
 #define C_HDMA_C_QUFQUAQUTQUAQUL__3_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUFQUAQUTQUAQUL__3_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUFQUAQUTQUAQUL__3_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * FAULT_STATUS
  * Payload fault status
+ */
+/*
+ * FAULT_STATUS
  * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
  */
+
 /*
  * faulted
  * A payload page fault awaits software repair and an explicit resume request
+ */
+/*
+ * faulted
  * A payload page fault awaits software repair and an explicit resume request.
  */
 #define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_OFFSET UINT64_C(12344)
@@ -912,14 +1321,21 @@
 #define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * RESUME
  * Resume suspended command
+ */
+/*
+ * RESUME
  * Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
  */
+
 /*
  * request
  * Write one to clear faulted after mapping repair; reserved bits must be zero
+ */
+/*
+ * request
  * Write one to clear faulted after mapping repair; reserved bits must be zero.
  */
 #define C_HDMA_C_QURQUEQUSQUUQUMQUE__3_OFFSET UINT64_C(12348)
@@ -928,14 +1344,21 @@
 #define C_HDMA_C_QURQUEQUSQUUQUMQUE__3_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QURQUEQUSQUUQUMQUE__3_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QURQUEQUSQUUQUMQUE__3_WRITABLE_MASK UINT64_C(1)
-
 /*
+ * ENABLE
  * Channel interrupt enable
+ */
+/*
+ * ENABLE
  * One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
  */
+
 /*
  * enabled
  * Enabled
+ */
+/*
+ * enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__6_OFFSET UINT64_C(12352)
@@ -944,29 +1367,45 @@
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__6_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__6_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUEQUNQUAQUBQULQUE__6_WRITABLE_MASK UINT64_C(1)
-
 /*
+ * CAUSE
  * Event non-empty, Trap, event error and channel fatal causes, visible even while masked
+ */
+/*
+ * CAUSE
  * Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
  */
+
 /*
  * event_non_empty
  * The event ring currently contains unread entries
+ */
+/*
+ * event_non_empty
  * The event ring currently contains unread entries.
  */
 /*
  * trap
  * A Trap command executed since the last Trap acknowledgment
+ */
+/*
+ * trap
  * A Trap command executed since the last Trap acknowledgment.
  */
 /*
  * error
  * A stopping command error is latched before event publication; processing remains stopped until reset
+ */
+/*
+ * error
  * A stopping command error is latched before event publication; processing remains stopped until reset. Payload suspension does not set this cause.
  */
 /*
  * channel_fatal
  * The channel fatal register contains a fatal error
+ */
+/*
+ * channel_fatal
  * The channel fatal register contains a fatal error.
  */
 #define C_HDMA_C_QUCQUAQUUQUSQUE__3_OFFSET UINT64_C(12356)
@@ -975,19 +1414,29 @@
 #define C_HDMA_C_QUCQUAQUUQUSQUE__3_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUCQUAQUUQUSQUE__3_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUCQUAQUUQUSQUE__3_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * MASK
  * Independent non-empty and Trap notification masks
+ */
+/*
+ * MASK
  * Independent non-empty and Trap notification masks. Unmask does not replay past events.
  */
+
 /*
  * event_non_empty
  * Mask notifications on event empty-to-non-empty transitions
+ */
+/*
+ * event_non_empty
  * Mask notifications on event empty-to-non-empty transitions.
  */
 /*
  * trap
  * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
+ */
+/*
+ * trap
  * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
  */
 #define C_HDMA_C_QUMQUAQUSQUK__3_OFFSET UINT64_C(12360)
@@ -996,14 +1445,21 @@
 #define C_HDMA_C_QUMQUAQUSQUK__3_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QUMQUAQUSQUK__3_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QUMQUAQUSQUK__3_WRITABLE_MASK UINT64_C(3)
-
 /*
+ * TRAP_ACK
  * Write one to clear sticky Trap cause without retracting platform notifications
+ */
+/*
+ * TRAP_ACK
  * Write one to clear sticky Trap cause without retracting platform notifications.
  */
+
 /*
  * request
  * Write one to clear the sticky Trap cause
+ */
+/*
+ * request
  * Write one to clear the sticky Trap cause.
  */
 #define C_HDMA_C_QUTQURQUAQUPQSQUAQUCQUK__3_OFFSET UINT64_C(12364)
@@ -1024,7 +1480,11 @@
 #define C_HDMA_C_CHANNELS__2_STRIDE UINT64_C(4096)
 
 /*
+ * boot
  * Firmware lifecycle status
+ */
+/*
+ * boot
  * Always accessible independently of DMA window permissions. Firmware can read/write; hardware denies all Host writes.
  */
 #define C_HBOOT_SIZE UINT64_C(4)
@@ -1034,11 +1494,15 @@
 #define C_HBOOT_RESET_CONSTANT UINT32_C(0)
 #define C_HBOOT_RESET_ZERO UINT32_C(1)
 #define C_HBOOT_RESET_POST_RESET UINT32_C(2)
-
 /*
+ * BOOT
  * Firmware boot report
+ */
+/*
+ * BOOT
  * One atomic firmware boot state and error report.
  */
+
 /*
  * state
  * Firmware initializes after subsystem reset release; Ready means initialization completed, not that any particular DMA window is open.
@@ -1060,19 +1524,19 @@
 #define C_HBOOT_C_QUBQUOQUOQUT_WRITABLE_MASK UINT64_C(0)
 
 /*
+ * control
  * Independent firmware control channel
+ */
+/*
+ * control
  * Always-on bootstrap and software notification registers outside DMA work windows. Hardware performs no memory operations, ring validation or channel allocation.
  */
-#define C_HCTL_SIZE UINT64_C(36)
-#define C_HCTL_ACCESS_READ_ONLY UINT32_C(0)
-#define C_HCTL_ACCESS_READ_WRITE UINT32_C(1)
-#define C_HCTL_ACCESS_WRITE_ONLY UINT32_C(2)
-#define C_HCTL_RESET_CONSTANT UINT32_C(0)
-#define C_HCTL_RESET_ZERO UINT32_C(1)
-#define C_HCTL_RESET_POST_RESET UINT32_C(2)
 /*
  * ControlRegisters.config
  * Control channel configuration
+ */
+/*
+ * ControlRegisters.config
  * PF-owned bootstrap, address-space attributes and publication enable, frozen together after activation.
  */
 /*
@@ -1082,49 +1546,78 @@
 /*
  * ControlRegisters.notification
  * Firmware-to-PF notifications
+ */
+/*
+ * ControlRegisters.notification
  * Firmware-to-PF response and event reporting, independent of request admission.
  */
-
+#define C_HCTL_SIZE UINT64_C(36)
+#define C_HCTL_ACCESS_READ_ONLY UINT32_C(0)
+#define C_HCTL_ACCESS_READ_WRITE UINT32_C(1)
+#define C_HCTL_ACCESS_WRITE_ONLY UINT32_C(2)
+#define C_HCTL_RESET_CONSTANT UINT32_C(0)
+#define C_HCTL_RESET_ZERO UINT32_C(1)
+#define C_HCTL_RESET_POST_RESET UINT32_C(2)
 /*
+ * BOOTSTRAP
  * Memory address
+ */
+/*
+ * BOOTSTRAP
  * Host-owned address of the memory-resident ControlQueue. Both domains may read it. Changes are locked after activation; address zero has no special hardware meaning.
  */
+
 #define C_HCTL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_OFFSET UINT64_C(0)
 #define C_HCTL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_WIDTH UINT64_C(8)
 #define C_HCTL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_ACCESS C_HCTL_ACCESS_READ_WRITE
 #define C_HCTL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_RESET_KIND C_HCTL_RESET_ZERO
 #define C_HCTL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_RESET_VALUE UINT64_C(0)
 #define C_HCTL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_WRITABLE_MASK UINT64_C(18446744073709551615)
-
 /*
+ * ADDRESS_SPACE
  * Read/write word
+ */
+/*
+ * ADDRESS_SPACE
  * Address-space mode encoded by ContextAttributes: Default is distinct from PASID zero.
  */
+
 #define C_HCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_OFFSET UINT64_C(8)
 #define C_HCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_WIDTH UINT64_C(4)
 #define C_HCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_ACCESS C_HCTL_ACCESS_READ_WRITE
 #define C_HCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_RESET_KIND C_HCTL_RESET_ZERO
 #define C_HCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_RESET_VALUE UINT64_C(0)
 #define C_HCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_WRITABLE_MASK UINT64_C(4294967295)
-
 /*
+ * PASID
  * Read/write word
+ */
+/*
+ * PASID
  * Twenty-bit PASID when PASID mode is selected; must be zero in Default mode.
  */
+
 #define C_HCTL_C_QUPQUAQUSQUIQUD_OFFSET UINT64_C(12)
 #define C_HCTL_C_QUPQUAQUSQUIQUD_WIDTH UINT64_C(4)
 #define C_HCTL_C_QUPQUAQUSQUIQUD_ACCESS C_HCTL_ACCESS_READ_WRITE
 #define C_HCTL_C_QUPQUAQUSQUIQUD_RESET_KIND C_HCTL_RESET_ZERO
 #define C_HCTL_C_QUPQUAQUSQUIQUD_RESET_VALUE UINT64_C(0)
 #define C_HCTL_C_QUPQUAQUSQUIQUD_WRITABLE_MASK UINT64_C(4294967295)
-
 /*
+ * ENABLE
  * Enable control
+ */
+/*
+ * ENABLE
  * Host writes one after initializing queue memory. Both domains may read activation. Disabling and bootstrap changes are forbidden after activation; there is no live reset register.
  */
+
 /*
  * enabled
  * Enabled
+ */
+/*
+ * enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
 #define C_HCTL_C_QUEQUNQUAQUBQULQUE_OFFSET UINT64_C(16)
@@ -1133,11 +1626,15 @@
 #define C_HCTL_C_QUEQUNQUAQUBQULQUE_RESET_KIND C_HCTL_RESET_ZERO
 #define C_HCTL_C_QUEQUNQUAQUBQULQUE_RESET_VALUE UINT64_C(0)
 #define C_HCTL_C_QUEQUNQUAQUBQULQUE_WRITABLE_MASK UINT64_C(1)
-
 /*
+ * REQUEST
  * Coalescing notification doorbell
+ */
+/*
+ * REQUEST
  * Host-only notification to firmware after publishing requests or freeing response space.
  */
+
 /*
  * pulse
  * Write one to notify the peer software domain.
@@ -1148,11 +1645,15 @@
 #define C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_RESET_KIND C_HCTL_RESET_ZERO
 #define C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_RESET_VALUE UINT64_C(0)
 #define C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_WRITABLE_MASK UINT64_C(1)
-
 /*
+ * EVENT_ERROR
  * Retained event delivery error
+ */
+/*
+ * EVENT_ERROR
  * Firmware-owned event delivery error; PF can only read. DMA reset does not clear it.
  */
+
 /*
  * code
  * 0: None. 1: Overflow. 2: AccessError. 3: InvalidRing. Nonzero means event history is incomplete and the producer is stopped.
@@ -1169,8 +1670,84 @@
 #define C_HCTL_C_QUEQUVQUEQUNQUTQSQUEQURQURQUOQUR_WRITABLE_MASK UINT64_C(0)
 
 /*
+ * window
  * Channel permission windows
+ */
+/*
+ * window
  * One complete permission block per hardware channel. Host and firmware see filtered views of this same physical bank.
+ */
+/*
+ * ChannelWindowRegisters.windows[0]
+ * Channel permission block
+ */
+/*
+ * ChannelWindowRegisters.windows[0]
+ * One channel's firmware permission control followed by its Host readiness status. Bank spacing derives from this complete block.
+ */
+/*
+ * ChannelWindowRegisters.windows[0].control
+ * Access-window management
+ */
+/*
+ * ChannelWindowRegisters.windows[0].control
+ * Firmware-only management registers, reachable while downstream access is closed. Host accesses to this map are always denied.
+ */
+/*
+ * ChannelWindowRegisters.windows[0].status
+ * Access-window readiness
+ */
+/*
+ * ChannelWindowRegisters.windows[0].status
+ * Host-readable status available while downstream access is closed. Hardware derives readiness directly from the management control without storing a separate handshake state.
+ */
+/*
+ * ChannelWindowRegisters.windows[1]
+ * Channel permission block
+ */
+/*
+ * ChannelWindowRegisters.windows[1]
+ * One channel's firmware permission control followed by its Host readiness status. Bank spacing derives from this complete block.
+ */
+/*
+ * ChannelWindowRegisters.windows[1].control
+ * Access-window management
+ */
+/*
+ * ChannelWindowRegisters.windows[1].control
+ * Firmware-only management registers, reachable while downstream access is closed. Host accesses to this map are always denied.
+ */
+/*
+ * ChannelWindowRegisters.windows[1].status
+ * Access-window readiness
+ */
+/*
+ * ChannelWindowRegisters.windows[1].status
+ * Host-readable status available while downstream access is closed. Hardware derives readiness directly from the management control without storing a separate handshake state.
+ */
+/*
+ * ChannelWindowRegisters.windows[2]
+ * Channel permission block
+ */
+/*
+ * ChannelWindowRegisters.windows[2]
+ * One channel's firmware permission control followed by its Host readiness status. Bank spacing derives from this complete block.
+ */
+/*
+ * ChannelWindowRegisters.windows[2].control
+ * Access-window management
+ */
+/*
+ * ChannelWindowRegisters.windows[2].control
+ * Firmware-only management registers, reachable while downstream access is closed. Host accesses to this map are always denied.
+ */
+/*
+ * ChannelWindowRegisters.windows[2].status
+ * Access-window readiness
+ */
+/*
+ * ChannelWindowRegisters.windows[2].status
+ * Host-readable status available while downstream access is closed. Hardware derives readiness directly from the management control without storing a separate handshake state.
  */
 #define C_HWIN_SIZE UINT64_C(36)
 #define C_HWIN_ACCESS_READ_ONLY UINT32_C(0)
@@ -1180,77 +1757,44 @@
 #define C_HWIN_RESET_ZERO UINT32_C(1)
 #define C_HWIN_RESET_POST_RESET UINT32_C(2)
 /*
- * ChannelWindowRegisters.windows[0]
- * Channel permission block
- * One channel's firmware permission control followed by its Host readiness status. Bank spacing derives from this complete block.
- */
-/*
- * ChannelWindowRegisters.windows[0].control
- * Access-window management
- * Firmware-only management registers, reachable while downstream access is closed. Host accesses to this map are always denied.
- */
-/*
- * ChannelWindowRegisters.windows[0].status
- * Access-window readiness
- * Host-readable status available while downstream access is closed. Hardware derives readiness directly from the management control without storing a separate handshake state.
- */
-/*
- * ChannelWindowRegisters.windows[1]
- * Channel permission block
- * One channel's firmware permission control followed by its Host readiness status. Bank spacing derives from this complete block.
- */
-/*
- * ChannelWindowRegisters.windows[1].control
- * Access-window management
- * Firmware-only management registers, reachable while downstream access is closed. Host accesses to this map are always denied.
- */
-/*
- * ChannelWindowRegisters.windows[1].status
- * Access-window readiness
- * Host-readable status available while downstream access is closed. Hardware derives readiness directly from the management control without storing a separate handshake state.
- */
-/*
- * ChannelWindowRegisters.windows[2]
- * Channel permission block
- * One channel's firmware permission control followed by its Host readiness status. Bank spacing derives from this complete block.
- */
-/*
- * ChannelWindowRegisters.windows[2].control
- * Access-window management
- * Firmware-only management registers, reachable while downstream access is closed. Host accesses to this map are always denied.
- */
-/*
- * ChannelWindowRegisters.windows[2].status
- * Access-window readiness
- * Host-readable status available while downstream access is closed. Hardware derives readiness directly from the management control without storing a separate handshake state.
- */
-
-/*
+ * READY
  * Downstream access ready
+ */
+/*
+ * READY
  * One means downstream host access is open; zero means closed. Hardware derives the value from the firmware open control. Host writes are always denied.
  */
+
 #define C_HWIN_C_QURQUEQUAQUDQUY__1_OFFSET UINT64_C(8)
 #define C_HWIN_C_QURQUEQUAQUDQUY__1_WIDTH UINT64_C(4)
 #define C_HWIN_C_QURQUEQUAQUDQUY__1_ACCESS C_HWIN_ACCESS_READ_ONLY
 #define C_HWIN_C_QURQUEQUAQUDQUY__1_RESET_KIND C_HWIN_RESET_ZERO
 #define C_HWIN_C_QURQUEQUAQUDQUY__1_RESET_VALUE UINT64_C(0)
 #define C_HWIN_C_QURQUEQUAQUDQUY__1_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * READY
  * Downstream access ready
+ */
+/*
+ * READY
  * One means downstream host access is open; zero means closed. Hardware derives the value from the firmware open control. Host writes are always denied.
  */
+
 #define C_HWIN_C_QURQUEQUAQUDQUY__2_OFFSET UINT64_C(20)
 #define C_HWIN_C_QURQUEQUAQUDQUY__2_WIDTH UINT64_C(4)
 #define C_HWIN_C_QURQUEQUAQUDQUY__2_ACCESS C_HWIN_ACCESS_READ_ONLY
 #define C_HWIN_C_QURQUEQUAQUDQUY__2_RESET_KIND C_HWIN_RESET_ZERO
 #define C_HWIN_C_QURQUEQUAQUDQUY__2_RESET_VALUE UINT64_C(0)
 #define C_HWIN_C_QURQUEQUAQUDQUY__2_WRITABLE_MASK UINT64_C(0)
-
 /*
+ * READY
  * Downstream access ready
+ */
+/*
+ * READY
  * One means downstream host access is open; zero means closed. Hardware derives the value from the firmware open control. Host writes are always denied.
  */
+
 #define C_HWIN_C_QURQUEQUAQUDQUY__3_OFFSET UINT64_C(32)
 #define C_HWIN_C_QURQUEQUAQUDQUY__3_WIDTH UINT64_C(4)
 #define C_HWIN_C_QURQUEQUAQUDQUY__3_ACCESS C_HWIN_ACCESS_READ_ONLY

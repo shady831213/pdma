@@ -32,6 +32,8 @@ macro_rules! __register_schema {
     };
 }
 
+/// Ordered semantic analysis passes and completed schema input.
+pub mod analysis;
 /// Format-neutral definitions, references and dependency collection.
 pub mod ast;
 /// Reusable typed bit-field layout contract.

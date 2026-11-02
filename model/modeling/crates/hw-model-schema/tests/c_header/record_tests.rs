@@ -1,7 +1,7 @@
-use hw_model_schema::ast::analysis::Analysis;
+use hw_model_schema::analysis::AnalyzedSchema;
 use hw_model_schema::{
     FieldSpec, RecordPlacement, RecordSpec, ScalarKind,
-    export::backends::c_header::{CHeaderBackend, CHeaderExportError},
+    export::backends::c_header::{CHeaderExportError, CRecordBackend},
     export::{Artifact, ArtifactSink, ExportError, generate},
 };
 
@@ -99,8 +99,8 @@ fn c_header_resolved_collision_is_typed_before_sink_emission() -> TestResult {
 
     // When: the real public exporter projects the resolved graph into its C namespace.
     let result = generate(
-        &Analysis::opaque(exporter.0, resolved)?,
-        CHeaderBackend::new().with_name(exporter.0, exporter.1.as_ref()),
+        &AnalyzedSchema::opaque(exporter.0, resolved)?,
+        CRecordBackend::new().with_name(exporter.0, exporter.1.as_ref()),
         &mut sink,
     );
 
@@ -132,8 +132,8 @@ fn c_header_sink_rejection_is_typed_and_emits_no_partial_artifact() -> TestResul
 
     // When: the resolved graph is exported through the rejecting sink.
     let result = generate(
-        &Analysis::opaque(exporter.0, resolved)?,
-        CHeaderBackend::new().with_name(exporter.0, exporter.1.as_ref()),
+        &AnalyzedSchema::opaque(exporter.0, resolved)?,
+        CRecordBackend::new().with_name(exporter.0, exporter.1.as_ref()),
         &mut sink,
     );
 

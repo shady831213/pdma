@@ -1,7 +1,8 @@
 mod scopes;
-use super::{CHeaderBackend, CHeaderExportError};
-use crate::ast::analysis::{Unit, UnitId};
+use super::CHeaderExportError;
+use crate::analysis::{Unit, UnitId};
 pub(super) use scopes::{GeometryNames, Scope};
+use std::collections::HashMap;
 
 pub(super) fn c_identifier(input: &str) -> String {
     let mut output = String::with_capacity(input.len().saturating_mul(2).saturating_add(2));
@@ -111,8 +112,19 @@ pub(super) fn check_record(
     reject_collisions(names.iter().map(|(path, name)| (*path, name.as_str())))
 }
 
-impl CHeaderBackend {
-    pub(super) fn definition_names(
+#[derive(Debug, Default)]
+pub(super) struct Names {
+    overrides: HashMap<UnitId, String>,
+    symbols: Scope,
+}
+impl Names {
+    pub(super) fn set(&mut self, source: impl Into<UnitId>, target: &str) {
+        self.overrides.insert(source.into(), target.into());
+    }
+    pub(super) fn prefix(&self, source: &UnitId, fallback: &str) -> String {
+        c_identifier(self.overrides.get(source).map_or(fallback, String::as_str))
+    }
+    pub(super) fn unit(
         &mut self,
         definition: &Unit,
     ) -> Result<(String, String), CHeaderExportError> {
@@ -120,13 +132,9 @@ impl CHeaderBackend {
             UnitId::Definition(id) => (definition.name.to_ascii_lowercase(), id.path()),
             UnitId::View(name) => (definition.name.clone(), name.as_str()),
         };
-        let prefix = self.target_prefix(&definition.id, &logical_name);
+        let prefix = self.prefix(&definition.id, &logical_name);
         self.symbols.insert(&prefix, path)?;
         Ok((logical_name, prefix))
-    }
-
-    pub(super) fn record_member_name(&self, member: &crate::ResolvedMember) -> String {
-        c_identifier(relative_path(self.record_root, member.path()))
     }
 }
 

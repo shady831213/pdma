@@ -125,3 +125,69 @@ int main(void) {
     )?;
     Ok(())
 }
+
+#[test]
+fn reusable_bits_documentation_is_emitted_once_in_each_c_backend() -> TestResult {
+    use hw_model_schema::{
+        analysis::{AnalyzedSchema, Bindings},
+        ast::SchemaSet,
+        export::{
+            InMemoryArtifactSink,
+            backends::c_header::{CRecordBackend, CRegisterBackend},
+            generate,
+        },
+    };
+    hw_model_schema::bits_schema! {
+        #[short_description = "Reusable flags summary"]
+        #[description = "Flags details.\nSecond line */ remains text."]
+        pub bits DocumentedFlags(u8) {
+            #[short_description = "Ready summary"]
+            #[description = "Ready details."]
+            ready: 0..=0,
+        }
+    }
+    // Given: a standalone bits definition shared by both C source domains.
+    let mut set = SchemaSet::new();
+    set.add::<DocumentedFlags>();
+    let graph = set.resolve()?;
+    let schema = AnalyzedSchema::from_graph(&graph, &Bindings::new())?;
+    let mut record = InMemoryArtifactSink::new();
+    let mut register = InMemoryArtifactSink::new();
+    // When: each public backend renders the same documented source definition.
+    generate(
+        &schema,
+        CRecordBackend::new().with_name(
+            hw_model_schema::ast::DefinitionId::of::<DocumentedFlags>(),
+            "flags",
+        ),
+        &mut record,
+    )?;
+    generate(
+        &schema,
+        CRegisterBackend::new().with_name(
+            hw_model_schema::ast::DefinitionId::of::<DocumentedFlags>(),
+            "flags",
+        ),
+        &mut register,
+    )?;
+    // Then: each fragment appears exactly once and escaped output compiles strictly.
+    for (label, sink) in [("bits-doc-record", record), ("bits-doc-register", register)] {
+        let artifact = sink.artifacts().first().ok_or("missing bits artifact")?;
+        let text = std::str::from_utf8(&artifact.contents)?;
+        for fragment in [
+            "Reusable flags summary",
+            "Flags details.",
+            "Second line * / remains text.",
+            "Ready summary",
+            "Ready details.",
+        ] {
+            assert_eq!(text.matches(fragment).count(), 1, "{label}: {fragment}");
+        }
+        compile_fragments(
+            label,
+            &[&artifact.contents],
+            b"int main(void) { return C_FLAGS_SIZE != 1; }\n",
+        )?;
+    }
+    Ok(())
+}

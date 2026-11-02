@@ -1,10 +1,14 @@
 //! A custom register backend using no builtin backend feature.
+use hw_model_schema::analysis::{AnalyzedSchema, Bindings, RegisterMapView, UnitId};
+use hw_model_schema::export::generate;
+use hw_model_schema::export::value::Backend as _;
 use hw_model_schema::{
-    ast::{
-        DefinitionId, MapView, Node, PlacementView, RegisterInfo, RegisterLocation, SchemaSet,
-        analysis::{Analysis, Bindings, UnitId},
+    ast::{DefinitionId, RegisterInfo, RegisterLocation, SchemaSet},
+    export::{
+        Artifact, InMemoryArtifactSink,
+        register::{Backend, EmitContext},
+        value,
     },
-    export::{Artifact, Backend, InMemoryArtifactSink, Scope, emit, emit_all, generate},
     register_map, register_schema,
 };
 use std::{error::Error, fmt::Write};
@@ -21,30 +25,31 @@ struct RegisterListing {
     text: String,
 }
 impl Backend for RegisterListing {
-    type Error = Box<dyn Error>;
-    fn definition(&mut self, node: Node<'_>, scope: Scope<'_>) -> Result<(), Self::Error> {
-        if scope.unit.id == self.selected {
-            emit(node, scope, self)?;
+    fn root(&mut self, ctx: EmitContext<'_>) -> Result<(), Self::Error> {
+        if ctx.unit().id == self.selected {
+            self.emit(ctx.current())?;
         }
         Ok(())
     }
-    fn register_map(&mut self, _: MapView<'_>, scope: Scope<'_>) -> Result<(), Self::Error> {
-        let map = scope
-            .map_layout()
-            .and_then(|layout| layout.instance.as_ref())
-            .ok_or("listing requires a bound map")?;
+    fn register_map<'a>(
+        &mut self,
+        _: &'a RegisterMapView,
+        ctx: EmitContext<'a>,
+    ) -> Result<(), Self::Error> {
         self.text.push_str("path\toffset\tbytes\n");
-        emit_all(MapView::Resolved(map).children(), scope, self)
+        self.emit_all(ctx.children())
     }
-    fn register(&mut self, register: &RegisterInfo, scope: Scope<'_>) -> Result<(), Self::Error> {
-        match scope.register_location() {
+    fn register(
+        &mut self,
+        register: &RegisterInfo,
+        ctx: EmitContext<'_>,
+    ) -> Result<(), Self::Error> {
+        match ctx.register_location() {
             RegisterLocation::Root | RegisterLocation::Template { .. } => return Ok(()),
             RegisterLocation::Standalone(_) | RegisterLocation::Instance { .. } => {}
         }
-        let Some(PlacementView::Register { view, .. }) = scope.placement else {
-            return Err("map register placement expected".into());
-        };
-        let path = view
+        let site = ctx.register_site().ok_or("map register site expected")?;
+        let path = site
             .segments
             .iter()
             .map(|part| {
@@ -55,9 +60,14 @@ impl Backend for RegisterListing {
             })
             .collect::<Vec<_>>()
             .join(".");
-        writeln!(self.text, "{path}\t{}\t{}", view.offset, register.width())?;
+        writeln!(self.text, "{path}\t{}\t{}", site.offset, register.width())?;
         Ok(())
     }
+}
+impl value::Backend for RegisterListing {
+    type Domain = hw_model_schema::export::register::Domain;
+    type Error = Box<dyn Error>;
+    type Context<'a> = EmitContext<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(vec![Artifact {
             logical_name: "registers.tsv".into(),
@@ -71,7 +81,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     selected.add::<Device>();
     let mut bindings = Bindings::new();
     bindings.bind::<Device>(&[2]);
-    let schema = Analysis::from_graph(&selected.resolve()?, &bindings)?;
+    let schema = AnalyzedSchema::from_graph(&selected.resolve()?, &bindings)?;
     let backend = RegisterListing {
         selected: DefinitionId::of::<Device>().into(),
         text: String::new(),

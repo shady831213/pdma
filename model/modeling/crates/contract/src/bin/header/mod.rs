@@ -1,8 +1,8 @@
+use hw_model_schema::analysis::{AnalyzedSchema, Bindings};
 use hw_model_schema::{
-    ast::analysis::{Analysis, Bindings},
     ast::{DefinitionBody, SchemaRegistry, SchemaSet},
-    export::backends::c_header::CHeaderBackend,
-    export::{InMemoryArtifactSink, generate as render_schema},
+    export::InMemoryArtifactSink,
+    export::backends::c_header::{CRecordBackend, CRegisterBackend},
 };
 use pdma_model_contract::dma::DmaRegisters;
 use pdma_model_contract::hw_components::context::ContextTableRegisters;
@@ -40,9 +40,9 @@ pub fn generate_with_contexts(count: usize, contexts: usize) -> Result<HeaderSet
             records.add_definition(definition.clone());
         }
     }
-    render_schema(
-        &Analysis::from_graph(&records.resolve()?, &Bindings::default())?,
-        CHeaderBackend::new(),
+    hw_model_schema::export::generate(
+        &AnalyzedSchema::from_graph(&records.resolve()?, &Bindings::default())?,
+        CRecordBackend::new(),
         &mut common,
     )?;
     let mut headers = vec![("pdma_common.h", wrap("PDMA_COMMON_H", &common, false))];
@@ -57,44 +57,44 @@ pub fn generate_with_contexts(count: usize, contexts: usize) -> Result<HeaderSet
     ] {
         let mut sink = InMemoryArtifactSink::new();
         if role == RegisterView::Firmware {
-            render_schema(
-                &Analysis::register_map("context", &contexts.resolve()?),
-                CHeaderBackend::new().with_name("context", "fctx"),
+            hw_model_schema::export::generate(
+                &AnalyzedSchema::register_map("context", &contexts.resolve()?)?,
+                CRegisterBackend::new().with_name("context", "fctx"),
                 &mut sink,
             )?;
         }
-        render_schema(
-            &Analysis::register_map(
+        hw_model_schema::export::generate(
+            &AnalyzedSchema::register_map(
                 "dma",
                 &registers.project_access(|r| role.dma_access(r.id(), r.definition().access()))?,
-            ),
-            CHeaderBackend::new().with_name("dma", &format!("{prefix}dma")),
+            )?,
+            CRegisterBackend::new().with_name("dma", &format!("{prefix}dma")),
             &mut sink,
         )?;
-        render_schema(
-            &Analysis::register_map(
+        hw_model_schema::export::generate(
+            &AnalyzedSchema::register_map(
                 "boot",
                 &FirmwareRegisters::resolve()?.project_access(|_| Some(role.boot_access()))?,
-            ),
-            CHeaderBackend::new().with_name("boot", &format!("{prefix}boot")),
+            )?,
+            CRegisterBackend::new().with_name("boot", &format!("{prefix}boot")),
             &mut sink,
         )?;
-        render_schema(
-            &Analysis::register_map(
+        hw_model_schema::export::generate(
+            &AnalyzedSchema::register_map(
                 "control",
                 &ControlRegisters::resolve()?
                     .project_access(|r| role.control_access(r.offset()))?,
-            ),
-            CHeaderBackend::new().with_name("control", &format!("{prefix}ctl")),
+            )?,
+            CRegisterBackend::new().with_name("control", &format!("{prefix}ctl")),
             &mut sink,
         )?;
         let window_view = windows.resolve()?.project_access(|register| {
             let (_, offset) = windows.windows().locate_instance(register.offset())?;
             role.window_access(offset)
         })?;
-        render_schema(
-            &Analysis::register_map("window", &window_view),
-            CHeaderBackend::new().with_name("window", &format!("{prefix}win")),
+        hw_model_schema::export::generate(
+            &AnalyzedSchema::register_map("window", &window_view)?,
+            CRegisterBackend::new().with_name("window", &format!("{prefix}win")),
             &mut sink,
         )?;
         let mut bytes = wrap(guard, &sink, true);

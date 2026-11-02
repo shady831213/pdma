@@ -2,11 +2,10 @@
 //!
 //! Select roots with [`SchemaSet`](crate::ast::SchemaSet); resolution retains both unique definitions and
 //! every reference edge. No registry is required for manually selected roots.
-/// Checked layout and projection analysis shared by emit backends.
-pub mod analysis;
 mod bits;
 mod node;
-mod record;
+/// Record declarations and their containment nodes.
+pub mod record;
 mod view;
 pub use node::Node;
 pub use record::{Case, CaseBody, Constant, Field, FieldType, RecordDefinition, UnionDefinition};
@@ -16,8 +15,11 @@ mod definition;
 mod discovery;
 mod instance;
 mod map;
-mod register;
+/// Register declarations and their containment nodes.
+pub mod register;
 mod set;
+/// Values shared by record and register schemas.
+pub mod value;
 #[cfg(feature = "discovery")]
 pub use discovery::{Registration, SchemaRegistry};
 

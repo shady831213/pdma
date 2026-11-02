@@ -9,7 +9,7 @@ pub enum LayoutExpr {
     Constant(usize),
     /// Named parameter of the enclosing map.
     Parameter(&'static str),
-    /// A child property or previously computed placement intermediate.
+    /// A child or enclosing placement geometry property.
     Value(PlanValue),
     /// Checked sum.
     Add(Box<Self>, Box<Self>),
@@ -48,7 +48,7 @@ impl std::fmt::Display for LayoutError {
 }
 impl std::error::Error for LayoutError {}
 
-/// Values available while evaluating an ordered placement.
+/// Mathematical geometry dependencies of an ordered placement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlanValue {
     /// Maximum occupied end before this placement.

@@ -4,12 +4,12 @@
 //! Definitions describe reusable types; placements may supply context-specific
 //! descriptions. These annotations change documentation, not the wire layout.
 
-use hw_model_schema::ast::analysis::{Analysis, Bindings};
+use hw_model_schema::analysis::{AnalyzedSchema, Bindings};
 use hw_model_schema::ast::{DefinitionId, SchemaSet};
 use std::io::{self, Write};
 
 use hw_model_schema::{
-    export::backends::c_header::CHeaderBackend,
+    export::backends::c_header::{CRecordBackend, CRegisterBackend},
     export::{InMemoryArtifactSink, generate},
     record_schema, register_map, register_schema,
 };
@@ -63,13 +63,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut records = SchemaSet::new();
     records.add::<CopyRequest>();
     generate(
-        &Analysis::from_graph(&records.resolve()?, &Bindings::new())?,
-        CHeaderBackend::new().with_name(DefinitionId::of::<CopyRequest>(), "copy"),
+        &AnalyzedSchema::from_graph(&records.resolve()?, &Bindings::new())?,
+        CRecordBackend::new().with_name(DefinitionId::of::<CopyRequest>(), "copy"),
         &mut sink,
     )?;
     generate(
-        &Analysis::register_map("channel.h", &Channel::resolve()?),
-        CHeaderBackend::new().with_name("channel.h", "channel"),
+        &AnalyzedSchema::register_map("channel.h", &Channel::resolve()?)?,
+        CRegisterBackend::new().with_name("channel.h", "channel"),
         &mut sink,
     )?;
     let mut output = io::stdout().lock();

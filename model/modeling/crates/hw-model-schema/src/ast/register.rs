@@ -1,4 +1,8 @@
+mod node;
+mod semantic;
 use crate::{Access, BitsFieldSpec, Documentation, Endian, RegisterDefinition, ResetKind};
+pub use node::Node;
+pub use semantic::{Argument, Attribute, LayoutProperty, LayoutPropertyKind, Parameter};
 
 /// Owned register metadata independent of application-specific field ID enums.
 #[derive(Debug, Clone)]
@@ -86,6 +90,17 @@ impl RegisterInfo {
     /// Writable bit mask.
     pub const fn writable_mask(&self) -> u64 {
         self.writable_mask
+    }
+    /// Validates target-independent register shape through the runtime definition validator.
+    ///
+    /// # Errors
+    /// Rejects unsupported widths, alignment, or overflowing mask/reset values.
+    pub fn validate_shape(&self) -> Result<(), crate::RegisterDefinitionError<usize>> {
+        RegisterDefinition::<usize>::new(self.name, self.width, self.endian)
+            .with_alignment(self.alignment)
+            .with_writable_mask(self.writable_mask)
+            .with_reset(self.reset_kind, self.reset_value)
+            .validate_shape()
     }
     /// Bit fields in declaration order, including enum semantics and descriptions.
     pub fn fields(&self) -> &[BitsFieldSpec<usize>] {

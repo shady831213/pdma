@@ -1,11 +1,16 @@
 //! Downstream-style checks for the format-neutral export extension boundary.
+use hw_model_schema::analysis::AnalyzedSchema;
+use hw_model_schema::export::generate;
 
 use core::convert::Infallible;
 
 use hw_model_schema::{
     RecordSpec,
-    ast::{Node, analysis::Analysis},
-    export::{Artifact, ArtifactSink, Backend, ExportError, InMemoryArtifactSink, Scope, generate},
+    export::{
+        Artifact, ArtifactSink, ExportError, InMemoryArtifactSink,
+        record::{Backend, EmitContext},
+        value,
+    },
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,9 +65,12 @@ impl ArtifactSink for CountingSink {
 struct LocalRenderer {
     record_size: Option<usize>,
 }
-impl Backend for LocalRenderer {
+impl Backend for LocalRenderer {}
+impl value::Backend for LocalRenderer {
+    type Domain = hw_model_schema::export::record::Domain;
     type Error = LocalExportError;
-    fn opaque(&mut self, record: &RecordSpec, _: Scope<'_>) -> Result<(), Self::Error> {
+    type Context<'a> = EmitContext<'a>;
+    fn opaque(&mut self, record: &RecordSpec, _: EmitContext<'_>) -> Result<(), Self::Error> {
         self.record_size = Some(record.size());
         Ok(())
     }
@@ -85,17 +93,24 @@ impl Backend for LocalRenderer {
 }
 struct RejectingRenderer;
 impl Backend for RejectingRenderer {
-    type Error = LocalExportError;
-    fn definition(&mut self, _: Node<'_>, _: Scope<'_>) -> Result<(), Self::Error> {
+    fn root(&mut self, _: EmitContext<'_>) -> Result<(), Self::Error> {
         Err(LocalExportError::RendererRejected)
     }
+}
+impl value::Backend for RejectingRenderer {
+    type Domain = hw_model_schema::export::record::Domain;
+    type Error = LocalExportError;
+    type Context<'a> = EmitContext<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(Vec::new())
     }
 }
 struct InfallibleLocalRenderer;
-impl Backend for InfallibleLocalRenderer {
+impl Backend for InfallibleLocalRenderer {}
+impl value::Backend for InfallibleLocalRenderer {
+    type Domain = hw_model_schema::export::record::Domain;
     type Error = Infallible;
+    type Context<'a> = EmitContext<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(vec![Artifact {
             logical_name: "odd-content".into(),
@@ -113,7 +128,7 @@ const fn record_schema() -> RecordSpec {
 #[test]
 fn downstream_local_renderer_and_sink_preserve_owned_artifacts_in_emission_order() {
     // Given
-    let schema = Analysis::opaque("record", record_schema()).expect("fixture must resolve");
+    let schema = AnalyzedSchema::opaque("record", record_schema()).expect("fixture must resolve");
     let renderer = LocalRenderer::default();
     let mut sink = LocalCollectingSink::default();
 
@@ -142,7 +157,7 @@ fn downstream_local_renderer_and_sink_preserve_owned_artifacts_in_emission_order
 #[test]
 fn in_memory_sink_preserves_owned_odd_contents_after_renderer_locals_drop() {
     // Given
-    let schema = Analysis::opaque("record", record_schema()).expect("fixture must resolve");
+    let schema = AnalyzedSchema::opaque("record", record_schema()).expect("fixture must resolve");
     let renderer = InfallibleLocalRenderer;
     let mut sink = InMemoryArtifactSink::new();
 
@@ -164,7 +179,7 @@ fn in_memory_sink_preserves_owned_odd_contents_after_renderer_locals_drop() {
 #[test]
 fn sink_rejection_reaches_the_caller_as_the_exact_typed_error() {
     // Given
-    let schema = Analysis::opaque("record", record_schema()).expect("fixture must resolve");
+    let schema = AnalyzedSchema::opaque("record", record_schema()).expect("fixture must resolve");
     let renderer = LocalRenderer::default();
     let mut sink = RejectingSink::default();
 
@@ -182,7 +197,7 @@ fn sink_rejection_reaches_the_caller_as_the_exact_typed_error() {
 #[test]
 fn renderer_rejection_does_not_invoke_the_sink() {
     // Given
-    let schema = Analysis::opaque("record", record_schema()).expect("fixture must resolve");
+    let schema = AnalyzedSchema::opaque("record", record_schema()).expect("fixture must resolve");
     let renderer = RejectingRenderer;
     let mut sink = CountingSink::default();
 

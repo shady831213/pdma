@@ -1,6 +1,6 @@
 //! Canonical source containment remains independent of physical storage lowering.
 use hw_model_schema::{
-    ast::{DescribeSchema, FieldType, Node, SchemaSet},
+    ast::{DescribeSchema, FieldType, Node, SchemaSet, record, value},
     record_schema,
 };
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -17,7 +17,7 @@ record_schema! { pub record Source { endian: Little, fields: {
 fn source_tree_retains_union_constant_order_and_repeated_references() -> TestResult {
     // Given a DSL record whose inline union codec lowers to raw words.
     let definition = <Source as DescribeSchema>::schema_definition();
-    let Node::Record(record) = definition.node() else {
+    let Node::Record(record::Node::Record(record)) = definition.node() else {
         return Err("expected record".into());
     };
     // When walking canonical containment, source names and constant constraints remain.
@@ -52,9 +52,13 @@ fn source_tree_retains_union_constant_order_and_repeated_references() -> TestRes
     let field = definition
         .node()
         .children()
-        .nth(2)
+        .find(|node| matches!(node, Node::Record(record::Node::Field(field)) if field.name() == "payload"))
         .ok_or("missing payload")?;
-    let Node::Union(union) = field.children().next().ok_or("missing union")? else {
+    let Node::Record(record::Node::Union(union)) = field
+        .children()
+        .find(|node| matches!(node, Node::Record(record::Node::Union(_))))
+        .ok_or("missing union")?
+    else {
         return Err("expected union".into());
     };
     assert_eq!(union.selector(), Some("self.kind"));
@@ -67,14 +71,14 @@ fn source_tree_retains_union_constant_order_and_repeated_references() -> TestRes
         [("Empty", Some(0)), ("Data", Some(3))]
     );
     // Then repeated edges remain, but the referenced definition is collected once.
-    let case = Node::Union(union)
+    let case = Node::Record(record::Node::Union(union))
         .children()
         .nth(1)
         .ok_or("missing Data case")?;
     let case_names: Vec<_> = case
         .children()
         .filter_map(|node| match node {
-            Node::Field(field) => Some(field.name()),
+            Node::Record(record::Node::Field(field)) => Some(field.name()),
             _ => None,
         })
         .collect();
@@ -88,23 +92,19 @@ fn source_tree_retains_union_constant_order_and_repeated_references() -> TestRes
             .collect::<Vec<_>>(),
         ["flags", "right", "left"]
     );
-    let mut set = SchemaSet::new();
-    set.add::<Source>();
-    let graph = set.resolve()?;
-    assert_eq!(graph.definitions().count(), 3);
-    assert_eq!(
-        graph
-            .definitions()
-            .filter(|definition| definition.name() == "Leaf")
-            .count(),
-        1
-    );
-    let mut children: Vec<_> = definition.node().children().collect();
+    verify_unique_dependency()?;
+    let mut children: Vec<_> = definition
+        .node()
+        .children()
+        .filter(|node| matches!(node, Node::Record(record::Node::Field(_))))
+        .collect();
     children.sort_by_key(|node| match node {
-        Node::Field(field) => field.name(),
+        Node::Record(record::Node::Field(field)) => field.name(),
         _ => "",
     });
-    assert!(matches!(children.first(), Some(Node::Field(field)) if field.name() == "kind"));
+    assert!(
+        matches!(children.first(), Some(Node::Record(record::Node::Field(field))) if field.name() == "kind")
+    );
     assert_eq!(
         record
             .fields()
@@ -120,6 +120,21 @@ fn source_tree_retains_union_constant_order_and_repeated_references() -> TestRes
     Ok(())
 }
 
+fn verify_unique_dependency() -> TestResult {
+    let mut set = SchemaSet::new();
+    set.add::<Source>();
+    let graph = set.resolve()?;
+    assert_eq!(graph.definitions().count(), 3);
+    assert_eq!(
+        graph
+            .definitions()
+            .filter(|definition| definition.name() == "Leaf")
+            .count(),
+        1
+    );
+    Ok(())
+}
+
 record_schema! { pub record InlineBits { alignment: 8, endian: Big, fields: {
     flags: bits(u32) { fields: {
         mode: 0..2 => enum { variants: { Off = 0, On = 1 } },
@@ -131,23 +146,30 @@ record_schema! { pub record InlineBits { alignment: 8, endian: Big, fields: {
 fn inline_bits_and_enumeration_are_containment_nodes() -> TestResult {
     // Given inline bit and enum declarations.
     let definition = <InlineBits as DescribeSchema>::schema_definition();
-    let Node::Record(record) = definition.node() else {
+    let Node::Record(record::Node::Record(record)) = definition.node() else {
         return Err("expected record".into());
     };
     assert_eq!(record.declared_alignment(), Some(8));
     assert_eq!(record.endian(), hw_model_schema::Endian::Big);
     // When traversing original containment.
-    let field = definition.node().children().next().ok_or("missing field")?;
-    let bits = field.children().next().ok_or("missing bits")?;
-    assert!(matches!(bits, Node::Bits(_)));
+    let field = definition
+        .node()
+        .children()
+        .find(|node| matches!(node, Node::Record(record::Node::Field(_))))
+        .ok_or("missing field")?;
+    let bits = field
+        .children()
+        .find(|node| matches!(node, Node::Value(value::Node::Bits(_))))
+        .ok_or("missing bits")?;
+    assert!(matches!(bits, Node::Value(value::Node::Bits(_))));
     let bit = bits.children().next().ok_or("missing bit field")?;
     let enumeration = bit.children().next().ok_or("missing enum")?;
-    assert!(matches!(enumeration, Node::Enum(_)));
+    assert!(matches!(enumeration, Node::Value(value::Node::Enum(_))));
     // Then variants retain source codes and no definition edges are fabricated.
     let variants: Vec<_> = enumeration
         .children()
         .filter_map(|node| match node {
-            Node::Variant(variant) => Some((variant.name(), variant.value())),
+            Node::Value(value::Node::Variant(variant)) => Some((variant.name(), variant.value())),
             _ => None,
         })
         .collect();
@@ -216,7 +238,10 @@ fn register_bits_reference_is_an_edge_not_duplicated_containment() -> TestResult
     // Given a register reuses an independently declared bits definition.
     let definition = <SharedRegister as DescribeSchema>::schema_definition();
     // When examining its original source, the reference remains explicit.
-    assert_eq!(definition.node().children().count(), 0);
+    assert!(definition.node().children().all(|node| matches!(
+        node,
+        Node::Register(hw_model_schema::ast::register::Node::Attribute(_))
+    )));
     let references: Vec<_> = definition.node().references().collect();
     assert_eq!(references.len(), 1);
     assert_eq!(

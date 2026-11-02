@@ -46,7 +46,7 @@ pub enum ChildLayout {
         /// Occupied child extent.
         extent: usize,
     },
-    /// A validated child map invocation retaining its parameter bindings.
+    /// A referenced child map retaining its constructor argument bindings.
     Call {
         /// Expressions in the enclosing map's parameter scope.
         arguments: Vec<LayoutExpr>,
@@ -54,7 +54,7 @@ pub enum ChildLayout {
         plan: Box<MapLayoutPlan>,
     },
 }
-/// An instance-independent map program in declaration order.
+/// Instance-independent mathematical map geometry in declaration order.
 #[derive(Debug, Clone)]
 pub struct MapLayoutPlan {
     pub(super) parameters: &'static [&'static str],

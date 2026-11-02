@@ -71,7 +71,7 @@ impl MapPlacement {
     }
 }
 
-/// A map definition retains the layout algorithm, not just one resolved address table.
+/// A map definition retains symbolic placement rules independently of a resolved address table.
 #[derive(Debug, Clone)]
 pub struct MapDefinition {
     parameters: &'static [&'static str],

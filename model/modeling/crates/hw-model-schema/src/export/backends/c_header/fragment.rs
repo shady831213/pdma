@@ -52,24 +52,36 @@ impl Fragment {
             return Ok(());
         }
         self.text.push_str("/*\n");
-        for text in [
-            Some(name).filter(|name| !name.is_empty()),
-            docs.short_description,
-            docs.description,
-        ]
-        .into_iter()
-        .flatten()
-        {
-            for line in text.lines() {
-                // Keep C preprocessing, comment delimiters and line splicing inert.
-                let line = line
-                    .replace('\\', "\\ ")
-                    .replace('?', "? ")
-                    .replace("/*", "/ *")
-                    .replace("*/", "* /");
-                self.line(format_args!(" * {line}"))?;
-            }
+        if !name.is_empty() {
+            self.comment_text(name)?;
+        }
+        for fragment in crate::export::value::documentation_fragments(docs) {
+            let (crate::export::value::DocumentationFragment::ShortDescription(text)
+            | crate::export::value::DocumentationFragment::Description(text)) = fragment;
+            self.comment_text(text)?;
         }
         self.line(" */")
+    }
+
+    pub(super) fn comment(&mut self, name: &str, text: &str) -> Result<(), CHeaderExportError> {
+        self.line("/*")?;
+        if !name.is_empty() {
+            self.comment_text(name)?;
+        }
+        self.comment_text(text)?;
+        self.line(" */")
+    }
+
+    fn comment_text(&mut self, text: &str) -> Result<(), CHeaderExportError> {
+        for line in text.lines() {
+            // Keep C preprocessing, comment delimiters and line splicing inert.
+            let line = line
+                .replace('\\', "\\ ")
+                .replace('?', "? ")
+                .replace("/*", "/ *")
+                .replace("*/", "* /");
+            self.line(format_args!(" * {line}"))?;
+        }
+        Ok(())
     }
 }

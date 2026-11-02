@@ -1,16 +1,15 @@
 //! Whole-node backends own recursive syntax; scopes are immutable per sibling call.
+use hw_model_schema::analysis::{AnalyzedSchema, Bindings};
+use hw_model_schema::analysis::{ConcretePlacement, Placement};
+use hw_model_schema::export::generate;
+use hw_model_schema::export::value::Backend as _;
 use hw_model_schema::{
-    ast::{
-        Field, MapView, Node, PlacementView, RecordDefinition, RegisterInfo, SchemaSet,
-        analysis::{
-            Analysis, Bindings,
-            program::{Expression, Symbol},
-        },
-    },
+    ast::{self, Field, LayoutExpr, RecordDefinition, RegisterInfo, SchemaSet, record::Node},
     export::{
-        Artifact, Backend, InMemoryArtifactSink, Scope, emit_all,
+        Artifact, InMemoryArtifactSink,
         expression::{ExpressionSyntax, format_expression},
-        generate,
+        record::{Backend, EmitContext},
+        register, value,
     },
     record_schema, register_map, register_schema,
 };
@@ -34,37 +33,44 @@ impl Recording {
     }
 }
 impl Backend for Recording {
-    type Error = &'static str;
-    fn record(&mut self, record: &RecordDefinition, scope: Scope<'_>) -> Result<(), Self::Error> {
+    fn record<'a>(
+        &mut self,
+        _: &'a RecordDefinition,
+        ctx: EmitContext<'a>,
+    ) -> Result<(), Self::Error> {
         self.push("record:start");
-        let mut children: Vec<_> = Node::Record(record).children().collect();
-        children.sort_by_key(|node| match node {
+        let mut children: Vec<_> = ctx.children().collect();
+        children.sort_by_key(|visit| match visit.node() {
             Node::Field(field) => field.name(),
             _ => "",
         });
-        emit_all(children, scope, self)?;
+        self.emit_all(children)?;
         self.push("record:end");
         Ok(())
     }
-    fn field(&mut self, field: &Field, scope: Scope<'_>) -> Result<(), Self::Error> {
-        assert_eq!(scope.field.map(Field::name), Some(field.name()));
-        assert!(scope.bit.is_none());
-        assert!(scope.placement.is_none());
+    fn field<'a>(&mut self, field: &'a Field, ctx: EmitContext<'a>) -> Result<(), Self::Error> {
+        assert_eq!(ctx.field().map(Field::name), Some(field.name()));
+        assert!(ctx.bit().is_none());
         self.push(format!("field:{}:start", field.name()));
         if self.fail == Some(field.name()) {
             return Err("field rejected");
         }
-        emit_all(Node::Field(field).children(), scope, self)?;
+        self.emit_all(ctx.children())?;
         self.push(format!("field:{}:end", field.name()));
         Ok(())
     }
+}
+impl value::Backend for Recording {
+    type Domain = hw_model_schema::export::record::Domain;
+    type Error = &'static str;
+    type Context<'a> = EmitContext<'a>;
     fn variant(
         &mut self,
         variant: &hw_model_schema::EnumVariantSpec,
-        scope: Scope<'_>,
+        ctx: EmitContext<'_>,
     ) -> Result<(), Self::Error> {
-        assert_eq!(scope.field.map(Field::name), Some("alpha"));
-        assert_eq!(scope.bit, Some("mode"));
+        assert_eq!(ctx.field().map(Field::name), Some("alpha"));
+        assert_eq!(ctx.bit(), Some("mode"));
         self.push(format!("variant:{}", variant.name()));
         Ok(())
     }
@@ -77,10 +83,13 @@ impl Backend for Recording {
     }
 }
 
-fn packet() -> Result<Analysis, Box<dyn std::error::Error>> {
+fn packet() -> Result<AnalyzedSchema, Box<dyn std::error::Error>> {
     let mut set = SchemaSet::new();
     set.add_record::<Packet>();
-    Ok(Analysis::from_graph(&set.resolve()?, &Bindings::new())?)
+    Ok(AnalyzedSchema::from_graph(
+        &set.resolve()?,
+        &Bindings::new(),
+    )?)
 }
 
 #[test]
@@ -115,15 +124,11 @@ fn complete_node_handlers_wrap_sorted_children_without_mutating_source() -> Test
             "record:end"
         ]
     );
-    let node = analysis
-        .definitions()
-        .next()
-        .ok_or("missing record")?
-        .node()?;
+    let node = analysis.units().next().ok_or("missing record")?.node()?;
     let names: Vec<_> = node
         .children()
         .filter_map(|node| match node {
-            Node::Field(field) => Some(field.name()),
+            ast::Node::Record(Node::Field(field)) => Some(field.name()),
             _ => None,
         })
         .collect();
@@ -171,32 +176,37 @@ fn recursive_failure_stops_siblings_and_publishes_no_partial_artifacts() -> Test
 
 #[derive(Default)]
 struct PlacementScopes(Vec<usize>);
-impl Backend for PlacementScopes {
-    type Error = &'static str;
-    fn register_map(&mut self, map: MapView<'_>, scope: Scope<'_>) -> Result<(), Self::Error> {
-        emit_all(map.children(), scope, self)
-    }
-    fn placement(
+impl register::Backend for PlacementScopes {
+    fn concrete_placement<'a>(
         &mut self,
-        placement: PlacementView<'_>,
-        scope: Scope<'_>,
+        _: ConcretePlacement<'a>,
+        ctx: register::EmitContext<'a>,
     ) -> Result<(), Self::Error> {
-        assert!(scope.register.is_none());
-        assert!(scope.field.is_none());
-        let Some(PlacementView::Register { view, .. }) = scope.placement else {
+        assert!(ctx.register().is_none());
+        let Some(Placement::Concrete(ConcretePlacement::Register { view, .. })) = ctx.placement()
+        else {
             return Err("expected concrete register");
         };
         self.0.push(view.offset);
-        emit_all(placement.children(), scope, self)
+        self.emit_all(ctx.children())
     }
-    fn register(&mut self, register: &RegisterInfo, scope: Scope<'_>) -> Result<(), Self::Error> {
+    fn register<'a>(
+        &mut self,
+        register: &'a RegisterInfo,
+        ctx: register::EmitContext<'a>,
+    ) -> Result<(), Self::Error> {
         assert_eq!(
-            scope.register.map(RegisterInfo::name),
+            ctx.register().map(RegisterInfo::name),
             Some(register.name())
         );
-        assert!(scope.bit.is_none());
-        emit_all(Node::Register(register).children(), scope, self)
+        assert!(ctx.bit().is_none());
+        self.emit_all(ctx.children())
     }
+}
+impl value::Backend for PlacementScopes {
+    type Domain = register::Domain;
+    type Error = &'static str;
+    type Context<'a> = register::EmitContext<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         assert_eq!(self.0, [0, 4]);
         Ok(Vec::new())
@@ -205,7 +215,7 @@ impl Backend for PlacementScopes {
 #[test]
 fn sibling_placements_keep_independent_register_and_bit_scopes() -> TestResult {
     // Given a checked map with two adjacent register placements.
-    let analysis = Analysis::register_map("pair", &Pair::resolve()?);
+    let analysis = AnalyzedSchema::register_map("pair", &Pair::resolve()?)?;
     // When default recursion descends into both registers.
     generate(
         &analysis,
@@ -227,20 +237,19 @@ impl ExpressionSyntax for PrefixSyntax {
     ) -> String {
         format!("({op:?} {left} {right})")
     }
-    fn reference(&mut self, reference: Symbol) -> String {
-        format!("{reference:?}")
+    fn parameter(&mut self, name: &str) -> String {
+        format!("Parameter({name:?})")
     }
 }
 #[test]
 fn custom_syntax_uses_shared_recursive_expression_formatting() {
     // Given a source expression independent of any backend rendering protocol.
-    let expression = Expression::Binary {
-        op: hw_model_schema::ast::ExpressionOp::Add,
-        left: Box::new(Expression::Reference(Symbol::Parameter("n"))),
-        right: Box::new(Expression::Literal(4)),
-    };
+    let expression = LayoutExpr::Add(
+        Box::new(LayoutExpr::Parameter("n")),
+        Box::new(LayoutExpr::Constant(4)),
+    );
     // When the shared expression fold applies custom operator and reference spelling.
-    let text = format_expression(&expression, &mut PrefixSyntax);
+    let text = format_expression(&expression, &mut PrefixSyntax).expect("complete formula");
     // Then syntax reflects both folded operands exactly.
     assert_eq!(text, "(Add Parameter(\"n\") 4)");
 }

@@ -1,11 +1,10 @@
 use super::{DownPair, TelemetryMap};
 use core::convert::Infallible;
+use his::analysis::{AnalyzedSchema, Bindings, Layout, RegisterMapView, UnitId};
+use his::export::value::Backend as _;
 use his::{
-    ast::{
-        DefinitionId, MapView, Node, RecordDefinition, SchemaSet,
-        analysis::{Analysis, Bindings, Layout, UnitId},
-    },
-    export::{Artifact, ArtifactSink, Backend, Scope, emit, generate},
+    ast::{DefinitionId, RecordDefinition, SchemaSet},
+    export::{self, Artifact, ArtifactSink, InMemoryArtifactSink, value},
 };
 use std::fmt::Write as _;
 
@@ -28,33 +27,58 @@ impl ArtifactSink for TelemetrySink {
         Ok(())
     }
 }
-/// Application-owned backend for selected telemetry definitions.
+/// Application-owned record report renderer.
 #[derive(Debug, Default)]
-pub struct TelemetryRenderer {
+pub struct TelemetryRecordRenderer {
+    content: String,
+}
+/// Application-owned register report renderer.
+#[derive(Debug, Default)]
+pub struct TelemetryRegisterRenderer {
     content: String,
 }
 
-/// Exports fresh resolved graphs through an application-owned sink.
+/// Assembles independently generated record and register reports in application order.
 pub fn export_resolved(sink: &mut TelemetrySink) -> Option<()> {
-    let mut selected = SchemaSet::new();
-    selected.add_record::<DownPair>();
-    selected.add::<TelemetryMap>();
-    let prepared = Analysis::from_graph(&selected.resolve().ok()?, &Bindings::new()).ok()?;
-    generate(&prepared, TelemetryRenderer::default(), sink).ok()
+    let mut records = SchemaSet::new();
+    records.add_record::<DownPair>();
+    let mut registers = SchemaSet::new();
+    registers.add::<TelemetryMap>();
+    let records = AnalyzedSchema::from_graph(&records.resolve().ok()?, &Bindings::new()).ok()?;
+    let registers =
+        AnalyzedSchema::from_graph(&registers.resolve().ok()?, &Bindings::new()).ok()?;
+    let mut fragments = InMemoryArtifactSink::new();
+    export::generate(&records, TelemetryRecordRenderer::default(), &mut fragments).ok()?;
+    export::generate(
+        &registers,
+        TelemetryRegisterRenderer::default(),
+        &mut fragments,
+    )
+    .ok()?;
+    sink.emit(Artifact {
+        logical_name: "acme-telemetry-layout.txt".into(),
+        media_type: "text/vnd.acme.telemetry-layout".into(),
+        contents: fragments
+            .into_artifacts()
+            .into_iter()
+            .flat_map(|artifact| artifact.contents)
+            .collect(),
+    })
+    .ok()
 }
-
-impl Backend for TelemetryRenderer {
-    type Error = std::io::Error;
-    fn definition(&mut self, node: Node<'_>, scope: Scope<'_>) -> Result<(), Self::Error> {
-        if scope.unit.id == UnitId::Definition(DefinitionId::of::<DownPair>())
-            || scope.unit.id == UnitId::Definition(DefinitionId::of::<TelemetryMap>())
-        {
-            emit(node, scope, self)?;
+impl export::record::Backend for TelemetryRecordRenderer {
+    fn root(&mut self, ctx: export::record::EmitContext<'_>) -> Result<(), Self::Error> {
+        if ctx.unit().id == UnitId::Definition(DefinitionId::of::<DownPair>()) {
+            self.emit(ctx.current())?;
         }
         Ok(())
     }
-    fn record(&mut self, _: &RecordDefinition, scope: Scope<'_>) -> Result<(), Self::Error> {
-        let Layout::Record(record) = &scope.unit.body else {
+    fn record(
+        &mut self,
+        _: &RecordDefinition,
+        ctx: export::record::EmitContext<'_>,
+    ) -> Result<(), Self::Error> {
+        let Layout::Record(record) = &ctx.unit().body else {
             return Err(std::io::Error::other("record layout"));
         };
         write!(self.content, "record_size={};record=", record.size())
@@ -75,11 +99,31 @@ impl Backend for TelemetryRenderer {
         self.content.push(';');
         Ok(())
     }
-    fn register_map(&mut self, _: MapView<'_>, scope: Scope<'_>) -> Result<(), Self::Error> {
-        let map = scope
-            .map_layout()
-            .and_then(|layout| layout.instance.as_ref())
-            .ok_or_else(|| std::io::Error::other("map instance"))?;
+}
+impl value::Backend for TelemetryRecordRenderer {
+    type Domain = export::record::Domain;
+    type Error = std::io::Error;
+    type Context<'a> = export::record::EmitContext<'a>;
+    fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
+        Ok(vec![Artifact {
+            logical_name: "records.txt".into(),
+            media_type: "text/plain".into(),
+            contents: self.content.into_bytes(),
+        }])
+    }
+}
+impl export::register::Backend for TelemetryRegisterRenderer {
+    fn root(&mut self, ctx: export::register::EmitContext<'_>) -> Result<(), Self::Error> {
+        if ctx.unit().id == UnitId::Definition(DefinitionId::of::<TelemetryMap>()) {
+            self.emit(ctx.current())?;
+        }
+        Ok(())
+    }
+    fn register_map(
+        &mut self,
+        map: &RegisterMapView,
+        _: export::register::EmitContext<'_>,
+    ) -> Result<(), Self::Error> {
         write!(self.content, "map_size={};registers=", map.extent)
             .map_err(std::io::Error::other)?;
         for (index, view) in map.registers.iter().enumerate() {
@@ -94,10 +138,15 @@ impl Backend for TelemetryRenderer {
         }
         Ok(())
     }
+}
+impl value::Backend for TelemetryRegisterRenderer {
+    type Domain = export::register::Domain;
+    type Error = std::io::Error;
+    type Context<'a> = export::register::EmitContext<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(vec![Artifact {
-            logical_name: String::from("acme-telemetry-layout.txt"),
-            media_type: String::from("text/vnd.acme.telemetry-layout"),
+            logical_name: "registers.txt".into(),
+            media_type: "text/plain".into(),
             contents: self.content.into_bytes(),
         }])
     }

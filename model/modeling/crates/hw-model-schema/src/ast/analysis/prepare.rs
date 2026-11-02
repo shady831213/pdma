@@ -26,6 +26,8 @@ impl Bindings {
 /// Schema preparation failed before any renderer or sink was called.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnalysisError {
+    /// Invalid dependencies in a manually supplied source declaration.
+    Dependencies(crate::ast::GraphError),
     /// A logical source field exceeds or overlaps its record's declared storage.
     SourceField {
         /// Enclosing record name.
@@ -52,6 +54,7 @@ pub enum AnalysisError {
 impl std::fmt::Display for AnalysisError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Dependencies(error) => error.fmt(f),
             Self::SourceField { record, field } => {
                 write!(f, "invalid source field {record}.{field}")
             }
@@ -70,6 +73,7 @@ impl std::fmt::Display for AnalysisError {
 impl std::error::Error for AnalysisError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Dependencies(source) => Some(source),
             Self::Record { source, .. } => Some(source),
             Self::Layout(source) => Some(source),
             Self::Binding(_)
@@ -130,7 +134,7 @@ impl Analysis {
                     discriminant: None,
                 }],
                 body: Layout::Map(MapLayout {
-                    plan: Some(map.layout_plan()?.bind(instance.arguments())?),
+                    program: Some(map.layout_plan()?.bind(instance.arguments())?.program()?),
                     instance: Some(RegisterMapView::from_definition(
                         instance.name(),
                         definition.documentation(),
@@ -176,7 +180,7 @@ fn prepare_definition(
                 None => plan,
             };
             Layout::Map(MapLayout {
-                plan: Some(plan),
+                program: Some(plan.program()?),
                 instance,
             })
         }
@@ -189,13 +193,8 @@ fn prepare_definition(
         body,
         references: definition
             .references()
-            .iter()
-            .map(|r| Dependency {
-                name: r.name(),
-                kind: r.kind(),
-                target: r.target().id(),
-                discriminant: r.discriminant(),
-            })
+            .into_iter()
+            .map(Dependency::from)
             .collect(),
     })
 }

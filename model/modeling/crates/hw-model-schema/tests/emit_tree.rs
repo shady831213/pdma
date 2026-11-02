@@ -1,12 +1,15 @@
 //! Whole-node backends own recursive syntax; scopes are immutable per sibling call.
 use hw_model_schema::{
     ast::{
-        Field, LayoutExpr, MapView, Node, PlacementView, RecordDefinition, RegisterInfo, SchemaSet,
-        analysis::{Analysis, Bindings},
+        Field, MapView, Node, PlacementView, RecordDefinition, RegisterInfo, SchemaSet,
+        analysis::{
+            Analysis, Bindings,
+            program::{Expression, Symbol},
+        },
     },
     export::{
         Artifact, Backend, InMemoryArtifactSink, Scope, emit_all,
-        expression::{ExpressionReference, ExpressionSyntax, format_expression},
+        expression::{ExpressionSyntax, format_expression},
         generate,
     },
     record_schema, register_map, register_schema,
@@ -224,20 +227,20 @@ impl ExpressionSyntax for PrefixSyntax {
     ) -> String {
         format!("({op:?} {left} {right})")
     }
-    fn reference(&mut self, reference: ExpressionReference<'_>) -> String {
+    fn reference(&mut self, reference: Symbol) -> String {
         format!("{reference:?}")
     }
 }
 #[test]
-fn custom_syntax_uses_shared_recursive_expression_analysis() -> TestResult {
+fn custom_syntax_uses_shared_recursive_expression_formatting() {
     // Given a source expression independent of any backend rendering protocol.
-    let expression = LayoutExpr::Add(
-        Box::new(LayoutExpr::Parameter("n")),
-        Box::new(LayoutExpr::Constant(4)),
-    );
+    let expression = Expression::Binary {
+        op: hw_model_schema::ast::ExpressionOp::Add,
+        left: Box::new(Expression::Reference(Symbol::Parameter("n"))),
+        right: Box::new(Expression::Literal(4)),
+    };
     // When the shared expression fold applies custom operator and reference spelling.
-    let text = format_expression(&expression, None, &mut PrefixSyntax)?;
+    let text = format_expression(&expression, &mut PrefixSyntax);
     // Then syntax reflects both folded operands exactly.
     assert_eq!(text, "(Add Parameter(\"n\") 4)");
-    Ok(())
 }

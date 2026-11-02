@@ -2,10 +2,12 @@
 mod instance;
 mod map;
 mod prepare;
+/// Checked layout computation consumed by target emitters.
+pub mod program;
 mod validate;
 use crate::{
     Documentation, ResolvedRecord,
-    ast::{DefinitionId, MapLayoutPlan, ReferenceKind},
+    ast::{DefinitionId, Node, Reference, ReferenceKind, SchemaSet},
 };
 pub use map::{BankView, RegisterMapView, RegisterView, ViewPathSegment};
 pub use prepare::{AnalysisError, Bindings};
@@ -41,12 +43,22 @@ pub struct Dependency {
     /// Union wire discriminant, when present.
     pub discriminant: Option<u64>,
 }
+impl From<&Reference> for Dependency {
+    fn from(reference: &Reference) -> Self {
+        Self {
+            name: reference.name(),
+            kind: reference.kind(),
+            target: reference.target().id(),
+            discriminant: reference.discriminant(),
+        }
+    }
+}
 
 /// Complete layout and optional concrete instance of the same register map.
 #[derive(Debug, Clone)]
 pub struct MapLayout {
-    /// Public formula plan; absent only for supplied resolved permission views.
-    pub plan: Option<MapLayoutPlan>,
+    /// Analyzed layout computation; absent for supplied resolved permission views.
+    pub program: Option<program::LayoutProgram>,
     /// Concrete metadata when all parameters are bound, or a resolved view is supplied.
     pub instance: Option<RegisterMapView>,
 }
@@ -89,7 +101,7 @@ impl Analysis {
     pub fn definitions(&self) -> impl Iterator<Item = &Unit> {
         self.definitions.iter()
     }
-    /// Selects an explicit source record and checks its storage layout.
+    /// Selects an explicit source record with its dependencies and checks their layouts.
     pub fn record(name: &str, record: crate::ast::RecordDefinition) -> Result<Self, AnalysisError> {
         validate::record(&record)?;
         let layout = record
@@ -99,16 +111,25 @@ impl Analysis {
                 path: record.spec().name(),
                 source,
             })?;
-        Ok(Self {
-            definitions: vec![Unit {
-                declaration: Some(crate::ast::DefinitionBody::Record(record)),
-                id: name.into(),
-                name: name.into(),
-                documentation: layout.documentation(),
-                references: Vec::new(),
-                body: Layout::Record(layout),
-            }],
-        })
+        let mut dependencies = SchemaSet::new();
+        let mut references = Vec::new();
+        for reference in Node::Record(&record).references() {
+            dependencies.add_definition(reference.target());
+            references.push(Dependency::from(reference));
+        }
+        let graph = dependencies
+            .resolve()
+            .map_err(AnalysisError::Dependencies)?;
+        let mut analysis = Self::from_graph(&graph, &Bindings::new())?;
+        analysis.definitions.push(Unit {
+            declaration: Some(crate::ast::DefinitionBody::Record(record)),
+            id: name.into(),
+            name: name.into(),
+            documentation: layout.documentation(),
+            references,
+            body: Layout::Record(layout),
+        });
+        Ok(analysis)
     }
     /// Selects manually supplied storage metadata without inventing source fields.
     pub fn opaque(name: &str, spec: crate::RecordSpec) -> Result<Self, AnalysisError> {

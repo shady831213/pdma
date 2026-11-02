@@ -72,9 +72,12 @@ specialized under that same identity; use a named instance or separate request.
 
 `MapLayoutPlan` owns parameter binding, referenced-child geometry, checked
 arithmetic, alignment, noninterleaving, offset/count/stride and extent.
-`LayoutExpr` is the common expression algebra. Numeric evaluation, validation and
-target spelling use its recursive fold. No Geometry AST node family is introduced.
-Private target structs/functions may still spell the computed layout program.
+`LayoutExpr` is the source expression algebra. Numeric evaluation, validation and
+analysis use its recursive fold. After binding, analysis lowers the plan into a
+`LayoutProgram` containing result members, parameters, required locals and ordered
+statements. Child alignment/extent operands become literals or resolved symbols
+before emission. No Geometry AST node family is introduced; the program is a
+computed map attribute. Target structs/functions spell its already analyzed body.
 
 Manual source construction uses `RecordDefinition` and the other AST constructors.
 `Analysis::opaque(name, RecordSpec)` explicitly selects storage metadata when no
@@ -95,8 +98,12 @@ stream, mutable render stack, or per-schema Render forwarding trait.
 
 Expression syntax is a separate nonrecursive capability:
 `export::expression::ExpressionSyntax` controls literals, references and folded
-operators. `format_expression` owns operand resolution and recursive folding.
-C/Veryl formatters do not compute placements or recursively match expression trees.
+operators. `format_expression` recursively formats analyzed expressions without
+consulting source placement rules. `ProgramSyntax` supplies syntax for child calls,
+local definitions and assignments; common `emit_body` handles statement order and
+expression formatting. Whole-map handlers own target-specific structure/function
+syntax. C/Veryl formatters do not select child calls, reconstruct cursor updates,
+compute placements or recursively match expression trees.
 
 The builtins are `CHeaderBackend` and `VerylBackend`, gated by their existing
 default-off features. C byte accessors deliberately lower checked physical storage;
@@ -182,3 +189,66 @@ The old graph namespace, prepared-export schema, flat visitor/walker and begin/e
 protocol are removed without compatibility aliases. Empty old module directories
 were cleaned up. The next step is user review of the AST/analysis/emit boundaries,
 not additional features or publication.
+
+## Follow-up review (2026-11-02)
+
+Resumed review found that `Analysis::record` validated a manual record but omitted
+its referenced definitions and dependency edges. Generation could therefore emit
+only the root, and cycles in referenced types escaped analysis. Three regression
+tests reproduced these failures before the fix.
+
+Manual records now collect dependencies through the existing `SchemaSet` resolver
+and common analysis before appending the named root view. Shared definitions are
+emitted once in dependency order, repeated field edges remain distinct, and cycle
+errors retain their original path through `AnalysisError::Dependencies`. Both
+manual and graph-selected definitions use the same reference-to-dependency
+conversion. No second graph traversal algorithm or backend workaround was added.
+
+Follow-up inspection covered AST macro emission, containment/reference traversal,
+backend scope recursion, C/Veryl emitters and removed export interfaces. No further
+confirmed issue was found in that scope. Candidate validation passed:
+
+- Schema all-features tests: 339 passed, none failed or ignored.
+- Contract all-features tests, including generator/native C checks: 89 passed,
+  none failed or ignored.
+- Strict schema Clippy, warning-free schema Rustdoc and workspace formatting.
+- Actual header and RTL-layout generator freshness checks; no generated-file changes.
+
+These are scoped follow-up checks, not a new full-workspace or native Veryl run.
+The previous checkpoint's broader results remain recorded above. The candidate
+remains unpublished and ready for user review.
+
+## Layout emission consolidation (2026-11-02)
+
+User review identified remaining duplicated computation orchestration in both
+backend `geometry.rs` modules. Those modules are removed. Each backend now has a
+`map.rs` that spells the analyzed result structure, function signature, locals
+and statements. Generated public `Geometry`/`geometry` names remain output API,
+not schema node kinds.
+
+`ast::analysis::program` owns result members, child calls, local requirements,
+statement order and resolution of source layout operands. `MapLayout` contains
+the analyzed program rather than exposing a plan for each backend to interpret.
+The original map declaration still provides `layout_plan` for checked formula
+inspection and evaluation. `export::program::emit_body` visits the body once and
+formats its expressions through shared recursion; target syntax implementations
+cannot accidentally change placement order by reconstructing the calculation.
+Obsolete backend layout-error variants and the C layout-error conversion were
+removed. Formula failures belong to analysis; target naming/formatting failures
+remain backend-owned.
+
+Existing native C/Veryl layout tests passed before the change. New tests first
+failed because common analysis did not expose an executable layout body, then
+passed after lowering was added. They cover child-result dependencies and bound
+programs without child calls or cursor work. Native C consumers verify symbolic
+and bound results independently. Symbolic C now separates cursor declaration
+from initialization, without changing its interface or numerical results.
+The current PDMA header and RTL layout files remain byte-for-byte fresh.
+
+Final validation: workspace all-features 1313 passed; default features 1244 passed;
+no failed or ignored tests. Strict workspace Clippy, warning-free workspace
+Rustdoc and formatting passed. Native Veryl CC and Cranelift each passed all
+7 register-slice tests. Final targeted expression/program tests passed after lint
+cleanup. Boundary review found no remaining backend layout interpretation; the
+new computation and emission modules are each below 100 pure lines. The candidate
+remains unpublished pending user review.

@@ -1,6 +1,6 @@
 //! Veryl layout metadata, without register storage, effects or application policy.
 mod backend;
-mod geometry;
+mod map;
 mod package;
 use crate::ast::analysis::UnitId;
 use crate::export::{Artifact, SymbolScope};
@@ -11,8 +11,6 @@ use std::collections::HashMap;
 pub enum VerylExportError {
     /// Formatting failed while producing an artifact.
     Format(std::fmt::Error),
-    /// Checked layout expression could not be formatted.
-    Layout(crate::ast::LayoutError),
     /// An invalid or colliding target symbol.
     Name(String),
     /// Register geometry is not a supported scalar layout.
@@ -22,7 +20,6 @@ impl std::fmt::Display for VerylExportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Format(error) => error.fmt(f),
-            Self::Layout(error) => error.fmt(f),
             Self::Name(name) => write!(f, "invalid or conflicting Veryl symbol {name}"),
             Self::Register(name) => write!(f, "unsupported register geometry for {name}"),
         }
@@ -32,7 +29,6 @@ impl std::error::Error for VerylExportError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Format(source) => Some(source),
-            Self::Layout(source) => Some(source),
             Self::Name(_) | Self::Register(_) => None,
         }
     }

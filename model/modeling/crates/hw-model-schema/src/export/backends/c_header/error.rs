@@ -5,8 +5,6 @@ use core::fmt;
 pub enum CHeaderExportError {
     /// Formatting failed while building an artifact.
     Format(fmt::Error),
-    /// Invalid checked layout expression.
-    Layout(crate::ast::LayoutError),
     /// A callback refers to unavailable target naming metadata.
     InvalidVisit(&'static str),
     /// Two export origins share one C11-significant identifier prefix.
@@ -26,7 +24,6 @@ impl fmt::Display for CHeaderExportError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Format(error) => error.fmt(formatter),
-            Self::Layout(error) => error.fmt(formatter),
             Self::InvalidVisit(context) => {
                 write!(formatter, "invalid C formatting visit: {context}")
             }
@@ -47,14 +44,7 @@ impl std::error::Error for CHeaderExportError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Format(source) => Some(source),
-            Self::Layout(source) => Some(source),
             Self::InvalidVisit(_) | Self::NameCollision { .. } => None,
         }
-    }
-}
-
-impl From<crate::ast::LayoutError> for CHeaderExportError {
-    fn from(value: crate::ast::LayoutError) -> Self {
-        Self::Layout(value)
     }
 }

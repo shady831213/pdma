@@ -55,8 +55,8 @@ impl Backend for VerylBackend {
     }
     fn register_map(&mut self, _: MapView<'_>, scope: Scope<'_>) -> Result<(), Self::Error> {
         if let Some(layout) = scope.map_layout() {
-            if let Some(plan) = &layout.plan {
-                self.geometry(plan)?;
+            if let Some(program) = &layout.program {
+                self.map_layout(program)?;
             }
             if let Some(instance) = &layout.instance {
                 self.package.constant("EXTENT", "u64", instance.extent)?;

@@ -67,8 +67,8 @@ impl Backend for CHeaderBackend {
             }
             emit_all(MapView::Resolved(view).children(), scope, self)?;
         }
-        if let Some(plan) = &map.plan {
-            self.geometry(plan)?;
+        if let Some(program) = &map.program {
+            self.map_layout(program)?;
         }
         Ok(())
     }

@@ -2,7 +2,7 @@
 
 mod error;
 mod fragment;
-mod geometry;
+mod map;
 mod naming;
 mod nodes;
 mod record;
@@ -26,7 +26,6 @@ pub struct CHeaderBackend {
     output: fragment::Fragment,
     record_root: &'static str,
     map_names: register_map::MapNames,
-    geometry_names: naming::GeometryNames,
 }
 
 impl CHeaderBackend {

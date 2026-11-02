@@ -7,6 +7,8 @@ mod backend;
 mod emit;
 /// Shared expression recursion with target-defined syntax.
 pub mod expression;
+/// Shared layout-body emission with target-owned statement syntax.
+pub mod program;
 use crate::ast::analysis::{Analysis, AnalysisError};
 pub use backend::Backend;
 pub use emit::{Scope, emit, emit_all};

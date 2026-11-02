@@ -126,13 +126,19 @@ Definition dependencies are generated once; referring members remain distinct.
 
 `MapLayoutPlan` owns checked placement formulas, child arguments, alignment,
 offset/count/stride and extent. `evaluate` binds values; `bind` produces constant
-formulas while retaining identities. Layout is a map attribute. Backends may
-choose target-specific structs/functions for spelling those computations.
+formulas while retaining identities. Analysis lowers the selected plan to
+`LayoutProgram`: result members, parameters, locals and ordered child calls,
+definitions and assignments. Its expressions contain resolved symbols, not
+placement-dependent operands. Bound programs contain concrete result assignments.
+This computation is an analyzed attribute of the map, not another source node kind.
 
-`LayoutExpr::visit` owns left-to-right expression folding. Checked evaluation
-and constructor-scope validation share it. The nonrecursive
-`export::expression::ExpressionSyntax` supplies target spelling;
-`format_expression` shares operand resolution and recursion. Portable constructor
+`LayoutExpr::visit` owns left-to-right source expression folding. Checked evaluation,
+constructor-scope validation and analysis share it. The nonrecursive
+`export::expression::ExpressionSyntax` supplies spelling for analyzed expressions;
+`format_expression` owns their recursive formatting. `export::program::emit_body`
+emits the analyzed statement sequence through `ProgramSyntax`. Backends spell each
+call, definition or assignment without reconstructing layout calculations or deciding
+which intermediates exist. Portable constructor
 expressions support literals, parameters, constant paths, parentheses and checked
 addition/subtraction/multiplication. Unsupported Rust expressions remain explicit
 errors; ordinary generated Rust constructors are not restricted to that subset.

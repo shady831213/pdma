@@ -83,7 +83,7 @@ impl Analysis {
                 documentation: map.documentation(),
                 references: Vec::new(),
                 body: Layout::Map(MapLayout {
-                    plan: None,
+                    program: None,
                     instance: Some(RegisterMapView::from_resolved(map)),
                 }),
             }],

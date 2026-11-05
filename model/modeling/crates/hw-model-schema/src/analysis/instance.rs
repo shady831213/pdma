@@ -11,45 +11,12 @@ impl RegisterMapView {
         map: &MapDefinition,
         args: &[usize],
     ) -> Result<Self, LayoutError> {
-        let registers = map
-            .registers(args)?
-            .into_iter()
-            .map(|leaf| {
-                let segments: Vec<_> = leaf
-                    .path()
-                    .iter()
-                    .map(|p| ViewPathSegment {
-                        name: p.name.into(),
-                        index: p.index,
-                    })
-                    .collect();
-                let relative = segments
-                    .iter()
-                    .map(|p| {
-                        p.index
-                            .map_or_else(|| p.name.clone(), |i| format!("{}[{i}]", p.name))
-                    })
-                    .collect::<Vec<_>>()
-                    .join(".");
-                let last = leaf.path().last().ok_or(LayoutError::Geometry)?;
-                Ok(RegisterView {
-                    path: format!("{name}.{relative}"),
-                    segments,
-                    name: last.name,
-                    offset: leaf.offset(),
-                    documentation: last
-                        .documentation
-                        .with_fallback(leaf.register().documentation()),
-                    register: leaf.register().clone(),
-                })
-            })
-            .collect::<Result<Vec<_>, LayoutError>>()?;
         let mut walk = InstanceWalk {
-            registers,
+            registers: Vec::new(),
             banks: Vec::new(),
             groups: Vec::new(),
         };
-        walk.map(
+        let extent = walk.map(
             map,
             args,
             &Scope {
@@ -60,7 +27,7 @@ impl RegisterMapView {
             },
         )?;
         Ok(Self {
-            extent: map.resolve(args)?.extent,
+            extent,
             alignment: Some(map.alignment()),
             documentation: docs,
             registers: walk.registers,
@@ -87,7 +54,7 @@ impl InstanceWalk {
         map: &MapDefinition,
         args: &[usize],
         scope: &Scope,
-    ) -> Result<(), LayoutError> {
+    ) -> Result<usize, LayoutError> {
         let geometry = map.resolve(args)?;
         for (placement, shape) in map.placements().iter().zip(geometry.placements) {
             let path = format!("{}.{}", scope.path, placement.reference().name());
@@ -97,31 +64,6 @@ impl InstanceWalk {
                 .ok_or(LayoutError::Geometry)?;
             let bank_index = if placement.is_bank() {
                 let index = self.banks.len();
-                let instances = (0..shape.count)
-                    .map(|i| {
-                        let prefix = format!("{path}[{i}]");
-                        self.registers
-                            .iter()
-                            .filter(|r| {
-                                r.path == prefix
-                                    || r.path
-                                        .strip_prefix(&prefix)
-                                        .is_some_and(|tail| tail.starts_with('.'))
-                            })
-                            .cloned()
-                            .collect::<Vec<_>>()
-                    })
-                    .collect::<Vec<_>>();
-                let registers = instances
-                    .first()
-                    .into_iter()
-                    .flatten()
-                    .map(|r| {
-                        let mut r = r.clone();
-                        r.offset = r.offset.checked_sub(base).ok_or(LayoutError::Geometry)?;
-                        Ok(r)
-                    })
-                    .collect::<Result<Vec<_>, LayoutError>>()?;
                 self.banks.push(BankView {
                     path: path.clone(),
                     segments: scope
@@ -139,42 +81,77 @@ impl InstanceWalk {
                     stride: crate::ast::LayoutExpr::Constant(shape.stride),
                     parent: scope.parent,
                     documentation: placement.documentation(),
-                    registers,
-                    instances,
+                    registers: Vec::new(),
+                    instances: Vec::new(),
                 });
                 Some(index)
             } else {
                 self.groups.push((path.clone(), placement.documentation()));
                 None
             };
-            if let DefinitionBody::RegisterMap(child) = placement.reference().target().body() {
-                for i in 0..shape.count {
-                    let offset = i
-                        .checked_mul(shape.stride)
-                        .and_then(|step| base.checked_add(step))
-                        .ok_or(LayoutError::Geometry)?;
-                    self.map(
-                        child,
-                        &shape.arguments,
-                        &Scope {
-                            base: offset,
-                            path: bank_index
-                                .map_or_else(|| path.clone(), |_| format!("{path}[{i}]")),
-                            segments: scope
-                                .segments
-                                .iter()
-                                .cloned()
-                                .chain([ViewPathSegment {
-                                    name: shape.name.into(),
-                                    index: bank_index.map(|_| i),
-                                }])
-                                .collect(),
-                            parent: bank_index.map(|bank| (bank, i)).or(scope.parent),
-                        },
-                    )?;
+            for i in 0..shape.count {
+                let offset = i
+                    .checked_mul(shape.stride)
+                    .and_then(|step| base.checked_add(step))
+                    .ok_or(LayoutError::Geometry)?;
+                let child_scope = Scope {
+                    base: offset,
+                    path: bank_index.map_or_else(|| path.clone(), |_| format!("{path}[{i}]")),
+                    segments: scope
+                        .segments
+                        .iter()
+                        .cloned()
+                        .chain([ViewPathSegment {
+                            name: shape.name.into(),
+                            index: bank_index.map(|_| i),
+                        }])
+                        .collect(),
+                    parent: bank_index.map(|bank| (bank, i)).or(scope.parent),
+                };
+                let first_register = self.registers.len();
+                match placement.reference().target().body() {
+                    DefinitionBody::Register(register) => self.registers.push(RegisterView {
+                        path: child_scope.path,
+                        segments: child_scope.segments,
+                        name: shape.name,
+                        offset,
+                        documentation: placement
+                            .documentation()
+                            .with_fallback(register.documentation()),
+                        register: register.clone(),
+                    }),
+                    DefinitionBody::RegisterMap(child) => {
+                        self.map(child, &shape.arguments, &child_scope)?;
+                    }
+                    DefinitionBody::Bits(_)
+                    | DefinitionBody::Record(_)
+                    | DefinitionBody::Union { .. }
+                    | DefinitionBody::Opaque(_) => return Err(LayoutError::Geometry),
+                }
+                if let Some(index) = bank_index {
+                    let instance = self
+                        .registers
+                        .get(first_register..)
+                        .ok_or(LayoutError::Geometry)?
+                        .to_vec();
+                    let bank = self.banks.get_mut(index).ok_or(LayoutError::Geometry)?;
+                    if i == 0 {
+                        bank.registers = instance
+                            .iter()
+                            .map(|register| {
+                                let mut register = register.clone();
+                                register.offset = register
+                                    .offset
+                                    .checked_sub(base)
+                                    .ok_or(LayoutError::Geometry)?;
+                                Ok(register)
+                            })
+                            .collect::<Result<Vec<_>, LayoutError>>()?;
+                    }
+                    bank.instances.push(instance);
                 }
             }
         }
-        Ok(())
+        Ok(geometry.extent)
     }
 }

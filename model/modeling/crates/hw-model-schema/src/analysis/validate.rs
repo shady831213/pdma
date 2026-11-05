@@ -1,5 +1,8 @@
+mod error;
+mod shape;
 use super::AnalysisError;
 use crate::ast::{CaseBody, Node, RecordDefinition};
+pub use error::ShapeError;
 
 pub(super) fn record(record: &RecordDefinition) -> Result<(), AnalysisError> {
     for (index, field) in record.fields().iter().enumerate() {
@@ -27,6 +30,7 @@ pub(super) fn record(record: &RecordDefinition) -> Result<(), AnalysisError> {
                 return Err(error());
             }
         }
+        shape::field(field)?;
         node(Node::Record(crate::ast::record::Node::Field(field)))?;
     }
     Ok(())
@@ -46,16 +50,21 @@ pub(super) fn node(value: Node<'_>) -> Result<(), AnalysisError> {
                 return record(value);
             }
         }
+        Node::Register(crate::ast::register::Node::RegisterField(field)) => {
+            if let Some(enumeration) = field.definition().enum_definition() {
+                shape::enumeration_values(field.name(), enumeration, field.bit_width())?;
+            }
+        }
+        Node::Record(crate::ast::record::Node::Union(union)) => shape::union(union)?,
+        Node::Value(crate::ast::value::Node::Bits(bits)) => shape::bits("bits", bits)?,
         Node::Record(
-            crate::ast::record::Node::Union(_)
-            | crate::ast::record::Node::Field(_)
+            crate::ast::record::Node::Field(_)
             | crate::ast::record::Node::Attribute(_)
             | crate::ast::record::Node::Constant(_)
             | crate::ast::record::Node::Value(_),
         )
         | Node::Register(
             crate::ast::register::Node::RegisterMap(_)
-            | crate::ast::register::Node::RegisterField(_)
             | crate::ast::register::Node::Placement(_)
             | crate::ast::register::Node::Parameter(_)
             | crate::ast::register::Node::Argument(_)

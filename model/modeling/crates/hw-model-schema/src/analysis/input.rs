@@ -40,6 +40,13 @@ pub enum AnalysisError {
         /// Invalid field name.
         field: &'static str,
     },
+    /// Inconsistent source value metadata.
+    SourceShape {
+        /// Invalid source member.
+        path: &'static str,
+        /// Typed shape failure.
+        source: super::validate::ShapeError,
+    },
     /// An analyzed unit has neither a declaration nor a concrete projection.
     MissingDeclaration(String),
     /// Invalid record geometry.
@@ -71,6 +78,7 @@ impl std::fmt::Display for AnalysisError {
             Self::SourceField { record, field } => {
                 write!(f, "invalid source field {record}.{field}")
             }
+            Self::SourceShape { path, source } => write!(f, "{path}: {source}"),
             Self::MissingDeclaration(name) => write!(f, "missing declaration for {name}"),
             Self::Register { path, source } => write!(f, "{path}: {source}"),
             Self::Record { path, source } => write!(f, "{path}: {source}"),
@@ -88,6 +96,7 @@ impl std::error::Error for AnalysisError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Dependencies(source) => Some(source),
+            Self::SourceShape { source, .. } => Some(source),
             Self::Register { source, .. } => Some(source),
             Self::Record { source, .. } => Some(source),
             Self::Layout(source) => Some(source),

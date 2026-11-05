@@ -29,6 +29,7 @@ impl RegisterInfo {
             .map(|(index, field)| {
                 BitsFieldSpec::place(index, field.name(), field.lsb(), field.definition())
                     .with_documentation(field.documentation())
+                    .with_declaration_index(field.declared_at(index))
             })
             .collect();
         Self {
@@ -94,13 +95,13 @@ impl RegisterInfo {
     /// Validates target-independent register shape through the runtime definition validator.
     ///
     /// # Errors
-    /// Rejects unsupported widths, alignment, or overflowing mask/reset values.
+    /// Rejects invalid register geometry, field declarations, writable masks or reset values.
     pub fn validate_shape(&self) -> Result<(), crate::RegisterDefinitionError<usize>> {
         RegisterDefinition::<usize>::new(self.name, self.width, self.endian)
             .with_alignment(self.alignment)
             .with_writable_mask(self.writable_mask)
             .with_reset(self.reset_kind, self.reset_value)
-            .validate_shape()
+            .validate_fields(&self.fields)
     }
     /// Bit fields in declaration order, including enum semantics and descriptions.
     pub fn fields(&self) -> &[BitsFieldSpec<usize>] {

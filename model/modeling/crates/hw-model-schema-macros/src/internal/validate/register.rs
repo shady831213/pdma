@@ -41,6 +41,7 @@ pub(in crate::internal) fn check_definition(register: &RegisterDefinitionDecl) -
     };
     crate::internal::validate::bits::check(fields, register.width.0 * 8)?;
     let mut generated = HashSet::new();
+    let mut identities = super::members::Members::new(&[]);
     let mut views = super::members::Members::new(&["new", "value", "set_value"]);
     let mut owned = super::members::Members::new(&["new", "raw", "ZERO", "RESET"]);
     for field in fields {
@@ -49,7 +50,11 @@ pub(in crate::internal) fn check_definition(register: &RegisterDefinitionDecl) -
         views.insert(&field.name, &format!("set_{name}"))?;
         owned.insert(&field.name, &name)?;
         owned.insert(&field.name, &format!("with_{name}"))?;
-        if !generated.insert(generated_ident(&name)) {
+        identities.insert(
+            &field.name,
+            &format!("{}_IDENTITY", name.to_ascii_uppercase()),
+        )?;
+        if !generated.insert(crate::internal::expand::register::variant(&field.name).to_string()) {
             return Err(syn::Error::new(
                 field.name.span(),
                 "generated register field identifier collision",
@@ -70,17 +75,6 @@ pub(in crate::internal) fn check_definition(register: &RegisterDefinitionDecl) -
         ));
     }
     Ok(())
-}
-
-fn generated_ident(name: &str) -> String {
-    name.split('_')
-        .map(|part| {
-            let mut chars = part.chars();
-            chars.next().map_or_else(String::new, |first| {
-                first.to_uppercase().chain(chars).collect()
-            })
-        })
-        .collect()
 }
 
 const fn fits(value: u64, width: usize) -> bool {

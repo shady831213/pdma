@@ -150,7 +150,20 @@ fn expand_inline(
     let documented_variants = variants
         .iter()
         .map(|item| quote!(#[doc = "Stable generated field ID."] #item));
-    let enums = crate::internal::expand::bits::enum_items(marker, declared, visibility, facade)?;
+    let enums = crate::internal::expand::bits::enum_items(
+        marker,
+        declared,
+        visibility,
+        facade,
+        &[
+            marker,
+            id_name,
+            &format_ident!("{}Raw", marker),
+            &format_ident!("{}Values", marker),
+            &format_ident!("{}View", marker),
+            &format_ident!("{}ViewMut", marker),
+        ],
+    )?;
     Ok(FieldsExpansion {
         id_declaration: quote! {
             #enums

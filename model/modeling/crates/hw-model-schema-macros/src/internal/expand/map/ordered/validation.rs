@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use syn::ext::IdentExt;
 
 use crate::internal::syntax::OrderedMapDecl;
 
@@ -11,6 +12,8 @@ pub(super) fn validate(decl: &OrderedMapDecl) -> syn::Result<()> {
         ));
     }
     let mut symbols = HashSet::new();
+    let mut variants = crate::internal::validate::members::Members::new(&[]);
+    let mut constants = crate::internal::validate::members::Members::new(&[]);
     let mut parameters = HashSet::new();
     for parameter in &decl.parameters {
         if !parameters.insert(parameter.to_string()) {
@@ -45,6 +48,12 @@ pub(super) fn validate(decl: &OrderedMapDecl) -> syn::Result<()> {
                 "duplicate register map placement name",
             ));
         }
+        let variant = crate::internal::expand::register::variant(&placement.symbol);
+        variants.insert(&placement.symbol, &variant.to_string())?;
+        constants.insert(
+            &placement.symbol,
+            &placement.symbol.unraw().to_string().to_uppercase(),
+        )?;
         if placement.count.0 == 0 {
             return Err(syn::Error::new(
                 placement.count.1,

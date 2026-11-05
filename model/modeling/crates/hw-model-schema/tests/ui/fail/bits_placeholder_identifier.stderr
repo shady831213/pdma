@@ -1,0 +1,5 @@
+error: expected identifier, found keyword `_`
+ --> tests/ui/fail/bits_placeholder_identifier.rs:2:39
+  |
+2 | bits_schema! { pub bits Invalid(u8) { _: 0..1 } }
+  |                                       ^

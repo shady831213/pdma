@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use syn::ext::IdentExt;
 
 use crate::internal::syntax::BitFieldDecl;
 
@@ -50,8 +51,17 @@ pub(in crate::internal) fn check_schema(
     }
     check(fields, storage_bits)?;
     let mut owned = super::members::Members::new(&["new", "raw", "from_raw", "ZERO"]);
+    let mut variants = super::members::Members::new(&[]);
+    let mut identities = super::members::Members::new(&["RESERVED_IDENTITY"]);
     for field in fields {
         owned.insert(&field.name, &field.name.to_string())?;
+        let variant = crate::internal::expand::register::variant(&field.name);
+        variants.insert(&field.name, &variant.to_string())?;
+        let identity = format!(
+            "{}_IDENTITY",
+            field.name.unraw().to_string().to_ascii_uppercase()
+        );
+        identities.insert(&field.name, &identity)?;
     }
     Ok(())
 }

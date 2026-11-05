@@ -60,11 +60,20 @@ pub(in crate::internal) fn enum_items(
     fields: &[BitFieldDecl],
     visibility: &syn::Visibility,
     facade: &TokenStream,
+    reserved: &[&syn::Ident],
 ) -> syn::Result<TokenStream> {
+    let mut types = crate::internal::validate::members::Members::new(&[]);
+    for name in reserved {
+        types.insert(owner, &name.to_string())?;
+    }
     let items = fields
         .iter()
         .filter_map(|field| {
             field.enumeration.as_ref().map(|decl| {
+                for suffix in ["", "Raw"] {
+                    let name = super::scalar::type_name(owner, &field.name, suffix);
+                    types.insert(&field.name, &name.to_string())?;
+                }
                 let identity = quote::format_ident!(
                     "{}_IDENTITY",
                     field.name.unraw().to_string().to_ascii_uppercase()

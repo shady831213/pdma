@@ -1,0 +1,5 @@
+error: field generates conflicting member `FooBar`
+ --> tests/ui/fail/map_generated_name_collision.rs:7:55
+  |
+7 |     alignment: 1, placements: [pub foo_bar: Word, pub foo__bar: Word],
+  |                                                       ^^^^^^^^

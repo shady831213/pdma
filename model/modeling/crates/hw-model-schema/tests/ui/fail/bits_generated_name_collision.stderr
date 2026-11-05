@@ -1,0 +1,5 @@
+error: field generates conflicting member `FooBar`
+ --> tests/ui/fail/bits_generated_name_collision.rs:2:56
+  |
+2 | bits_schema! { pub bits Collision(u8) { foo_bar: 0..1, foo__bar: 1..2 } }
+  |                                                        ^^^^^^^^

@@ -1,0 +1,5 @@
+error: field generates conflicting member `FOO_IDENTITY`
+ --> tests/ui/fail/bits_generated_identity_collision.rs:2:52
+  |
+2 | bits_schema! { pub bits Collision(u8) { foo: 0..1, FOO: 1..2 } }
+  |                                                    ^^^

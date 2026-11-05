@@ -11,6 +11,7 @@ pub(super) fn check(
     plan: &RecordPlan<'_>,
     facade: &TokenStream,
 ) -> syn::Result<()> {
+    check_types(decl)?;
     let mut owned = Members::new(&[
         "from_bytes",
         "to_bytes",
@@ -88,6 +89,36 @@ pub(super) fn check(
             | ModernTypeDecl::BitsReference(_) => {
                 views.insert(name, &name.to_string())?;
                 views.insert(name, &format!("set_{}", name.unraw()))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn check_types(decl: &ModernRecordDecl) -> syn::Result<()> {
+    let marker = decl.name.unraw().to_string();
+    let mut types = Members::new(&[
+        &marker,
+        &format!("{marker}Raw"),
+        &format!("{marker}View"),
+        &format!("{marker}ViewMut"),
+    ]);
+    for field in &decl.fields {
+        let suffixes: &[&str] = match &field.ty {
+            ModernTypeDecl::Enum(_) => &["", "Raw"],
+            ModernTypeDecl::Bits(_) | ModernTypeDecl::TaggedUnion(_) => &["Values", "Raw"],
+            ModernTypeDecl::Scalar { .. }
+            | ModernTypeDecl::Codec(_)
+            | ModernTypeDecl::BitsReference(_) => &[],
+        };
+        for suffix in suffixes {
+            let name = super::scalar::type_name(&decl.name, &field.name, suffix);
+            types.insert(&field.name, &name.to_string())?;
+        }
+        if let ModernTypeDecl::TaggedUnion(union) = &field.ty {
+            for case in union.cases.iter().filter(|case| case.codec.is_none()) {
+                let name = super::tagged_union::case_type(decl, &field.name, &case.name);
+                types.insert(&case.name, &name.to_string())?;
             }
         }
     }

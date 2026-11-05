@@ -1,0 +1,5 @@
+error: field generates conflicting member `Collision`
+ --> tests/ui/fail/record_empty_helper_collision.rs:3:31
+  |
+3 |     endian: Little, fields: { __: enum(u8) { variants: { Value = 1 } } },
+  |                               ^^

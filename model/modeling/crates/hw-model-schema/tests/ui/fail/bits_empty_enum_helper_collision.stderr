@@ -1,0 +1,5 @@
+error: field generates conflicting member `Collision`
+ --> tests/ui/fail/bits_empty_enum_helper_collision.rs:3:5
+  |
+3 |     __: 0..1 => enum { variants: { Value = 0 } },
+  |     ^^

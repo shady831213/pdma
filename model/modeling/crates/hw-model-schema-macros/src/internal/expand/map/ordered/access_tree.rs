@@ -31,6 +31,7 @@ struct Emitter<'a, 'context> {
     context: &'a ExpansionContext<'context>,
     geometry: &'a [Geometry],
     output: Vec<TokenStream>,
+    types: crate::internal::validate::members::Members,
 }
 
 pub(super) fn expand(
@@ -48,6 +49,7 @@ pub(super) fn expand(
         context,
         geometry,
         output: Vec::new(),
+        types: crate::internal::validate::members::Members::new(&[]),
     };
     for group in &roots {
         emitter.emit_group(group)?;
@@ -135,6 +137,8 @@ impl Emitter<'_, '_> {
     fn emit_group(&mut self, group: &Group) -> syn::Result<()> {
         let visibility = &self.decl.visibility;
         let (view, view_mut) = type_names(self.context.marker, &group.path);
+        self.types.insert(&group.name, &view.to_string())?;
+        self.types.insert(&group.name, &view_mut.to_string())?;
         let nested = group_methods(&group.groups, self.context);
         let nested_immutable = nested.0;
         let nested_mutable = nested.1;

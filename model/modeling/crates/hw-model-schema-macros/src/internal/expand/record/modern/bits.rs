@@ -41,7 +41,13 @@ pub(super) fn expand(
     let narrowed_raw = scalar::from_u64(decl.storage, quote!(observed));
     let codec = codec(&name, &raw_name, facade);
     let member_identities = member_identities(decl, &name, facade);
-    let enums = crate::internal::expand::bits::enum_items(&name, &decl.fields, visibility, facade)?;
+    let enums = crate::internal::expand::bits::enum_items(
+        &name,
+        &decl.fields,
+        visibility,
+        facade,
+        &[&name, &raw_name],
+    )?;
     Ok(quote! {
         #enums
         #[doc = "Typed raw scalar for the generated packed-bit field."]

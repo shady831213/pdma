@@ -29,7 +29,18 @@ pub(super) fn expand(decl: &BitsSchemaDecl) -> syn::Result<TokenStream> {
         declared_mask: validate::bits::declared_mask(&decl.fields),
     };
     let identities = identities(&context);
-    let enums = super::enum_items(&decl.name, &decl.fields, &decl.visibility, &context.facade)?;
+    let enums = super::enum_items(
+        &decl.name,
+        &decl.fields,
+        &decl.visibility,
+        &context.facade,
+        &[
+            &decl.name,
+            &context.values,
+            &context.field_id,
+            &format_ident!("{}Raw", decl.name),
+        ],
+    )?;
     let values = values::expand(&context);
     let marker = marker::expand(&context)?;
     Ok(quote!(#identities #enums #values #marker))

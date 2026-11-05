@@ -1,20 +1,22 @@
 # Publishing the reusable libraries
 
-The first release candidate is version **0.1.0**, edition 2024, with **Rust 1.96**
-as its supported baseline and **MIT OR Apache-2.0** licensing. No upload has been
-performed as part of release preparation. The six library manifests allow only
+The schema release candidate is **0.2.0** for both `hw-model-schema` and
+`hw-model-schema-macros`, edition 2024, with **Rust 1.96** as its supported baseline
+and **MIT OR Apache-2.0** licensing. Their published baseline is 0.1.0; this candidate
+has not been uploaded. Other reusable crates are not part of this release.
+The six library manifests allow only
 the `crates-io` registry; the workspace default, PDMA packages and standalone test
 fixtures keep publication disabled.
 
 ## Release contents and order
 
-| Package | First-release surface | Published siblings required |
+| Package | Library surface | Published siblings required |
 | --- | --- | --- |
 | `hw-model-io` | Memory/register capabilities, optional byte backing, bounded allocation and ordered observations | None |
 | `hw-model-irq` | Interrupt source/handler traits; optional Tokio interrupt wire | None |
 | `hw-model-pipeline` | Continuation stages, composition, routing and executors | None |
 | `hw-model-schema-macros` | Procedural implementation of schema declarations | None |
-| `hw-model-schema` | Layouts, codecs, registers and optional C exporter | `hw-model-schema-macros` |
+| `hw-model-schema` | Layouts, codecs, registers, definition graphs, passes and optional C/Veryl exporters | Exact matching `hw-model-schema-macros` version |
 | `hw-model-swenv` | SoftwareEnv, scoped main/ISR execution, notifications and tracing | `hw-model-io`, `hw-model-irq` |
 
 The macro crate must precede its facade. IO and IRQ must precede the software
@@ -43,13 +45,20 @@ packages must not contain PDMA implementation packages, credentials or build out
 Cargo may omit nested fixture packages; validate those separately from the repository.
 Remove the task-owned build directory after recording verification results.
 
-Before the first release, dependent packages cannot resolve unpublished siblings
+Before a matching macro version is published, the facade cannot resolve that sibling
 from crates.io. Local preparation may package with `--no-verify --exclude-lockfile`,
 extract the **actual archives**, and patch siblings to their extracted locations
 in a temporary workspace for builds/tests/docs. This checks the archives without
 reaching back into the PDMA checkout. Use a fresh target after re-extraction:
 archive timestamps are normalized and a reused target can retain stale products.
 This local check does not prove that registry dependencies are available.
+
+Put temporary sibling patches in the verification Cargo home's `config.toml`, not
+only in a command-line `--config`: tests may spawn Cargo subprocesses, which need
+the same resolution. Archive verification uses a separate Cargo home whose patches
+point only to the extracted archives. Inspect `cargo metadata` to confirm that no
+checkout source satisfies a package dependency. Do not copy credentials into these
+verification homes. Never upload from a patched verification environment.
 
 Once each prerequisite is published and indexed, run normal `cargo package` for
 its dependents without sibling patches. Do not use `--no-verify` for the actual
@@ -60,18 +69,15 @@ upload. Registry availability and authenticated upload remain separate checks.
 Confirm the intended crates.io account, verified email and publishing permission.
 Configure credentials through `cargo login` or an approved credential provider;
 never put tokens in this repository, shell command arguments or review logs.
-Recheck name availability just before the first upload: a prior 404 is not a reservation.
+Recheck version availability just before upload; preparation does not reserve a version.
 
-Only after explicit release authorization, publish from the reviewed commit in order:
+Only after explicit release authorization, publish this schema release from the
+reviewed commit in order:
 
 ```sh
-cargo publish --registry crates-io -p hw-model-io
-cargo publish --registry crates-io -p hw-model-irq
-cargo publish --registry crates-io -p hw-model-pipeline
 cargo publish --registry crates-io -p hw-model-schema-macros
 # Wait for prerequisites to become available in the registry before dependents.
 cargo publish --registry crates-io -p hw-model-schema
-cargo publish --registry crates-io -p hw-model-swenv
 ```
 
 If an upload fails, stop and check which versions actually reached the registry;

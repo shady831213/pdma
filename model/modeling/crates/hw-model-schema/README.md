@@ -7,6 +7,22 @@ and a format-neutral streaming export boundary. The facade re-exports the declar
 macros, so downstream crates normally depend on this crate rather than on the
 procedural-macro implementation crate.
 
+## Upgrading from 0.1
+
+Version 0.2 adds definition graphs, optional discovery, typed analysis passes and
+independent record/register backends. Export APIs are intentionally changed:
+replace `Exporter`, `Artifact` and `ArtifactSink` implementations with domain
+backend callbacks that receive `std::io::Write`. `generate` writes to an ordinary
+writer; `prepare` exposes per-root metadata and emission when the application
+chooses separate destinations. The caller owns flushing and publication.
+
+Manual register-map builders must handle the result of `with_placements(...)`;
+attachment validates the supplied topology instead of accepting unchecked metadata.
+Nested manual storage crosses the same validation boundary as root storage.
+The facade pins the matching 0.2.0 macro crate; applications normally depend only
+on the facade. Rust raw identifiers are supported in declarations; descriptive
+metadata retains source spelling while generated helper symbols omit `r#`.
+
 ## Definition graphs and optional discovery
 
 `ast::SchemaSet` selects definitions; `resolve()` follows their references,
@@ -204,13 +220,15 @@ Documentation lines are not separate IR nodes.
 - `export-c-header` enables `CRecordBackend` and `CRegisterBackend`. Byte accessors use checked
   physical storage layout; semantic backends retain the original AST.
 - `export-veryl-layout` enables `VerylRecordBackend` and `VerylRegisterBackend`. Their metadata packages describe
-  layout, not register storage, bus behavior or hardware effects.
+  layout, not register storage, bus behavior or hardware effects. Package aliases
+  use unescaped ASCII identifiers; reserved Veryl keywords are rejected before
+  emission. The generated format is checked with Veryl 0.22.
 - Both features are default-off; custom backends need neither builtin.
 
 Veryl emits direct scalar layout functions (`extent`, member `offset`, `count`
 and `stride`) from completed expressions; it does not emit a `Geometry` structure
 or an aggregate `geometry()` function. C retains its aggregate `_Geometry` API,
-whose fields and assignments are collected through the same leaf callbacks.
+whose fields and assignments are rendered through the same analyzed leaf callbacks.
 
 The layout pass resolves the source `MapLayoutPlan` into complete mathematical
 attributes attached to the same declarations. Child arguments, extents and ordered
@@ -728,21 +746,7 @@ Low-level `RepeatedRegisterBank` metadata retains descriptive strides. Both
 `RegisterMapSpec::validate()` and `resolve()` reject overlap across complete bank
 envelopes, including a scalar or another bank placed in an internal hole.
 
-## PDMA consumer
-
-PDMA uses generated layouts for an instance-configured channel count, independent
-command/error-event rings and DMA/channel controls. Its current contract generates
-the C header; historical register counts and layouts are not compatibility targets.
-PDMA ring geometry and pointer rules belong to its contract crate; shared software
-ring algorithms belong to `pdma-model-software`. DMA, reset and IRQ behavior belong
-to the PDMA hardware and software, not this schema library.
-
-The resulting layer boundary is deliberate: this crate owns schema descriptors,
-codecs, checked views and generated-value register windows.
-`hw-model-io` supplies access interfaces, byte-memory models and register
-observation; `hw-model-swenv` supplies main/ISR execution.
-`hw-model-pipeline` supplies interaction drive policies, and the PDMA device supplies register command,
-DMA, reset and IRQ effects.
+## Union composition
 
 ### Record-backed union cases
 

@@ -66,5 +66,6 @@ Initial testbenches drive DMA ports directly and supply memory/fault/timer/IRQ
 behavior. They do not require a CPU, synthesized firmware or a recreated managed subsystem.
 
 [Tool integration](../tools/rtl-flow/README.md) independently maintains a fixed
-Veryl version and patches, initially taken from a qualified pcie_modeling snapshot.
+Veryl version and patches, initially taken from a qualified
+[pcie_modeling](https://github.com/shady831213/pcie_modeling) snapshot.
 Its separate compiler smoke test is not a PDMA design test or EDA qualification.

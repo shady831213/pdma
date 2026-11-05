@@ -20,7 +20,7 @@
 
 | 项目 | 本轮决定 |
 | --- | --- |
-| 设计语言和工具 | 参考 pcie_modeling 的 Veryl、原生测试、VCS/UVM/VIP、DC、VC SpyGlass 流程；本阶段视为可用，不开展工具仓库拆分或重新验证 flow |
+| 设计语言和工具 | 参考 [pcie_modeling](https://github.com/shady831213/pcie_modeling) 的 Veryl、原生测试、VCS/UVM/VIP、DC、VC SpyGlass 流程；本阶段视为可用，不开展工具仓库拆分或重新验证 flow |
 | 工具版本 | PDMA 在 tools/rtl-flow 独立维护固定 Veryl 源码版本、有序补丁和安装入口，以 pcie_modeling 已验证快照为起点；后续再统一共享仓库，不自动跟随外部更新 |
 | 内存接口 | AXI5 master；需要明确选择 atomic 支持及相关事务属性 |
 | 寄存器接口 | AXI4-Lite slave，数据位宽在实例化时选择 32 或 64 位 |

@@ -7,9 +7,10 @@ Apply only in the order recorded in `../toolchain.env`.
 - `veryl-guarded-read.patch`: upstream author commit
   `75e35bc59f6dcc69584474bf310f1639d4dca362`, submitted as
   [PR #3585](https://github.com/veryl-lang/veryl/pull/3585); proves guarded prior writes.
-- `veryl-generic-parameters.patch`: pcie_modeling's local fix for resolved generic
+- `veryl-generic-parameters.patch`: a fix from
+  [pcie_modeling](https://github.com/shady831213/pcie_modeling) for resolved generic
   module parameter forwarding and known literal interface widths.
-- `veryl-generic-constant-context.patch`: pcie_modeling's local fix preserving
+- `veryl-generic-constant-context.patch`: a fix from the same project preserving
   originating namespaces for package constants introduced by generic substitution.
 - `veryl-struct-member-width.patch`: PDMA's 2026-10-29 simulator fix. A struct
   constructor must resize each expression to its declared member width, including
@@ -18,11 +19,10 @@ Apply only in the order recorded in `../toolchain.env`.
   `resize_to_width` at that call site without changing global extension behavior.
   Regression cases cover ternaries, arithmetic, adjacent sentinels and X values.
 
-The source project's `docs/evidence/port-completion-2026-10-27.md`, section
-“项目工具修复与正式入口验证”, records 4075 passing upstream workspace tests and
-22 original ignored tests for this exact three-patch manifest. That is inherited
-evidence, not a compiler-suite run performed by PDMA. It also records existing
-upstream Clippy findings; no all-clean Clippy claim is made.
+The source project's qualification record for this snapshot reports 4075 passing
+upstream workspace tests and 22 original ignored tests for the initial three-patch
+manifest. That is inherited evidence, not a compiler-suite run performed by PDMA.
+It also reports existing upstream Clippy findings; no all-clean Clippy claim is made.
 
 Initial three-patch manifest SHA-256:
 `fbfcb32cd20a0aa622a81bea6190a2444347926aeab65fc777dc9de1db769feb`.

@@ -1,7 +1,8 @@
 # RTL tools
 
 PDMA maintains its own fixed Veryl installation. `toolchain.env`, the ordered
-`patches/` and `veryl.sh` are a snapshot of pcie_modeling's qualified tooling,
+`patches/` and `veryl.sh` are a snapshot of
+[pcie_modeling's qualified tooling](https://github.com/shady831213/pcie_modeling),
 with installation paths localized to this directory. Running them requires no
 pcie_modeling checkout. Shared repository extraction is deferred; future updates
 are deliberate PDMA changes, not automatic tracking of that project's work.

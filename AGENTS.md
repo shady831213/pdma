@@ -5,11 +5,12 @@
 PDMA-authored RTL, model, firmware, software, tools, tests and documentation are
 licensed under MIT OR Apache-2.0; see the repository-root licenses and README.
 Third-party notices and terms remain applicable to their respective material.
-Public-release preparation is waiting for the `pcie_modeling` Veryl toolchain
-upgrade result before revisiting the current compiler pin and retained patches.
-Do not infer that these patches are obsolete or change repository visibility as
-part of this preparation. History and commit-email disclosure remain unchanged;
-confirm the final public scope with the user before switching visibility.
+Public-release preparation retains the pinned Veryl compiler and checked-in
+patches. Reference the [pcie_modeling repository](https://github.com/shady831213/pcie_modeling)
+for their origins, not machine-local checkout paths. External upgrades do not
+automatically change PDMA's toolchain. Repository visibility, history and
+commit-email disclosure remain separate user decisions; confirm the final public
+scope with the user before switching visibility.
 
 ## Current state
 
@@ -40,7 +41,8 @@ the AXI5 memory port are not implemented yet. Register reset action/clear ports
 are integration boundaries, not evidence of implemented transaction drain.
 Follow `rtl/README.md` for source and verification ownership. PDMA independently
 pins and maintains Veryl under `tools/rtl-flow`, starting from a verified snapshot
-of pcie_modeling's tool inputs. Do not modify that project's active toolchain or
+of [pcie_modeling's tool inputs](https://github.com/shady831213/pcie_modeling).
+Do not modify that project's active toolchain or
 automatically follow its updates; shared tool extraction is deferred.
 The model's Cargo workspace contains the core `contract`, `dma` and `host` crates, the
 managed MVP's `hw-components` and `firmware`, shared PDMA `software`, system scenarios,

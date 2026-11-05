@@ -730,7 +730,8 @@ remain RTL/platform obligations, not a mandate to lower the model to bus-transac
 
 ## Reference boundary
 
-The separate `pcie_modeling` project informed the distinction between request
+The separate [pcie_modeling project](https://github.com/shady831213/pcie_modeling)
+informed the distinction between request
 acceptance, local completion and manager release. That project is an integration
 reference, not a build prerequisite or the source of PDMA's normative contract.
 PDMA's requirements are recorded in [the system specification](spec.md) and

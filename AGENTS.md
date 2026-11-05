@@ -1,5 +1,16 @@
 # PDMA REBUILD WORKSPACE
 
+## Public-release preparation
+
+PDMA-authored RTL, model, firmware, software, tools, tests and documentation are
+licensed under MIT OR Apache-2.0; see the repository-root licenses and README.
+Third-party notices and terms remain applicable to their respective material.
+Public-release preparation is waiting for the `pcie_modeling` Veryl toolchain
+upgrade result before revisiting the current compiler pin and retained patches.
+Do not infer that these patches are obsolete or change repository visibility as
+part of this preparation. History and commit-email disclosure remain unchanged;
+confirm the final public scope with the user before switching visibility.
+
 ## Current state
 
 The user authorized a clean PDMA restart on 2026-09-09.

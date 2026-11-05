@@ -49,4 +49,17 @@ The pre-rebuild architecture specification and v0.x plans were removed from the
 working tree because they described obsolete interfaces. Their last retained
 versions are available in Git at commit
 `7f264595971aad5224d98276113a11efc63ee2db`, under `model/docs/`.
-The pre-rebuild implementation remains on `backup/pdma-before-rebuild-20260909`.
+The pre-rebuild implementation is retained at commit
+`51707fe1d38e261a188e1d0ac14243c0caf58127`.
+
+## License
+
+PDMA-authored content is dual-licensed under either the [MIT License](LICENSE-MIT)
+or the [Apache License, Version 2.0](LICENSE-APACHE), at your option. This covers
+the RTL, executable model, firmware, Host software, tools, tests and documentation.
+The SPDX license expression is `MIT OR Apache-2.0`.
+
+Third-party material retains its own copyright notices and license terms.
+Dependencies and linked specifications are not relicensed by this repository.
+Veryl compiler patch origins are recorded in
+[the patch provenance document](tools/rtl-flow/patches/README.md).

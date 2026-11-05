@@ -730,10 +730,11 @@ remain RTL/platform obligations, not a mandate to lower the model to bus-transac
 
 ## Reference boundary
 
-Reference repository: `https://github.com/shady831213/pcie_modeling`.
-Its `docs/architecture/pcie-endpoint-architecture.md` APP-CONTROL section and
-`crates/pcie-app/src/control/` distinguish request acceptance, local completion
-and manager release. The architecture document records an ongoing migration:
-recheck actual interfaces when integrating. Do not restore its legacy centralized
-per-work admission/token tables into PDMA. PCIe capabilities, ATS/PRI, MSI-X and
-DWC-specific handshake encoding remain outside this preparation goal.
+The separate `pcie_modeling` project informed the distinction between request
+acceptance, local completion and manager release. That project is an integration
+reference, not a build prerequisite or the source of PDMA's normative contract.
+PDMA's requirements are recorded in [the system specification](spec.md) and
+[the reset contract](reset.md). Recheck the actual endpoint interfaces when
+integrating; do not restore legacy centralized per-work admission/token tables
+into PDMA. PCIe capabilities, ATS/PRI, MSI-X and DWC-specific handshake encoding
+remain outside this preparation goal.

@@ -419,3 +419,23 @@ paths usable without consulting any other node. Digest collisions are not assume
 impossible; final emitted-symbol checking still rejects them. Root prefix overrides
 are not silently abbreviated. The checked-in role headers and native consumers
 use the new names; wire layout, offsets, access masks and enum codes are unchanged.
+
+## Full-crate audit corrections
+
+The comprehensive audit after checkpoint `2354314f` reproduced three correctness
+defects: public ASTs could describe a field smaller than its actual representation;
+following a record reference confused declaration attributes with outer placement
+attributes; C scalar accessor names bypassed the final symbol collision guard.
+
+Common validation now checks value extents, union case fit, bit shapes, enum and
+constant ranges, and scalar byte-order consistency. Register source fields and
+runtime definitions share a borrowed field validator with the same error ordering.
+Packed records and explicit opaque storage remain supported. Attribute dispatch
+uses its immediate semantic owner while preserving the full reference-site ancestry
+for consumers. Generated C accessor functions share final-name checks with macros.
+
+Concrete instance metadata is collected in one recursive walk. It retains the
+existing checked geometry resolver, collects each register once and uses the
+resulting ranges to populate banks. The separate register collection, string-prefix
+bank scans and redundant final root extent resolution were removed. This is not a
+claim that all recursive plan evaluation has been globally cached or eliminated.

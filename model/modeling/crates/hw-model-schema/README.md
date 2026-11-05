@@ -114,6 +114,14 @@ specialize selected unreferenced roots; shared generic definitions need separate
 named instances or separate requests. Instance identity remains distinct from
 definition identity.
 
+Manually assembled ASTs cross the same validation boundary. Field extents must
+match scalar, bits, referenced value or union storage; union alternatives must fit
+their envelope. Scalar encoding metadata must agree with its source placement.
+Bit ranges, overlapping members, enum codes and constant values are checked before
+generation. Register AST fields reuse the runtime register validator through a
+borrowed field slice. Packed byte placements remain supported; this does not add a
+natural-alignment requirement to individual record fields.
+
 `AnalyzedSchema::record` accepts an explicit `RecordDefinition`.
 `AnalyzedSchema::opaque` accepts manual `RecordSpec` storage without inventing source
 fields. Both validate before emission. `AnalyzedSchema::register_map` accepts a
@@ -624,6 +632,7 @@ bytes use their first 15 bytes, `_`, and a 16-digit uppercase FNV-1a64 digest of
 entire encoded stem. Final symbol checking rejects collisions, including collisions
 within C's 63 significant identifier bytes. Explicit root-prefix overrides retain
 their spelling and may therefore be rejected if they cause such a collision.
+Final macro and scalar accessor function declarations use the same collision scope.
 
 ```rust
 # use hw_model_schema::{

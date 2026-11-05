@@ -1,5 +1,15 @@
 # PDMA REBUILD WORKSPACE
 
+## Project direction
+
+PDMA is a programmable copy engine for virtualized systems. Keep the direct
+configuration usable without firmware. Managed allocation/lifecycle policy belongs
+to firmware, Function/context enforcement to peripheral hardware, and memory
+translation/requester identity to the integration platform. Current RTL work stays
+DMA-core-only. Do not describe modeled isolation as complete SR-IOV, FLR, ATS/PRI
+or logical-channel oversubscription support, and do not rename existing DMA APIs
+merely to match the project tagline.
+
 ## Public-release preparation
 
 PDMA-authored RTL, model, firmware, software, tools, tests and documentation are

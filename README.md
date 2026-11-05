@@ -1,4 +1,25 @@
-# Programmable DMA Subsystem (PDMA)
+# PDMA: A programmable copy engine for virtualized systems
+
+PDMA provides programmable data movement, synchronization and recovery through
+multiple channels sharing one Copy Engine. It supports a direct configuration
+and a firmware-managed configuration for sharing resources between Functions
+and address-space contexts. PCIe endpoints and GPU/SoC integration are target
+environments; the engine's memory and control interfaces keep platform mechanisms
+outside the data path.
+
+## Architecture and implementation status
+
+| Layer | Responsibility | Current status |
+| --- | --- | --- |
+| Copy Engine core | Channel arbitration, command execution, completion, fault/resume and independent channel reset | Rust functional model implemented; RTL register-access slice implemented |
+| Managed resource control | Firmware channel allocation and lifecycle policy; peripheral MMIO permissions, Function/context resolution and notification routing | Executable managed model implemented; corresponding RTL/subsystem integration deferred |
+| Integration platform | Trusted requester identity, memory backing/translation, interconnect and interrupt transport | Injected model capabilities; actual PCIe/IOMMU integration unimplemented |
+
+Function/context isolation and Default/PASID bindings are modeled under the
+documented platform and software obligations. This is not a claim of complete
+SR-IOV, PCIe FLR, ATS/PRI or logical-channel oversubscription support. Physical
+channels remain instance-configured. The direct configuration remains usable
+without firmware or virtualization management.
 
 The active Rust model lives in [model/modeling](model/modeling/README.md). It
 implements instance-configured channels with command/error-event rings, independent

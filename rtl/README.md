@@ -1,4 +1,8 @@
-# PDMA RTL
+# PDMA Copy Engine RTL
+
+This directory contains the in-progress core RTL for PDMA, a programmable copy
+engine for virtualized systems. The managed resource-control and platform-integration layers remain
+outside the first RTL phase; see the [project overview](../README.md).
 
 The first implemented slice is the DMA register-access path: AXI4-Lite 32/64,
 reg/core CDC and channel/ring register owners. Seven native tests exercise it.

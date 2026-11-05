@@ -1,27 +1,50 @@
-# Firmware-managed DMA roadmap
+# PDMA Copy Engine and virtualization roadmap
 
 Recorded: 2026-09-15.
-Updated: 2026-10-23.
+Updated: 2026-11-05.
 Status: the architecture MVP, Function-scoped channel management, context selection
-and maintenance, and managed fatal/event recovery are implemented. Actual PCIe/IOMMU
-integration and Function-level reset remain unimplemented. Payload-only retained
-suspension with owner per-channel resume replaces the earlier DSA-like continuation;
-the first Signal/Wait implementation has been withdrawn. The agreed next feature set
-adds copy-engine commands and replaces DMA success responses with ordered completion
-writeback, optional notification and a per-channel error event ring. These additions
-are implemented and model-verified; [copy-engine.md](copy-engine.md) specifies
+and maintenance, and managed fatal/event recovery are implemented in the functional
+model. Actual PCIe/IOMMU integration and Function-level reset remain unimplemented.
+Recoverable command-target page faults retain work for owner per-channel resume,
+replacing the earlier DSA-like continuation; the first Signal/Wait implementation
+has been withdrawn. The implemented copy-engine commands replace DMA success
+responses with ordered completion writeback, optional notification and a per-channel
+error event ring. [copy-engine.md](copy-engine.md) specifies
 exact command, error-event and visibility semantics and records verification.
 HSA remains a semantic reference, not a mandatory AQL migration or conformance goal.
 Generic memory atomics and reset during context maintenance remain implemented.
 This document records decisions and open questions; it is not an execution plan
 or an instruction to start implementation automatically.
 
-The next phase is RTL architecture preparation against the implemented system
+## Project direction and implementation boundaries
+
+Decision, 2026-11-05: position PDMA as **a programmable copy engine for virtualized
+systems**. Retain the PDMA name and existing DMA crate/interface terminology.
+This clarifies the project direction without introducing new commands or moving
+responsibilities between hardware, firmware and platform.
+
+- The Copy Engine core owns physical channels, shared execution, completion,
+  command recovery and reset. Ordinary direct use remains a supported configuration.
+- Firmware owns resource allocation and lifecycle policy. Peripheral hardware
+  enforces work-MMIO permissions and resolves channel/context selectors to the
+  platform-facing memory identity and fault-source tag.
+- The platform supplies trusted Function identity, memory translation/backing,
+  bus transport and interrupt delivery. PCIe endpoint and GPU/SoC integration are
+  target uses, not implemented interconnects or a conformance claim.
+
+The model already covers Function-scoped sharing, Default/PASID context bindings
+and their documented software lifetime obligations. Complete SR-IOV, PCIe FLR,
+ATS/PRI and logical-channel oversubscription remain unimplemented. Virtualization
+must not make the direct configuration depend on firmware or PCIe machinery.
+
+The current phase is DMA-only RTL convergence against the implemented system
 contract. [RTL design inputs](../../../docs/rtl/architecture.md) records the agreed AXI5 master,
 32/64-bit AXI4-Lite slave, three clock domains, configurable geometry and tentative
 22nm/500MHz target. Tool/EDA flows are assumed available for this phase; it does
-not start a toolchain split or add model features. Register commit and transaction
-retirement details still require closure before RTL coding.
+not start a toolchain split or add model features. The register-access slice has
+native tests; execution, IRQ/lifecycle owners and the AXI5 memory endpoint remain
+to be implemented. RTL transaction retirement and reset/drain must be verified at
+their own boundaries. Broader subsystem integration follows DMA RTL convergence.
 
 On 2026-10-29 the first RTL phase was scoped to DMA only. CPU, managed peripherals
 and subsystem integration follow DMA convergence. Existing DMA-maintenance behavior

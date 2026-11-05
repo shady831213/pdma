@@ -1,9 +1,13 @@
-# PDMA RTL 架构设计输入
+# PDMA Copy Engine RTL 架构设计输入
 
 状态：编码前设计草案，2026-10-28。本文区分已经确认的目标、已有体系结构约定和
-尚待评审的微架构选择；不宣称 RTL 已实现或已经满足时序。规范入口仍是
+尚待评审的微架构选择；不宣称完整 Copy Engine RTL 已实现或已经满足时序。规范入口仍是
 [system specification](../../model/modeling/docs/spec.md)。
 涉及寄存器提交协议的变化，必须先同步 contract、Host/Firmware 和 model 测试，不能只改 RTL。
+
+项目定位为面向虚拟化系统的可编程 Copy Engine。当前 RTL 仍只实现 DMA core；
+Function/context 外围、firmware 资源管理与 PCIe/SoC 集成保持既定职责划分，
+不因定位调整而扩大本阶段范围，也不把模型能力描述为已经完成的硬件虚拟化支持。
 
 本轮具体草案：
 

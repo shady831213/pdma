@@ -1,7 +1,8 @@
-# PDMA system specification
+# PDMA Copy Engine system specification
 
-This is the entry point for the active system specification. The specified system
-includes DMA hardware, peripheral hardware and firmware. Host drivers and the
+PDMA is a programmable copy engine for virtualized systems. This is the entry
+point for its active system specification. The specified system includes the
+DMA execution core, peripheral hardware and firmware. Host drivers and the
 integration platform have explicit obligations; firmware is not an unspecified
 external driver. The executable model and its scenarios validate observable
 behavior, not a particular RTL microarchitecture.
@@ -12,6 +13,10 @@ The direct configuration contains DMA alone. The managed configuration adds
 Function access windows, context resolution, management registers and firmware.
 Managed requirements must not change the direct configuration's interfaces.
 PCIe, IOMMU translation, caches and an actual interconnect are integration scope.
+Function/context isolation here assumes the documented trusted-platform identity
+and software lifetime/submission obligations. It does not establish complete
+SR-IOV, PCIe FLR, ATS/PRI or logical-channel oversubscription support. The project
+positioning does not move Function/PASID tables or allocation policy into the DMA core.
 
 | Chapter | Normative subject |
 | --- | --- |

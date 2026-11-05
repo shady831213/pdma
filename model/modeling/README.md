@@ -1,4 +1,11 @@
-# PDMA functional model
+# PDMA Copy Engine functional model
+
+PDMA is a programmable copy engine for virtualized systems. This workspace models
+the shared execution core, its ordinary direct use, and firmware-managed resource
+sharing. Function/context routing belongs to peripheral hardware; firmware owns
+allocation and lifecycle policy; the platform supplies memory and requester identity.
+The [project overview](../../README.md) separates these implemented model capabilities
+from planned PCIe/SoC integration and the partial RTL implementation.
 
 The reusable libraries and their extraction boundaries are documented in
 [reusable libraries](docs/reusable-libraries.md).

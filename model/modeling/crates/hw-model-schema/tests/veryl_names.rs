@@ -16,7 +16,8 @@ fn reserved_package_names_fail_before_emission() -> Result<(), Box<dyn std::erro
     let schema = AnalyzedSchema::opaque("Storage", RecordSpec::new(4, 4, &[]))?;
     let id = schema.view("Storage").ok_or("missing storage")?.id.clone();
     for name in [
-        "package", "module", "function", "input", "u32", "true", "clock", "unsafe",
+        "wire", "_", "__hidden", "package", "module", "function", "input", "u32", "true", "clock",
+        "unsafe",
     ] {
         let mut bytes = Vec::new();
         // When: the target checks its package namespace.

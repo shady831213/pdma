@@ -37,7 +37,7 @@ impl Backend for VerylRegisterBackend {
             .iter()
             .map(|name| {
                 let name = format!("p_{name}");
-                if !super::identifier(&name) {
+                if !super::identifier::is_identifier(&name) {
                     return Err(VerylExportError::Name(name));
                 }
                 Ok(format!("{name}: input u64"))

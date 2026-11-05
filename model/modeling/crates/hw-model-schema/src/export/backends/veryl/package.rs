@@ -1,4 +1,4 @@
-use super::{VerylExportError, identifier};
+use super::{VerylExportError, identifier::is_identifier};
 use crate::export::SymbolScope;
 use std::fmt::Display;
 use std::io::Write;
@@ -19,7 +19,7 @@ impl Package {
         Ok(())
     }
     pub(super) fn declare(&mut self, name: &str) -> Result<(), VerylExportError> {
-        if !identifier(name) || self.symbols.insert(name, ()).is_err() {
+        if !is_identifier(name) || self.symbols.insert(name, ()).is_err() {
             return Err(VerylExportError::Name(name.into()));
         }
         Ok(())

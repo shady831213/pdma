@@ -1,4 +1,5 @@
 //! Veryl layout metadata, without register storage, effects or application policy.
+mod identifier;
 mod package;
 mod record;
 mod register;
@@ -61,103 +62,6 @@ impl Output {
             .unwrap_or_else(|| format!("{name}Layout"))
     }
 }
-fn identifier(value: &str) -> bool {
-    value.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
-        && value.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-        && !KEYWORDS.contains(&value)
-}
-
-// Keyword tokens in Veryl 0.22 parser/veryl.par, revision bacc44532af83058bdaab97dbe66ca1b89976be2.
-const KEYWORDS: &[&str] = &[
-    "alias",
-    "always_comb",
-    "always_ff",
-    "assign",
-    "as",
-    "bind",
-    "bit",
-    "block",
-    "bbool",
-    "lbool",
-    "case",
-    "clock",
-    "clock_posedge",
-    "clock_negedge",
-    "connect",
-    "const",
-    "converse",
-    "default",
-    "else",
-    "embed",
-    "enum",
-    "f32",
-    "f64",
-    "false",
-    "final",
-    "for",
-    "function",
-    "gen",
-    "i8",
-    "i16",
-    "i32",
-    "i64",
-    "if_reset",
-    "if",
-    "import",
-    "include",
-    "initial",
-    "inout",
-    "input",
-    "inside",
-    "inst",
-    "interface",
-    "in",
-    "let",
-    "logic",
-    "lsb",
-    "mixin",
-    "modport",
-    "module",
-    "msb",
-    "output",
-    "outside",
-    "package",
-    "param",
-    "proto",
-    "pub",
-    "repeat",
-    "reset",
-    "reset_async_high",
-    "reset_async_low",
-    "reset_sync_high",
-    "reset_sync_low",
-    "reset_active",
-    "reset_inactive",
-    "return",
-    "rev",
-    "break",
-    "same",
-    "signed",
-    "step",
-    "string",
-    "struct",
-    "switch",
-    "tri",
-    "true",
-    "type",
-    "p8",
-    "p16",
-    "p32",
-    "p64",
-    "u8",
-    "u16",
-    "u32",
-    "u64",
-    "union",
-    "unsafe",
-    "var",
-];
-
 /// Emits record and reusable value layout packages.
 #[derive(Debug, Default)]
 pub struct VerylRecordBackend {
@@ -198,7 +102,8 @@ impl Output {
         unit: &crate::analysis::Unit,
     ) -> Result<OutputMetadata, VerylExportError> {
         let name = self.name(&unit.id, &unit.name);
-        if !identifier(&name) || self.symbols.insert(&name, unit.id.clone()).is_err() {
+        if !identifier::is_identifier(&name) || self.symbols.insert(&name, unit.id.clone()).is_err()
+        {
             return Err(VerylExportError::Name(name));
         }
         Ok(OutputMetadata {

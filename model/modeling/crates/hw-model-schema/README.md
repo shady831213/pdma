@@ -221,8 +221,9 @@ Documentation lines are not separate IR nodes.
   physical storage layout; semantic backends retain the original AST.
 - `export-veryl-layout` enables `VerylRecordBackend` and `VerylRegisterBackend`. Their metadata packages describe
   layout, not register storage, bus behavior or hardware effects. Package aliases
-  use unescaped ASCII identifiers; reserved Veryl keywords are rejected before
-  emission. The generated format is checked with Veryl 0.22.
+  use ASCII letters, digits and underscores, starting with a letter or underscore.
+  Anonymous `_`, names starting with `__`, and Veryl/SystemVerilog keywords are
+  rejected before emission. The generated format is checked with Veryl 0.22.
 - Both features are default-off; custom backends need neither builtin.
 
 Veryl emits direct scalar layout functions (`extent`, member `offset`, `count`

@@ -162,6 +162,10 @@ pub struct ResolvedRegisterMap<I: 'static = u16, F: 'static = u16> {
 
 impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegisterMap<I, F> {
     /// Attaches nested map instances in depth-first declaration order.
+    ///
+    /// Rejects descendants before their supplied ancestors and reentry into a
+    /// completed ancestor subtree. Sibling order remains the caller's declaration
+    /// order, independent of physical offsets; omitted ancestors are not invented.
     pub fn with_placements(
         mut self,
         placements: Vec<ResolvedRegisterMapPlacement<I>>,

@@ -8,6 +8,12 @@ impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegisterMap<I, F> {
         &self,
         nodes: &[ResolvedRegisterMapPlacement<I>],
     ) -> Result<(), RegisterMapError<I, F>> {
+        let mut preceding: Option<&ResolvedRegisterMapPlacement<I>> = None;
+        let order_error = |ancestor: &str, descendant: &str| RegisterMapError::PlacementOrder {
+            root: self.root,
+            path: descendant.to_owned(),
+            ancestor: ancestor.to_owned(),
+        };
         for (index, node) in nodes.iter().enumerate() {
             let failure = |source| RegisterMapError::PlacementGeometry {
                 root: self.root,
@@ -27,9 +33,15 @@ impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegisterMap<I, F> {
                     previous.placement().offset()..placement_end(previous).map_err(failure)?;
                 if let Some(parent) = containing_range(previous, node.path()) {
                     require_containment(parent.map_err(failure)?, &occupied).map_err(failure)?;
+                    if preceding.is_some_and(|last| {
+                        last.path() != previous.path() && !is_child(previous.path(), last.path())
+                    }) {
+                        return Err(order_error(previous.path(), node.path()));
+                    }
                 } else if let Some(parent) = containing_range(node, previous.path()) {
                     require_containment(parent.map_err(failure)?, &previous_range)
                         .map_err(failure)?;
+                    return Err(order_error(node.path(), previous.path()));
                 } else if overlaps(&occupied, &previous_range) {
                     return Err(failure(RegisterBankError::Overlap));
                 }
@@ -46,6 +58,7 @@ impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegisterMap<I, F> {
                     return Err(failure(RegisterBankError::Overlap));
                 }
             }
+            preceding = Some(node);
         }
         Ok(())
     }

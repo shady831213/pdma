@@ -98,6 +98,15 @@ impl<I: fmt::Debug> std::error::Error for RegisterMapValidationError<I> {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RegisterMapError<I = u16, F = u16> {
+    /// A descendant precedes its ancestor or reenters a completed ancestor subtree.
+    PlacementOrder {
+        /// Root map name.
+        root: &'static str,
+        /// Descendant whose position violates depth-first order.
+        path: String,
+        /// Ancestor that must precede and remain contiguous with its descendants.
+        ancestor: String,
+    },
     /// Attached placement metadata disagrees with the resolved layout.
     PlacementGeometry {
         /// Root map name.

@@ -40,7 +40,7 @@ impl register::Backend for Trace {
     fn register_width(
         &mut self,
         width: usize,
-        ctx: register::EmitContext<'_>,
+        ctx: hw_model_schema::traversal::register::Context<'_>,
     ) -> Result<(), Failure> {
         assert!(
             ctx.register()
@@ -52,7 +52,7 @@ impl register::Backend for Trace {
     fn register_alignment(
         &mut self,
         alignment: usize,
-        _: register::EmitContext<'_>,
+        _: hw_model_schema::traversal::register::Context<'_>,
     ) -> Result<(), Failure> {
         self.events.push(format!("register-alignment:{alignment}"));
         Ok(())
@@ -60,7 +60,7 @@ impl register::Backend for Trace {
     fn map_alignment(
         &mut self,
         alignment: usize,
-        _: register::EmitContext<'_>,
+        _: hw_model_schema::traversal::register::Context<'_>,
     ) -> Result<(), Failure> {
         self.events.push(format!("map-alignment:{alignment}"));
         Ok(())
@@ -68,7 +68,7 @@ impl register::Backend for Trace {
     fn register_field<'a>(
         &mut self,
         field: &'a hw_model_schema::BitsFieldSpec<usize>,
-        ctx: register::EmitContext<'a>,
+        ctx: hw_model_schema::traversal::register::Context<'a>,
     ) -> Result<(), Failure> {
         self.events.push(format!("field:{}", field.name()));
         self.emit_all(ctx.children())
@@ -76,7 +76,7 @@ impl register::Backend for Trace {
     fn layout_offset(
         &mut self,
         expression: &LayoutExpr,
-        _: register::EmitContext<'_>,
+        _: hw_model_schema::traversal::register::Context<'_>,
     ) -> Result<(), Failure> {
         assert_eq!(*expression, LayoutExpr::Constant(0));
         self.events.push("offset:0".into());
@@ -85,7 +85,7 @@ impl register::Backend for Trace {
     fn layout_extent(
         &mut self,
         expression: &LayoutExpr,
-        _: register::EmitContext<'_>,
+        _: hw_model_schema::traversal::register::Context<'_>,
     ) -> Result<(), Failure> {
         assert_eq!(*expression, LayoutExpr::Constant(4));
         self.events.push("extent:4".into());
@@ -95,7 +95,7 @@ impl register::Backend for Trace {
 impl value::Backend for Trace {
     type Domain = register::Domain;
     type Error = Failure;
-    type Context<'a> = register::EmitContext<'a>;
+    type Context<'a> = hw_model_schema::traversal::register::Context<'a>;
     fn short_description(
         &mut self,
         text: &str,

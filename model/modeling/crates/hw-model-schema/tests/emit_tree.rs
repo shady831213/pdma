@@ -1,14 +1,14 @@
 //! Whole-node backends own recursive syntax; scopes are immutable per sibling call.
 use hw_model_schema::analysis::{AnalyzedSchema, Bindings};
-use hw_model_schema::analysis::{ConcretePlacement, Placement};
 use hw_model_schema::export::generate;
 use hw_model_schema::export::value::Backend as _;
+use hw_model_schema::traversal::record::Context;
 use hw_model_schema::{
     ast::{self, Field, LayoutExpr, RecordDefinition, RegisterInfo, SchemaSet, record::Node},
     export::{
         Artifact, InMemoryArtifactSink,
         expression::{ExpressionSyntax, format_expression},
-        record::{Backend, EmitContext},
+        record::Backend,
         register, value,
     },
     record_schema, register_map, register_schema,
@@ -33,11 +33,7 @@ impl Recording {
     }
 }
 impl Backend for Recording {
-    fn record<'a>(
-        &mut self,
-        _: &'a RecordDefinition,
-        ctx: EmitContext<'a>,
-    ) -> Result<(), Self::Error> {
+    fn record<'a>(&mut self, _: &'a RecordDefinition, ctx: Context<'a>) -> Result<(), Self::Error> {
         self.push("record:start");
         let mut children: Vec<_> = ctx.children().collect();
         children.sort_by_key(|visit| match visit.node() {
@@ -48,7 +44,7 @@ impl Backend for Recording {
         self.push("record:end");
         Ok(())
     }
-    fn field<'a>(&mut self, field: &'a Field, ctx: EmitContext<'a>) -> Result<(), Self::Error> {
+    fn field<'a>(&mut self, field: &'a Field, ctx: Context<'a>) -> Result<(), Self::Error> {
         assert_eq!(ctx.field().map(Field::name), Some(field.name()));
         assert!(ctx.bit().is_none());
         self.push(format!("field:{}:start", field.name()));
@@ -63,11 +59,11 @@ impl Backend for Recording {
 impl value::Backend for Recording {
     type Domain = hw_model_schema::export::record::Domain;
     type Error = &'static str;
-    type Context<'a> = EmitContext<'a>;
+    type Context<'a> = Context<'a>;
     fn variant(
         &mut self,
         variant: &hw_model_schema::EnumVariantSpec,
-        ctx: EmitContext<'_>,
+        ctx: Context<'_>,
     ) -> Result<(), Self::Error> {
         assert_eq!(ctx.field().map(Field::name), Some("alpha"));
         assert_eq!(ctx.bit(), Some("mode"));
@@ -177,23 +173,19 @@ fn recursive_failure_stops_siblings_and_publishes_no_partial_artifacts() -> Test
 #[derive(Default)]
 struct PlacementScopes(Vec<usize>);
 impl register::Backend for PlacementScopes {
-    fn concrete_placement<'a>(
+    fn register_placement<'a>(
         &mut self,
-        _: ConcretePlacement<'a>,
-        ctx: register::EmitContext<'a>,
+        view: &'a hw_model_schema::analysis::RegisterView,
+        ctx: hw_model_schema::traversal::register::Context<'a>,
     ) -> Result<(), Self::Error> {
         assert!(ctx.register().is_none());
-        let Some(Placement::Concrete(ConcretePlacement::Register { view, .. })) = ctx.placement()
-        else {
-            return Err("expected concrete register");
-        };
         self.0.push(view.offset);
         self.emit_all(ctx.children())
     }
     fn register<'a>(
         &mut self,
         register: &'a RegisterInfo,
-        ctx: register::EmitContext<'a>,
+        ctx: hw_model_schema::traversal::register::Context<'a>,
     ) -> Result<(), Self::Error> {
         assert_eq!(
             ctx.register().map(RegisterInfo::name),
@@ -206,7 +198,7 @@ impl register::Backend for PlacementScopes {
 impl value::Backend for PlacementScopes {
     type Domain = register::Domain;
     type Error = &'static str;
-    type Context<'a> = register::EmitContext<'a>;
+    type Context<'a> = hw_model_schema::traversal::register::Context<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         assert_eq!(self.0, [0, 4]);
         Ok(Vec::new())

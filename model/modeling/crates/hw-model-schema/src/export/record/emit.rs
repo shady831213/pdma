@@ -1,12 +1,13 @@
-use super::{Backend, EmitContext};
+use super::Backend;
 use crate::ast::record::{Attribute, Node};
+use crate::traversal::record::Context;
 /// Dispatches a record node with recursion-local context.
 ///
 /// # Errors
 /// Propagates the target error.
 pub(super) fn emit<'a, B: Backend>(
     node: Node<'a>,
-    ctx: EmitContext<'a>,
+    ctx: Context<'a>,
     backend: &mut B,
 ) -> Result<(), B::Error> {
     let documentation = match node {

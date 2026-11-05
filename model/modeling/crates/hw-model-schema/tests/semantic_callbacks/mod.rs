@@ -4,7 +4,7 @@ use hw_model_schema::export::value::Backend as _;
 struct Documentation(Vec<String>);
 impl hw_model_schema::export::value::Backend for Documentation {
     type Error = std::convert::Infallible;
-    type Context<'a> = hw_model_schema::export::register::EmitContext<'a>;
+    type Context<'a> = hw_model_schema::traversal::register::Context<'a>;
     type Domain = hw_model_schema::export::register::Domain;
     fn expression<'a>(
         &mut self,
@@ -26,7 +26,7 @@ impl hw_model_schema::export::register::Backend for Documentation {
     fn parameter(
         &mut self,
         value: ast::register::Parameter,
-        _: hw_model_schema::export::register::EmitContext<'_>,
+        _: hw_model_schema::traversal::register::Context<'_>,
     ) -> Result<(), Self::Error> {
         self.0.push(format!("parameter:{}", value.name));
         Ok(())
@@ -34,7 +34,7 @@ impl hw_model_schema::export::register::Backend for Documentation {
     fn argument<'a>(
         &mut self,
         value: ast::register::Argument<'a>,
-        ctx: hw_model_schema::export::register::EmitContext<'a>,
+        ctx: hw_model_schema::traversal::register::Context<'a>,
     ) -> Result<(), Self::Error> {
         self.0.push(format!("binding:{:?}", value.parameter));
         self.emit_all(ctx.children())
@@ -71,7 +71,7 @@ impl hw_model_schema::export::register::Backend for Documentation {
     fn layout_stride<'a>(
         &mut self,
         _value: &'a LayoutExpr,
-        ctx: hw_model_schema::export::register::EmitContext<'a>,
+        ctx: hw_model_schema::traversal::register::Context<'a>,
     ) -> Result<(), Self::Error> {
         self.0.push("layout:stride".into());
         self.emit_all(ctx.children())

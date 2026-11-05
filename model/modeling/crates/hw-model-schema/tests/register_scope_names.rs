@@ -95,3 +95,60 @@ fn duplicate_names_within_one_bank_scope_report_the_later_path() {
         })
     );
 }
+
+#[test]
+fn projected_bank_and_register_paths_share_source_segments() {
+    use hw_model_schema::{
+        analysis::{AnalyzedSchema, ViewPathSegment},
+        ast::RegisterLocation,
+        traversal::register::{self, Context, Node},
+    };
+    fn segments(parts: &[ViewPathSegment]) -> Vec<(&str, Option<usize>)> {
+        parts
+            .iter()
+            .map(|part| (part.name.as_str(), part.index))
+            .collect()
+    }
+    fn walk(ctx: &Context<'_>, seen: &mut Vec<RegisterLocation>) {
+        match ctx.node() {
+            Node::Bank(bank) => {
+                assert_eq!(bank.path(), "Device.channel");
+                assert_eq!(segments(bank.segments()), [("channel", None)]);
+            }
+            Node::RegisterPlacement { view, location } => {
+                let index = match location {
+                    RegisterLocation::Template { .. } => None,
+                    RegisterLocation::Instance { instance, .. } => Some(instance),
+                    _ => panic!("expected a bank member"),
+                };
+                assert_eq!(
+                    segments(&view.segments),
+                    [("channel", index), ("control", None)]
+                );
+                let path = index.map_or_else(
+                    || "Device.channel.control".to_owned(),
+                    |index| format!("Device.channel[{index}].control"),
+                );
+                assert_eq!(view.path, path);
+                seen.push(location);
+            }
+            _ => {}
+        }
+        for child in ctx.children() {
+            walk(child.context(), seen);
+        }
+    }
+    const MEMBERS: [RegisterSpec<RegisterId>; 1] =
+        [RegisterSpec::place(RegisterId::First, "control", 0, VALUE)];
+    const BANKS: [RepeatedRegisterBank<RegisterId>; 1] =
+        [RepeatedRegisterBank::new("channel", 16, 2, 8, &MEMBERS)];
+    let resolved = RegisterMapSpec::named("Device", 32, &[], &BANKS)
+        .resolve()
+        .unwrap();
+    let schema = AnalyzedSchema::register_map("unrelated target alias", &resolved).unwrap();
+    let mut seen = Vec::new();
+    for root in register::roots(&schema) {
+        walk(root.context(), &mut seen);
+    }
+    assert_eq!(seen.len(), 3);
+}

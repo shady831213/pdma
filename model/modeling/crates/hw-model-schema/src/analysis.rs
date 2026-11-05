@@ -1,15 +1,17 @@
 //! Target-independent, prepared schemas consumed by all renderers.
-mod instance;
-mod placement;
-pub use placement::{ConcretePlacement, Placement};
 mod complete;
+mod instance;
 mod math;
 mod simplify;
 pub use complete::{CompleteMapLayout, CompletePlacementLayout, Constraint};
 mod input;
 mod layout;
 mod map;
+mod pass;
 mod pipeline;
+pub use pass::{Pass, Pipeline};
+mod stages;
+pub use stages::{LaidOutSchema, LayoutSchema, Resolve, Simplify, Validate, ValidatedSchema};
 /// Resolves graph identities and root selection.
 pub mod resolve;
 
@@ -17,29 +19,10 @@ pub mod resolve;
 pub mod validate;
 use crate::{
     Documentation, ResolvedRecord,
-    ast::{DefinitionId, Node, Reference, ReferenceKind, SchemaSet},
+    ast::{Node, Reference, ReferenceKind, SchemaSet},
 };
 pub use input::{AnalysisError, Bindings};
 pub use map::{BankView, RegisterMapView, RegisterView, ViewPathSegment};
-
-/// Identity of a reusable definition or an explicitly named export view.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum UnitId {
-    /// A Rust schema definition, independent of output naming.
-    Definition(DefinitionId),
-    /// A generator-owned resolved view.
-    View(String),
-}
-impl From<DefinitionId> for UnitId {
-    fn from(id: DefinitionId) -> Self {
-        Self::Definition(id)
-    }
-}
-impl From<&str> for UnitId {
-    fn from(name: &str) -> Self {
-        Self::View(name.into())
-    }
-}
 
 /// One prepared dependency, retaining the original relationship and wire tag.
 #[derive(Debug, Clone)]
@@ -49,7 +32,7 @@ pub struct Dependency {
     /// Relationship to the target definition.
     pub kind: ReferenceKind,
     /// Referenced type identity.
-    pub target: DefinitionId,
+    pub target: crate::traversal::NodeId,
     /// Union wire discriminant, when present.
     pub discriminant: Option<u64>,
 }
@@ -58,7 +41,7 @@ impl From<&Reference> for Dependency {
         Self {
             name: reference.name(),
             kind: reference.kind(),
-            target: reference.target().id(),
+            target: crate::traversal::NodeId::definition(reference.target().id()),
             discriminant: reference.discriminant(),
         }
     }
@@ -92,7 +75,7 @@ pub struct Unit {
     /// Canonical declaration; absent only for a concrete permission projection.
     pub declaration: Option<crate::ast::DefinitionBody>,
     /// Stable identity within a generation request.
-    pub id: UnitId,
+    pub id: crate::traversal::NodeId,
     /// Declared name or explicit view name.
     pub name: String,
     /// Definition documentation.
@@ -115,6 +98,16 @@ pub struct AnalyzedSchema {
     units: Vec<Unit>,
 }
 impl AnalyzedSchema {
+    /// Looks up a reusable root at the Rust frontend identity boundary.
+    pub fn definition(&self, id: crate::ast::DefinitionId) -> Option<&Unit> {
+        let id = crate::traversal::NodeId::definition(id);
+        self.units.iter().find(|unit| unit.id == id)
+    }
+    /// Looks up an explicitly named instance or permission projection root.
+    pub fn view(&self, name: &str) -> Option<&Unit> {
+        let id = crate::traversal::NodeId::view(name);
+        self.units.iter().find(|unit| unit.id == id)
+    }
     /// Iterates analyzed definitions and views in generation order.
     pub fn units(&self) -> impl Iterator<Item = &Unit> {
         self.units.iter()
@@ -141,7 +134,7 @@ impl AnalyzedSchema {
         let mut units = pipeline::prepare_graph(&graph, &Bindings::new())?;
         units.push(Unit {
             declaration: Some(crate::ast::DefinitionBody::Record(record)),
-            id: name.into(),
+            id: crate::traversal::NodeId::view(name),
             name: name.into(),
             documentation: layout.documentation(),
             references,
@@ -157,7 +150,7 @@ impl AnalyzedSchema {
         })?;
         Self::finish(vec![Unit {
             declaration: Some(crate::ast::DefinitionBody::Opaque(spec)),
-            id: name.into(),
+            id: crate::traversal::NodeId::view(name),
             name: name.into(),
             documentation: spec.documentation(),
             references: Vec::new(),

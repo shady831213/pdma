@@ -32,7 +32,13 @@ fn symbolic_layout_retains_child_bindings_and_math_dependencies() {
         ["head", "groups", "tail"]
     );
     let groups = &plan.placements().get(1).expect("groups placement");
-    assert_eq!(groups.child_definition, DefinitionId::of::<Child>());
+    assert_eq!(
+        groups.child_definition,
+        analysis
+            .definition(DefinitionId::of::<Child>())
+            .expect("child definition")
+            .id
+    );
     assert_eq!(groups.arguments, [LayoutExpr::Parameter("n")]);
     assert_eq!(groups.child_alignment, Word::ALIGNMENT);
     for n in [1, 3, 5] {

@@ -1,14 +1,11 @@
 //! A custom register backend using no builtin backend feature.
-use hw_model_schema::analysis::{AnalyzedSchema, Bindings, RegisterMapView, UnitId};
+use hw_model_schema::analysis::{AnalyzedSchema, Bindings, RegisterMapView};
 use hw_model_schema::export::generate;
 use hw_model_schema::export::value::Backend as _;
+use hw_model_schema::traversal::register::Context as RegisterContext;
 use hw_model_schema::{
     ast::{DefinitionId, RegisterInfo, RegisterLocation, SchemaSet},
-    export::{
-        Artifact, InMemoryArtifactSink,
-        register::{Backend, EmitContext},
-        value,
-    },
+    export::{Artifact, InMemoryArtifactSink, register::Backend, value},
     register_map, register_schema,
 };
 use std::{error::Error, fmt::Write};
@@ -21,11 +18,11 @@ register_map! { pub map Channel { alignment: 16, placements: [pub status: Status
 register_map! { pub map Device(n: usize) { alignment: 16, placements: [pub channels: Channel[n]] } }
 
 struct RegisterListing {
-    selected: UnitId,
+    selected: hw_model_schema::traversal::NodeId,
     text: String,
 }
 impl Backend for RegisterListing {
-    fn root(&mut self, ctx: EmitContext<'_>) -> Result<(), Self::Error> {
+    fn root(&mut self, ctx: RegisterContext<'_>) -> Result<(), Self::Error> {
         if ctx.unit().id == self.selected {
             self.emit(ctx.current())?;
         }
@@ -34,7 +31,7 @@ impl Backend for RegisterListing {
     fn register_map<'a>(
         &mut self,
         _: &'a RegisterMapView,
-        ctx: EmitContext<'a>,
+        ctx: RegisterContext<'a>,
     ) -> Result<(), Self::Error> {
         self.text.push_str("path\toffset\tbytes\n");
         self.emit_all(ctx.children())
@@ -42,7 +39,7 @@ impl Backend for RegisterListing {
     fn register(
         &mut self,
         register: &RegisterInfo,
-        ctx: EmitContext<'_>,
+        ctx: RegisterContext<'_>,
     ) -> Result<(), Self::Error> {
         match ctx.register_location() {
             RegisterLocation::Root | RegisterLocation::Template { .. } => return Ok(()),
@@ -67,7 +64,7 @@ impl Backend for RegisterListing {
 impl value::Backend for RegisterListing {
     type Domain = hw_model_schema::export::register::Domain;
     type Error = Box<dyn Error>;
-    type Context<'a> = EmitContext<'a>;
+    type Context<'a> = RegisterContext<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(vec![Artifact {
             logical_name: "registers.tsv".into(),
@@ -83,7 +80,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     bindings.bind::<Device>(&[2]);
     let schema = AnalyzedSchema::from_graph(&selected.resolve()?, &bindings)?;
     let backend = RegisterListing {
-        selected: DefinitionId::of::<Device>().into(),
+        selected: schema
+            .definition(DefinitionId::of::<Device>())
+            .ok_or("missing device")?
+            .id
+            .clone(),
         text: String::new(),
     };
     let mut sink = InMemoryArtifactSink::new();

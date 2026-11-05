@@ -1,5 +1,5 @@
 use super::Node;
-use super::{Backend, EmitContext};
+use super::{Backend, Context};
 use crate::ast::register::{Attribute, LayoutPropertyKind};
 /// Dispatches a register node with recursion-local context.
 ///
@@ -7,14 +7,16 @@ use crate::ast::register::{Attribute, LayoutPropertyKind};
 /// Propagates the target error.
 pub(super) fn emit<'a, B: Backend>(
     node: Node<'a>,
-    ctx: EmitContext<'a>,
+    ctx: Context<'a>,
     backend: &mut B,
 ) -> Result<(), B::Error> {
     super::documentation::emit(node, &ctx, backend)?;
     match node {
         Node::Root(_) => backend.emit_all(ctx.children()),
         Node::MapLayout(v) => backend.map_layout(v, ctx),
-        Node::ConcretePlacement(v) => backend.concrete_placement(v, ctx),
+        Node::Bank(v) => backend.bank(v, ctx),
+        Node::BankProperty(v) => backend.bank_property(v, ctx),
+        Node::RegisterPlacement { view, .. } => backend.register_placement(view, ctx),
         Node::Register(v) => backend.register(v, ctx),
         Node::RegisterMap(v) => backend.register_map(v, ctx),
         Node::Placement(v) => backend.placement(v, ctx),

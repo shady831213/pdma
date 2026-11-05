@@ -1,6 +1,6 @@
 mod scopes;
 use super::CHeaderExportError;
-use crate::analysis::{Unit, UnitId};
+use crate::{analysis::Unit, traversal::NodeId};
 pub(super) use scopes::{GeometryNames, Scope};
 use std::collections::HashMap;
 
@@ -37,25 +37,6 @@ fn push_hex_digit(output: &mut String, digits: &[u8; 16], nibble: u8) {
     if let Some(digit) = digits.get(usize::from(nibble)) {
         output.push(char::from(*digit));
     }
-}
-
-pub(super) fn disambiguate_identifiers(identifiers: Vec<String>) -> Vec<String> {
-    let mut totals = std::collections::BTreeMap::<String, usize>::new();
-    for identifier in &identifiers {
-        *totals.entry(identifier.clone()).or_default() += 1;
-    }
-    let mut occurrences = std::collections::BTreeMap::<String, usize>::new();
-    identifiers
-        .into_iter()
-        .map(|identifier| match totals.get(&identifier) {
-            Some(1) | None => identifier,
-            Some(_) => {
-                let occurrence = occurrences.entry(identifier.clone()).or_default();
-                *occurrence += 1;
-                format!("{identifier}__{occurrence}")
-            }
-        })
-        .collect()
 }
 
 pub(super) fn reject_collisions<'a>(
@@ -114,24 +95,24 @@ pub(super) fn check_record(
 
 #[derive(Debug, Default)]
 pub(super) struct Names {
-    overrides: HashMap<UnitId, String>,
+    overrides: HashMap<NodeId, String>,
     symbols: Scope,
 }
 impl Names {
-    pub(super) fn set(&mut self, source: impl Into<UnitId>, target: &str) {
-        self.overrides.insert(source.into(), target.into());
+    pub(super) fn set(&mut self, source: NodeId, target: &str) {
+        self.overrides.insert(source, target.into());
     }
-    pub(super) fn prefix(&self, source: &UnitId, fallback: &str) -> String {
+    pub(super) fn prefix(&self, source: &NodeId, fallback: &str) -> String {
         c_identifier(self.overrides.get(source).map_or(fallback, String::as_str))
     }
     pub(super) fn unit(
         &mut self,
         definition: &Unit,
     ) -> Result<(String, String), CHeaderExportError> {
-        let (logical_name, path) = match &definition.id {
-            UnitId::Definition(id) => (definition.name.to_ascii_lowercase(), id.path()),
-            UnitId::View(name) => (definition.name.clone(), name.as_str()),
-        };
+        let (logical_name, path) = definition.id.source_path().map_or_else(
+            || (definition.name.clone(), definition.name.as_str()),
+            |path| (definition.name.to_ascii_lowercase(), path),
+        );
         let prefix = self.prefix(&definition.id, &logical_name);
         self.symbols.insert(&prefix, path)?;
         Ok((logical_name, prefix))
@@ -140,7 +121,7 @@ impl Names {
 
 #[cfg(test)]
 mod tests {
-    use super::{c_identifier, disambiguate_identifiers};
+    use super::c_identifier;
 
     #[test]
     fn identifier_is_stable_when_input_contains_special_characters() {
@@ -164,18 +145,6 @@ mod tests {
 
         // Then: every byte has a deterministic portable representation.
         assert_eq!(identifier, "C_QX2DQX2DQX2D");
-    }
-
-    #[test]
-    fn identifiers_keep_declaration_order_when_raw_names_repeat() {
-        // Given: two identical names in one declaration scope.
-        let inputs = vec![c_identifier("same"), c_identifier("same")];
-
-        // When: the identifiers are disambiguated for one declaration scope.
-        let identifiers = disambiguate_identifiers(inputs);
-
-        // Then: each declaration remains readable and unambiguous.
-        assert_eq!(identifiers, ["C_SAME__1", "C_SAME__2"]);
     }
 
     #[test]

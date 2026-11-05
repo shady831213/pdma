@@ -7,24 +7,30 @@ use crate::export::{
 use crate::{BitsFieldSpec, EnumVariantSpec, RecordSpec};
 type CResult<T = ()> = Result<T, CHeaderExportError>;
 
-impl Backend for CRecordBackend {
+impl Backend for CRecordBackend<'_> {
     type Domain = record::Domain;
     type Error = CHeaderExportError;
-    type Context<'a> = record::EmitContext<'a>;
+    type Context<'a> = crate::traversal::record::Context<'a>;
     fn short_description(
         &mut self,
         text: &str,
         owner: DocumentationOwner<'_>,
-        _: Self::Context<'_>,
+        ctx: Self::Context<'_>,
     ) -> CResult {
-        if matches!(
-            owner.kind,
-            DocumentationKind::Record | DocumentationKind::Union | DocumentationKind::Opaque
-        ) {
+        if ctx.field().is_some()
+            || matches!(
+                owner.kind,
+                DocumentationKind::Field
+                    | DocumentationKind::Record
+                    | DocumentationKind::Union
+                    | DocumentationKind::Opaque
+            )
+        {
             return Ok(());
         }
         self.output.comment(owner.name, text)
     }
+
     fn description(
         &mut self,
         text: &str,
@@ -35,22 +41,52 @@ impl Backend for CRecordBackend {
     }
 
     fn bits(&mut self, bits: &BitsDefinition, ctx: Self::Context<'_>) -> CResult {
-        bits_metadata(&mut self.output, &self.prefix, bits)?;
-        self.emit_all(ctx.children())
+        if let Some(field) = ctx.field() {
+            self.emit_all(ctx.children())?;
+            let definition = crate::FieldDefinition::new(bits.scalar())
+                .with_endian(field.endian())
+                .with_width(field.width());
+            self.scalar(
+                &super::analysis::path(&ctx),
+                self.analysis.at(&ctx)?,
+                definition,
+            )
+        } else {
+            bits_metadata(&mut self.output, &self.prefix, bits)?;
+            self.emit_all(ctx.children())
+        }
     }
     fn bit_field(&mut self, field: &BitsFieldSpec, ctx: Self::Context<'_>) -> CResult {
-        bit_metadata(&mut self.output, &self.prefix, field)?;
+        if ctx.field().is_none() {
+            bit_metadata(&mut self.output, &self.prefix, field)?;
+        } else {
+            self.output
+                .documentation(field.name(), field.documentation())?;
+        }
         self.emit_all(ctx.children())
     }
     fn variant(&mut self, variant: &EnumVariantSpec, ctx: Self::Context<'_>) -> CResult {
-        let prefix = value_prefix(&self.prefix, ctx.bit());
+        if ctx.field().is_some() {
+            self.output
+                .documentation(variant.name(), variant.documentation())?;
+        }
+        let prefix = if ctx.field().is_some() {
+            format!(
+                "{}_{}",
+                self.prefix,
+                naming::c_identifier(&super::analysis::path(&ctx))
+            )
+        } else {
+            self.prefix.clone()
+        };
+        let prefix = value_prefix(&prefix, ctx.bit());
         self.output.unsigned::<64>(
             &format!("{prefix}_{}", naming::c_identifier(variant.name())),
             variant.value(),
         )
     }
     fn opaque(&mut self, _: &RecordSpec, ctx: Self::Context<'_>) -> CResult {
-        self.storage(&ctx)
+        self.opaque_storage(&ctx)
     }
     fn finish(self) -> CResult<Vec<Artifact>> {
         Ok(self.artifacts)
@@ -59,26 +95,14 @@ impl Backend for CRecordBackend {
 impl Backend for CRegisterBackend {
     type Domain = register::Domain;
     type Error = CHeaderExportError;
-    type Context<'a> = register::EmitContext<'a>;
+    type Context<'a> = crate::traversal::register::Context<'a>;
     fn short_description(
         &mut self,
         text: &str,
         owner: DocumentationOwner<'_>,
         ctx: Self::Context<'_>,
     ) -> CResult {
-        use crate::{
-            analysis::{ConcretePlacement, Placement},
-            ast::RegisterLocation,
-        };
-        if matches!(
-            ctx.placement(),
-            Some(Placement::Concrete(
-                ConcretePlacement::Register {
-                    location: RegisterLocation::Instance { .. },
-                    ..
-                } | ConcretePlacement::Bank { expanded: true, .. }
-            ))
-        ) {
+        if ctx.repeated_documentation() {
             return Ok(());
         }
         self.output.comment(owner.name, text)
@@ -101,7 +125,7 @@ impl Backend for CRegisterBackend {
     }
     fn variant(&mut self, variant: &EnumVariantSpec, ctx: Self::Context<'_>) -> CResult {
         let prefix = if ctx.register().is_some() {
-            self.register_name(ctx.register_location())?
+            self.register_name(&ctx)?
         } else {
             self.prefix.clone()
         };

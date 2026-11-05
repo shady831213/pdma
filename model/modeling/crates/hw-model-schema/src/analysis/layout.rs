@@ -15,13 +15,13 @@ pub(super) fn run(graph: &SchemaGraph, bindings: &Bindings) -> Result<Vec<Unit>,
         };
         units.push(Unit {
             declaration: Some(definition.body().clone()),
-            id: instance.name().into(),
+            id: crate::traversal::NodeId::view(instance.name()),
             name: instance.name().into(),
             documentation: definition.documentation(),
             references: vec![Dependency {
                 name: "definition",
                 kind: crate::ast::ReferenceKind::Placement,
-                target: definition.id(),
+                target: crate::traversal::NodeId::definition(definition.id()),
                 discriminant: None,
             }],
             body: Layout::Map(MapLayout {
@@ -78,7 +78,7 @@ fn prepare_definition(
     };
     Ok(Unit {
         declaration: Some(definition.body().clone()),
-        id: definition.id().into(),
+        id: crate::traversal::NodeId::definition(definition.id()),
         name: definition.name().into(),
         documentation: definition.documentation(),
         body,

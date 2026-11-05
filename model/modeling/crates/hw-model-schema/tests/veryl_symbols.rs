@@ -45,8 +45,22 @@ fn package_alias_collision_rejects_all_artifacts() -> Result<(), Box<dyn std::er
     set.add::<Status>();
     let prepared = AnalyzedSchema::from_graph(&set.resolve()?, &Bindings::default())?;
     let renderer = VerylRegisterBackend::new()
-        .with_name(DefinitionId::of::<Flags>(), "Shared")
-        .with_name(DefinitionId::of::<Status>(), "Shared");
+        .with_name(
+            prepared
+                .definition(DefinitionId::of::<Flags>())
+                .ok_or("missing definition")?
+                .id
+                .clone(),
+            "Shared",
+        )
+        .with_name(
+            prepared
+                .definition(DefinitionId::of::<Status>())
+                .ok_or("missing definition")?
+                .id
+                .clone(),
+            "Shared",
+        );
     let mut sink = InMemoryArtifactSink::new();
     // When: common generation renders the complete request.
     let result = generate(&prepared, renderer, &mut sink);

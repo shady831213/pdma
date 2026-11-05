@@ -32,14 +32,16 @@ pub struct RegisterView {
 pub struct BankView {
     /// Source path.
     pub path: String,
+    /// Structural path excluding the root, including enclosing bank indices.
+    pub segments: Vec<ViewPathSegment>,
     /// Placement name.
     pub name: &'static str,
-    /// First instance offset.
-    pub base: usize,
-    /// Number of instances.
-    pub count: usize,
-    /// Instance spacing.
-    pub stride: usize,
+    /// Closed first-instance address expression.
+    pub base: crate::ast::LayoutExpr,
+    /// Closed instance-count expression.
+    pub count: crate::ast::LayoutExpr,
+    /// Closed instance-spacing expression.
+    pub stride: crate::ast::LayoutExpr,
     /// Enclosing bank position and instance, when nested.
     pub parent: Option<(usize, usize)>,
     /// Placement documentation.
@@ -77,7 +79,7 @@ impl AnalyzedSchema {
     ) -> Result<Self, super::AnalysisError> {
         Self::finish(vec![Unit {
             declaration: None,
-            id: name.into(),
+            id: crate::traversal::NodeId::view(name),
             name: name.into(),
             documentation: map.documentation(),
             references: Vec::new(),
@@ -114,10 +116,11 @@ impl RegisterMapView {
             .iter()
             .map(|bank| BankView {
                 path: bank.path().into(),
+                segments: view_segments(bank.path(), map.root()),
                 name: bank.name(),
-                base: bank.base(),
-                count: bank.count(),
-                stride: bank.stride(),
+                base: crate::ast::LayoutExpr::Constant(bank.base()),
+                count: crate::ast::LayoutExpr::Constant(bank.count()),
+                stride: crate::ast::LayoutExpr::Constant(bank.stride()),
                 parent: map
                     .enclosing_banks(bank.path())
                     .next_back()
@@ -127,11 +130,14 @@ impl RegisterMapView {
                     .registers()
                     .iter()
                     .map(|register| RegisterView {
-                        path: register.name().into(),
-                        segments: vec![ViewPathSegment {
-                            name: register.name().into(),
-                            index: None,
-                        }],
+                        path: format!("{}.{}", bank.path(), register.name()),
+                        segments: view_segments(bank.path(), map.root())
+                            .into_iter()
+                            .chain([ViewPathSegment {
+                                name: register.name().into(),
+                                index: None,
+                            }])
+                            .collect(),
                         name: register.name(),
                         offset: register.offset(),
                         documentation: register.documentation(),
@@ -180,28 +186,34 @@ fn register_view<I: Copy, F: Copy + Eq + core::fmt::Debug>(
 ) -> RegisterView {
     RegisterView {
         path: register.path().into(),
-        segments: register
-            .path()
-            .strip_prefix(root)
-            .unwrap_or_else(|| register.path())
-            .trim_start_matches('.')
-            .split('.')
-            .map(
-                |part| match part.strip_suffix(']').and_then(|s| s.rsplit_once('[')) {
-                    Some((name, index)) if index.parse::<usize>().is_ok() => ViewPathSegment {
-                        name: name.into(),
-                        index: index.parse().ok(),
-                    },
-                    _ => ViewPathSegment {
-                        name: part.into(),
-                        index: None,
-                    },
-                },
-            )
-            .collect(),
+        segments: view_segments(register.path(), root),
         name: register.name(),
         offset: register.offset(),
         documentation: register.documentation(),
         register: RegisterInfo::from_spec(register.definition()),
     }
+}
+
+fn view_segments(path: &str, root: &str) -> Vec<ViewPathSegment> {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .trim_start_matches('.')
+        .split('.')
+        .map(|part| {
+            match part
+                .strip_suffix(']')
+                .and_then(|s| s.rsplit_once('['))
+                .and_then(|(name, index)| index.parse().ok().map(|index| (name, index)))
+            {
+                Some((name, index)) => ViewPathSegment {
+                    name: name.into(),
+                    index: Some(index),
+                },
+                None => ViewPathSegment {
+                    name: part.into(),
+                    index: None,
+                },
+            }
+        })
+        .collect()
 }

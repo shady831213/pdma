@@ -1,14 +1,15 @@
 //! Independent record-domain export callbacks over completed semantics.
 mod backend;
-mod context;
 mod emit;
 pub use backend::Backend;
-pub use context::EmitContext;
 /// Record source domain for a target's shared value callbacks.
 #[derive(Debug)]
 pub struct Domain;
 impl<B: Backend> super::Domain<B> for Domain {
-    fn emit(visit: super::value::Visit<B::Context<'_>>, backend: &mut B) -> Result<(), B::Error> {
+    fn emit(
+        visit: crate::traversal::Visit<B::Context<'_>>,
+        backend: &mut B,
+    ) -> Result<(), B::Error> {
         let ctx = visit.into_context();
         emit::emit(ctx.node(), ctx, backend)
     }
@@ -31,17 +32,13 @@ impl<B: Backend> super::Domain<B> for Domain {
     }
     fn roots(
         schema: &crate::analysis::AnalyzedSchema,
-    ) -> impl Iterator<Item = super::value::Visit<B::Context<'_>>> {
-        schema.units().filter_map(|unit| {
-            let node = match unit.declaration.as_ref()?.node() {
-                crate::ast::Node::Record(v) => v,
-                crate::ast::Node::Value(v) => crate::ast::record::Node::Value(v),
-                crate::ast::Node::Register(_) => return None,
-            };
-            Some(EmitContext::root(schema, unit, node).current())
-        })
+    ) -> impl Iterator<Item = crate::traversal::Visit<B::Context<'_>>> {
+        crate::traversal::record::roots(schema)
     }
-    fn root(visit: super::value::Visit<B::Context<'_>>, backend: &mut B) -> Result<(), B::Error> {
+    fn root(
+        visit: crate::traversal::Visit<B::Context<'_>>,
+        backend: &mut B,
+    ) -> Result<(), B::Error> {
         backend.root(visit.into_context())
     }
 }

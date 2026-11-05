@@ -1,10 +1,10 @@
-use super::{Backend, EmitContext, Node};
-use crate::analysis::{ConcretePlacement, Layout, Placement};
+use super::{Backend, Context, Node};
+use crate::analysis::Layout;
 use crate::export::value::{DocumentationKind as Kind, DocumentationOwner, emit_documentation};
 
 pub(super) fn emit<B: Backend>(
     node: Node<'_>,
-    ctx: &EmitContext<'_>,
+    ctx: &Context<'_>,
     backend: &mut B,
 ) -> Result<(), B::Error> {
     let docs = match node {
@@ -20,10 +20,11 @@ pub(super) fn emit<B: Backend>(
                 | crate::ast::DefinitionBody::Opaque(_),
             ) => None,
         },
-        Node::Register(v) => match ctx.placement() {
-            Some(Placement::Concrete(ConcretePlacement::Register { .. })) => None,
-            Some(Placement::Symbolic(_) | Placement::Concrete(ConcretePlacement::Bank { .. }))
-            | None => Some((v.documentation(), v.name(), Kind::Register)),
+        Node::Register(v) => match ctx.register_location() {
+            crate::ast::RegisterLocation::Root => {
+                Some((v.documentation(), v.name(), Kind::Register))
+            }
+            _ => None,
         },
         Node::RegisterField(v) => Some((v.documentation(), v.name(), Kind::BitField)),
         Node::Placement(v) => match &ctx.unit().body {
@@ -32,12 +33,10 @@ pub(super) fn emit<B: Backend>(
                 Some((v.documentation, v.reference.name(), Kind::Placement))
             }
         },
-        Node::ConcretePlacement(ConcretePlacement::Register { view, .. }) => {
+        Node::RegisterPlacement { view, .. } => {
             Some((view.documentation, view.name, Kind::Placement))
         }
-        Node::ConcretePlacement(ConcretePlacement::Bank { view, .. }) => {
-            Some((view.documentation, view.name, Kind::Placement))
-        }
+        Node::Bank(bank) => Some((bank.documentation(), bank.name(), Kind::Placement)),
         Node::RegisterMap(map) => {
             for (name, documentation) in &map.groups {
                 emit_documentation(
@@ -52,7 +51,8 @@ pub(super) fn emit<B: Backend>(
             }
             None
         }
-        Node::MapLayout(_)
+        Node::BankProperty(_)
+        | Node::MapLayout(_)
         | Node::Parameter(_)
         | Node::Argument(_)
         | Node::Attribute(_)

@@ -1,5 +1,4 @@
 use super::super::{CHeaderExportError, CRegisterBackend, fragment::Fragment};
-use crate::analysis::BankView;
 use crate::{Access, ResetKind};
 
 pub(in super::super) fn register_access(
@@ -36,21 +35,6 @@ pub(in super::super) fn register_reset(
         format_args!("{prefix}_RESET_{kind}"),
     )?;
     output.unsigned::<64>(&format!("{name}_RESET_VALUE"), value)
-}
-
-pub(super) fn bank_metadata(
-    output: &mut Fragment,
-    name: &str,
-    bank: &BankView,
-) -> Result<(), CHeaderExportError> {
-    output.constants::<64>(
-        name,
-        &[
-            ("BASE", bank.base),
-            ("COUNT", bank.count),
-            ("STRIDE", bank.stride),
-        ],
-    )
 }
 
 impl CRegisterBackend {

@@ -9,11 +9,19 @@ record_schema! { #[short_description = "summary"] #[description = "first\nsecond
 #[derive(Default)]
 struct Recorder(Vec<String>);
 impl record::Backend for Recorder {
-    fn record_size(&mut self, size: usize, _: record::EmitContext<'_>) -> Result<(), Self::Error> {
+    fn record_size(
+        &mut self,
+        size: usize,
+        _: hw_model_schema::traversal::record::Context<'_>,
+    ) -> Result<(), Self::Error> {
         self.0.push(format!("size:record:{size}"));
         Ok(())
     }
-    fn field_size(&mut self, size: usize, ctx: record::EmitContext<'_>) -> Result<(), Self::Error> {
+    fn field_size(
+        &mut self,
+        size: usize,
+        ctx: hw_model_schema::traversal::record::Context<'_>,
+    ) -> Result<(), Self::Error> {
         self.0.push(format!(
             "size:{}:{size}",
             ctx.field().ok_or("missing field owner")?.name()
@@ -24,7 +32,7 @@ impl record::Backend for Recorder {
 impl value::Backend for Recorder {
     type Domain = record::Domain;
     type Error = &'static str;
-    type Context<'a> = record::EmitContext<'a>;
+    type Context<'a> = hw_model_schema::traversal::record::Context<'a>;
     fn short_description(
         &mut self,
         text: &str,

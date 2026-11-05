@@ -13,7 +13,7 @@ impl CompleteMapLayout {
             .map(|p| {
                 Ok(PlacementGeometry {
                     name: p.reference.name(),
-                    definition: p.child_definition,
+                    definition: p.reference.target().id(),
                     arguments: p.arguments.iter().map(eval).collect::<Result<_, _>>()?,
                     offset: eval(&p.offset)?,
                     count: eval(&p.count)?,

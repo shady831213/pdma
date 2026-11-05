@@ -3,8 +3,8 @@ mod package;
 mod record;
 mod register;
 mod values;
-use crate::analysis::UnitId;
 use crate::export::{Artifact, SymbolScope};
+use crate::traversal::NodeId;
 use std::collections::HashMap;
 
 /// Unsupported or ambiguous target-language layout metadata.
@@ -49,13 +49,13 @@ impl From<std::fmt::Error> for VerylExportError {
 /// Target package storage shared by the independent domain renderers.
 #[derive(Debug, Default)]
 struct Output {
-    names: HashMap<UnitId, String>,
-    symbols: SymbolScope<UnitId>,
+    names: HashMap<NodeId, String>,
+    symbols: SymbolScope<NodeId>,
     artifacts: Vec<Artifact>,
     package: package::Package,
 }
 impl Output {
-    fn name(&self, id: &UnitId, name: &str) -> String {
+    fn name(&self, id: &NodeId, name: &str) -> String {
         self.names
             .get(id)
             .cloned()
@@ -79,8 +79,8 @@ impl VerylRecordBackend {
     }
     /// Overrides one package name.
     #[must_use]
-    pub fn with_name(mut self, definition: impl Into<UnitId>, name: &str) -> Self {
-        self.output.names.insert(definition.into(), name.into());
+    pub fn with_name(mut self, definition: NodeId, name: &str) -> Self {
+        self.output.names.insert(definition, name.into());
         self
     }
 }
@@ -96,8 +96,8 @@ impl VerylRegisterBackend {
     }
     /// Overrides one package name.
     #[must_use]
-    pub fn with_name(mut self, definition: impl Into<UnitId>, name: &str) -> Self {
-        self.output.names.insert(definition.into(), name.into());
+    pub fn with_name(mut self, definition: NodeId, name: &str) -> Self {
+        self.output.names.insert(definition, name.into());
         self
     }
 }

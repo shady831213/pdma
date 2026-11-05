@@ -52,11 +52,23 @@ register_map! {
 fn long_rust_paths_export_when_actual_c_symbols_are_distinct() -> TestResult {
     // Given: repeated nesting whose Rust paths share more than 63 encoded bytes.
     let resolved = DeeplyNestedDeviceRegisterInterface::resolve()?;
-    // When: rendering the generated map's short, disambiguated register symbols.
+    // When: rendering complete structural paths with deterministic C stem abbreviation.
     let artifact = render_map("deep.h", "deep", &resolved)?;
+    let subset = resolved.project_access(|register| {
+        (register.offset() == 44).then_some(hw_model_schema::Access::ReadOnly)
+    })?;
+    let projected = render_map("deep-subset.h", "deep", &subset)?;
+    let declaration = "C_DEEP_C_CHANNELSQSWIT_B3B1D0CC33E9931B_OFFSET UINT64_C(44)";
+    assert!(std::str::from_utf8(&artifact.contents)?.contains(declaration));
+    assert!(std::str::from_utf8(&projected.contents)?.contains(declaration));
+    compile_fragments(
+        "deep-subset",
+        &[&projected.contents],
+        b"int main(void) { return C_DEEP_C_CHANNELSQSWIT_B3B1D0CC33E9931B_OFFSET != 44; }\n",
+    )?;
     // Then: the actual symbols compile and expose the final repeated register.
     compile_fragments("deep-map", &[&artifact.contents],
-        b"_Static_assert(C_DEEP_C_QUSQUTQUAQUTQUUQUS__12_OFFSET == 44, \"last register\");\nint main(void) { return C_DEEP_SIZE != 48; }\n")?;
+        b"_Static_assert(C_DEEP_C_CHANNELSQSWIT_B3B1D0CC33E9931B_OFFSET == 44, \"last register\");\nint main(void) { return C_DEEP_SIZE != 48; }\n")?;
     Ok(())
 }
 
@@ -68,9 +80,13 @@ fn long_actual_c_prefix_collisions_are_rejected_before_emission() -> TestResult 
     let exporter = ("long.h", "a".repeat(64));
     let mut sink = InMemoryArtifactSink::new();
     // When: rendering symbols whose distinguishing suffix lies beyond that length.
+    let schema = AnalyzedSchema::register_map(exporter.0, &resolved)?;
     let result = generate(
-        &AnalyzedSchema::register_map(exporter.0, &resolved)?,
-        CRegisterBackend::new().with_name(exporter.0, exporter.1.as_ref()),
+        &schema,
+        CRegisterBackend::new().with_name(
+            schema.view(exporter.0).ok_or("missing view")?.id.clone(),
+            exporter.1.as_ref(),
+        ),
         &mut sink,
     );
     // Then: no artifact is emitted and the collision remains a typed error.

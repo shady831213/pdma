@@ -55,6 +55,7 @@ impl RegisterMapView {
             &Scope {
                 base: 0,
                 path: name.into(),
+                segments: Vec::new(),
                 parent: None,
             },
         )?;
@@ -72,6 +73,7 @@ impl RegisterMapView {
 struct Scope {
     base: usize,
     path: String,
+    segments: Vec<ViewPathSegment>,
     parent: Option<(usize, usize)>,
 }
 struct InstanceWalk {
@@ -122,10 +124,19 @@ impl InstanceWalk {
                     .collect::<Result<Vec<_>, LayoutError>>()?;
                 self.banks.push(BankView {
                     path: path.clone(),
+                    segments: scope
+                        .segments
+                        .iter()
+                        .cloned()
+                        .chain([ViewPathSegment {
+                            name: shape.name.into(),
+                            index: None,
+                        }])
+                        .collect(),
                     name: shape.name,
-                    base,
-                    count: shape.count,
-                    stride: shape.stride,
+                    base: crate::ast::LayoutExpr::Constant(base),
+                    count: crate::ast::LayoutExpr::Constant(shape.count),
+                    stride: crate::ast::LayoutExpr::Constant(shape.stride),
                     parent: scope.parent,
                     documentation: placement.documentation(),
                     registers,
@@ -149,6 +160,15 @@ impl InstanceWalk {
                             base: offset,
                             path: bank_index
                                 .map_or_else(|| path.clone(), |_| format!("{path}[{i}]")),
+                            segments: scope
+                                .segments
+                                .iter()
+                                .cloned()
+                                .chain([ViewPathSegment {
+                                    name: shape.name.into(),
+                                    index: bank_index.map(|_| i),
+                                }])
+                                .collect(),
                             parent: bank_index.map(|bank| (bank, i)).or(scope.parent),
                         },
                     )?;

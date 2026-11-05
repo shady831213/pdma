@@ -77,11 +77,13 @@ fn record_export_preserves_independent_non_clone_sink_error() -> super::support:
     let schema = super::support::RECORD;
     // When/Then: rejecting storage receives one artifact and returns its exact typed cause.
     retains_storage_error(|sink| {
-        generate(
+        hw_model_schema::analysis::Pipeline::new((
             &AnalyzedSchema::opaque("record", schema).unwrap(),
-            CRecordBackend::new(),
-            sink,
-        )
+            (),
+        ))
+        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)
+        .unwrap()
+        .generate(CRecordBackend::new, sink)
     })
 }
 
@@ -109,10 +111,12 @@ fn graph_export_preserves_independent_non_clone_sink_error() -> super::support::
 
     // When/Then: graph export returns the original sink failure after one attempt.
     retains_storage_error(|sink| {
-        generate(
+        hw_model_schema::analysis::Pipeline::new((
             &AnalyzedSchema::from_graph(&graph, &Bindings::new()).unwrap(),
-            CRecordBackend::new(),
-            sink,
-        )
+            (),
+        ))
+        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)
+        .unwrap()
+        .generate(CRecordBackend::new, sink)
     })
 }

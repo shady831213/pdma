@@ -1,41 +1,39 @@
 //! Independent register-domain export callbacks over completed semantics.
 mod backend;
-mod context;
 mod documentation;
 mod emit;
-mod node;
+use crate::traversal::register::{Bank, BankProperty, Context, LayoutProperty, Node};
 pub use backend::Backend;
-pub use context::{EmitContext, LayoutProperty, LayoutPropertyKind, RegisterSite};
-pub use node::Node;
 /// Register source domain for a target's shared value callbacks.
 #[derive(Debug)]
 pub struct Domain;
 impl<B: Backend> super::Domain<B> for Domain {
-    fn emit(visit: super::value::Visit<B::Context<'_>>, backend: &mut B) -> Result<(), B::Error> {
+    fn emit(
+        visit: crate::traversal::Visit<B::Context<'_>>,
+        backend: &mut B,
+    ) -> Result<(), B::Error> {
         let ctx = visit.into_context();
         emit::emit(ctx.node(), ctx, backend)
     }
     fn validate(unit: &crate::analysis::Unit) -> Result<(), crate::analysis::AnalysisError> {
-        if matches!(
-            unit.declaration,
-            Some(crate::ast::DefinitionBody::Record(_) | crate::ast::DefinitionBody::Union(_))
-        ) {
+        if crate::traversal::register::supports(unit) {
+            Ok(())
+        } else {
             Err(crate::analysis::AnalysisError::Domain {
                 name: unit.name.clone(),
                 domain: "register",
             })
-        } else {
-            Ok(())
         }
     }
     fn roots(
         schema: &crate::analysis::AnalyzedSchema,
-    ) -> impl Iterator<Item = super::value::Visit<B::Context<'_>>> {
-        schema
-            .units()
-            .map(|unit| EmitContext::root(schema, unit, Node::Root(unit)).current())
+    ) -> impl Iterator<Item = crate::traversal::Visit<B::Context<'_>>> {
+        crate::traversal::register::roots(schema)
     }
-    fn root(visit: super::value::Visit<B::Context<'_>>, backend: &mut B) -> Result<(), B::Error> {
+    fn root(
+        visit: crate::traversal::Visit<B::Context<'_>>,
+        backend: &mut B,
+    ) -> Result<(), B::Error> {
         backend.root(visit.into_context())
     }
 }

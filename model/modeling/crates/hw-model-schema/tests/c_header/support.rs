@@ -1,4 +1,5 @@
-use hw_model_schema::analysis::AnalyzedSchema;
+use hw_model_schema::analysis::{AnalyzedSchema, Bindings, Pipeline};
+use hw_model_schema::ast::{DefinitionId, DescribeSchema, SchemaSet};
 use std::{
     error::Error,
     fs, io,
@@ -6,8 +7,10 @@ use std::{
     process::{Command, Output},
 };
 
-use hw_model_schema::export::backends::c_header::{CRecordBackend, CRegisterBackend};
-use hw_model_schema::export::{InMemoryArtifactSink, generate};
+use hw_model_schema::export::backends::c_header::{
+    CRecordAnalysisPass, CRecordBackend, CRegisterBackend,
+};
+use hw_model_schema::export::{Artifact, InMemoryArtifactSink, generate};
 use hw_model_schema::{Endian, FieldSpec, RecordSpec, ScalarKind};
 
 pub type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -36,12 +39,38 @@ pub fn render_record(
     schema: &hw_model_schema::RecordSpec,
 ) -> TestResult<hw_model_schema::export::Artifact> {
     let mut sink = InMemoryArtifactSink::new();
-    generate(
-        &AnalyzedSchema::opaque(name, *schema)?,
-        CRecordBackend::new().with_name(name, prefix),
+    let schema = AnalyzedSchema::opaque(name, *schema)?;
+    let id = schema.view(name).ok_or("missing view")?.id.clone();
+    hw_model_schema::analysis::Pipeline::new((&schema, ()))
+        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?
+        .generate(
+            |data| CRecordBackend::new(data).with_name(id, prefix),
+            &mut sink,
+        )?;
+    one_artifact(sink)
+}
+
+/// Renders one source record root with its explicit C preparation pass.
+pub fn source<T: DescribeSchema + 'static>(prefix: &str) -> TestResult<Artifact> {
+    let mut set = SchemaSet::new();
+    set.add::<T>();
+    let graph = set.resolve()?;
+    let schema = AnalyzedSchema::from_graph(&graph, &Bindings::new())?;
+    let preparation = Pipeline::new((&schema, ())).run(CRecordAnalysisPass)?;
+    let id = schema
+        .definition(DefinitionId::of::<T>())
+        .ok_or("missing definition")?
+        .id
+        .clone();
+    let mut sink = InMemoryArtifactSink::new();
+    preparation.generate(
+        |data| CRecordBackend::new(data).with_name(id, prefix),
         &mut sink,
     )?;
-    one_artifact(sink)
+    sink.into_artifacts()
+        .into_iter()
+        .last()
+        .ok_or_else(|| "missing artifact".into())
 }
 
 pub fn render_map<I: Copy + Eq, F: Copy + Eq + core::fmt::Debug>(
@@ -50,9 +79,11 @@ pub fn render_map<I: Copy + Eq, F: Copy + Eq + core::fmt::Debug>(
     schema: &hw_model_schema::ResolvedRegisterMap<I, F>,
 ) -> TestResult<hw_model_schema::export::Artifact> {
     let mut sink = InMemoryArtifactSink::new();
+    let schema = AnalyzedSchema::register_map(name, schema)?;
     generate(
-        &AnalyzedSchema::register_map(name, schema)?,
-        CRegisterBackend::new().with_name(name, prefix),
+        &schema,
+        CRegisterBackend::new()
+            .with_name(schema.view(name).ok_or("missing view")?.id.clone(), prefix),
         &mut sink,
     )?;
     one_artifact(sink)
@@ -89,6 +120,21 @@ pub fn compile_fragments(label: &str, fragments: &[&[u8]], main: &[u8]) -> TestR
     assert_success("C compiler", &compile);
     let run = Command::new(&binary).output()?;
     assert_success("compiled wrapper", &run);
+    if let Some(directory) = std::env::var_os("SCHEMA_C_EVIDENCE_DIR") {
+        let directory = PathBuf::from(directory).join(label);
+        fs::create_dir_all(&directory)?;
+        fs::copy(&source, directory.join("wrapper.c"))?;
+        fs::copy(&binary, directory.join("wrapper"))?;
+        fs::write(
+            directory.join("result.txt"),
+            format!(
+                "cc {} wrapper.c -o wrapper\ncompile={}\nrun={}\n",
+                STRICT_C11_FLAGS.join(" "),
+                compile.status,
+                run.status
+            ),
+        )?;
+    }
     Ok(())
 }
 

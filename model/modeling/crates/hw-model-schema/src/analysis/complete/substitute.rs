@@ -83,7 +83,7 @@ impl CompleteMapLayout {
             };
             let complete = CompletePlacementLayout {
                 reference: placement.reference.clone(),
-                child_definition: placement.child_definition,
+                child_definition: crate::traversal::NodeId::definition(placement.child_definition),
                 child_name: placement.child_name,
                 bank: placement.bank,
                 documentation: placement.documentation,

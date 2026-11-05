@@ -1,12 +1,9 @@
 //! Common preparation binds layouts and owns rendering order.
-use hw_model_schema::analysis::{AnalyzedSchema, Bindings, Layout, UnitId};
+use hw_model_schema::analysis::{AnalyzedSchema, Bindings, Layout};
 use hw_model_schema::export::generate;
+use hw_model_schema::traversal::register::Context as RegisterContext;
 use hw_model_schema::{
-    export::{
-        Artifact, InMemoryArtifactSink,
-        register::{Backend, EmitContext},
-        value,
-    },
+    export::{Artifact, InMemoryArtifactSink, register::Backend, value},
     register_map, register_schema,
 };
 register_schema! { pub register Word {width:4,endian:Little,access:ReadWrite,reset:Zero(0),writable_mask:0xffff_ffff,fields:{}} }
@@ -90,18 +87,16 @@ fn named_instances_survive_preparation_with_independent_geometry()
     // Then: both named instances retain their concrete extent.
     let instances = schema
         .units()
-        .filter_map(|d| match (&d.id, &d.body) {
-            (UnitId::View(name), Layout::Map(map)) => {
-                Some((name.as_str(), map.instance.as_ref().map(|i| i.extent)))
-            }
-            _ => None,
+        .filter_map(|d| match (d.id.view_name(), &d.body) {
+            (Some(name), Layout::Map(map)) => Some((name, map.instance.as_ref().map(|i| i.extent))),
+            (None, _) | (Some(_), Layout::None | Layout::Record(_)) => None,
         })
         .collect::<Vec<_>>();
     assert_eq!(instances, [("large", Some(36)), ("small", Some(4))]);
     Ok(())
 }
 impl Backend for FailsAfterOne {
-    fn root(&mut self, _: EmitContext<'_>) -> Result<(), Self::Error> {
+    fn root(&mut self, _: RegisterContext<'_>) -> Result<(), Self::Error> {
         self.0 += 1;
         if self.0 == 2 {
             Err("render failure")
@@ -113,7 +108,7 @@ impl Backend for FailsAfterOne {
 impl value::Backend for FailsAfterOne {
     type Domain = hw_model_schema::export::register::Domain;
     type Error = &'static str;
-    type Context<'a> = EmitContext<'a>;
+    type Context<'a> = RegisterContext<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(Vec::new())
     }
@@ -140,7 +135,7 @@ fn rendering_failure_never_reaches_the_sink() -> Result<(), Box<dyn std::error::
 
 struct CountCallbacks<'a>(&'a std::cell::Cell<usize>);
 impl Backend for CountCallbacks<'_> {
-    fn root(&mut self, _: EmitContext<'_>) -> Result<(), Self::Error> {
+    fn root(&mut self, _: RegisterContext<'_>) -> Result<(), Self::Error> {
         self.0.set(self.0.get() + 1);
         Ok(())
     }
@@ -148,7 +143,7 @@ impl Backend for CountCallbacks<'_> {
 impl value::Backend for CountCallbacks<'_> {
     type Domain = hw_model_schema::export::register::Domain;
     type Error = core::convert::Infallible;
-    type Context<'a> = EmitContext<'a>;
+    type Context<'a> = RegisterContext<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(Vec::new())
     }

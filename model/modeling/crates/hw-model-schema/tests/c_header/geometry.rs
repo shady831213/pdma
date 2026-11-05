@@ -26,8 +26,22 @@ fn common_preparation_renders_symbolic_and_bound_nested_geometry_as_strict_c11()
     for (label, bindings) in [("symbolic", Bindings::new()), ("bound", bound)] {
         let prepared = AnalyzedSchema::from_graph(&graph, &bindings)?;
         let renderer = CRegisterBackend::new()
-            .with_name(DefinitionId::of::<Parent>(), "root")
-            .with_name(DefinitionId::of::<Child>(), "leaf");
+            .with_name(
+                prepared
+                    .definition(DefinitionId::of::<Parent>())
+                    .ok_or("missing definition")?
+                    .id
+                    .clone(),
+                "root",
+            )
+            .with_name(
+                prepared
+                    .definition(DefinitionId::of::<Child>())
+                    .ok_or("missing definition")?
+                    .id
+                    .clone(),
+                "leaf",
+            );
         let mut sink = InMemoryArtifactSink::new();
 
         // When: generation visits prepared definitions and C only renders their formulas.
@@ -56,7 +70,14 @@ fn symbolic_geometry_rejects_aliasing_type_and_function_names() -> super::suppor
     selected.add::<Parent>();
     let prepared = AnalyzedSchema::from_graph(&selected.resolve()?, &Bindings::new())?;
     let prefix = "a".repeat(64);
-    let renderer = CRegisterBackend::new().with_name(DefinitionId::of::<Parent>(), &prefix);
+    let renderer = CRegisterBackend::new().with_name(
+        prepared
+            .definition(DefinitionId::of::<Parent>())
+            .ok_or("missing definition")?
+            .id
+            .clone(),
+        &prefix,
+    );
     let mut sink = InMemoryArtifactSink::new();
 
     // When: its geometry type and function would alias in the ordinary C namespace.
@@ -89,8 +110,22 @@ fn empty_parameterized_maps_compile_and_preserve_implicit_and_explicit_extents()
     selected.add::<EmptyExplicit>();
     let prepared = AnalyzedSchema::from_graph(&selected.resolve()?, &Bindings::new())?;
     let renderer = CRegisterBackend::new()
-        .with_name(DefinitionId::of::<EmptyImplicit>(), "implicit")
-        .with_name(DefinitionId::of::<EmptyExplicit>(), "explicit");
+        .with_name(
+            prepared
+                .definition(DefinitionId::of::<EmptyImplicit>())
+                .ok_or("missing definition")?
+                .id
+                .clone(),
+            "implicit",
+        )
+        .with_name(
+            prepared
+                .definition(DefinitionId::of::<EmptyExplicit>())
+                .ok_or("missing definition")?
+                .id
+                .clone(),
+            "explicit",
+        );
     let mut sink = InMemoryArtifactSink::new();
     // When: their symbolic geometry is emitted for a strict native C11 consumer.
     generate(&prepared, renderer, &mut sink)?;
@@ -119,9 +154,30 @@ fn geometry_parameters_remain_local_across_bound_and_unbound_definitions()
     bindings.bind::<Parent>(&[3]);
     let prepared = AnalyzedSchema::from_graph(&selected.resolve()?, &bindings)?;
     let renderer = CRegisterBackend::new()
-        .with_name(DefinitionId::of::<Parent>(), "root")
-        .with_name(DefinitionId::of::<Child>(), "leaf")
-        .with_name(DefinitionId::of::<Independent>(), "independent");
+        .with_name(
+            prepared
+                .definition(DefinitionId::of::<Parent>())
+                .ok_or("missing definition")?
+                .id
+                .clone(),
+            "root",
+        )
+        .with_name(
+            prepared
+                .definition(DefinitionId::of::<Child>())
+                .ok_or("missing definition")?
+                .id
+                .clone(),
+            "leaf",
+        )
+        .with_name(
+            prepared
+                .definition(DefinitionId::of::<Independent>())
+                .ok_or("missing definition")?
+                .id
+                .clone(),
+            "independent",
+        );
     let mut sink = InMemoryArtifactSink::new();
 
     // When: one backend emits all definitions into a native C consumer.

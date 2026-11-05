@@ -1,16 +1,13 @@
 //! Downstream-style checks for the format-neutral export extension boundary.
 use hw_model_schema::analysis::AnalyzedSchema;
 use hw_model_schema::export::generate;
+use hw_model_schema::traversal::record::Context as RecordContext;
 
 use core::convert::Infallible;
 
 use hw_model_schema::{
     RecordSpec,
-    export::{
-        Artifact, ArtifactSink, ExportError, InMemoryArtifactSink,
-        record::{Backend, EmitContext},
-        value,
-    },
+    export::{Artifact, ArtifactSink, ExportError, InMemoryArtifactSink, record::Backend, value},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,8 +66,8 @@ impl Backend for LocalRenderer {}
 impl value::Backend for LocalRenderer {
     type Domain = hw_model_schema::export::record::Domain;
     type Error = LocalExportError;
-    type Context<'a> = EmitContext<'a>;
-    fn opaque(&mut self, record: &RecordSpec, _: EmitContext<'_>) -> Result<(), Self::Error> {
+    type Context<'a> = RecordContext<'a>;
+    fn opaque(&mut self, record: &RecordSpec, _: RecordContext<'_>) -> Result<(), Self::Error> {
         self.record_size = Some(record.size());
         Ok(())
     }
@@ -93,14 +90,14 @@ impl value::Backend for LocalRenderer {
 }
 struct RejectingRenderer;
 impl Backend for RejectingRenderer {
-    fn root(&mut self, _: EmitContext<'_>) -> Result<(), Self::Error> {
+    fn root(&mut self, _: RecordContext<'_>) -> Result<(), Self::Error> {
         Err(LocalExportError::RendererRejected)
     }
 }
 impl value::Backend for RejectingRenderer {
     type Domain = hw_model_schema::export::record::Domain;
     type Error = LocalExportError;
-    type Context<'a> = EmitContext<'a>;
+    type Context<'a> = RecordContext<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(Vec::new())
     }
@@ -110,7 +107,7 @@ impl Backend for InfallibleLocalRenderer {}
 impl value::Backend for InfallibleLocalRenderer {
     type Domain = hw_model_schema::export::record::Domain;
     type Error = Infallible;
-    type Context<'a> = EmitContext<'a>;
+    type Context<'a> = RecordContext<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(vec![Artifact {
             logical_name: "odd-content".into(),

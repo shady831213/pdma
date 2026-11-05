@@ -98,13 +98,41 @@ application-owned.
 
 ## Independent record and register emission
 
+The C-specific two-view experiment was rejected and restored to the pushed
+`6a36d025b98598ae2ea4c59290c387ba0e4b966b` checkpoint before this revision.
+Record emission continues to use the source AST nodes. No public RecordLayout /
+RecordMember traversal or layout-selection mode is added.
+
+Optional work before generation is explicit Rust composition:
+`Pipeline::new(input).run(pass_a)?.run(pass_b)?`.
+`Pass<Input>` owns its output and error types; the required Resolve, Validate,
+LayoutSchema and Simplify stages use the same protocol. Custom passes can run
+between stages, including before layout. Validation/layout states are immutable;
+consuming `into_source()` discards derived state and requires validation and layout
+again after source transformation. Results may borrow source metadata directly.
+For target preparation, a pass can carry `(&schema, data)` into the next pass.
+That pipeline's `generate(factory, sink)` borrows the resulting data. Existing
+simple generation needs no Pipeline wrapper or target-specific pass.
+
+Target-neutral `traversal` is available to passes independently of a Backend,
+including pre-layout source traversal. Explicit
+reference traversal retains the selected root and the actual occurrence's ancestor
+chain; a reusable definition has no single mutable parent. Complete paths and
+derived offsets can therefore be computed by generator-defined passes. The C
+offset pass lives with the C backend and is selected by the header generator;
+public core passes do not acquire C naming, codec operations or offset policy.
+Opaque storage and tagged-union word projection remain explicit C representations,
+without inventing source AST fields or routing ordinary records through a second
+flat traversal.
+
 The public names distinguish the source model, analyzed input and traversal role:
 
 | Name | Responsibility |
 | --- | --- |
 | Source `Definition` | A schema declaration in the source graph |
 | Analyzed `Unit` | A completed definition or projected view; enumerated by `units()` |
-| `EmitContext` | Read-only node, ancestry, analysis and binding queries |
+| `NodeId` | Identity of roots, child nodes and reference-site occurrences |
+| Traversal `Context` | Read-only node, ancestry, source/analysis and binding queries |
 | `Visit` | A node bound to its context, for roots and descendants alike |
 | `root(ctx)` | Entry callback for one selected tree |
 | `layout_property` | A completed offset/count/stride/extent attribute |
@@ -196,6 +224,23 @@ merges identical shared value packages, and preserves dependency order. Neither
 application generator computes layout formulas.
 
 ## Candidate validation
+
+The optional-pass revision passed 1368 all-feature workspace tests and 1285
+default-feature tests, with no failures or ignored cases. Strict workspace
+Clippy, warning-free private Rustdoc, formatting, both real generator freshness
+checks, standalone downstream exporters and release discovery passed.
+The C source traversal preserves all three generated headers byte-for-byte.
+
+Tests exercise independently implemented pass chains and a custom backend,
+schema-borrowing outputs without cloned metadata, typed preparation failures,
+discarding results on schema replacement, distinct occurrences of a shared
+reference, opaque boundaries and domain-filtered traversal over mixed schemas.
+The first mixed-domain register-root test exposed a missing filter; the final
+implementation shares its supported-domain predicate with generation preflight,
+and the full regression was rerun after that fix. Native C coverage includes
+repeated nested records, bits, enum documentation, opaque children, tagged storage
+words and untagged envelopes. The rejected second record-layout traversal was
+removed before this revision and has not been retained as a compatibility route.
 
 The naming and root-visitation revision passed 1350 all-feature workspace tests
 and 1275 default-feature tests, with no failures or ignored cases. Strict Clippy,
@@ -323,3 +368,54 @@ exporters, release discovery and formatting passed. Native CC and Cranelift
 each passed seven DMA register-slice tests; direct scalar helpers also passed
 native numerical and deliberate-mutation checks. Typed documentation failures
 were verified to leave the artifact sink empty.
+
+## Neutral traversal and composable-pass revision validation
+
+The current revision separates traversal from target emission. Early source passes
+and completed analysis share occurrence identities and lexical context. Record
+reference expansions keep their actual parent sites. Register source nodes retain
+their IDs when layout introduces derived nodes; derived IDs cannot alias source
+nodes. IDs describe an immutable schema, not persistent handles across edits.
+
+Resolve, Validate, LayoutSchema and Simplify implement the same typed Pass protocol
+as custom analysis. Source transformations discard certified derived state and
+must revalidate. C-specific offset analysis remains a selected backend pass,
+indexed by NodeId rather than textual paths. Framework traversal owns bank
+topology and effective permissions. Bank geometry uses the same expression
+callbacks as other layout properties, without parallel numeric/expression fields.
+Expression formatting reuses the semantic expression visitor.
+
+Review also removed duplicate validation between layout and simplification,
+obsolete forwarding types and old consumer imports. The complete regression found
+and fixed a missing bank owner in layout-property context; coverage now checks its
+parent, owner, property kind and evaluated value.
+
+The final all-feature workspace run passed 1379 tests, with zero failed or ignored.
+The schema run without default features passed 339 tests. Strict workspace Clippy,
+warning-free private Rustdoc, formatting, both actual generator freshness checks,
+standalone downstream exporters and release discovery passed. Generated C headers
+and Veryl layout are unchanged. The focused native C suite also compiled and ran
+generated consumers. The candidate remains unpublished and uncommitted for review.
+
+## C register naming ownership
+
+C register names now use the same direct structural-path approach as Veryl.
+The preceding NodeId-table revision was insufficient: it retained global short-name
+allocation solely to preserve old generated spelling. That compatibility constraint
+has been removed. There is no naming preparation, occurrence scan, name table,
+template lookup or automatic ordinal alias.
+
+Analysis supplies normalized path components for banks, template registers and
+expanded instances. Both backends consume those components directly. Adding a
+sibling or projecting out another register cannot rename a surviving declaration.
+C-specific differences are identifier escaping, a root prefix for the macro
+namespace, deterministic local abbreviation for long paths and final C symbol
+collision checking. Veryl uses its package namespace and target identifier checks.
+
+The C path stem joins escaped component names and explicit instance indices. A
+stem longer than 32 ASCII bytes becomes its first 15 bytes, an underscore, and the
+16-digit uppercase FNV-1a64 digest of the complete encoded stem. This keeps deep
+paths usable without consulting any other node. Digest collisions are not assumed
+impossible; final emitted-symbol checking still rejects them. Root prefix overrides
+are not silently abbreviated. The checked-in role headers and native consumers
+use the new names; wire layout, offsets, access masks and enum codes are unchanged.

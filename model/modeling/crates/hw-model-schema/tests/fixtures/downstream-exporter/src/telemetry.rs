@@ -1,6 +1,6 @@
 use super::{DownPair, TelemetryMap};
 use core::convert::Infallible;
-use his::analysis::{AnalyzedSchema, Bindings, Layout, RegisterMapView, UnitId};
+use his::analysis::{AnalyzedSchema, Bindings, Layout, RegisterMapView};
 use his::export::value::Backend as _;
 use his::{
     ast::{DefinitionId, RecordDefinition, SchemaSet},
@@ -67,8 +67,12 @@ pub fn export_resolved(sink: &mut TelemetrySink) -> Option<()> {
     .ok()
 }
 impl export::record::Backend for TelemetryRecordRenderer {
-    fn root(&mut self, ctx: export::record::EmitContext<'_>) -> Result<(), Self::Error> {
-        if ctx.unit().id == UnitId::Definition(DefinitionId::of::<DownPair>()) {
+    fn root(&mut self, ctx: his::traversal::record::Context<'_>) -> Result<(), Self::Error> {
+        if ctx
+            .schema()
+            .definition(DefinitionId::of::<DownPair>())
+            .is_some_and(|unit| unit.id == ctx.unit().id)
+        {
             self.emit(ctx.current())?;
         }
         Ok(())
@@ -76,7 +80,7 @@ impl export::record::Backend for TelemetryRecordRenderer {
     fn record(
         &mut self,
         _: &RecordDefinition,
-        ctx: export::record::EmitContext<'_>,
+        ctx: his::traversal::record::Context<'_>,
     ) -> Result<(), Self::Error> {
         let Layout::Record(record) = &ctx.unit().body else {
             return Err(std::io::Error::other("record layout"));
@@ -103,7 +107,7 @@ impl export::record::Backend for TelemetryRecordRenderer {
 impl value::Backend for TelemetryRecordRenderer {
     type Domain = export::record::Domain;
     type Error = std::io::Error;
-    type Context<'a> = export::record::EmitContext<'a>;
+    type Context<'a> = his::traversal::record::Context<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(vec![Artifact {
             logical_name: "records.txt".into(),
@@ -113,8 +117,12 @@ impl value::Backend for TelemetryRecordRenderer {
     }
 }
 impl export::register::Backend for TelemetryRegisterRenderer {
-    fn root(&mut self, ctx: export::register::EmitContext<'_>) -> Result<(), Self::Error> {
-        if ctx.unit().id == UnitId::Definition(DefinitionId::of::<TelemetryMap>()) {
+    fn root(&mut self, ctx: his::traversal::register::Context<'_>) -> Result<(), Self::Error> {
+        if ctx
+            .schema()
+            .definition(DefinitionId::of::<TelemetryMap>())
+            .is_some_and(|unit| unit.id == ctx.unit().id)
+        {
             self.emit(ctx.current())?;
         }
         Ok(())
@@ -122,7 +130,7 @@ impl export::register::Backend for TelemetryRegisterRenderer {
     fn register_map(
         &mut self,
         map: &RegisterMapView,
-        _: export::register::EmitContext<'_>,
+        _: his::traversal::register::Context<'_>,
     ) -> Result<(), Self::Error> {
         write!(self.content, "map_size={};registers=", map.extent)
             .map_err(std::io::Error::other)?;
@@ -142,7 +150,7 @@ impl export::register::Backend for TelemetryRegisterRenderer {
 impl value::Backend for TelemetryRegisterRenderer {
     type Domain = export::register::Domain;
     type Error = std::io::Error;
-    type Context<'a> = export::register::EmitContext<'a>;
+    type Context<'a> = his::traversal::register::Context<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(vec![Artifact {
             logical_name: "registers.txt".into(),

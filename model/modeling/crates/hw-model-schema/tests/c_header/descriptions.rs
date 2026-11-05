@@ -153,21 +153,21 @@ fn reusable_bits_documentation_is_emitted_once_in_each_c_backend() -> TestResult
     let schema = AnalyzedSchema::from_graph(&graph, &Bindings::new())?;
     let mut record = InMemoryArtifactSink::new();
     let mut register = InMemoryArtifactSink::new();
+    let id = schema
+        .definition(hw_model_schema::ast::DefinitionId::of::<DocumentedFlags>())
+        .ok_or("missing flags")?
+        .id
+        .clone();
     // When: each public backend renders the same documented source definition.
+    hw_model_schema::analysis::Pipeline::new((&schema, ()))
+        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?
+        .generate(
+            |data| CRecordBackend::new(data).with_name(id.clone(), "flags"),
+            &mut record,
+        )?;
     generate(
         &schema,
-        CRecordBackend::new().with_name(
-            hw_model_schema::ast::DefinitionId::of::<DocumentedFlags>(),
-            "flags",
-        ),
-        &mut record,
-    )?;
-    generate(
-        &schema,
-        CRegisterBackend::new().with_name(
-            hw_model_schema::ast::DefinitionId::of::<DocumentedFlags>(),
-            "flags",
-        ),
+        CRegisterBackend::new().with_name(id, "flags"),
         &mut register,
     )?;
     // Then: each fragment appears exactly once and escaped output compiles strictly.

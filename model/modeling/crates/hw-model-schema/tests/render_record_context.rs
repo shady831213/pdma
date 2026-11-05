@@ -1,10 +1,11 @@
 //! Cross-parent reordering keeps immutable field and bit ancestry attached to visits.
+use hw_model_schema::traversal::record::Context as RecordContext;
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Bindings},
     ast::{RecordDefinition, SchemaSet, record::Node},
     export::{
         Artifact, InMemoryArtifactSink, generate,
-        record::{self, EmitContext},
+        record::{self},
         value::{self, Backend},
     },
     record_schema,
@@ -19,7 +20,7 @@ impl record::Backend for Probe {
     fn record<'a>(
         &mut self,
         _: &'a RecordDefinition,
-        ctx: EmitContext<'a>,
+        ctx: RecordContext<'a>,
     ) -> Result<(), Self::Error> {
         let mut grandchildren: Vec<_> = ctx
             .children()
@@ -33,11 +34,11 @@ impl record::Backend for Probe {
 impl value::Backend for Probe {
     type Domain = record::Domain;
     type Error = &'static str;
-    type Context<'a> = EmitContext<'a>;
+    type Context<'a> = RecordContext<'a>;
     fn variant(
         &mut self,
         _: &hw_model_schema::EnumVariantSpec,
-        ctx: EmitContext<'_>,
+        ctx: RecordContext<'_>,
     ) -> Result<(), Self::Error> {
         let field = ctx.field().ok_or("missing field")?.name();
         let bit = ctx.bit().ok_or("missing bit")?;
@@ -93,7 +94,7 @@ fn root_visit_retains_owner_when_dispatched_as_an_ordinary_visit() {
 
 struct RootNames(Vec<String>);
 impl record::Backend for RootNames {
-    fn root(&mut self, ctx: EmitContext<'_>) -> Result<(), Self::Error> {
+    fn root(&mut self, ctx: RecordContext<'_>) -> Result<(), Self::Error> {
         assert!(ctx.ancestors().is_empty());
         self.0.push(ctx.unit().name.clone());
         self.emit(ctx.current())
@@ -101,7 +102,7 @@ impl record::Backend for RootNames {
     fn field<'a>(
         &mut self,
         _: &'a hw_model_schema::ast::Field,
-        ctx: EmitContext<'a>,
+        ctx: RecordContext<'a>,
     ) -> Result<(), Self::Error> {
         assert!(matches!(ctx.ancestors(), [Node::Record(_)]));
         self.emit_all(ctx.children())
@@ -110,7 +111,7 @@ impl record::Backend for RootNames {
 impl value::Backend for RootNames {
     type Domain = record::Domain;
     type Error = &'static str;
-    type Context<'a> = EmitContext<'a>;
+    type Context<'a> = RecordContext<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(vec![Artifact {
             logical_name: "roots".into(),

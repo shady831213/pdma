@@ -1,29 +1,29 @@
 #include "pdma_firmware.h"
 #include "pdma_firmware.h"
-#ifdef C_FCTL_C_QURQUEQUQQUUQUEQUSQUT_OFFSET
+#ifdef C_FCTL_C_REQQUEST_OFFSET
 #error Firmware must not expose the Host request doorbell
 #endif
 #if defined(PDMA_FIRMWARE_WINDOW_CONTROL_BASE) || defined(PDMA_FIRMWARE_WINDOW_STATUS_BASE)
 #error Firmware window view must use one grouped bank base
 #endif
-#if defined(C_FWIN_C_QURQUEQUAQUDQUY__1_OFFSET) || defined(C_FWIN_C_QURQUEQUAQUDQUY__2_OFFSET) || defined(C_FWIN_C_QURQUEQUAQUDQUY__3_OFFSET)
+#if defined(C_FWIN_C_WINDOWS_0_C_STATUS_C_READY_OFFSET) || defined(C_FWIN_C_WINDOWS_1_C_STATUS_C_READY_OFFSET) || defined(C_FWIN_C_WINDOWS_2_C_STATUS_C_READY_OFFSET)
 #error Firmware management bus cannot expose Host readiness leaves
 #endif
-_Static_assert(C_FBOOT_C_QUBQUOQUOQUT_ACCESS == C_FBOOT_ACCESS_READ_WRITE, "firmware boot ownership");
-_Static_assert(C_FBOOT_C_QUBQUOQUOQUT_WRITABLE_MASK == UINT64_C(0x10003), "boot mask unchanged");
-_Static_assert(C_FCTL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_ACCESS == C_FCTL_ACCESS_READ_ONLY, "firmware bootstrap read-only");
-_Static_assert(C_FCTL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_WRITABLE_MASK == 0, "firmware bootstrap is not writable");
-_Static_assert(C_FCTL_C_QUEQUNQUAQUBQULQUE_ACCESS == C_FCTL_ACCESS_READ_ONLY, "firmware enable read-only");
-_Static_assert(C_FCTL_C_QUEQUNQUAQUBQULQUE_WRITABLE_MASK == 0, "firmware enable is not writable");
-_Static_assert(C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_ACCESS == C_FCTL_ACCESS_WRITE_ONLY, "firmware response pulse");
-_Static_assert(C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_OFFSET == 24, "hidden request retains response offset");
+_Static_assert(C_FBOOT_C_BOOT_ACCESS == C_FBOOT_ACCESS_READ_WRITE, "firmware boot ownership");
+_Static_assert(C_FBOOT_C_BOOT_WRITABLE_MASK == UINT64_C(0x10003), "boot mask unchanged");
+_Static_assert(C_FCTL_C_CONFIG_C_BOOTSTRAP_ACCESS == C_FCTL_ACCESS_READ_ONLY, "firmware bootstrap read-only");
+_Static_assert(C_FCTL_C_CONFIG_C_BOOTSTRAP_WRITABLE_MASK == 0, "firmware bootstrap is not writable");
+_Static_assert(C_FCTL_C_CONFIG_C_ENABLE_ACCESS == C_FCTL_ACCESS_READ_ONLY, "firmware enable read-only");
+_Static_assert(C_FCTL_C_CONFIG_C_ENABLE_WRITABLE_MASK == 0, "firmware enable is not writable");
+_Static_assert(C_FCTL_C_NOTIFICATION_C_RESPONSE_ACCESS == C_FCTL_ACCESS_WRITE_ONLY, "firmware response pulse");
+_Static_assert(C_FCTL_C_NOTIFICATION_C_RESPONSE_OFFSET == 24, "hidden request retains response offset");
 _Static_assert(C_FCTL_SIZE == 36, "firmware control physical extent");
-_Static_assert(C_FWIN_C_QUOQUPQUEQUN__1_ACCESS == C_FWIN_ACCESS_READ_WRITE, "firmware window ownership");
+_Static_assert(C_FWIN_C_WINDOWS_0_C_CONTROL_C_OPEN_ACCESS == C_FWIN_ACCESS_READ_WRITE, "firmware window ownership");
 _Static_assert(C_FWIN_SIZE == 36, "firmware view retains the whole window bank");
 #if defined(PDMA_HOST_CONTROL_STRIDE) || defined(PDMA_FIRMWARE_CONTROL_STRIDE)
 #error Management is a single PF control block, not a Function bank
 #endif
-_Static_assert(C_FWIN_C_QUOQUPQUEQUN__1_OFFSET == 0, "control bank relative offset");
+_Static_assert(C_FWIN_C_WINDOWS_0_C_CONTROL_C_OPEN_OFFSET == 0, "control bank relative offset");
 #if defined(PDMA_FIRMWARE_WINDOW_BASE) || defined(PDMA_FIRMWARE_CONTROL_BASE) || defined(PDMA_FIRMWARE_BOOT_BASE)
 #error Platform base addresses must not be fixed by the contract
 #endif

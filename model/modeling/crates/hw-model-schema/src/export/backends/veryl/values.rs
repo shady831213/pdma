@@ -10,7 +10,7 @@ use crate::{
 impl Backend for VerylRecordBackend {
     type Error = VerylExportError;
     type Domain = record::Domain;
-    type Context<'a> = record::EmitContext<'a>;
+    type Context<'a> = crate::traversal::record::Context<'a>;
     fn bits<'a>(
         &mut self,
         bits: &'a BitsDefinition,
@@ -57,7 +57,7 @@ impl Backend for VerylRecordBackend {
 impl Backend for VerylRegisterBackend {
     type Error = VerylExportError;
     type Domain = register::Domain;
-    type Context<'a> = register::EmitContext<'a>;
+    type Context<'a> = crate::traversal::register::Context<'a>;
     fn bits<'a>(
         &mut self,
         bits: &'a BitsDefinition,

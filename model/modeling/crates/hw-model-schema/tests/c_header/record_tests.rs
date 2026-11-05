@@ -2,7 +2,7 @@ use hw_model_schema::analysis::AnalyzedSchema;
 use hw_model_schema::{
     FieldSpec, RecordPlacement, RecordSpec, ScalarKind,
     export::backends::c_header::{CHeaderExportError, CRecordBackend},
-    export::{Artifact, ArtifactSink, ExportError, generate},
+    export::{Artifact, ArtifactSink, ExportError},
 };
 
 use super::support::{
@@ -98,11 +98,14 @@ fn c_header_resolved_collision_is_typed_before_sink_emission() -> TestResult {
     let mut sink = CountingSink::default();
 
     // When: the real public exporter projects the resolved graph into its C namespace.
-    let result = generate(
-        &AnalyzedSchema::opaque(exporter.0, resolved)?,
-        CRecordBackend::new().with_name(exporter.0, exporter.1.as_ref()),
-        &mut sink,
-    );
+    let schema = AnalyzedSchema::opaque(exporter.0, resolved)?;
+    let id = schema.view(exporter.0).ok_or("missing view")?.id.clone();
+    let result = hw_model_schema::analysis::Pipeline::new((&schema, ()))
+        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?
+        .generate(
+            |data| CRecordBackend::new(data).with_name(id, exporter.1.as_ref()),
+            &mut sink,
+        );
 
     // Then: collision validation reports both paths and never reaches the sink.
     let expected = CHeaderExportError::NameCollision {
@@ -131,11 +134,14 @@ fn c_header_sink_rejection_is_typed_and_emits_no_partial_artifact() -> TestResul
     let mut sink = RejectingSink::default();
 
     // When: the resolved graph is exported through the rejecting sink.
-    let result = generate(
-        &AnalyzedSchema::opaque(exporter.0, resolved)?,
-        CRecordBackend::new().with_name(exporter.0, exporter.1.as_ref()),
-        &mut sink,
-    );
+    let schema = AnalyzedSchema::opaque(exporter.0, resolved)?;
+    let id = schema.view(exporter.0).ok_or("missing view")?.id.clone();
+    let result = hw_model_schema::analysis::Pipeline::new((&schema, ()))
+        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?
+        .generate(
+            |data| CRecordBackend::new(data).with_name(id, exporter.1.as_ref()),
+            &mut sink,
+        );
 
     // Then: the exact sink variant escapes and no artifact was accepted.
     assert_eq!(result, Err(ExportError::Sink(17)));

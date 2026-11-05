@@ -1,18 +1,19 @@
 use super::{VerylExportError, VerylRegisterBackend, package::register_name};
+use crate::traversal::register::{Context, LayoutProperty};
 use crate::{
     BitsFieldSpec, Endian,
     analysis::RegisterMapView,
     ast::{RegisterInfo, RegisterLocation},
     export::{
         expression::{ExpressionSyntax, format_expression},
-        register::{Backend, EmitContext, LayoutProperty},
+        register::Backend,
         value::Backend as _,
     },
 };
 use std::fmt::Write;
 
 impl Backend for VerylRegisterBackend {
-    fn root(&mut self, ctx: EmitContext<'_>) -> Result<(), Self::Error> {
+    fn root(&mut self, ctx: Context<'_>) -> Result<(), Self::Error> {
         let name = self.output.begin(ctx.unit())?;
         self.emit(ctx.current())?;
         self.output.end(&name);
@@ -21,8 +22,11 @@ impl Backend for VerylRegisterBackend {
     fn layout_property(
         &mut self,
         property: LayoutProperty<'_>,
-        ctx: EmitContext<'_>,
+        ctx: Context<'_>,
     ) -> Result<(), Self::Error> {
+        if ctx.bank().is_some() {
+            return Ok(());
+        }
         let name = property.owner.map_or_else(
             || property.name.to_owned(),
             |owner| format!("{owner}_{}", property.name),
@@ -50,16 +54,12 @@ impl Backend for VerylRegisterBackend {
     fn register_map<'a>(
         &mut self,
         map: &'a RegisterMapView,
-        ctx: EmitContext<'a>,
+        ctx: Context<'a>,
     ) -> Result<(), Self::Error> {
         self.output.package.constant("EXTENT", "u64", map.extent)?;
         self.emit_all(ctx.children())
     }
-    fn register<'a>(
-        &mut self,
-        _: &'a RegisterInfo,
-        ctx: EmitContext<'a>,
-    ) -> Result<(), Self::Error> {
+    fn register<'a>(&mut self, _: &'a RegisterInfo, ctx: Context<'a>) -> Result<(), Self::Error> {
         if let Some(site) = ctx.register_site() {
             if matches!(site.location, RegisterLocation::Template { .. }) {
                 return Ok(());
@@ -74,7 +74,7 @@ impl Backend for VerylRegisterBackend {
     fn register_field<'a>(
         &mut self,
         field: &'a BitsFieldSpec<usize>,
-        ctx: EmitContext<'a>,
+        ctx: Context<'a>,
     ) -> Result<(), Self::Error> {
         let prefix = register_name(ctx.register_segments());
         let name = format!("{prefix}_{}", field.name().to_ascii_uppercase());
@@ -86,7 +86,7 @@ impl Backend for VerylRegisterBackend {
             .constant(&format!("{name}_BITS"), "u32", field.bit_width())?;
         self.emit_all(ctx.children())
     }
-    fn register_width(&mut self, width: usize, ctx: EmitContext<'_>) -> Result<(), Self::Error> {
+    fn register_width(&mut self, width: usize, ctx: Context<'_>) -> Result<(), Self::Error> {
         if ctx.register_location() == RegisterLocation::Root {
             self.output.package.constant("EXTENT", "u64", width)?;
         }
@@ -95,7 +95,7 @@ impl Backend for VerylRegisterBackend {
             .package
             .constant(&format!("{name}_BYTES"), "u32", width)
     }
-    fn register_endian(&mut self, endian: Endian, ctx: EmitContext<'_>) -> Result<(), Self::Error> {
+    fn register_endian(&mut self, endian: Endian, ctx: Context<'_>) -> Result<(), Self::Error> {
         let name = register_name(ctx.register_segments());
         self.output.package.constant(
             &format!("{name}_ENDIAN_LITTLE"),
@@ -107,7 +107,7 @@ impl Backend for VerylRegisterBackend {
         &mut self,
         _: crate::ResetKind,
         value: u64,
-        ctx: EmitContext<'_>,
+        ctx: Context<'_>,
     ) -> Result<(), Self::Error> {
         let name = register_name(ctx.register_segments());
         self.output.package.constant(
@@ -116,11 +116,7 @@ impl Backend for VerylRegisterBackend {
             format_args!("64'h{value:016x}"),
         )
     }
-    fn register_writable_mask(
-        &mut self,
-        value: u64,
-        ctx: EmitContext<'_>,
-    ) -> Result<(), Self::Error> {
+    fn register_writable_mask(&mut self, value: u64, ctx: Context<'_>) -> Result<(), Self::Error> {
         let name = register_name(ctx.register_segments());
         self.output.package.constant(
             &format!("{name}_WRITABLE"),
@@ -131,7 +127,7 @@ impl Backend for VerylRegisterBackend {
     fn register_access(
         &mut self,
         access: crate::Access,
-        ctx: EmitContext<'_>,
+        ctx: Context<'_>,
     ) -> Result<(), Self::Error> {
         let name = register_name(ctx.register_segments());
         self.output
@@ -141,17 +137,13 @@ impl Backend for VerylRegisterBackend {
             .package
             .constant(&format!("{name}_WRITE"), "bbool", access.writable())
     }
-    fn register_alignment(
-        &mut self,
-        value: usize,
-        ctx: EmitContext<'_>,
-    ) -> Result<(), Self::Error> {
+    fn register_alignment(&mut self, value: usize, ctx: Context<'_>) -> Result<(), Self::Error> {
         if ctx.register_location() == RegisterLocation::Root {
             self.output.package.constant("ALIGNMENT", "u64", value)?;
         }
         Ok(())
     }
-    fn map_alignment(&mut self, value: usize, _: EmitContext<'_>) -> Result<(), Self::Error> {
+    fn map_alignment(&mut self, value: usize, _: Context<'_>) -> Result<(), Self::Error> {
         self.output.package.constant("ALIGNMENT", "u64", value)
     }
 }

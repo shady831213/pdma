@@ -1,10 +1,10 @@
 //! Bound visits preserve lexical ancestry when a target reorders or omits children.
+use hw_model_schema::traversal::register::{Context as RegisterContext, LayoutProperty};
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Bindings, CompleteMapLayout},
     ast::{SchemaSet, register::Parameter},
     export::{
-        Artifact, InMemoryArtifactSink, generate,
-        register::{self, EmitContext, LayoutProperty},
+        Artifact, InMemoryArtifactSink, generate, register,
         value::{self, Backend},
     },
     register_map, register_schema,
@@ -20,7 +20,7 @@ impl register::Backend for Probe {
     fn map_layout<'a>(
         &mut self,
         _: &'a CompleteMapLayout,
-        ctx: EmitContext<'a>,
+        ctx: RegisterContext<'a>,
     ) -> Result<(), Self::Error> {
         assert_eq!(ctx.declared_parameters(), &["n"]);
         assert_eq!(
@@ -39,7 +39,7 @@ impl register::Backend for Probe {
         children.reverse();
         self.emit_all(children)
     }
-    fn parameter(&mut self, p: Parameter, ctx: EmitContext<'_>) -> Result<(), Self::Error> {
+    fn parameter(&mut self, p: Parameter, ctx: RegisterContext<'_>) -> Result<(), Self::Error> {
         assert_eq!(ctx.declared_parameters().get(p.index), Some(&p.name));
         assert_eq!(
             p.binding,
@@ -51,7 +51,7 @@ impl register::Backend for Probe {
     fn layout_property<'a>(
         &mut self,
         property: LayoutProperty<'a>,
-        ctx: EmitContext<'a>,
+        ctx: RegisterContext<'a>,
     ) -> Result<(), Self::Error> {
         assert_eq!(ctx.declared_parameters(), &["n"]);
         assert_eq!(
@@ -67,13 +67,34 @@ impl register::Backend for Probe {
             self.binding
         );
         match ctx.ancestors().last().ok_or("missing parent")? {
-            register::Node::MapLayout(_) => assert_eq!(property.owner, None),
-            register::Node::Placement(p) => {
+            hw_model_schema::traversal::register::Node::MapLayout(_) => {
+                assert_eq!(property.owner, None);
+            }
+            hw_model_schema::traversal::register::Node::Placement(p) => {
                 assert_eq!(property.owner, Some(p.reference.name()));
                 assert_eq!(
                     ctx.resolve(&p.reference).ok_or("missing reference")?.name,
                     "Word"
                 );
+            }
+            hw_model_schema::traversal::register::Node::Bank(bank) => {
+                use hw_model_schema::ast::{LayoutExpr, register::LayoutPropertyKind as K};
+                assert_eq!(
+                    (bank.index(), bank.name(), bank.path()),
+                    (0, "zeta", "Pair.zeta")
+                );
+                assert_eq!(ctx.bank().ok_or("missing bank")?.index(), bank.index());
+                assert_eq!(property.owner, Some(bank.name()));
+                let (name, expected) = match property.kind {
+                    K::Offset => ("offset", 0),
+                    K::Count => ("count", self.binding.ok_or("bound bank count")?),
+                    K::Stride => ("stride", 4),
+                    K::End | K::OccupiedEnd | K::Extent => return Err("unexpected bank property"),
+                };
+                assert_eq!(property.name, name);
+                assert_eq!(property.expression, &LayoutExpr::Constant(expected));
+                self.events
+                    .push(format!("bank:{}:{name}={expected}", bank.name()));
             }
             _ => return Err("wrong parent"),
         }
@@ -91,7 +112,7 @@ impl register::Backend for Probe {
 impl value::Backend for Probe {
     type Domain = register::Domain;
     type Error = &'static str;
-    type Context<'a> = EmitContext<'a>;
+    type Context<'a> = RegisterContext<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(vec![Artifact {
             logical_name: "probe".into(),
@@ -163,6 +184,18 @@ fn bound_parameters_remain_available_before_parameter_visitation() {
     )
     .unwrap();
     assert!(!sink.artifacts().is_empty());
+    let output = String::from_utf8(sink.artifacts().first().unwrap().contents.clone()).unwrap();
+    assert_eq!(
+        output
+            .lines()
+            .filter(|line| line.starts_with("bank:"))
+            .collect::<Vec<_>>(),
+        [
+            "bank:zeta:offset=0",
+            "bank:zeta:count=3",
+            "bank:zeta:stride=4"
+        ]
+    );
 }
 
 #[test]
@@ -180,7 +213,7 @@ fn roots_are_bound_visits_with_default_recursive_dispatch() {
         assert!(ctx.ancestors().is_empty());
         assert!(core::ptr::eq(ctx.analysis(), core::ptr::from_ref(&schema)));
         assert!(
-            matches!(visit.node(), register::Node::Root(unit) if core::ptr::eq(unit, ctx.unit()))
+            matches!(visit.node(), hw_model_schema::traversal::register::Node::Root(unit) if core::ptr::eq(unit, ctx.unit()))
         );
         <register::Domain as Domain<Probe>>::root(visit, &mut probe).unwrap();
     }

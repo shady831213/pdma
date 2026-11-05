@@ -3,7 +3,7 @@ use hw_model_schema::{
     ast::{DefinitionId, SchemaSet},
     bits_schema,
     export::backends::c_header::{CHeaderExportError, CRecordBackend},
-    export::{ExportError, InMemoryArtifactSink, generate},
+    export::{ExportError, InMemoryArtifactSink},
 };
 
 bits_schema! { pub bits Flags(u8) { ready: 0..=0, } }
@@ -13,15 +13,17 @@ fn record_macro_declarations_reject_collisions_after_the_significant_prefix()
 -> super::support::TestResult {
     // Given: a valid record with one long caller-owned C prefix.
     let prefix = "a".repeat(64);
-    let renderer = CRecordBackend::new().with_name("record", &prefix);
     let mut sink = InMemoryArtifactSink::new();
 
     // When: distinct metadata macros differ only after the C11 significant prefix.
-    let failure = generate(
-        &AnalyzedSchema::opaque("record", super::support::RECORD)?,
-        renderer,
-        &mut sink,
-    );
+    let schema = AnalyzedSchema::opaque("record", super::support::RECORD)?;
+    let id = schema.view("record").ok_or("missing view")?.id.clone();
+    let failure = hw_model_schema::analysis::Pipeline::new((&schema, ()))
+        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?
+        .generate(
+            |data| CRecordBackend::new(data).with_name(id, &prefix),
+            &mut sink,
+        );
 
     // Then: the exact first pair is diagnosed before emitting an artifact.
     let stem = format!("C_{}", prefix.to_ascii_uppercase());
@@ -46,15 +48,21 @@ fn bits_macro_declarations_reject_collisions_after_the_significant_prefix()
     schemas.add::<Flags>();
     let graph = schemas.resolve()?;
     let prefix = "a".repeat(64);
-    let renderer = CRecordBackend::new().with_name(DefinitionId::of::<Flags>(), &prefix);
     let mut sink = InMemoryArtifactSink::new();
 
     // When: generated size and bit-width macros alias in their significant prefix.
-    let failure = generate(
-        &AnalyzedSchema::from_graph(&graph, &Bindings::new())?,
-        renderer,
-        &mut sink,
-    );
+    let schema = AnalyzedSchema::from_graph(&graph, &Bindings::new())?;
+    let id = schema
+        .definition(DefinitionId::of::<Flags>())
+        .ok_or("missing flags")?
+        .id
+        .clone();
+    let failure = hw_model_schema::analysis::Pipeline::new((&schema, ()))
+        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?
+        .generate(
+            |data| CRecordBackend::new(data).with_name(id, &prefix),
+            &mut sink,
+        );
 
     // Then: the same typed declaration collision is returned without partial output.
     let stem = format!("C_{}", prefix.to_ascii_uppercase());

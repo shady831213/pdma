@@ -1,82 +1,19 @@
-use super::super::value::{Context, Visit};
 use super::Node;
-use crate::analysis::{
-    AnalyzedSchema, ConcretePlacement, Layout, Placement, Unit, ViewPathSegment,
-};
+use crate::analysis::{Layout, ViewPathSegment};
 pub use crate::ast::register::LayoutPropertyKind;
 use crate::ast::{LayoutExpr, RegisterLocation};
-/// Framework-owned lexical context. Its node and ancestry cannot be rebound.
+/// Immutable register traversal context bound by the framework.
 /// ```compile_fail
-/// use hw_model_schema::export::register::EmitContext;
-/// fn forge(mut ctx: EmitContext<'_>) { ctx.node = ctx.node(); }
+/// use hw_model_schema::traversal::register::Context;
+/// fn forge(mut ctx: Context<'_>) { ctx.node = ctx.node(); }
 /// ```
 /// Root construction belongs to the framework:
 /// ```compile_fail
-/// use hw_model_schema::{analysis::{AnalyzedSchema, Unit}, export::register::{EmitContext, Node}};
-/// fn root(a: &AnalyzedSchema, u: &Unit) { let _ = EmitContext::root(a, u, Node::Root(u)); }
+/// use hw_model_schema::{analysis::{AnalyzedSchema, Unit}, traversal::register::{Context, Node}};
+/// fn root(a: &AnalyzedSchema, u: &Unit) { let _ = Context::root(a, u, Node::Root(u)); }
 /// ```
-#[derive(Debug, Clone)]
-pub struct EmitContext<'a> {
-    analysis: &'a AnalyzedSchema,
-    unit: &'a Unit,
-    node: Node<'a>,
-    ancestors: std::rc::Rc<Vec<Node<'a>>>,
-}
-impl<'a> EmitContext<'a> {
-    pub(super) fn root(analysis: &'a AnalyzedSchema, unit: &'a Unit, node: Node<'a>) -> Self {
-        Self {
-            analysis,
-            unit,
-            node,
-            ancestors: std::rc::Rc::new(Vec::new()),
-        }
-    }
-    /// Completed semantic analysis, available read-only to targets.
-    pub const fn analysis(&self) -> &'a AnalyzedSchema {
-        self.analysis
-    }
-    /// Selected definition or projection.
-    pub const fn unit(&self) -> &'a Unit {
-        self.unit
-    }
-    /// Resolves a source reference against the completed definition graph.
-    pub fn resolve(&self, reference: &crate::ast::Reference) -> Option<&'a Unit> {
-        let id = crate::analysis::UnitId::Definition(reference.target().id());
-        self.analysis.units().find(|unit| unit.id == id)
-    }
-    /// Current semantic node.
-    pub const fn node(&self) -> Node<'a> {
-        self.node
-    }
-    /// True containment ancestors in root-to-parent order.
-    pub fn ancestors(&self) -> &[Node<'a>] {
-        &self.ancestors
-    }
-    /// Bound current node for dispatch.
-    pub fn current(&self) -> Visit<Self> {
-        Visit::new(self.clone())
-    }
-    /// Bound children, independently reorderable without changing lexical parents.
-    pub fn children(&self) -> std::vec::IntoIter<Visit<Self>> {
-        let mut ancestors = self.ancestors.as_ref().clone();
-        ancestors.push(self.node);
-        let ancestors = std::rc::Rc::new(ancestors);
-        self.node
-            .children()
-            .map(|node| {
-                Visit::new(Self {
-                    analysis: self.analysis,
-                    unit: self.unit,
-                    node,
-                    ancestors: ancestors.clone(),
-                })
-            })
-            .collect::<Vec<_>>()
-            .into_iter()
-    }
-    fn lineage(&self) -> impl Iterator<Item = Node<'a>> + '_ {
-        core::iter::once(self.node).chain(self.ancestors.iter().rev().copied())
-    }
+pub type Context<'a> = crate::traversal::BoundContext<'a, Node<'a>>;
+impl<'a> Context<'a> {
     /// Enclosing bit-field name.
     pub fn bit(&self) -> Option<&'static str> {
         self.lineage().find_map(|node| match node {
@@ -85,13 +22,17 @@ impl<'a> EmitContext<'a> {
             _ => None,
         })
     }
-    /// Enclosing completed placement.
-    pub fn placement(&self) -> Option<crate::analysis::Placement<'a>> {
+    /// Enclosing completed bank.
+    pub fn bank(&self) -> Option<super::Bank<'a>> {
         self.lineage().find_map(|node| match node {
-            Node::Placement(v) => Some(crate::analysis::Placement::Symbolic(v)),
-            Node::ConcretePlacement(v) => Some(crate::analysis::Placement::Concrete(v)),
+            Node::Bank(bank) => Some(bank),
             _ => None,
         })
+    }
+    /// Whether this node is a repeated documentation occurrence.
+    pub fn repeated_documentation(&self) -> bool {
+        matches!(self.register_location(), RegisterLocation::Instance { .. })
+            || self.bank().is_some_and(|bank| bank.expanded)
     }
     /// Enclosing effective register declaration.
     pub fn register(&self) -> Option<&'a crate::ast::RegisterInfo> {
@@ -101,19 +42,6 @@ impl<'a> EmitContext<'a> {
         })
     }
 }
-impl<'a> Context for EmitContext<'a> {
-    type Node = Node<'a>;
-    fn node(&self) -> Self::Node {
-        self.node()
-    }
-    fn current(&self) -> Visit<Self> {
-        self.current()
-    }
-    fn children(&self) -> std::vec::IntoIter<Visit<Self>> {
-        self.children()
-    }
-}
-
 /// A completed layout property with its semantic owner and source expression.
 #[derive(Debug, Clone, Copy)]
 pub struct LayoutProperty<'a> {
@@ -138,7 +66,7 @@ pub struct RegisterSite<'a> {
     /// Offset in the enclosing map or bank template.
     pub offset: usize,
 }
-impl<'a> EmitContext<'a> {
+impl<'a> Context<'a> {
     /// Active unbound map parameter names, regardless of traversal order.
     pub fn parameters(&self) -> &'a [&'static str] {
         match &self.unit().body {
@@ -162,15 +90,16 @@ impl<'a> EmitContext<'a> {
     }
     /// Normalized position of the enclosing effective register.
     pub fn register_site(&self) -> Option<RegisterSite<'a>> {
-        match self.placement() {
-            Some(Placement::Concrete(ConcretePlacement::Register { view, location })) => {
-                Some(RegisterSite {
-                    location,
-                    path: &view.path,
-                    segments: &view.segments,
-                    offset: view.offset,
-                })
-            }
+        match self
+            .lineage()
+            .find(|node| matches!(node, Node::RegisterPlacement { .. }))
+        {
+            Some(Node::RegisterPlacement { view, location }) => Some(RegisterSite {
+                location,
+                path: &view.path,
+                segments: &view.segments,
+                offset: view.offset,
+            }),
             _ => self.register().map(|_| RegisterSite {
                 location: RegisterLocation::Root,
                 path: &self.unit().name,
@@ -198,8 +127,12 @@ impl<'a> EmitContext<'a> {
         let Node::LayoutProperty(property) = self.node() else {
             return None;
         };
-        let owner = match self.placement() {
-            Some(Placement::Symbolic(p)) => Some(p.reference.name()),
+        let owner = match self
+            .lineage()
+            .find(|node| matches!(node, Node::Placement(_) | Node::Bank(_)))
+        {
+            Some(Node::Placement(p)) => Some(p.reference.name()),
+            Some(Node::Bank(bank)) => Some(bank.name()),
             _ => None,
         };
         let name = match property.kind {

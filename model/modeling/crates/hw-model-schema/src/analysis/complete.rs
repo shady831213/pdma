@@ -4,7 +4,7 @@ mod substitute;
 mod substitution;
 use crate::{
     Documentation,
-    ast::{DefinitionId, LayoutExpr, Reference},
+    ast::{LayoutExpr, Reference},
 };
 
 /// Completed geometry for an ordered placement, expressed in its root parameter scope.
@@ -13,7 +13,7 @@ pub struct CompletePlacementLayout {
     /// Original reference and member name.
     pub reference: Reference,
     /// Referenced definition identity.
-    pub child_definition: DefinitionId,
+    pub child_definition: crate::traversal::NodeId,
     /// Source child name.
     pub child_name: &'static str,
     /// Explicit bank identity.

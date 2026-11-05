@@ -5,11 +5,8 @@ use hw_model_schema::ast::{
     ReferenceKind,
 };
 use hw_model_schema::export::generate;
-use hw_model_schema::export::{
-    Artifact, InMemoryArtifactSink,
-    record::{Backend, EmitContext},
-    value,
-};
+use hw_model_schema::export::{Artifact, InMemoryArtifactSink, record::Backend, value};
+use hw_model_schema::traversal::record::Context as RecordContext;
 use hw_model_schema::{Endian, FieldDefinition, RecordSpec, ScalarKind};
 
 const fn field(name: &'static str, offset: usize) -> Field {
@@ -81,7 +78,7 @@ fn manual_record() -> RecordDefinition {
 #[derive(Default)]
 struct DefinitionList(Vec<String>);
 impl Backend for DefinitionList {
-    fn root(&mut self, ctx: EmitContext<'_>) -> Result<(), Self::Error> {
+    fn root(&mut self, ctx: RecordContext<'_>) -> Result<(), Self::Error> {
         self.0.push(ctx.unit().name.clone());
         Ok(())
     }
@@ -89,7 +86,7 @@ impl Backend for DefinitionList {
 impl value::Backend for DefinitionList {
     type Domain = hw_model_schema::export::record::Domain;
     type Error = std::convert::Infallible;
-    type Context<'a> = EmitContext<'a>;
+    type Context<'a> = RecordContext<'a>;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(vec![Artifact {
             logical_name: "definitions.txt".into(),
@@ -124,13 +121,29 @@ fn manual_record_keeps_each_reference_to_a_shared_dependency() {
     let edges: Vec<_> = root
         .references
         .iter()
-        .map(|r| (r.name, r.kind, r.target))
+        .map(|r| (r.name, r.kind, r.target.clone()))
         .collect();
     assert_eq!(
         edges,
         vec![
-            ("left", ReferenceKind::Field, DefinitionId::of::<Middle>()),
-            ("right", ReferenceKind::Field, DefinitionId::of::<Middle>()),
+            (
+                "left",
+                ReferenceKind::Field,
+                analysis
+                    .definition(DefinitionId::of::<Middle>())
+                    .expect("middle")
+                    .id
+                    .clone()
+            ),
+            (
+                "right",
+                ReferenceKind::Field,
+                analysis
+                    .definition(DefinitionId::of::<Middle>())
+                    .expect("middle")
+                    .id
+                    .clone()
+            ),
         ]
     );
 }

@@ -1,6 +1,7 @@
 //! Recursive value callbacks shared by independent domain emitters.
 mod documentation;
 use super::Artifact;
+use crate::traversal::{Context, Visit};
 use crate::{
     BitsFieldSpec, EnumDefinition, EnumVariantSpec, RecordSpec,
     ast::{BitsDefinition, LayoutExpr, value::Node},
@@ -9,56 +10,6 @@ pub use documentation::{
     DocumentationFragment, DocumentationKind, DocumentationOwner, documentation_fragments,
     emit_documentation,
 };
-/// Read-only bound traversal context implemented by the framework domains.
-pub trait Context: Clone {
-    /// Domain node type, exposed only for inspection.
-    type Node: Copy;
-    /// Current semantic node.
-    fn node(&self) -> Self::Node;
-    /// Current bound visit.
-    fn current(&self) -> Visit<Self>;
-    /// Bound semantic children.
-    fn children(&self) -> std::vec::IntoIter<Visit<Self>>;
-}
-/// A semantic node bound to its original lexical context.
-///
-/// Targets cannot manufacture a visit from a context:
-/// ```compile_fail
-/// use hw_model_schema::export::{record::EmitContext, value::Visit};
-/// fn rebind(ctx: EmitContext<'_>) { let _ = Visit::new(ctx); }
-/// ```
-/// A struct literal also cannot create an independently bound visit:
-/// ```compile_fail
-/// use hw_model_schema::export::{record::EmitContext, value::Visit};
-/// fn forge(ctx: EmitContext<'_>) { let _ = Visit { ctx }; }
-/// ```
-/// Nor can targets dispatch a raw node paired with a context:
-/// ```compile_fail
-/// use hw_model_schema::{ast::record::Node, export::{record, value::Backend}};
-/// fn rebind<B: record::Backend>(b: &mut B, node: Node<'_>, ctx: record::EmitContext<'_>) {
-///     b.emit(node, ctx);
-/// }
-/// ```
-#[derive(Debug, Clone)]
-pub struct Visit<S> {
-    ctx: S,
-}
-impl<S: Context> Visit<S> {
-    pub(crate) const fn new(ctx: S) -> Self {
-        Self { ctx }
-    }
-    /// Inspects the semantic node without granting rebinding capability.
-    pub fn node(&self) -> S::Node {
-        self.ctx.node()
-    }
-    /// Inspects the immutable lexical context.
-    pub const fn context(&self) -> &S {
-        &self.ctx
-    }
-    pub(crate) fn into_context(self) -> S {
-        self.ctx
-    }
-}
 /// Target handling of values in one independently chosen source domain.
 pub trait Backend: Sized {
     /// Independently selected source domain.

@@ -39,6 +39,13 @@ The role prefix is part of every register macro namespace. All offsets are relat
 to platform-supplied bases; the contract exports no absolute base macros. Host and
 firmware may use different bus views of the same hardware.
 
+Register macro names derive from complete placement paths and instance indices;
+they do not use leaf-name ordinals such as `__1`. Long encoded path stems use a
+deterministic local abbreviation described in the schema crate README. The same
+physical path has the same stem in both role views; only the role prefix differs.
+This naming revision changes C source identifiers, not register addresses or access
+permissions. Consumers must use the names from the regenerated role headers.
+
 Each channel has an independent permission window. `ChannelWindowRegisters`
 repeats `ChannelWindowBlock` with alignment four and inferred extent/stride twelve:
 open at zero, firmware-only Function owner at four and status at eight. Both projections

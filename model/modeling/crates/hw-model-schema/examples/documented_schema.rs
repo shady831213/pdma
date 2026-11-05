@@ -9,7 +9,7 @@ use hw_model_schema::ast::{DefinitionId, SchemaSet};
 use std::io::{self, Write};
 
 use hw_model_schema::{
-    export::backends::c_header::{CRecordBackend, CRegisterBackend},
+    export::backends::c_header::{CRecordAnalysisPass, CRecordBackend, CRegisterBackend},
     export::{InMemoryArtifactSink, generate},
     record_schema, register_map, register_schema,
 };
@@ -62,14 +62,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut sink = InMemoryArtifactSink::new();
     let mut records = SchemaSet::new();
     records.add::<CopyRequest>();
+    let schema = AnalyzedSchema::from_graph(&records.resolve()?, &Bindings::new())?;
+    let id = schema
+        .definition(DefinitionId::of::<CopyRequest>())
+        .ok_or("missing copy")?
+        .id
+        .clone();
+    hw_model_schema::analysis::Pipeline::new((&schema, ()))
+        .run(CRecordAnalysisPass)?
+        .generate(
+            |data| CRecordBackend::new(data).with_name(id, "copy"),
+            &mut sink,
+        )?;
+    let schema = AnalyzedSchema::register_map("channel.h", &Channel::resolve()?)?;
     generate(
-        &AnalyzedSchema::from_graph(&records.resolve()?, &Bindings::new())?,
-        CRecordBackend::new().with_name(DefinitionId::of::<CopyRequest>(), "copy"),
-        &mut sink,
-    )?;
-    generate(
-        &AnalyzedSchema::register_map("channel.h", &Channel::resolve()?)?,
-        CRegisterBackend::new().with_name("channel.h", "channel"),
+        &schema,
+        CRegisterBackend::new().with_name(
+            schema
+                .view("channel.h")
+                .ok_or("missing channel")?
+                .id
+                .clone(),
+            "channel",
+        ),
         &mut sink,
     )?;
     let mut output = io::stdout().lock();

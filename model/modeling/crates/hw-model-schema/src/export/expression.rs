@@ -38,20 +38,26 @@ pub fn format_expression<S: ExpressionSyntax>(
     expression: &LayoutExpr,
     syntax: &mut S,
 ) -> Result<String, LayoutError> {
-    let mut binary = |op, left: &LayoutExpr, right: &LayoutExpr| {
-        let left = format_expression(left, syntax)?;
-        let right = format_expression(right, syntax)?;
-        Ok(syntax.binary(op, &left, &right))
-    };
-    match expression {
-        LayoutExpr::Constant(value) => Ok(syntax.literal(*value)),
-        LayoutExpr::Parameter(name) => Ok(syntax.parameter(name)),
-        LayoutExpr::Value(_) => Err(LayoutError::Geometry),
-        LayoutExpr::Add(a, b) => binary(ExpressionOp::Add, a, b),
-        LayoutExpr::Subtract(a, b) => binary(ExpressionOp::Subtract, a, b),
-        LayoutExpr::Multiply(a, b) => binary(ExpressionOp::Multiply, a, b),
-        LayoutExpr::Maximum(a, b) => binary(ExpressionOp::Maximum, a, b),
-        LayoutExpr::AlignUp(a, b) => binary(ExpressionOp::AlignUp, a, b),
-        LayoutExpr::Unsupported(source) => Err(LayoutError::Unsupported(source)),
+    expression.visit(&mut Formatter(syntax))
+}
+struct Formatter<'a, S>(&'a mut S);
+impl<S: ExpressionSyntax> crate::ast::ExpressionVisitor for Formatter<'_, S> {
+    type Output = String;
+    fn constant(&mut self, value: usize) -> Result<String, LayoutError> {
+        Ok(self.0.literal(value))
+    }
+    fn parameter(&mut self, name: &'static str) -> Result<String, LayoutError> {
+        Ok(self.0.parameter(name))
+    }
+    fn value(&mut self, _: crate::ast::PlanValue) -> Result<String, LayoutError> {
+        Err(LayoutError::Geometry)
+    }
+    fn binary(
+        &mut self,
+        op: ExpressionOp,
+        left: String,
+        right: String,
+    ) -> Result<String, LayoutError> {
+        Ok(self.0.binary(op, &left, &right))
     }
 }

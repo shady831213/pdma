@@ -1,8 +1,8 @@
+use super::{Bank, BankProperty};
 use crate::{
     BitsFieldSpec,
     analysis::{
-        CompleteMapLayout, CompletePlacementLayout, ConcretePlacement, Layout, RegisterMapView,
-        Unit,
+        CompleteMapLayout, CompletePlacementLayout, Layout, RegisterMapView, RegisterView, Unit,
     },
     ast::{
         RegisterInfo, RegisterLocation,
@@ -25,8 +25,17 @@ pub enum Node<'a> {
     RegisterField(&'a BitsFieldSpec<usize>),
     /// Completed placement layout.
     Placement(&'a CompletePlacementLayout),
-    /// Concrete member or bank.
-    ConcretePlacement(ConcretePlacement<'a>),
+    /// Effective register placement.
+    RegisterPlacement {
+        /// Permission-projected register.
+        view: &'a RegisterView,
+        /// Stable structural location.
+        location: RegisterLocation,
+    },
+    /// Completed bank.
+    Bank(Bank<'a>),
+    /// Final bank metadata.
+    BankProperty(BankProperty),
     /// Root parameter.
     Parameter(Parameter),
     /// Child binding.
@@ -48,58 +57,20 @@ impl<'a> Node<'a> {
                 .registers
                 .iter()
                 .enumerate()
-                .map(|(index, view)| {
-                    Self::ConcretePlacement(ConcretePlacement::Register {
-                        view,
-                        location: RegisterLocation::Standalone(index),
-                    })
+                .map(|(index, view)| Self::RegisterPlacement {
+                    view,
+                    location: RegisterLocation::Standalone(index),
                 })
                 .chain(map.banks.iter().enumerate().map(|(index, view)| {
-                    Self::ConcretePlacement(ConcretePlacement::Bank {
+                    Self::Bank(Bank {
                         view,
                         index,
                         expanded: map.expanded_banks,
                     })
                 }))
                 .collect(),
-            Self::ConcretePlacement(ConcretePlacement::Register { view, .. }) => {
-                vec![Self::Register(&view.register)]
-            }
-            Self::ConcretePlacement(ConcretePlacement::Bank {
-                view,
-                index,
-                expanded: false,
-            }) => view
-                .registers
-                .iter()
-                .enumerate()
-                .map(|(member, view)| {
-                    Self::ConcretePlacement(ConcretePlacement::Register {
-                        view,
-                        location: RegisterLocation::Template {
-                            bank: index,
-                            member,
-                        },
-                    })
-                })
-                .chain(
-                    view.instances
-                        .iter()
-                        .enumerate()
-                        .flat_map(move |(instance, rs)| {
-                            rs.iter().enumerate().map(move |(member, view)| {
-                                Self::ConcretePlacement(ConcretePlacement::Register {
-                                    view,
-                                    location: RegisterLocation::Instance {
-                                        bank: index,
-                                        instance,
-                                        member,
-                                    },
-                                })
-                            })
-                        }),
-                )
-                .collect(),
+            Self::RegisterPlacement { view, .. } => vec![Self::Register(&view.register)],
+            Self::Bank(bank) => bank.children(),
             Self::Register(v) => crate::ast::register::Node::Register(v)
                 .children()
                 .filter_map(Self::source)
@@ -117,7 +88,7 @@ impl<'a> Node<'a> {
             Self::LayoutProperty(v) => vec![Self::Value(value::Node::Expression(v.expression))],
             Self::Attribute(Attribute::Count(e)) => vec![Self::Value(value::Node::Expression(e))],
             Self::Value(v) => v.children().map(Self::Value).collect(),
-            Self::ConcretePlacement(ConcretePlacement::Bank { expanded: true, .. })
+            Self::BankProperty(_)
             | Self::Parameter(_)
             | Self::Attribute(
                 Attribute::Width(_)
@@ -210,7 +181,9 @@ impl<'a> Node<'a> {
             | Self::RegisterMap(_)
             | Self::Register(_)
             | Self::RegisterField(_)
-            | Self::ConcretePlacement(_)
+            | Self::RegisterPlacement { .. }
+            | Self::Bank(_)
+            | Self::BankProperty(_)
             | Self::Parameter(_)
             | Self::Argument(_)
             | Self::Attribute(_)

@@ -133,7 +133,10 @@ fn completed_layout_retains_documentation_references_and_bound_parameter_names()
     assert_eq!(root.documentation, docs);
     assert_eq!(
         root.references.first().expect("child reference").target,
-        DefinitionId::of::<Child>()
+        schema
+            .definition(DefinitionId::of::<Child>())
+            .expect("child definition")
+            .id
     );
     let Layout::Map(map) = &root.body else {
         panic!("map")

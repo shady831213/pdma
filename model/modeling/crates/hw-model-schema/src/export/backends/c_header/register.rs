@@ -1,14 +1,15 @@
+use crate::traversal::register::{Bank, BankProperty, Context, LayoutProperty, Node};
 mod metadata;
 pub(super) mod naming;
 
 use super::{CHeaderExportError, CRegisterBackend, fragment::Fragment, naming as symbols};
-use crate::analysis::{CompleteMapLayout, ConcretePlacement, RegisterMapView};
+use crate::analysis::{CompleteMapLayout, RegisterMapView};
 use crate::ast::{LayoutExpr, RegisterInfo, RegisterLocation};
 use crate::export::value::Backend as _;
 use crate::export::{
     Artifact,
     expression::{ExpressionSyntax, format_expression},
-    register::{Backend, EmitContext, LayoutProperty, Node},
+    register::Backend,
 };
 type CResult<T = ()> = Result<T, CHeaderExportError>;
 #[derive(Debug, Default)]
@@ -40,7 +41,7 @@ impl ExpressionSyntax for Syntax {
 }
 
 impl Backend for CRegisterBackend {
-    fn root(&mut self, ctx: EmitContext<'_>) -> CResult {
+    fn root(&mut self, ctx: Context<'_>) -> CResult {
         (self.logical_name, self.prefix) = self.names.unit(ctx.unit())?;
         self.output = Fragment::default();
         self.emit(ctx.current())?;
@@ -51,7 +52,7 @@ impl Backend for CRegisterBackend {
         });
         Ok(())
     }
-    fn map_layout<'a>(&mut self, _: &'a CompleteMapLayout, ctx: EmitContext<'a>) -> CResult {
+    fn map_layout<'a>(&mut self, _: &'a CompleteMapLayout, ctx: Context<'a>) -> CResult {
         let mut names = symbols::GeometryNames::new(&self.prefix)?;
         self.geometry = Geometry::default();
         self.emit_all(ctx.children())?;
@@ -84,38 +85,37 @@ impl Backend for CRegisterBackend {
         self.output.text.push_str(&self.geometry.assignments.text);
         self.output.line("    return result;\n}")
     }
-    fn register_map<'a>(&mut self, value: &'a RegisterMapView, ctx: EmitContext<'a>) -> CResult {
-        self.map_names = naming::map_names(value);
+    fn register_map<'a>(&mut self, value: &'a RegisterMapView, ctx: Context<'a>) -> CResult {
         self.map_constants(value.extent)?;
         self.emit_all(ctx.children())
     }
-    fn concrete_placement<'a>(
-        &mut self,
-        value: ConcretePlacement<'a>,
-        ctx: EmitContext<'a>,
-    ) -> CResult {
-        if let ConcretePlacement::Bank {
-            view,
-            index,
-            expanded,
-        } = value
-        {
-            let name = self.bank_name(index)?;
-            self.output.text.push('\n');
-            if expanded {
-                self.output.constants::<64>(&name, &[("INDEX", index)])?;
-                if let Some((parent, instance)) = view.parent {
-                    self.output.constants::<64>(
-                        &name,
-                        &[("PARENT_INDEX", parent), ("PARENT_INSTANCE", instance)],
-                    )?;
-                }
-            }
-            metadata::bank_metadata(&mut self.output, &name, view)?;
-        }
+    fn bank<'a>(&mut self, _: Bank<'a>, ctx: Context<'a>) -> CResult {
+        self.output.text.push('\n');
         self.emit_all(ctx.children())
     }
-    fn layout_property(&mut self, property: LayoutProperty<'_>, _: EmitContext<'_>) -> CResult {
+    fn bank_property(&mut self, property: BankProperty, ctx: Context<'_>) -> CResult {
+        let name = self.bank_name(&ctx)?;
+        let (suffix, value) = match property {
+            BankProperty::Index(v) => ("INDEX", v),
+            BankProperty::ParentIndex(v) => ("PARENT_INDEX", v),
+            BankProperty::ParentInstance(v) => ("PARENT_INSTANCE", v),
+        };
+        self.output
+            .unsigned::<64>(&format!("{name}_{suffix}"), value)
+    }
+    fn layout_property(&mut self, property: LayoutProperty<'_>, ctx: Context<'_>) -> CResult {
+        if ctx.bank().is_some() {
+            let name = self.bank_name(&ctx)?;
+            let suffix = if property.name == "offset" {
+                "BASE".into()
+            } else {
+                property.name.to_ascii_uppercase()
+            };
+            return self.output.unsigned::<64>(
+                &format!("{name}_{suffix}"),
+                property.expression.evaluate(&[], &[])?,
+            );
+        }
         let name = if let Some(owner) = property.owner {
             let name = format!("{}_{}", symbols::c_identifier(owner), property.name);
             self.geometry.names.insert(&name, &name)?;
@@ -128,7 +128,7 @@ impl Backend for CRegisterBackend {
         };
         self.geometry.assignment(&name, property.expression)
     }
-    fn register(&mut self, register: &RegisterInfo, ctx: EmitContext<'_>) -> CResult {
+    fn register(&mut self, register: &RegisterInfo, ctx: Context<'_>) -> CResult {
         let location = ctx.register_location();
         match location {
             RegisterLocation::Root => {
@@ -159,25 +159,20 @@ impl Backend for CRegisterBackend {
                 .filter(|visit| matches!(visit.node(), Node::Attribute(_))),
         )
     }
-    fn register_width(&mut self, value: usize, ctx: EmitContext<'_>) -> CResult {
-        let name = self.register_name(ctx.register_location())?;
+    fn register_width(&mut self, value: usize, ctx: Context<'_>) -> CResult {
+        let name = self.register_name(&ctx)?;
         self.output.unsigned::<64>(&format!("{name}_WIDTH"), value)
     }
-    fn register_access(&mut self, value: crate::Access, ctx: EmitContext<'_>) -> CResult {
-        let name = self.register_name(ctx.register_location())?;
+    fn register_access(&mut self, value: crate::Access, ctx: Context<'_>) -> CResult {
+        let name = self.register_name(&ctx)?;
         metadata::register_access(&mut self.output, &self.prefix, &name, value)
     }
-    fn register_reset(
-        &mut self,
-        kind: crate::ResetKind,
-        value: u64,
-        ctx: EmitContext<'_>,
-    ) -> CResult {
-        let name = self.register_name(ctx.register_location())?;
+    fn register_reset(&mut self, kind: crate::ResetKind, value: u64, ctx: Context<'_>) -> CResult {
+        let name = self.register_name(&ctx)?;
         metadata::register_reset(&mut self.output, &self.prefix, &name, kind, value)
     }
-    fn register_writable_mask(&mut self, value: u64, ctx: EmitContext<'_>) -> CResult {
-        let name = self.register_name(ctx.register_location())?;
+    fn register_writable_mask(&mut self, value: u64, ctx: Context<'_>) -> CResult {
+        let name = self.register_name(&ctx)?;
         self.output
             .unsigned::<64>(&format!("{name}_WRITABLE_MASK"), value)
     }

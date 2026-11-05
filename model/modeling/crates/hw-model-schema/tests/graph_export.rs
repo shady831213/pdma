@@ -30,7 +30,9 @@ fn distinct_same_named_types_require_an_explicit_backend_name_override()
     // When: the default backend would emit the same C prefix twice.
     let mut sink = InMemoryArtifactSink::new();
     let prepared = AnalyzedSchema::from_graph(&graph, &Bindings::new())?;
-    let failure = generate(&prepared, CRecordBackend::new(), &mut sink);
+    let c_prepared = hw_model_schema::analysis::Pipeline::new((&prepared, ()))
+        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?;
+    let failure = c_prepared.generate(CRecordBackend::new, &mut sink);
     // Then: no partial header is emitted; identity-based renaming resolves the collision.
     assert_eq!(
         failure,
@@ -42,8 +44,12 @@ fn distinct_same_named_types_require_an_explicit_backend_name_override()
         }))
     );
     assert!(sink.artifacts().is_empty());
-    let renderer = CRecordBackend::new().with_name(
-        hw_model_schema::ast::DefinitionId::of::<right::Entry>(),
+    let renderer = CRecordBackend::new(&c_prepared.input().1).with_name(
+        prepared
+            .definition(hw_model_schema::ast::DefinitionId::of::<right::Entry>())
+            .ok_or("missing right entry")?
+            .id
+            .clone(),
         "right_entry",
     );
     generate(&prepared, renderer, &mut sink)?;
@@ -59,11 +65,12 @@ fn c_header_exports_reachable_records_once() -> Result<(), Box<dyn std::error::E
     let graph = set.resolve()?;
     // When: the built-in C backend renders its complete dependency set.
     let mut sink = InMemoryArtifactSink::new();
-    generate(
+    hw_model_schema::analysis::Pipeline::new((
         &AnalyzedSchema::from_graph(&graph, &Bindings::new())?,
-        CRecordBackend::new(),
-        &mut sink,
-    )?;
+        (),
+    ))
+    .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?
+    .generate(CRecordBackend::new, &mut sink)?;
     // Then: both storage geometry and the referenced record's accessors are present.
     let output = sink
         .artifacts()
@@ -116,11 +123,12 @@ fn graph_register_uses_prepared_register_metadata() -> Result<(), Box<dyn std::e
     let mut sink = InMemoryArtifactSink::new();
     let mut records = SchemaSet::new();
     records.add_record::<Payload>();
-    generate(
+    hw_model_schema::analysis::Pipeline::new((
         &AnalyzedSchema::from_graph(&records.resolve()?, &Bindings::new())?,
-        CRecordBackend::new(),
-        &mut sink,
-    )?;
+        (),
+    ))
+    .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?
+    .generate(CRecordBackend::new, &mut sink)?;
 
     // When: the common preparer supplies register metadata to the C renderer.
     hw_model_schema::export::generate(

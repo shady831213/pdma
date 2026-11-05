@@ -122,10 +122,39 @@ layouts or concrete register maps, retaining effective access, masks, bank ident
 and holes. Source `MapView`/`PlacementView` analysis states are not backend inputs.
 
 Record and register domains have independent `Backend` traits and typed nodes.
+Processing uses `analysis::Pipeline` and `analysis::Pass<Input>`. Each pass owns
+its output and error types; `Pipeline::new(input).run(pass)` passes that output
+to the next explicitly selected stage. The built-in `Resolve`, `Validate`,
+`LayoutSchema` and `Simplify` stages use the same protocol as custom passes.
+Generators can insert analysis between these stages. `AnalyzedSchema::from_graph`
+remains the convenience path through validation, layout and simplification.
+
+For late target analysis, a pass can accept `(&schema, data)` and return
+`(&schema, new_data)`. `prepared.generate(|data| Backend::new(data), &mut sink)`
+borrows those results and runs the ordinary generator. Backends without extra
+analysis keep using `generate(&schema, backend, &mut sink)`. Validated and laid-out
+states expose immutable source. Their consuming `into_source()` discards the
+stage result before a transformation; the changed source must be validated and
+laid out again. Custom pass data is explicitly carried by its result type.
+
+Passes can walk `traversal::record::roots(&schema)` or
+`traversal::register::roots(&schema)` without
+implementing a renderer. Record `ctx.referent()` follows the current source
+reference as a bound visit. Its ancestors include the actual reference site, so
+two uses of a shared definition retain separate paths. Ordinary `children()`
+continues to traverse source containment without implicitly expanding references.
+The C record renderer's optional `CRecordAnalysisPass` computes occurrence offsets
+from source ancestry, indexed by occurrence `NodeId`; this computation is not
+part of the mandatory core flow. `traversal::source` also exposes pre-layout
+traversal. `DefinitionId` identifies a Rust declaration during discovery;
+`NodeId` identifies roots, children and reference-site occurrences during passes
+and generation. IDs are structural within an immutable schema, not persistent
+handles across arbitrary source edits.
+
 Shared bits/enums use `export::value::Backend`, implemented independently by each
 domain renderer. A handler formats one complete original node. It chooses where to
 recurse through `self.emit(ctx.current())` and `self.emit_all(ctx.children())`.
-Shared dispatch supplies a read-only `EmitContext` bound to the current node. Its
+Shared traversal supplies a read-only `Context` bound to the current node. Its
 `value::Backend::Domain` selects the record or register dispatcher
 for the unified generation entry. Recursion supplies the call stack. No begin/end
 events, per-type Render forwarding traits or mutable render stack are involved.
@@ -537,12 +566,13 @@ use core::convert::Infallible;
 use hw_model_schema::{
     RecordSpec,
     analysis::AnalyzedSchema,
-    export::{Artifact, InMemoryArtifactSink, generate, record::{self, EmitContext}, value},
+    export::{Artifact, InMemoryArtifactSink, generate, record, value},
+    traversal::record::Context,
 };
 #[derive(Default)]
 struct NameListing { names: String }
 impl record::Backend for NameListing {
-    fn root(&mut self, ctx: EmitContext<'_>) -> Result<(), Self::Error> {
+    fn root(&mut self, ctx: Context<'_>) -> Result<(), Self::Error> {
         self.names.push_str(&ctx.unit().name);
         self.names.push('\n');
         Ok(())
@@ -550,7 +580,7 @@ impl record::Backend for NameListing {
 }
 impl value::Backend for NameListing {
     type Error = Infallible;
-    type Context<'a> = EmitContext<'a>;
+    type Context<'a> = Context<'a>;
     type Domain = record::Domain;
     fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
         Ok(vec![Artifact {
@@ -585,6 +615,16 @@ With that feature enabled, the backend lives at
 It emits an owned deterministic C fragment through a sink and leaves include guards,
 file layout, and integration policy to the caller.
 
+Register symbols follow the complete structural path, including bank instance
+indices. Each component uses C identifier escaping; an unrelated sibling or a
+permission projection does not change the name of a surviving register. There is
+no global short-name allocation or declaration-order numbering. To leave space
+for the root prefix and property suffix, encoded path stems longer than 32 ASCII
+bytes use their first 15 bytes, `_`, and a 16-digit uppercase FNV-1a64 digest of the
+entire encoded stem. Final symbol checking rejects collisions, including collisions
+within C's 63 significant identifier bytes. Explicit root-prefix overrides retain
+their spelling and may therefore be rejected if they cause such a collision.
+
 ```rust
 # use hw_model_schema::{
 #     Decode, Encode, Endian, FieldSpec, SchemaCodec, RecordSpec, ScalarKind,
@@ -593,10 +633,10 @@ file layout, and integration policy to the caller.
 #[cfg(feature = "export-c-header")]
 fn main() {
     use hw_model_schema::{
-        export::{generate, InMemoryArtifactSink},
+        export::InMemoryArtifactSink,
         ast::{DefinitionId, SchemaSet},
-        analysis::{AnalyzedSchema, Bindings},
-        export::backends::c_header::CRecordBackend,
+        analysis::{AnalyzedSchema, Bindings, Pipeline},
+        export::backends::c_header::{CRecordAnalysisPass, CRecordBackend},
         record_schema,
     };
 
@@ -608,13 +648,17 @@ fn main() {
         }
     }
 
-    let renderer = CRecordBackend::new().with_name(DefinitionId::of::<Header>(), "demo header");
     let mut sink = InMemoryArtifactSink::new();
     let mut selected = SchemaSet::new();
     selected.add::<Header>();
     let graph = selected.resolve().expect("example references must resolve");
     let schema = AnalyzedSchema::from_graph(&graph, &Bindings::new()).expect("example layout must resolve");
-    assert!(generate(&schema, renderer, &mut sink).is_ok());
+    let root = schema.definition(DefinitionId::of::<Header>()).expect("selected root");
+    let prepared = Pipeline::new((&schema, ())).run(CRecordAnalysisPass).expect("C analysis must succeed");
+    assert!(prepared.generate(
+        |data| CRecordBackend::new(data).with_name(root.id.clone(), "demo header"),
+        &mut sink,
+    ).is_ok());
     let artifacts = sink.into_artifacts();
     assert_eq!(artifacts.len(), 1);
     assert_eq!(artifacts[0].logical_name, "header");

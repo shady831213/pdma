@@ -7,6 +7,7 @@ pub mod support;
 
 mod declarations;
 mod descriptions;
+mod direct_names;
 mod enum_bit_union;
 mod enumeration;
 mod generated_enumeration;
@@ -15,4 +16,6 @@ mod ordered_descriptions;
 mod record_tests;
 mod register_map_tests;
 mod sink_errors;
+mod source_graph;
+mod source_opaque;
 mod untagged;

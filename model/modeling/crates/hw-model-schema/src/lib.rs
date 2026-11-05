@@ -93,3 +93,6 @@ pub use scalar::{Scalar, ScalarKind};
 
 /// Failure while inserting a value through a generated register-field marker.
 pub type RegisterCodecError = RegisterValueError;
+
+/// Target-neutral bound semantic traversal and occurrence identities.
+pub mod traversal;

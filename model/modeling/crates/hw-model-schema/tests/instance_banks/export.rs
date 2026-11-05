@@ -14,9 +14,13 @@ fn strict_c11_retains_nested_singleton_topology_when_members_are_hidden()
         (register.id() == NestedRegisterId::Tail).then_some(hw_model_schema::Access::ReadOnly)
     })?;
     let mut sink = InMemoryArtifactSink::new();
+    let schema = AnalyzedSchema::register_map("nested.h", &resolved)?;
     generate(
-        &AnalyzedSchema::register_map("nested.h", &resolved)?,
-        CRegisterBackend::new().with_name("nested.h", "nested"),
+        &schema,
+        CRegisterBackend::new().with_name(
+            schema.view("nested.h").ok_or("nested view")?.id.clone(),
+            "nested",
+        ),
         &mut sink,
     )?;
     let directory = std::env::var_os("SCHEMA_BANK_EVIDENCE_DIR")
@@ -30,7 +34,7 @@ fn strict_c11_retains_nested_singleton_topology_when_members_are_hidden()
         directory.join("nested.h"),
         &sink.artifacts().first().unwrap().contents,
     )?;
-    std::fs::write(directory.join("consumer.c"), b"#include <stdint.h>\n#include \"nested.h\"\n_Static_assert(C_NESTED_C_GROUPS_COUNT == 3, \"outer count\");\n_Static_assert(C_NESTED_C_LANES__3_COUNT == 1, \"inner count\");\n_Static_assert(C_NESTED_C_LANES__3_BASE == 32, \"nested base\");\n_Static_assert(C_NESTED_C_LANES__3_PARENT_INDEX == C_NESTED_C_GROUPS_INDEX, \"parent bank\");\n_Static_assert(C_NESTED_C_LANES__3_PARENT_INSTANCE == 2, \"parent instance\");\n_Static_assert(C_NESTED_C_GROUPS_STRIDE == 16, \"occupied stride\");\nint main(void) { return C_NESTED_SIZE != 64; }\n")?;
+    std::fs::write(directory.join("consumer.c"), b"#include <stdint.h>\n#include \"nested.h\"\n_Static_assert(C_NESTED_C_GROUPS_COUNT == 3, \"outer count\");\n_Static_assert(C_NESTED_C_GROUPS_2_C_LANES_COUNT == 1, \"inner count\");\n_Static_assert(C_NESTED_C_GROUPS_2_C_LANES_BASE == 32, \"nested base\");\n_Static_assert(C_NESTED_C_GROUPS_2_C_LANES_PARENT_INDEX == C_NESTED_C_GROUPS_INDEX, \"parent bank\");\n_Static_assert(C_NESTED_C_GROUPS_2_C_LANES_PARENT_INSTANCE == 2, \"parent instance\");\n_Static_assert(C_NESTED_C_GROUPS_STRIDE == 16, \"occupied stride\");\nint main(void) { return C_NESTED_SIZE != 64; }\n")?;
     let binary = directory.join("consumer");
     let compile = Command::new("cc")
         .args([
@@ -68,9 +72,13 @@ fn strict_c11_addresses_match_routing_for_runtime_counts() -> Result<(), Box<dyn
         let layout = super::contiguous::Grouped::new(count)?;
         let resolved = layout.resolve()?;
         let mut sink = InMemoryArtifactSink::new();
+        let schema = AnalyzedSchema::register_map("banks.h", &resolved)?;
         generate(
-            &AnalyzedSchema::register_map("banks.h", &resolved)?,
-            CRegisterBackend::new().with_name("banks.h", "banks"),
+            &schema,
+            CRegisterBackend::new().with_name(
+                schema.view("banks.h").ok_or("banks view")?.id.clone(),
+                "banks",
+            ),
             &mut sink,
         )?;
         let header = &sink.artifacts().first().unwrap().contents;
@@ -78,12 +86,7 @@ fn strict_c11_addresses_match_routing_for_runtime_counts() -> Result<(), Box<dyn
             "#include <stdint.h>\n#include <stdio.h>\n#include \"banks.h\"\nint main(void) {\n",
         );
         for index in 0..count {
-            let suffix = if count == 1 {
-                String::new()
-            } else {
-                format!("__{}", index + 1)
-            };
-            let symbol = format!("C_BANKS_C_QUSQUTQUAQUTQUUQUS{suffix}_OFFSET");
+            let symbol = format!("C_BANKS_C_CHANNELS_{index}_C_STATUS_OFFSET");
             writeln!(
                 consumer,
                 "printf(\"%llu\\n\", (unsigned long long){symbol});"

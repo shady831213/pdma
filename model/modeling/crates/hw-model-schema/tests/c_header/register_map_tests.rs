@@ -144,8 +144,8 @@ fn c_header_fragments_compile_and_run_when_wrapped_as_strict_c11() -> TestResult
 }
 
 #[test]
-fn c_header_disambiguates_normalization_collisions_when_compiled_as_strict_c11() -> TestResult {
-    // Given: valid record and map names that collapse at the C identifier boundary.
+fn c_header_preserves_distinct_punctuation_names_when_compiled_as_strict_c11() -> TestResult {
+    // Given: record and map names distinguished only by punctuation.
     let record_exporter = ("collision.record", "collision record");
     let map_exporter = ("collision.map", "collision map");
     let collision_record = COLLISION_RECORD;
@@ -169,6 +169,6 @@ fn c_header_disambiguates_normalization_collisions_when_compiled_as_strict_c11()
         COLLISION_C_MAIN,
     )?;
 
-    // Then: declaration-order suffixes retain distinct helpers and macro values.
+    // Then: injective escaping retains distinct helpers and macro values.
     Ok(())
 }

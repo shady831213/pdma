@@ -204,17 +204,21 @@ fn derived_size_uses_the_codec_extent() {
 #[test]
 fn opaque_field_metadata_exports_without_describing_internals() {
     use hw_model_schema::analysis::AnalyzedSchema;
+    use hw_model_schema::export::InMemoryArtifactSink;
     use hw_model_schema::export::backends::c_header::CRecordBackend;
-    use hw_model_schema::export::{InMemoryArtifactSink, generate};
     // Given a parent containing trait-default opaque metadata.
     let mut sink = InMemoryArtifactSink::new();
     // When exporting its validated layout.
-    generate(
-        &AnalyzedSchema::opaque("opaque.h", WithMarker::SPEC).unwrap(),
-        CRecordBackend::new().with_name("opaque.h", "opaque"),
-        &mut sink,
-    )
-    .unwrap();
+    let schema = AnalyzedSchema::opaque("opaque.h", WithMarker::SPEC).unwrap();
+    let id = schema.view("opaque.h").unwrap().id.clone();
+    hw_model_schema::analysis::Pipeline::new((&schema, ()))
+        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)
+        .unwrap()
+        .generate(
+            |data| CRecordBackend::new(data).with_name(id, "opaque"),
+            &mut sink,
+        )
+        .unwrap();
     let artifact = sink.into_artifacts().remove(0);
     let header = String::from_utf8(artifact.contents).unwrap();
     // Then the complete parent size and known prefix survive the export.

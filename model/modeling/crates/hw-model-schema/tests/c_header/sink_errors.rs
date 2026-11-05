@@ -2,7 +2,7 @@ use hw_model_schema::analysis::{AnalyzedSchema, Bindings};
 use hw_model_schema::{
     ast::{Definition, SchemaSet},
     export::backends::c_header::{CHeaderExportError, CRecordBackend, CRegisterBackend},
-    export::{Artifact, ArtifactSink, ExportError, generate},
+    export::{ExportError, generate},
     register::RegisterSpec,
     register_map::RegisterMapSpec,
 };
@@ -30,22 +30,21 @@ struct RejectingStorage {
     attempts: usize,
 }
 
-impl ArtifactSink for RejectingStorage {
-    type Error = StorageFailure;
-
-    fn emit(&mut self, _: Artifact) -> Result<(), Self::Error> {
+impl io::Write for RejectingStorage {
+    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
         self.attempts += 1;
-        Err(StorageFailure {
+        Err(io::Error::other(StorageFailure {
             destination: String::from("device/headers/output.h"),
             cause: io::Error::new(io::ErrorKind::PermissionDenied, "storage is read only"),
-        })
+        }))
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
 
 fn retains_storage_error(
-    generate: impl FnOnce(
-        &mut RejectingStorage,
-    ) -> Result<(), ExportError<CHeaderExportError, StorageFailure>>,
+    generate: impl FnOnce(&mut RejectingStorage) -> Result<(), ExportError<CHeaderExportError>>,
 ) -> super::support::TestResult {
     let mut sink = RejectingStorage { attempts: 0 };
     let error = generate(&mut sink)
@@ -55,9 +54,13 @@ fn retains_storage_error(
         error.source().ok_or("missing export source")?.to_string(),
         "device/headers/output.h: storage is read only"
     );
-    let ExportError::Sink(storage) = error else {
-        return Err("renderer must retain the independent storage error".into());
+    let ExportError::Render(CHeaderExportError::Io(error)) = error else {
+        return Err("renderer must retain the writer error".into());
     };
+    let storage = error
+        .get_ref()
+        .and_then(|cause| cause.downcast_ref::<StorageFailure>())
+        .ok_or("missing typed storage error")?;
     assert_eq!(storage.destination, "device/headers/output.h");
     assert_eq!(storage.cause.kind(), io::ErrorKind::PermissionDenied);
     assert_eq!(
@@ -75,7 +78,7 @@ fn retains_storage_error(
 fn record_export_preserves_independent_non_clone_sink_error() -> super::support::TestResult {
     // Given: a resolved record and an exporter unrelated to the storage error type.
     let schema = super::support::RECORD;
-    // When/Then: rejecting storage receives one artifact and returns its exact typed cause.
+    // When/Then: storage rejects the first write and preserves its exact typed cause.
     retains_storage_error(|sink| {
         hw_model_schema::analysis::Pipeline::new((
             &AnalyzedSchema::opaque("record", schema).unwrap(),
@@ -92,7 +95,7 @@ fn register_map_export_preserves_independent_non_clone_sink_error() -> super::su
     // Given: a resolved register map and the same independent storage error type.
     const REGISTERS: [RegisterSpec<u8>; 1] = [RegisterSpec::new(0, "status", 0, 4)];
     let schema = RegisterMapSpec::new(4, &REGISTERS, &[]).resolve().unwrap();
-    // When/Then: rejecting storage receives one artifact and returns its exact typed cause.
+    // When/Then: storage rejects the first write and preserves its exact typed cause.
     retains_storage_error(|sink| {
         generate(
             &AnalyzedSchema::register_map("map", &schema).expect("valid checked projection"),

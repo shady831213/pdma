@@ -1,5 +1,11 @@
 # Schema export review candidate
 
+Current output contract: backends stream directly into caller-provided `io::Write`.
+`prepare` exposes bound units with `OutputMetadata` carrying logical name and media
+type without owning bytes. Historical validation notes below describe earlier checkpoints;
+their no-partial-artifact guarantee no longer applies to direct streaming.
+Callers may explicitly stage output before publication.
+
 Status: unpublished 0.2.0. Publication requires renewed user approval. Normal
 consumers keep crates.io dependencies; candidate checks use an external Cargo-home
 patch configuration, never a checked-in default override.
@@ -33,7 +39,7 @@ existing DSL parser
                                       |
                               generate(backend)
                                       |
-                       artifacts -> application sink
+                       writer -> application output policy
 ```
 
 Macro expansion constructs metadata from the parsed DSL. It never parses the
@@ -165,16 +171,28 @@ bindings remain separately queryable. These facts do not depend on visit order;
 backend parameter collection and semantic scope reconstruction have been removed.
 
 The common generate pass preflights the selected dependency closure for domain
-compatibility before invoking callbacks. It emits in dependency order and calls
-`finish` before publishing artifacts. Analysis or rendering errors publish no
-partial artifacts. Sink failures can retain already accepted artifacts;
-transactional storage is the sink's responsibility.
+compatibility before invoking callbacks or opening output. It emits in dependency
+order, preparing every root's metadata before the first write. `generate` accepts
+an ordinary `io::Write`. `prepare` exposes the same bound units and metadata for
+callers selecting separate destinations; `prepare_roots` permits explicit domain
+selection within a unified graph. Backend metadata checks names but does not select
+active rendering state; each root callback initializes its own target-local state.
+Backends write incrementally; no final artifact buffer, `finish`, storage trait or
+writer wrapper exists. Rendering errors may leave partial bytes. Opening, flushing
+and publishing are caller I/O operations with ordinary I/O errors.
+PDMA's RTL generator resolves one dependency graph and selects record/value roots
+and register roots once. It checks the combined package namespace before writing,
+then emits record/value packages followed by register packages, preserving each
+group's dependency order. There is no heterogeneous package enum, identity map or
+global interleaving restoration. No rendered-byte comparison or package-byte map
+remains. CLI buffering of complete files remains application-owned, preserving
+render-before-publish behavior. The schema library does not flush or publish output.
 
 Default-off builtin features provide `CRecordBackend`, `CRegisterBackend`,
 `VerylRecordBackend` and `VerylRegisterBackend`. C byte accessors use checked
 storage metadata. Veryl packages describe layout, not bus behavior or hardware
 register state. Custom documentation and dependency-graph outputs need neither
-builtin. Target-private text buffers are formatting details, not another IR.
+builtin. Target-private symbol state concerns spelling, not another IR or text buffer.
 Each register backend owns its map formatting callbacks directly. There is no
 separate map renderer or forwarding entry point. Veryl formats parameter
 signatures from the current context, typed attributes and expression spelling;
@@ -202,7 +220,7 @@ receives the completed expression and normalized relative owner/property. Both
 builtins implement this generic callback once. Veryl's register-name helper only
 spells structural path segments; template/instance output policy is decided at
 register entry rather than repeated by every attribute callback. Target symbol
-collision checks and output buffers remain target responsibilities.
+collision checks remain target responsibilities; output storage belongs to the caller.
 
 Common documentation dispatch preserves summary/detail distinction, explicit
 empty text, effective placement fallback and source ownership. It invokes target
@@ -216,11 +234,15 @@ removed. Each layout leaf emits its scalar function directly, retaining existing
 offset/count/stride signatures and adding a direct extent accessor. The Rust-side
 member/body collection is gone. C's aggregate `_Geometry` interface remains a
 deliberate target format used by native consumers; its members and assignments now
-come from common leaf callbacks rather than a second map traversal.
+come from common leaf callbacks over the already analyzed children.
 
 The contract header generator selects record roots and separate Host/firmware
-register projections. The RTL generator selects DMA record and register roots,
-merges identical shared value packages, and preserves dependency order. Neither
+register projections. `contract::view::RegisterView` constructs complete DMA, boot,
+control, window and optional context-table views; the generator does not implement
+role permissions or bank-relative address mapping. Window count and stride use the
+backend's ordinary bank constants, without additional handwritten aliases.
+The RTL generator emits DMA record/value and register groups
+separately, assigning shared definitions once before emission. Neither
 application generator computes layout formulas.
 
 ## Candidate validation

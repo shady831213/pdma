@@ -2,7 +2,8 @@
 
 mod telemetry;
 pub use telemetry::{
-    TelemetryRecordRenderer, TelemetryRegisterRenderer, TelemetrySink, export_resolved,
+    TelemetryRecordRenderer, TelemetryRegisterRenderer, TelemetryReport, TelemetrySink,
+    export_resolved,
 };
 
 use his::{
@@ -120,15 +121,15 @@ register_map! {
 
 /// Returns the stable terminal report derived from the custom artifact and schema locations.
 #[must_use]
-pub fn output_line() -> Option<String> {
+pub fn output_line() -> Result<String, Box<dyn std::error::Error>> {
     let mut sink = TelemetrySink::default();
     export_resolved(&mut sink)?;
-    let artifact = sink.artifacts().first()?;
-    let content = core::str::from_utf8(&artifact.contents).ok()?;
-    let fixed = fixed_offset(TelemetryMap::locate(4))?;
-    let repeated0 = repeated_offset(TelemetryMap::locate(32), 0)?;
-    let repeated1 = repeated_offset(TelemetryMap::locate(64), 1)?;
-    Some(format!(
+    let artifact = sink.artifacts().first().ok_or("missing report")?;
+    let content = core::str::from_utf8(&artifact.contents)?;
+    let fixed = fixed_offset(TelemetryMap::locate(4)).ok_or("fixed register")?;
+    let repeated0 = repeated_offset(TelemetryMap::locate(32), 0).ok_or("first lane")?;
+    let repeated1 = repeated_offset(TelemetryMap::locate(64), 1).ok_or("second lane")?;
+    Ok(format!(
         "artifact={};media={};content={content};flat_record_size={};fixed={fixed};repeated0={repeated0};repeated1={repeated1}",
         artifact.logical_name,
         artifact.media_type,

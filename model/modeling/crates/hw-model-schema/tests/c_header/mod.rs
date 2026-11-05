@@ -3,7 +3,7 @@
 #![cfg(feature = "export-c-header")]
 
 #[allow(missing_docs)]
-pub mod support;
+mod support;
 
 mod declarations;
 mod descriptions;
@@ -19,3 +19,5 @@ mod sink_errors;
 mod source_graph;
 mod source_opaque;
 mod untagged;
+
+mod streaming;

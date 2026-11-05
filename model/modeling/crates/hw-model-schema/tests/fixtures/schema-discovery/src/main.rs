@@ -1,10 +1,12 @@
 //! Cross-crate discovery plus an application-defined dependency-graph backend.
 use schema::{
     ast::{SchemaGraph, SchemaRegistry},
-    export::Artifact,
     record_schema,
 };
-use std::{error::Error, fmt::Write};
+use std::{
+    error::Error,
+    io::{self, Write},
+};
 
 record_schema! {
     pub record Entry { alignment: 4, endian: Little, fields: {
@@ -14,26 +16,21 @@ record_schema! {
 }
 
 /// Dependency graph rendering consumes reusable schema identities directly.
-fn dependency_graph(graph: &SchemaGraph) -> Result<Artifact, std::fmt::Error> {
-    let mut text = String::from("digraph schemas {\n");
+fn dependency_graph(graph: &SchemaGraph, writer: &mut dyn Write) -> io::Result<()> {
+    writer.write_all(b"digraph schemas {\n")?;
     for definition in graph.definitions() {
         let path = definition.id().path();
-        writeln!(text, "  {path:?};")?;
+        writeln!(writer, "  {path:?};")?;
         for edge in definition.node().references() {
             writeln!(
-                text,
+                writer,
                 "  {path:?} -> {:?} [label={:?}];",
                 edge.target().id().path(),
                 edge.name()
             )?;
         }
     }
-    text.push_str("}\n");
-    Ok(Artifact {
-        logical_name: "dependencies.dot".into(),
-        media_type: "text/vnd.graphviz".into(),
-        contents: text.into_bytes(),
-    })
+    writer.write_all(b"}\n")
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -48,8 +45,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let peer = registry.select_module("schema_peer").resolve()?;
     assert_eq!(peer.definitions().count(), 2);
     assert!(peer.definitions().any(|node| node.name() == "Dormant"));
-    let artifact = dependency_graph(&graph)?;
-    let text = std::str::from_utf8(&artifact.contents)?;
+    let mut bytes = Vec::new();
+    dependency_graph(&graph, &mut bytes)?;
+    let text = std::str::from_utf8(&bytes)?;
     assert_eq!(text.matches(" -> ").count(), 2);
     print!("{text}");
     Ok(())

@@ -1,15 +1,17 @@
 //! Cross-parent reordering keeps immutable field and bit ancestry attached to visits.
+/// Caller-owned capture for generation tests.
+pub mod output_support;
 use hw_model_schema::traversal::record::Context as RecordContext;
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Bindings},
     ast::{RecordDefinition, SchemaSet, record::Node},
     export::{
-        Artifact, InMemoryArtifactSink, generate,
         record::{self},
         value::{self, Backend},
     },
     record_schema,
 };
+use output_support::MemoryOutput;
 record_schema! { pub record Packet { endian: Little, fields: {
     zeta: bits(u8) { fields: { first: 0..2 => enum { variants: { Off = 0, On = 1 } } } },
     alpha: bits(u8) { fields: { second: 0..2 => enum { variants: { Off = 0, On = 1 } } } },
@@ -21,6 +23,7 @@ impl record::Backend for Probe {
         &mut self,
         _: &'a RecordDefinition,
         ctx: RecordContext<'a>,
+        writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
         let mut grandchildren: Vec<_> = ctx
             .children()
@@ -28,7 +31,7 @@ impl record::Backend for Probe {
             .flat_map(|v| v.context().children())
             .collect();
         grandchildren.sort_by_key(|v| v.context().field().map(hw_model_schema::ast::Field::name));
-        self.emit_all(grandchildren)
+        self.emit_all(grandchildren, writer)
     }
 }
 impl value::Backend for Probe {
@@ -39,6 +42,7 @@ impl value::Backend for Probe {
         &mut self,
         _: &hw_model_schema::EnumVariantSpec,
         ctx: RecordContext<'_>,
+        writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
         let field = ctx.field().ok_or("missing field")?.name();
         let bit = ctx.bit().ok_or("missing bit")?;
@@ -47,15 +51,26 @@ impl value::Backend for Probe {
                 .iter()
                 .any(|n| matches!(n, Node::Field(f) if f.name() == field))
         );
-        self.0.push(format!("{field}:{bit}"));
+        {
+            let event: String = format!("{field}:{bit}");
+            if !self.0.is_empty() {
+                writer.write_all(b"\n").map_err(|_| "writer rejected")?;
+            }
+            writer
+                .write_all(event.as_bytes())
+                .map_err(|_| "writer rejected")?;
+            self.0.push(event);
+        }
         Ok(())
     }
-    fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
-        Ok(vec![Artifact {
-            logical_name: "parents".into(),
+    fn metadata(
+        &mut self,
+        ctx: &Self::Context<'_>,
+    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
+        Ok(hw_model_schema::export::OutputMetadata {
+            logical_name: ctx.unit().name.clone(),
             media_type: "text/plain".into(),
-            contents: self.0.join("\n").into_bytes(),
-        }])
+        })
     }
 }
 #[test]
@@ -63,10 +78,13 @@ fn grandchildren_sorted_across_siblings_keep_original_parent() {
     let mut set = SchemaSet::new();
     set.add_record::<Packet>();
     let schema = AnalyzedSchema::analyze(set, &Bindings::new()).unwrap();
-    let mut sink = InMemoryArtifactSink::new();
-    generate(&schema, Probe(vec![]), &mut sink).unwrap();
+    let mut sink = MemoryOutput::new();
+    sink.generate(&schema, Probe(vec![])).unwrap();
     assert_eq!(
-        sink.artifacts().first().unwrap().contents,
+        sink.outputs()
+            .iter()
+            .flat_map(|output| output.bytes.iter().copied())
+            .collect::<Vec<_>>(),
         b"alpha:second\nalpha:second\nzeta:first\nzeta:first"
     );
 }
@@ -84,7 +102,7 @@ fn root_visit_retains_owner_when_dispatched_as_an_ordinary_visit() {
             core::ptr::from_ref(&schema)
         ));
         assert!(visit.context().ancestors().is_empty());
-        probe.emit(visit).unwrap();
+        probe.emit(visit, &mut std::io::sink()).unwrap();
     }
     assert_eq!(
         probe.0,
@@ -94,30 +112,46 @@ fn root_visit_retains_owner_when_dispatched_as_an_ordinary_visit() {
 
 struct RootNames(Vec<String>);
 impl record::Backend for RootNames {
-    fn root(&mut self, ctx: RecordContext<'_>) -> Result<(), Self::Error> {
+    fn root(
+        &mut self,
+        ctx: RecordContext<'_>,
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), Self::Error> {
         assert!(ctx.ancestors().is_empty());
-        self.0.push(ctx.unit().name.clone());
-        self.emit(ctx.current())
+        {
+            let event: String = ctx.unit().name.clone();
+            if !self.0.is_empty() {
+                writer.write_all(b"\n").map_err(|_| "writer rejected")?;
+            }
+            writer
+                .write_all(event.as_bytes())
+                .map_err(|_| "writer rejected")?;
+            self.0.push(event);
+        }
+        self.emit(ctx.current(), writer)
     }
     fn field<'a>(
         &mut self,
         _: &'a hw_model_schema::ast::Field,
         ctx: RecordContext<'a>,
+        writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
         assert!(matches!(ctx.ancestors(), [Node::Record(_)]));
-        self.emit_all(ctx.children())
+        self.emit_all(ctx.children(), writer)
     }
 }
 impl value::Backend for RootNames {
     type Domain = record::Domain;
     type Error = &'static str;
     type Context<'a> = RecordContext<'a>;
-    fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
-        Ok(vec![Artifact {
-            logical_name: "roots".into(),
+    fn metadata(
+        &mut self,
+        ctx: &Self::Context<'_>,
+    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
+        Ok(hw_model_schema::export::OutputMetadata {
+            logical_name: ctx.unit().name.clone(),
             media_type: "text/plain".into(),
-            contents: self.0.join("\n").into_bytes(),
-        }])
+        })
     }
 }
 #[test]
@@ -125,10 +159,13 @@ fn generation_dispatches_dependency_roots_without_extra_ancestors() {
     let mut set = SchemaSet::new();
     set.add_record::<Envelope>();
     let schema = AnalyzedSchema::analyze(set, &Bindings::new()).unwrap();
-    let mut sink = InMemoryArtifactSink::new();
-    generate(&schema, RootNames(vec![]), &mut sink).unwrap();
+    let mut sink = MemoryOutput::new();
+    sink.generate(&schema, RootNames(vec![])).unwrap();
     assert_eq!(
-        sink.artifacts().first().unwrap().contents,
+        sink.outputs()
+            .iter()
+            .flat_map(|output| output.bytes.iter().copied())
+            .collect::<Vec<_>>(),
         b"Packet\nEnvelope"
     );
 }

@@ -51,11 +51,11 @@ fn record_enum_codes_and_sanitized_documentation_compile_in_c11() -> TestResult 
     // When: the resolved record exports its enum variants.
     let artifact = render_record(exporter.0, exporter.1, &RECORD)?;
     // Then: variant descriptions remain comments and every wire code is C-consumable.
-    let text = std::str::from_utf8(&artifact.contents)?;
+    let text = std::str::from_utf8(&artifact.bytes)?;
     assert!(text.contains("Active / * transfer * /"));
     compile_fragments(
         "record-enum",
-        &[&artifact.contents],
+        &[&artifact.bytes],
         br#"
 _Static_assert(C_RECORD_C_CHILDQX2ESTATE_C_IDLE == 0, "idle code");
 _Static_assert(C_RECORD_C_CHILDQX2ESTATE_C_ACTIVEQX2DSTATE == 7, "active code");
@@ -77,10 +77,10 @@ fn nested_record_bit_enum_exports_unshifted_codes() -> TestResult {
     // When: the nested bit metadata crosses the record exporter.
     let artifact = render_record(exporter.0, exporter.1, &BIT_RECORD)?;
     // Then: named codes remain local values and hostile docs remain inert comments.
-    assert!(std::str::from_utf8(&artifact.contents)?.contains("Active / * transfer * /"));
+    assert!(std::str::from_utf8(&artifact.bytes)?.contains("Active / * transfer * /"));
     compile_fragments(
         "record-bit-enum",
-        &[&artifact.contents],
+        &[&artifact.bytes],
         br#"
 _Static_assert(C_RECORD_C_CHILDQX2EFLAGS_C_MODE_C_IDLE == 0, "idle code");
 _Static_assert(C_RECORD_C_CHILDQX2EFLAGS_C_MODE_C_ACTIVEQX2DSTATE == 7, "local code");
@@ -98,14 +98,14 @@ fn fixed_and_repeated_register_bit_enums_export_the_same_codes() -> TestResult {
     let artifact = render_map(exporter.0, exporter.1, &MAP.resolve()?)?;
     // Then: both register forms expose unshifted codes and sanitized variant docs.
     assert_eq!(
-        std::str::from_utf8(&artifact.contents)?
+        std::str::from_utf8(&artifact.bytes)?
             .matches("Active / * transfer * /")
             .count(),
         2
     );
     compile_fragments(
         "register-bit-enum",
-        &[&artifact.contents],
+        &[&artifact.bytes],
         br#"
 _Static_assert(C_MAP_C_STATUS_C_MODE_C_IDLE == 0, "fixed idle code");
 _Static_assert(C_MAP_C_STATUS_C_MODE_C_ACTIVEQX2DSTATE == 7, "fixed local code");

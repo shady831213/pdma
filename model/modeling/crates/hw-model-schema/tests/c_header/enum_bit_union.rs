@@ -69,7 +69,7 @@ fn bitfield_tag_constants_and_raw_word_accessors_interoperate_with_rust() -> Tes
     let inline = render_record("inline.h", "inline", &Inline::SPEC)?;
     let named = render_record("named.h", "named", &Named::SPEC)?;
     // Then: unshifted enum codes and word accessors produce the same independent wire fixtures.
-    compile_fragments("enum-bit-union", &[&inline.contents, &named.contents], br"
+    compile_fragments("enum-bit-union", &[&inline.bytes, &named.bytes], br"
 #include <string.h>
 int main(void) {
     uint8_t a[C_INLINE_SIZE] = {0};

@@ -1,11 +1,13 @@
 //! Common preparation binds layouts and owns rendering order.
+/// Caller-owned capture for generation tests.
+pub mod output_support;
 use hw_model_schema::analysis::{AnalyzedSchema, Bindings, Layout};
-use hw_model_schema::export::generate;
 use hw_model_schema::traversal::register::Context as RegisterContext;
 use hw_model_schema::{
-    export::{Artifact, InMemoryArtifactSink, register::Backend, value},
+    export::{register::Backend, value},
     register_map, register_schema,
 };
+use output_support::MemoryOutput;
 register_schema! { pub register Word {width:4,endian:Little,access:ReadWrite,reset:Zero(0),writable_mask:0xffff_ffff,fields:{}} }
 register_map! { pub map Block {alignment:16,placements:[pub word:Word]} }
 register_map! { pub map Root(n:usize) {alignment:16,placements:[pub blocks:Block[n]]} }
@@ -96,7 +98,11 @@ fn named_instances_survive_preparation_with_independent_geometry()
     Ok(())
 }
 impl Backend for FailsAfterOne {
-    fn root(&mut self, _: RegisterContext<'_>) -> Result<(), Self::Error> {
+    fn root(
+        &mut self,
+        _: RegisterContext<'_>,
+        _writer: &mut dyn std::io::Write,
+    ) -> Result<(), Self::Error> {
         self.0 += 1;
         if self.0 == 2 {
             Err("render failure")
@@ -109,33 +115,50 @@ impl value::Backend for FailsAfterOne {
     type Domain = hw_model_schema::export::register::Domain;
     type Error = &'static str;
     type Context<'a> = RegisterContext<'a>;
-    fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
-        Ok(Vec::new())
+    fn metadata(
+        &mut self,
+        ctx: &Self::Context<'_>,
+    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
+        Ok(hw_model_schema::export::OutputMetadata {
+            logical_name: ctx.unit().name.clone(),
+            media_type: "text/plain".into(),
+        })
     }
 }
 #[test]
-fn rendering_failure_never_reaches_the_sink() -> Result<(), Box<dyn std::error::Error>> {
+fn rendering_failure_preserves_completed_root_output() -> Result<(), Box<dyn std::error::Error>> {
     // Given: multiple definitions and a renderer failing on the second definition.
     let mut set = hw_model_schema::ast::SchemaSet::new();
     set.add::<Root>();
     let schema = AnalyzedSchema::from_graph(&set.resolve()?, &Bindings::new())?;
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
     // When: the common driver traverses the prepared definitions.
-    let result = generate(&schema, FailsAfterOne(0), &mut sink);
-    // Then: the render error is preserved and nothing is emitted.
+    let result = sink.generate(&schema, FailsAfterOne(0));
+    // Then: the render error is preserved and only the first completed root remains.
     assert_eq!(
         result,
         Err(hw_model_schema::export::ExportError::Render(
             "render failure"
         ))
     );
-    assert!(sink.artifacts().is_empty());
+    let [completed] = sink.outputs() else {
+        return Err("expected first root only".into());
+    };
+    assert_eq!(
+        completed.metadata.logical_name,
+        schema.units().next().ok_or("first root")?.name
+    );
+
     Ok(())
 }
 
 struct CountCallbacks<'a>(&'a std::cell::Cell<usize>);
 impl Backend for CountCallbacks<'_> {
-    fn root(&mut self, _: RegisterContext<'_>) -> Result<(), Self::Error> {
+    fn root(
+        &mut self,
+        _: RegisterContext<'_>,
+        _writer: &mut dyn std::io::Write,
+    ) -> Result<(), Self::Error> {
         self.0.set(self.0.get() + 1);
         Ok(())
     }
@@ -144,8 +167,14 @@ impl value::Backend for CountCallbacks<'_> {
     type Domain = hw_model_schema::export::register::Domain;
     type Error = core::convert::Infallible;
     type Context<'a> = RegisterContext<'a>;
-    fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
-        Ok(Vec::new())
+    fn metadata(
+        &mut self,
+        ctx: &Self::Context<'_>,
+    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
+        Ok(hw_model_schema::export::OutputMetadata {
+            logical_name: ctx.unit().name.clone(),
+            media_type: "text/plain".into(),
+        })
     }
 }
 hw_model_schema::record_schema! { pub record ZRecord { endian: Little, fields: { value: u32 } } }
@@ -162,9 +191,9 @@ fn wrong_domain_is_rejected_before_any_renderer_callback() -> Result<(), Box<dyn
         "Word"
     );
     let callbacks = std::cell::Cell::new(0);
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
     // When: register generation receives the incompatible closure.
-    let result = generate(&schema, CountCallbacks(&callbacks), &mut sink);
+    let result = sink.generate(&schema, CountCallbacks(&callbacks));
     // Then: preflight rejects the record without invoking the earlier valid callback.
     assert!(matches!(
         result,
@@ -176,6 +205,6 @@ fn wrong_domain_is_rejected_before_any_renderer_callback() -> Result<(), Box<dyn
         ))
     ));
     assert_eq!(callbacks.get(), 0);
-    assert!(sink.artifacts().is_empty());
+    assert!(sink.outputs().is_empty());
     Ok(())
 }

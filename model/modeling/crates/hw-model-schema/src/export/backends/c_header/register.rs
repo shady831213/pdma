@@ -1,34 +1,30 @@
+use crate::export::backends::c_header::fragment::Fragment;
 use crate::traversal::register::{Bank, BankProperty, Context, LayoutProperty, Node};
+use std::io::Write;
 mod metadata;
 pub(super) mod naming;
 
-use super::{CHeaderExportError, CRegisterBackend, fragment::Fragment, naming as symbols};
+use super::{CHeaderExportError, CRegisterBackend, naming as symbols};
 use crate::analysis::{CompleteMapLayout, RegisterMapView};
-use crate::ast::{LayoutExpr, RegisterInfo, RegisterLocation};
+use crate::ast::{RegisterInfo, RegisterLocation};
 use crate::export::value::Backend as _;
 use crate::export::{
-    Artifact,
     expression::{ExpressionSyntax, format_expression},
     register::Backend,
 };
 type CResult<T = ()> = Result<T, CHeaderExportError>;
 #[derive(Debug, Default)]
 pub(super) struct Geometry {
-    members: Fragment,
-    assignments: Fragment,
+    pub(super) section: GeometrySection,
     names: symbols::Scope,
 }
 
-impl Geometry {
-    fn assignment(
-        &mut self,
-        name: &str,
-        expression: &LayoutExpr,
-    ) -> Result<(), CHeaderExportError> {
-        let expression = format_expression(expression, &mut Syntax)?;
-        self.assignments
-            .line(format_args!("    result.{name} = {expression};"))
-    }
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(super) enum GeometrySection {
+    #[default]
+    Documentation,
+    Members,
+    Assignments,
 }
 struct Syntax;
 impl ExpressionSyntax for Syntax {
@@ -41,31 +37,30 @@ impl ExpressionSyntax for Syntax {
 }
 
 impl Backend for CRegisterBackend {
-    fn root(&mut self, ctx: Context<'_>) -> CResult {
-        (self.logical_name, self.prefix) = self.names.unit(ctx.unit())?;
+    fn root(&mut self, ctx: Context<'_>, writer: &mut dyn Write) -> CResult {
+        self.prefix = self.names.unit_name(ctx.unit()).1;
         self.output = Fragment::default();
-        self.emit(ctx.current())?;
-        self.artifacts.push(Artifact {
-            logical_name: self.logical_name.clone(),
-            media_type: "text/x-c; charset=utf-8".into(),
-            contents: std::mem::take(&mut self.output.text).into_bytes(),
-        });
-        Ok(())
+        self.emit(ctx.current(), writer)
     }
-    fn map_layout<'a>(&mut self, _: &'a CompleteMapLayout, ctx: Context<'a>) -> CResult {
+    fn map_layout<'a>(
+        &mut self,
+        _: &'a CompleteMapLayout,
+        ctx: Context<'a>,
+        writer: &mut dyn Write,
+    ) -> CResult {
         let mut names = symbols::GeometryNames::new(&self.prefix)?;
         self.geometry = Geometry::default();
-        self.emit_all(ctx.children())?;
+        self.emit_all(ctx.children(), writer)?;
         let parameters: Vec<_> = ctx
             .parameters()
             .iter()
             .map(|name| format!("p_{}", symbols::c_identifier(name)))
             .collect();
-        self.output.line("typedef struct {")?;
-        self.output.line("    uint64_t extent;")?;
-        self.output.text.push_str(&self.geometry.members.text);
-        self.output
-            .line(format_args!("}} {}_Geometry;", self.prefix))?;
+        Fragment::line("typedef struct {", writer)?;
+        Fragment::line("    uint64_t extent;", writer)?;
+        self.geometry.section = GeometrySection::Members;
+        self.emit_all(ctx.children(), writer)?;
+        Fragment::line(format_args!("}} {}_Geometry;", self.prefix), writer)?;
         for parameter in &parameters {
             names.parameters.insert(parameter, parameter)?;
         }
@@ -78,22 +73,40 @@ impl Backend for CRegisterBackend {
                 .collect::<Vec<_>>()
                 .join(", ")
         };
-        self.output.line(format_args!("static inline {0}_Geometry {0}_GEOMETRY({signature}) {{\n    {0}_Geometry result = {{0}};", self.prefix))?;
+        Fragment::line(
+            format_args!(
+                "static inline {0}_Geometry {0}_GEOMETRY({signature}) {{\n    {0}_Geometry result = {{0}};",
+                self.prefix
+            ),
+            writer,
+        )?;
         for parameter in &parameters {
-            self.output.line(format_args!("    (void){parameter};"))?;
+            Fragment::line(format_args!("    (void){parameter};"), writer)?;
         }
-        self.output.text.push_str(&self.geometry.assignments.text);
-        self.output.line("    return result;\n}")
+        self.geometry.section = GeometrySection::Assignments;
+        self.emit_all(ctx.children(), writer)?;
+        self.geometry.section = GeometrySection::Documentation;
+        Fragment::line("    return result;\n}", writer)
     }
-    fn register_map<'a>(&mut self, value: &'a RegisterMapView, ctx: Context<'a>) -> CResult {
-        self.map_constants(value.extent)?;
-        self.emit_all(ctx.children())
+    fn register_map<'a>(
+        &mut self,
+        value: &'a RegisterMapView,
+        ctx: Context<'a>,
+        writer: &mut dyn Write,
+    ) -> CResult {
+        self.map_constants(value.extent, writer)?;
+        self.emit_all(ctx.children(), writer)
     }
-    fn bank<'a>(&mut self, _: Bank<'a>, ctx: Context<'a>) -> CResult {
-        self.output.text.push('\n');
-        self.emit_all(ctx.children())
+    fn bank<'a>(&mut self, _: Bank<'a>, ctx: Context<'a>, writer: &mut dyn Write) -> CResult {
+        writer.write_all(b"\n")?;
+        self.emit_all(ctx.children(), writer)
     }
-    fn bank_property(&mut self, property: BankProperty, ctx: Context<'_>) -> CResult {
+    fn bank_property(
+        &mut self,
+        property: BankProperty,
+        ctx: Context<'_>,
+        writer: &mut dyn Write,
+    ) -> CResult {
         let name = self.bank_name(&ctx)?;
         let (suffix, value) = match property {
             BankProperty::Index(v) => ("INDEX", v),
@@ -101,9 +114,14 @@ impl Backend for CRegisterBackend {
             BankProperty::ParentInstance(v) => ("PARENT_INSTANCE", v),
         };
         self.output
-            .unsigned::<64>(&format!("{name}_{suffix}"), value)
+            .unsigned::<64>(&format!("{name}_{suffix}"), value, writer)
     }
-    fn layout_property(&mut self, property: LayoutProperty<'_>, ctx: Context<'_>) -> CResult {
+    fn layout_property(
+        &mut self,
+        property: LayoutProperty<'_>,
+        ctx: Context<'_>,
+        writer: &mut dyn Write,
+    ) -> CResult {
         if ctx.bank().is_some() {
             let name = self.bank_name(&ctx)?;
             let suffix = if property.name == "offset" {
@@ -114,29 +132,42 @@ impl Backend for CRegisterBackend {
             return self.output.unsigned::<64>(
                 &format!("{name}_{suffix}"),
                 property.expression.evaluate(&[], &[])?,
+                writer,
             );
+        }
+        if self.geometry.section == GeometrySection::Documentation {
+            return Ok(());
         }
         let name = if let Some(owner) = property.owner {
             let name = format!("{}_{}", symbols::c_identifier(owner), property.name);
-            self.geometry.names.insert(&name, &name)?;
-            self.geometry
-                .members
-                .line(format_args!("    uint64_t {name};"))?;
+            if self.geometry.section == GeometrySection::Members {
+                self.geometry.names.insert(&name, &name)?;
+                Fragment::line(format_args!("    uint64_t {name};"), writer)?;
+            }
             name
         } else {
             property.name.into()
         };
-        self.geometry.assignment(&name, property.expression)
+        if self.geometry.section == GeometrySection::Assignments {
+            let expression = format_expression(property.expression, &mut Syntax)?;
+            Fragment::line(format_args!("    result.{name} = {expression};"), writer)?;
+        }
+        Ok(())
     }
-    fn register(&mut self, register: &RegisterInfo, ctx: Context<'_>) -> CResult {
+    fn register(
+        &mut self,
+        register: &RegisterInfo,
+        ctx: Context<'_>,
+        writer: &mut dyn Write,
+    ) -> CResult {
         let location = ctx.register_location();
         match location {
             RegisterLocation::Root => {
-                self.map_constants(register.width())?;
+                self.map_constants(register.width(), writer)?;
             }
             RegisterLocation::Standalone(_) | RegisterLocation::Template { .. } => {
                 if matches!(location, RegisterLocation::Standalone(_)) {
-                    self.output.text.push('\n');
+                    writer.write_all(b"\n")?;
                 }
             }
             RegisterLocation::Instance { .. } => {}
@@ -145,35 +176,59 @@ impl Backend for CRegisterBackend {
         if matches!(location, RegisterLocation::Instance { .. }) {
             let (name, offset) =
                 offset.ok_or(CHeaderExportError::InvalidVisit("instance offset"))?;
-            return self.output.unsigned::<64>(&name, offset);
+            return self.output.unsigned::<64>(&name, offset, writer);
         }
         self.emit_all(
             ctx.children()
                 .filter(|visit| matches!(visit.node(), Node::RegisterField(_))),
+            writer,
         )?;
         if let Some((name, offset)) = offset {
-            self.output.unsigned::<64>(&name, offset)?;
+            self.output.unsigned::<64>(&name, offset, writer)?;
         }
         self.emit_all(
             ctx.children()
                 .filter(|visit| matches!(visit.node(), Node::Attribute(_))),
+            writer,
         )
     }
-    fn register_width(&mut self, value: usize, ctx: Context<'_>) -> CResult {
-        let name = self.register_name(&ctx)?;
-        self.output.unsigned::<64>(&format!("{name}_WIDTH"), value)
-    }
-    fn register_access(&mut self, value: crate::Access, ctx: Context<'_>) -> CResult {
-        let name = self.register_name(&ctx)?;
-        metadata::register_access(&mut self.output, &self.prefix, &name, value)
-    }
-    fn register_reset(&mut self, kind: crate::ResetKind, value: u64, ctx: Context<'_>) -> CResult {
-        let name = self.register_name(&ctx)?;
-        metadata::register_reset(&mut self.output, &self.prefix, &name, kind, value)
-    }
-    fn register_writable_mask(&mut self, value: u64, ctx: Context<'_>) -> CResult {
+    fn register_width(
+        &mut self,
+        value: usize,
+        ctx: Context<'_>,
+        writer: &mut dyn Write,
+    ) -> CResult {
         let name = self.register_name(&ctx)?;
         self.output
-            .unsigned::<64>(&format!("{name}_WRITABLE_MASK"), value)
+            .unsigned::<64>(&format!("{name}_WIDTH"), value, writer)
+    }
+    fn register_access(
+        &mut self,
+        value: crate::Access,
+        ctx: Context<'_>,
+        writer: &mut dyn Write,
+    ) -> CResult {
+        let name = self.register_name(&ctx)?;
+        metadata::register_access(&mut self.output, &self.prefix, &name, value, writer)
+    }
+    fn register_reset(
+        &mut self,
+        kind: crate::ResetKind,
+        value: u64,
+        ctx: Context<'_>,
+        writer: &mut dyn Write,
+    ) -> CResult {
+        let name = self.register_name(&ctx)?;
+        metadata::register_reset(&mut self.output, &self.prefix, &name, kind, value, writer)
+    }
+    fn register_writable_mask(
+        &mut self,
+        value: u64,
+        ctx: Context<'_>,
+        writer: &mut dyn Write,
+    ) -> CResult {
+        let name = self.register_name(&ctx)?;
+        self.output
+            .unsigned::<64>(&format!("{name}_WRITABLE_MASK"), value, writer)
     }
 }

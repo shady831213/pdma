@@ -1,4 +1,6 @@
 //! Semantic traversal exposes source bindings and mathematical layout dependencies.
+/// Caller-owned capture for generation tests.
+pub mod output_support;
 use hw_model_schema::analysis::{AnalyzedSchema, Bindings};
 use hw_model_schema::{
     ast::{self, LayoutExpr, PlanValue, SchemaSet},

@@ -5,10 +5,13 @@ use hw_model_schema::export::value::Backend as _;
 use hw_model_schema::traversal::register::Context as RegisterContext;
 use hw_model_schema::{
     ast::{DefinitionId, RegisterInfo, RegisterLocation, SchemaSet},
-    export::{Artifact, InMemoryArtifactSink, register::Backend, value},
+    export::{OutputMetadata, register::Backend, value},
     register_map, register_schema,
 };
-use std::{error::Error, fmt::Write};
+use std::{
+    error::Error,
+    io::{self, Write},
+};
 
 register_schema! {
     pub register Status { width: 4, endian: Little, access: ReadOnly,
@@ -19,12 +22,15 @@ register_map! { pub map Device(n: usize) { alignment: 16, placements: [pub chann
 
 struct RegisterListing {
     selected: hw_model_schema::traversal::NodeId,
-    text: String,
 }
 impl Backend for RegisterListing {
-    fn root(&mut self, ctx: RegisterContext<'_>) -> Result<(), Self::Error> {
+    fn root(
+        &mut self,
+        ctx: RegisterContext<'_>,
+        writer: &mut dyn Write,
+    ) -> Result<(), Self::Error> {
         if ctx.unit().id == self.selected {
-            self.emit(ctx.current())?;
+            self.emit(ctx.current(), writer)?;
         }
         Ok(())
     }
@@ -32,20 +38,24 @@ impl Backend for RegisterListing {
         &mut self,
         _: &'a RegisterMapView,
         ctx: RegisterContext<'a>,
+        writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
-        self.text.push_str("path\toffset\tbytes\n");
-        self.emit_all(ctx.children())
+        writer.write_all(b"path\toffset\tbytes\n")?;
+        self.emit_all(ctx.children(), writer)
     }
     fn register(
         &mut self,
         register: &RegisterInfo,
         ctx: RegisterContext<'_>,
+        writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
         match ctx.register_location() {
             RegisterLocation::Root | RegisterLocation::Template { .. } => return Ok(()),
             RegisterLocation::Standalone(_) | RegisterLocation::Instance { .. } => {}
         }
-        let site = ctx.register_site().ok_or("map register site expected")?;
+        let site = ctx
+            .register_site()
+            .ok_or_else(|| io::Error::other("map register site expected"))?;
         let path = site
             .segments
             .iter()
@@ -57,20 +67,19 @@ impl Backend for RegisterListing {
             })
             .collect::<Vec<_>>()
             .join(".");
-        writeln!(self.text, "{path}\t{}\t{}", site.offset, register.width())?;
+        writeln!(writer, "{path}\t{}\t{}", site.offset, register.width())?;
         Ok(())
     }
 }
 impl value::Backend for RegisterListing {
     type Domain = hw_model_schema::export::register::Domain;
-    type Error = Box<dyn Error>;
+    type Error = io::Error;
     type Context<'a> = RegisterContext<'a>;
-    fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
-        Ok(vec![Artifact {
+    fn metadata(&mut self, _: &Self::Context<'_>) -> Result<OutputMetadata, Self::Error> {
+        Ok(OutputMetadata {
             logical_name: "registers.tsv".into(),
             media_type: "text/tab-separated-values".into(),
-            contents: self.text.into_bytes(),
-        }])
+        })
     }
 }
 fn main() -> Result<(), Box<dyn Error>> {
@@ -85,12 +94,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             .ok_or("missing device")?
             .id
             .clone(),
-        text: String::new(),
     };
-    let mut sink = InMemoryArtifactSink::new();
-    generate(&schema, backend, &mut sink).map_err(|error| format!("{error}"))?;
-    for artifact in sink.into_artifacts() {
-        print!("{}", String::from_utf8(artifact.contents)?);
-    }
+    let mut output = io::stdout().lock();
+    generate(&schema, backend, &mut output)?;
+    output.flush()?;
     Ok(())
 }

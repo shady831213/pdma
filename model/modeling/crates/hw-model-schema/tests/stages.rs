@@ -1,4 +1,6 @@
 //! Public typed stages preserve validation and invalidate derived geometry.
+/// Caller-owned capture for generation tests.
+pub mod output_support;
 use core::convert::Infallible;
 use hw_model_schema::{
     RecordSpec,
@@ -7,6 +9,7 @@ use hw_model_schema::{
     },
     ast::{Definition, SchemaGraph, SchemaSet},
 };
+use output_support::MemoryOutput;
 struct Storage;
 fn source(size: usize) -> SchemaSet {
     let mut set = SchemaSet::new();
@@ -176,7 +179,7 @@ impl Pass<hw_model_schema::analysis::ValidatedSchema<'_>> for InvalidSource {
 fn transformed_source_must_revalidate_before_generation() {
     use hw_model_schema::{
         analysis::AnalysisError,
-        export::{Artifact, InMemoryArtifactSink, record, value},
+        export::{record, value},
     };
     struct Backend;
     impl record::Backend for Backend {}
@@ -184,12 +187,14 @@ fn transformed_source_must_revalidate_before_generation() {
         type Domain = record::Domain;
         type Error = Infallible;
         type Context<'a> = hw_model_schema::traversal::record::Context<'a>;
-        fn finish(self) -> Result<Vec<Artifact>, Infallible> {
-            Ok(vec![Artifact {
-                logical_name: "output".into(),
+        fn metadata(
+            &mut self,
+            ctx: &Self::Context<'_>,
+        ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
+            Ok(hw_model_schema::export::OutputMetadata {
+                logical_name: ctx.unit().name.clone(),
                 media_type: "text/plain".into(),
-                contents: b"output".to_vec(),
-            }])
+            })
         }
     }
     let bindings = Bindings::new();
@@ -197,7 +202,7 @@ fn transformed_source_must_revalidate_before_generation() {
     let graph = InvalidSource
         .run(Validate::new(&bindings).run(&original).unwrap())
         .unwrap();
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
     let mut constructed = false;
     let result = Pipeline::new(&graph)
         .run(Validate::new(&bindings))
@@ -205,7 +210,7 @@ fn transformed_source_must_revalidate_before_generation() {
         .and_then(|p| p.run(Simplify))
         .map(|p| {
             constructed = true;
-            hw_model_schema::export::generate(p.input(), Backend, &mut sink).unwrap();
+            sink.generate(p.input(), Backend).unwrap();
         });
     assert!(matches!(
         result,
@@ -215,5 +220,5 @@ fn transformed_source_must_revalidate_before_generation() {
         })
     ));
     assert!(!constructed);
-    assert!(sink.artifacts().is_empty());
+    assert!(sink.outputs().is_empty());
 }

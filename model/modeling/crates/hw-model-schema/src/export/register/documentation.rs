@@ -6,6 +6,7 @@ pub(super) fn emit<B: Backend>(
     node: Node<'_>,
     ctx: &Context<'_>,
     backend: &mut B,
+    writer: &mut dyn std::io::Write,
 ) -> Result<(), B::Error> {
     let docs = match node {
         Node::Root(unit) => match &unit.declaration {
@@ -47,6 +48,7 @@ pub(super) fn emit<B: Backend>(
                     },
                     ctx,
                     backend,
+                    writer,
                 )?;
             }
             None
@@ -65,6 +67,7 @@ pub(super) fn emit<B: Backend>(
             DocumentationOwner { name, kind },
             ctx,
             backend,
+            writer,
         )?;
     }
     Ok(())

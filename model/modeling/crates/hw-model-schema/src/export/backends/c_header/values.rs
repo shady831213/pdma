@@ -1,10 +1,11 @@
 use super::{CHeaderExportError, CRecordBackend, CRegisterBackend, fragment::Fragment, naming};
 use crate::ast::BitsDefinition;
 use crate::export::{
-    Artifact, record, register,
+    OutputMetadata, record, register,
     value::{Backend, DocumentationKind, DocumentationOwner},
 };
 use crate::{BitsFieldSpec, EnumVariantSpec, RecordSpec};
+use std::io::Write;
 type CResult<T = ()> = Result<T, CHeaderExportError>;
 
 impl Backend for CRecordBackend<'_> {
@@ -16,6 +17,7 @@ impl Backend for CRecordBackend<'_> {
         text: &str,
         owner: DocumentationOwner<'_>,
         ctx: Self::Context<'_>,
+        writer: &mut dyn Write,
     ) -> CResult {
         if ctx.field().is_some()
             || matches!(
@@ -28,7 +30,7 @@ impl Backend for CRecordBackend<'_> {
         {
             return Ok(());
         }
-        self.output.comment(owner.name, text)
+        Fragment::comment(owner.name, text, writer)
     }
 
     fn description(
@@ -36,13 +38,19 @@ impl Backend for CRecordBackend<'_> {
         text: &str,
         owner: DocumentationOwner<'_>,
         ctx: Self::Context<'_>,
+        writer: &mut dyn Write,
     ) -> CResult {
-        self.short_description(text, owner, ctx)
+        self.short_description(text, owner, ctx, writer)
     }
 
-    fn bits(&mut self, bits: &BitsDefinition, ctx: Self::Context<'_>) -> CResult {
+    fn bits(
+        &mut self,
+        bits: &BitsDefinition,
+        ctx: Self::Context<'_>,
+        writer: &mut dyn Write,
+    ) -> CResult {
         if let Some(field) = ctx.field() {
-            self.emit_all(ctx.children())?;
+            self.emit_all(ctx.children(), writer)?;
             let definition = crate::FieldDefinition::new(bits.scalar())
                 .with_endian(field.endian())
                 .with_width(field.width());
@@ -50,25 +58,34 @@ impl Backend for CRecordBackend<'_> {
                 &super::analysis::path(&ctx),
                 self.analysis.at(&ctx)?,
                 definition,
+                writer,
             )
         } else {
-            bits_metadata(&mut self.output, &self.prefix, bits)?;
-            self.emit_all(ctx.children())
+            bits_metadata(&mut self.output, &self.prefix, bits, writer)?;
+            self.emit_all(ctx.children(), writer)
         }
     }
-    fn bit_field(&mut self, field: &BitsFieldSpec, ctx: Self::Context<'_>) -> CResult {
+    fn bit_field(
+        &mut self,
+        field: &BitsFieldSpec,
+        ctx: Self::Context<'_>,
+        writer: &mut dyn Write,
+    ) -> CResult {
         if ctx.field().is_none() {
-            bit_metadata(&mut self.output, &self.prefix, field)?;
+            bit_metadata(&mut self.output, &self.prefix, field, writer)?;
         } else {
-            self.output
-                .documentation(field.name(), field.documentation())?;
+            Fragment::documentation(field.name(), field.documentation(), writer)?;
         }
-        self.emit_all(ctx.children())
+        self.emit_all(ctx.children(), writer)
     }
-    fn variant(&mut self, variant: &EnumVariantSpec, ctx: Self::Context<'_>) -> CResult {
+    fn variant(
+        &mut self,
+        variant: &EnumVariantSpec,
+        ctx: Self::Context<'_>,
+        writer: &mut dyn Write,
+    ) -> CResult {
         if ctx.field().is_some() {
-            self.output
-                .documentation(variant.name(), variant.documentation())?;
+            Fragment::documentation(variant.name(), variant.documentation(), writer)?;
         }
         let prefix = if ctx.field().is_some() {
             format!(
@@ -83,13 +100,23 @@ impl Backend for CRecordBackend<'_> {
         self.output.unsigned::<64>(
             &format!("{prefix}_{}", naming::c_identifier(variant.name())),
             variant.value(),
+            writer,
         )
     }
-    fn opaque(&mut self, _: &RecordSpec, ctx: Self::Context<'_>) -> CResult {
-        self.opaque_storage(&ctx)
+    fn opaque(
+        &mut self,
+        _: &RecordSpec,
+        ctx: Self::Context<'_>,
+        writer: &mut dyn Write,
+    ) -> CResult {
+        self.opaque_storage(&ctx, writer)
     }
-    fn finish(self) -> CResult<Vec<Artifact>> {
-        Ok(self.artifacts)
+    fn metadata(&mut self, ctx: &Self::Context<'_>) -> CResult<OutputMetadata> {
+        let logical_name = self.names.reserve_unit(ctx.unit())?;
+        Ok(OutputMetadata {
+            logical_name,
+            media_type: "text/x-c; charset=utf-8".into(),
+        })
     }
 }
 impl Backend for CRegisterBackend {
@@ -101,29 +128,48 @@ impl Backend for CRegisterBackend {
         text: &str,
         owner: DocumentationOwner<'_>,
         ctx: Self::Context<'_>,
+        writer: &mut dyn Write,
     ) -> CResult {
-        if ctx.repeated_documentation() {
+        if ctx.repeated_documentation()
+            || self.geometry.section != super::register::GeometrySection::Documentation
+        {
             return Ok(());
         }
-        self.output.comment(owner.name, text)
+        Fragment::comment(owner.name, text, writer)
     }
     fn description(
         &mut self,
         text: &str,
         owner: DocumentationOwner<'_>,
         ctx: Self::Context<'_>,
+        writer: &mut dyn Write,
     ) -> CResult {
-        self.short_description(text, owner, ctx)
+        self.short_description(text, owner, ctx, writer)
     }
-    fn bits(&mut self, bits: &BitsDefinition, ctx: Self::Context<'_>) -> CResult {
-        bits_metadata(&mut self.output, &self.prefix, bits)?;
-        self.emit_all(ctx.children())
+    fn bits(
+        &mut self,
+        bits: &BitsDefinition,
+        ctx: Self::Context<'_>,
+        writer: &mut dyn Write,
+    ) -> CResult {
+        bits_metadata(&mut self.output, &self.prefix, bits, writer)?;
+        self.emit_all(ctx.children(), writer)
     }
-    fn bit_field(&mut self, field: &BitsFieldSpec, ctx: Self::Context<'_>) -> CResult {
-        bit_metadata(&mut self.output, &self.prefix, field)?;
-        self.emit_all(ctx.children())
+    fn bit_field(
+        &mut self,
+        field: &BitsFieldSpec,
+        ctx: Self::Context<'_>,
+        writer: &mut dyn Write,
+    ) -> CResult {
+        bit_metadata(&mut self.output, &self.prefix, field, writer)?;
+        self.emit_all(ctx.children(), writer)
     }
-    fn variant(&mut self, variant: &EnumVariantSpec, ctx: Self::Context<'_>) -> CResult {
+    fn variant(
+        &mut self,
+        variant: &EnumVariantSpec,
+        ctx: Self::Context<'_>,
+        writer: &mut dyn Write,
+    ) -> CResult {
         let prefix = if ctx.register().is_some() {
             self.register_name(&ctx)?
         } else {
@@ -133,30 +179,55 @@ impl Backend for CRegisterBackend {
         self.output.unsigned::<64>(
             &format!("{prefix}_{}", naming::c_identifier(variant.name())),
             variant.value(),
+            writer,
         )
     }
-    fn opaque(&mut self, spec: &RecordSpec, _: Self::Context<'_>) -> CResult {
+    fn opaque(
+        &mut self,
+        spec: &RecordSpec,
+        _: Self::Context<'_>,
+        writer: &mut dyn Write,
+    ) -> CResult {
         self.output.constants::<64>(
             &self.prefix,
             &[("SIZE", spec.size()), ("ALIGNMENT", spec.alignment())],
+            writer,
         )?;
-        self.output
-            .constants::<32>(&self.prefix, &[("ENDIAN_LITTLE", 0), ("ENDIAN_BIG", 1)])
+        self.output.constants::<32>(
+            &self.prefix,
+            &[("ENDIAN_LITTLE", 0), ("ENDIAN_BIG", 1)],
+            writer,
+        )
     }
-    fn finish(self) -> CResult<Vec<Artifact>> {
-        Ok(self.artifacts)
+    fn metadata(&mut self, ctx: &Self::Context<'_>) -> CResult<OutputMetadata> {
+        let logical_name = self.names.reserve_unit(ctx.unit())?;
+        Ok(OutputMetadata {
+            logical_name,
+            media_type: "text/x-c; charset=utf-8".into(),
+        })
     }
 }
-fn bits_metadata(output: &mut Fragment, prefix: &str, bits: &BitsDefinition) -> CResult {
-    output.constants::<64>(prefix, &[("SIZE", bits.scalar().width())])?;
-    output.constants::<32>(prefix, &[("BIT_WIDTH", bits.bit_width())])?;
-    output.constants::<64>(prefix, &[("DECLARED_MASK", bits.declared_mask())])
+fn bits_metadata(
+    output: &mut Fragment,
+    prefix: &str,
+    bits: &BitsDefinition,
+    writer: &mut dyn Write,
+) -> CResult {
+    output.constants::<64>(prefix, &[("SIZE", bits.scalar().width())], writer)?;
+    output.constants::<32>(prefix, &[("BIT_WIDTH", bits.bit_width())], writer)?;
+    output.constants::<64>(prefix, &[("DECLARED_MASK", bits.declared_mask())], writer)
 }
-fn bit_metadata(output: &mut Fragment, prefix: &str, field: &BitsFieldSpec) -> CResult {
+fn bit_metadata(
+    output: &mut Fragment,
+    prefix: &str,
+    field: &BitsFieldSpec,
+    writer: &mut dyn Write,
+) -> CResult {
     let prefix = format!("{prefix}_{}", naming::c_identifier(field.name()));
     output.constants::<32>(
         &prefix,
         &[("LSB", field.lsb()), ("BITS", field.bit_width())],
+        writer,
     )
 }
 fn value_prefix(prefix: &str, bit: Option<&str>) -> String {

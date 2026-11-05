@@ -1,8 +1,9 @@
+use crate::output_support::MemoryOutput;
 use hw_model_schema::analysis::{AnalyzedSchema, Bindings};
 use hw_model_schema::{
     ast::{DefinitionId, SchemaSet},
+    export::ExportError,
     export::backends::c_header::{CHeaderExportError, CRegisterBackend},
-    export::{ExportError, InMemoryArtifactSink, generate},
     register_map, register_schema,
 };
 
@@ -42,14 +43,14 @@ fn common_preparation_renders_symbolic_and_bound_nested_geometry_as_strict_c11()
                     .clone(),
                 "leaf",
             );
-        let mut sink = InMemoryArtifactSink::new();
+        let mut sink = MemoryOutput::new();
 
         // When: generation visits prepared definitions and C only renders their formulas.
-        generate(&prepared, renderer, &mut sink)?;
+        sink.generate(&prepared, renderer)?;
         let fragments: Vec<_> = sink
-            .artifacts()
+            .outputs()
             .iter()
-            .map(|artifact| artifact.contents.as_slice())
+            .map(|artifact| artifact.bytes.as_slice())
             .collect();
 
         // Then: native C observes independently calculated geometry at three parameter values.
@@ -78,23 +79,36 @@ fn symbolic_geometry_rejects_aliasing_type_and_function_names() -> super::suppor
             .clone(),
         &prefix,
     );
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
 
     // When: its geometry type and function would alias in the ordinary C namespace.
-    let failure = generate(&prepared, renderer, &mut sink);
+    let failure = sink.generate(&prepared, renderer);
 
-    // Then: the exact declarations are diagnosed before any artifact reaches the sink.
+    // Then: the failed root is discarded while completed dependency outputs remain.
     let stem = format!("C_{}", prefix.to_ascii_uppercase());
+    let ExportError::Render(CHeaderExportError::NameCollision {
+        first_path,
+        second_path,
+        first_index,
+        second_index,
+    }) = failure.unwrap_err()
+    else {
+        panic!("expected name collision");
+    };
+    assert_eq!(first_path, format!("{stem}_Geometry"));
+    assert_eq!(second_path, format!("{stem}_GEOMETRY"));
+    assert_eq!(first_index, 0);
+    assert_eq!(second_index, 1);
+    let mut successful = MemoryOutput::new();
+    successful.generate(&prepared, CRegisterBackend::new())?;
+    assert_eq!(successful.outputs().len(), 3);
     assert_eq!(
-        failure,
-        Err(ExportError::Render(CHeaderExportError::NameCollision {
-            first_path: format!("{stem}_Geometry"),
-            second_path: format!("{stem}_GEOMETRY"),
-            first_index: 0,
-            second_index: 1,
-        }))
+        sink.outputs(),
+        successful
+            .outputs()
+            .get(..2)
+            .ok_or("missing dependency outputs")?
     );
-    assert!(sink.artifacts().is_empty());
     Ok(())
 }
 
@@ -126,13 +140,13 @@ fn empty_parameterized_maps_compile_and_preserve_implicit_and_explicit_extents()
                 .clone(),
             "explicit",
         );
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
     // When: their symbolic geometry is emitted for a strict native C11 consumer.
-    generate(&prepared, renderer, &mut sink)?;
+    sink.generate(&prepared, renderer)?;
     let fragments: Vec<_> = sink
-        .artifacts()
+        .outputs()
         .iter()
-        .map(|artifact| artifact.contents.as_slice())
+        .map(|artifact| artifact.bytes.as_slice())
         .collect();
     // Then: implicit extent remains zero and explicit extent remains eight for any input.
     super::support::compile_fragments("empty-parameterized", &fragments,
@@ -178,14 +192,14 @@ fn geometry_parameters_remain_local_across_bound_and_unbound_definitions()
                 .clone(),
             "independent",
         );
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
 
     // When: one backend emits all definitions into a native C consumer.
-    generate(&prepared, renderer, &mut sink)?;
+    sink.generate(&prepared, renderer)?;
     let fragments: Vec<_> = sink
-        .artifacts()
+        .outputs()
         .iter()
-        .map(|artifact| artifact.contents.as_slice())
+        .map(|artifact| artifact.bytes.as_slice())
         .collect();
 
     // Then: each function accepts only its own ordered, unbound parameters.

@@ -1,9 +1,7 @@
 use super::*;
+use crate::output_support::MemoryOutput;
 use hw_model_schema::analysis::AnalyzedSchema;
-use hw_model_schema::{
-    RegisterWindow,
-    export::{InMemoryArtifactSink, backends::c_header::CRegisterBackend, generate},
-};
+use hw_model_schema::{RegisterWindow, export::backends::c_header::CRegisterBackend};
 use std::{fmt::Write as _, process::Command};
 
 #[test]
@@ -13,15 +11,14 @@ fn strict_c11_retains_nested_singleton_topology_when_members_are_hidden()
     let resolved = layout.resolve()?.project_access(|register| {
         (register.id() == NestedRegisterId::Tail).then_some(hw_model_schema::Access::ReadOnly)
     })?;
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
     let schema = AnalyzedSchema::register_map("nested.h", &resolved)?;
-    generate(
+    sink.generate(
         &schema,
         CRegisterBackend::new().with_name(
             schema.view("nested.h").ok_or("nested view")?.id.clone(),
             "nested",
         ),
-        &mut sink,
     )?;
     let directory = std::env::var_os("SCHEMA_BANK_EVIDENCE_DIR")
         .map_or_else(
@@ -32,7 +29,7 @@ fn strict_c11_retains_nested_singleton_topology_when_members_are_hidden()
     std::fs::create_dir_all(&directory)?;
     std::fs::write(
         directory.join("nested.h"),
-        &sink.artifacts().first().unwrap().contents,
+        &sink.outputs().first().unwrap().bytes,
     )?;
     std::fs::write(directory.join("consumer.c"), b"#include <stdint.h>\n#include \"nested.h\"\n_Static_assert(C_NESTED_C_GROUPS_COUNT == 3, \"outer count\");\n_Static_assert(C_NESTED_C_GROUPS_2_C_LANES_COUNT == 1, \"inner count\");\n_Static_assert(C_NESTED_C_GROUPS_2_C_LANES_BASE == 32, \"nested base\");\n_Static_assert(C_NESTED_C_GROUPS_2_C_LANES_PARENT_INDEX == C_NESTED_C_GROUPS_INDEX, \"parent bank\");\n_Static_assert(C_NESTED_C_GROUPS_2_C_LANES_PARENT_INSTANCE == 2, \"parent instance\");\n_Static_assert(C_NESTED_C_GROUPS_STRIDE == 16, \"occupied stride\");\nint main(void) { return C_NESTED_SIZE != 64; }\n")?;
     let binary = directory.join("consumer");
@@ -71,17 +68,16 @@ fn strict_c11_addresses_match_routing_for_runtime_counts() -> Result<(), Box<dyn
     for count in [1, 3, 5] {
         let layout = super::contiguous::Grouped::new(count)?;
         let resolved = layout.resolve()?;
-        let mut sink = InMemoryArtifactSink::new();
+        let mut sink = MemoryOutput::new();
         let schema = AnalyzedSchema::register_map("banks.h", &resolved)?;
-        generate(
+        sink.generate(
             &schema,
             CRegisterBackend::new().with_name(
                 schema.view("banks.h").ok_or("banks view")?.id.clone(),
                 "banks",
             ),
-            &mut sink,
         )?;
-        let header = &sink.artifacts().first().unwrap().contents;
+        let header = &sink.outputs().first().unwrap().bytes;
         let mut consumer = String::from(
             "#include <stdint.h>\n#include <stdio.h>\n#include \"banks.h\"\nint main(void) {\n",
         );

@@ -9,9 +9,7 @@ fn control_view_permissions_match_real_hardware_transactions() {
     // Given: each physical control leaf and a fresh disabled control channel.
     let original = ControlRegisters::resolve().unwrap();
     for role in [RegisterView::Host, RegisterView::Firmware] {
-        let view = original
-            .project_access(|r| role.control_access(r.offset()))
-            .unwrap();
+        let view = role.control().unwrap();
         assert_eq!(view.size(), original.size());
         for register in original.registers() {
             let offset = register.offset();

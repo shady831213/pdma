@@ -1,9 +1,10 @@
+use crate::output_support::MemoryOutput;
 use hw_model_schema::analysis::{AnalyzedSchema, Bindings};
 use hw_model_schema::{
     ast::{DefinitionId, SchemaSet},
     bits_schema,
+    export::ExportError,
     export::backends::c_header::{CHeaderExportError, CRecordBackend},
-    export::{ExportError, InMemoryArtifactSink},
 };
 
 bits_schema! { pub bits Flags(u8) { ready: 0..=0, } }
@@ -13,30 +14,33 @@ fn record_macro_declarations_reject_collisions_after_the_significant_prefix()
 -> super::support::TestResult {
     // Given: a valid record with one long caller-owned C prefix.
     let prefix = "a".repeat(64);
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
 
     // When: distinct metadata macros differ only after the C11 significant prefix.
     let schema = AnalyzedSchema::opaque("record", super::support::RECORD)?;
     let id = schema.view("record").ok_or("missing view")?.id.clone();
-    let failure = hw_model_schema::analysis::Pipeline::new((&schema, ()))
-        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?
-        .generate(
-            |data| CRecordBackend::new(data).with_name(id, &prefix),
-            &mut sink,
-        );
+    let failure = sink.generate_prepared(
+        &hw_model_schema::analysis::Pipeline::new((&schema, ()))
+            .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?,
+        |data| CRecordBackend::new(data).with_name(id, &prefix),
+    );
 
     // Then: the exact first pair is diagnosed before emitting an artifact.
     let stem = format!("C_{}", prefix.to_ascii_uppercase());
-    assert_eq!(
-        failure,
-        Err(ExportError::Render(CHeaderExportError::NameCollision {
-            first_path: format!("{stem}_SIZE"),
-            second_path: format!("{stem}_ALIGNMENT"),
-            first_index: 0,
-            second_index: 1,
-        }))
-    );
-    assert!(sink.artifacts().is_empty());
+    let ExportError::Render(CHeaderExportError::NameCollision {
+        first_path,
+        second_path,
+        first_index,
+        second_index,
+    }) = failure.unwrap_err()
+    else {
+        panic!("expected name collision");
+    };
+    assert_eq!(first_path, format!("{stem}_SIZE"));
+    assert_eq!(second_path, format!("{stem}_ALIGNMENT"));
+    assert_eq!(first_index, 0);
+    assert_eq!(second_index, 1);
+    assert!(sink.outputs().is_empty());
     Ok(())
 }
 
@@ -48,7 +52,7 @@ fn bits_macro_declarations_reject_collisions_after_the_significant_prefix()
     schemas.add::<Flags>();
     let graph = schemas.resolve()?;
     let prefix = "a".repeat(64);
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
 
     // When: generated size and bit-width macros alias in their significant prefix.
     let schema = AnalyzedSchema::from_graph(&graph, &Bindings::new())?;
@@ -57,25 +61,28 @@ fn bits_macro_declarations_reject_collisions_after_the_significant_prefix()
         .ok_or("missing flags")?
         .id
         .clone();
-    let failure = hw_model_schema::analysis::Pipeline::new((&schema, ()))
-        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?
-        .generate(
-            |data| CRecordBackend::new(data).with_name(id, &prefix),
-            &mut sink,
-        );
+    let failure = sink.generate_prepared(
+        &hw_model_schema::analysis::Pipeline::new((&schema, ()))
+            .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?,
+        |data| CRecordBackend::new(data).with_name(id, &prefix),
+    );
 
     // Then: the same typed declaration collision is returned without partial output.
     let stem = format!("C_{}", prefix.to_ascii_uppercase());
-    assert_eq!(
-        failure,
-        Err(ExportError::Render(CHeaderExportError::NameCollision {
-            first_path: format!("{stem}_SIZE"),
-            second_path: format!("{stem}_BIT_WIDTH"),
-            first_index: 0,
-            second_index: 1,
-        }))
-    );
-    assert!(sink.artifacts().is_empty());
+    let ExportError::Render(CHeaderExportError::NameCollision {
+        first_path,
+        second_path,
+        first_index,
+        second_index,
+    }) = failure.unwrap_err()
+    else {
+        panic!("expected name collision");
+    };
+    assert_eq!(first_path, format!("{stem}_SIZE"));
+    assert_eq!(second_path, format!("{stem}_BIT_WIDTH"));
+    assert_eq!(first_index, 0);
+    assert_eq!(second_index, 1);
+    assert!(sink.outputs().is_empty());
     Ok(())
 }
 
@@ -98,22 +105,28 @@ fn accessor_function_names_use_the_final_c_symbol_scope() -> super::support::Tes
         ),
     ];
     let schema = AnalyzedSchema::opaque("r", RecordSpec::new(2, 1, &FIELDS))?;
-    let mut sink = InMemoryArtifactSink::new();
-    let result = hw_model_schema::analysis::Pipeline::new((&schema, ()))
-        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?
-        .generate(CRecordBackend::new, &mut sink);
+    let mut sink = MemoryOutput::new();
+    let result = sink.generate_prepared(
+        &hw_model_schema::analysis::Pipeline::new((&schema, ()))
+            .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?,
+        CRecordBackend::new,
+    );
     let first = format!("C_R_LOAD_C_{}B", PREFIX.to_ascii_uppercase());
     let second = format!("C_R_LOAD_C_{}C", PREFIX.to_ascii_uppercase());
     assert_eq!(first.len(), 64);
-    assert_eq!(
-        result,
-        Err(ExportError::Render(CHeaderExportError::NameCollision {
-            first_path: first,
-            second_path: second,
-            first_index: 7,
-            second_index: 12,
-        }))
-    );
-    assert!(sink.artifacts().is_empty());
+    let ExportError::Render(CHeaderExportError::NameCollision {
+        first_path,
+        second_path,
+        first_index,
+        second_index,
+    }) = result.unwrap_err()
+    else {
+        panic!("expected name collision");
+    };
+    assert_eq!(first_path, first);
+    assert_eq!(second_path, second);
+    assert_eq!(first_index, 7);
+    assert_eq!(second_index, 12);
+    assert!(sink.outputs().is_empty());
     Ok(())
 }

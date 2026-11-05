@@ -15,7 +15,7 @@ fn opaque_extent_and_complete_case_fields_work_in_c11() -> TestResult {
     // Then exported extent, offsets and byte-order accessors agree with the wire layout.
     compile_fragments(
         "untagged",
-        &[&union.contents, &small.contents, &large.contents],
+        &[&union.bytes, &small.bytes, &large.bytes],
         br"
 int main(void) {
     uint8_t bytes[C_PACKET_SIZE] = {0};

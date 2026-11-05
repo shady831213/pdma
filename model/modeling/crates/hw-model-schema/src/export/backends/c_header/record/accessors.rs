@@ -1,13 +1,14 @@
 use super::super::{CHeaderExportError, fragment::Fragment};
 use crate::{Endian, FieldDefinition, ScalarKind};
-use std::fmt::Write as _;
+use std::io::Write;
 
 pub(super) fn scalar_accessors(
     output: &mut Fragment,
     names: FieldNames<'_>,
     field: FieldDefinition,
+    writer: &mut dyn Write,
 ) -> Result<(), CHeaderExportError> {
-    output.constants::<64>(names.metadata, &[("WIDTH", field.width())])?;
+    output.constants::<64>(names.metadata, &[("WIDTH", field.width())], writer)?;
     let endian = match field.endian() {
         Endian::Little => "LITTLE",
         Endian::Big => "BIG",
@@ -15,15 +16,17 @@ pub(super) fn scalar_accessors(
     output.define(
         &format!("{}_ENDIAN", names.metadata),
         format_args!("{}_ENDIAN_{endian}", names.prefix),
+        writer,
     )?;
-    push_load(output, names, field)?;
-    push_store(output, names, field)
+    push_load(output, names, field, writer)?;
+    push_store(output, names, field, writer)
 }
 
 fn push_load(
     output: &mut Fragment,
     names: FieldNames<'_>,
     field: FieldDefinition,
+    writer: &mut dyn Write,
 ) -> Result<(), CHeaderExportError> {
     let c_type = c_type(field.scalar());
     let FieldNames {
@@ -33,36 +36,36 @@ fn push_load(
     } = names;
     let function = format!("{prefix}_LOAD_{field_name}");
     output.declare(&function)?;
-    let output = &mut output.text;
-    let _ = writeln!(
+    let output = writer;
+    writeln!(
         output,
         "static inline {c_type} {function}(const uint8_t bytes[{prefix}_SIZE]) {{"
-    );
+    )?;
     if field.width() == 1 {
-        let _ = writeln!(output, "    return ({c_type})bytes[{metadata}_OFFSET];\n}}");
+        writeln!(output, "    return ({c_type})bytes[{metadata}_OFFSET];\n}}")?;
         return Ok(());
     }
-    let _ = write!(output, "    return ({c_type})(");
+    write!(output, "    return ({c_type})(")?;
     for byte_index in 0..field.width() {
         if byte_index > 0 {
-            output.push_str(" | ");
+            output.write_all(b" | ")?;
         }
         let shift = shift(field, byte_index);
         if shift == 0 {
-            let _ = write!(output, "({c_type})bytes[{metadata}_OFFSET");
+            write!(output, "({c_type})bytes[{metadata}_OFFSET")?;
         } else {
-            let _ = write!(output, "(({c_type})bytes[{metadata}_OFFSET");
+            write!(output, "(({c_type})bytes[{metadata}_OFFSET")?;
         }
         if byte_index > 0 {
-            let _ = write!(output, " + UINT64_C({byte_index})");
+            write!(output, " + UINT64_C({byte_index})")?;
         }
         if shift == 0 {
-            output.push(']');
+            output.write_all(b"]")?;
         } else {
-            let _ = write!(output, "] << UINT32_C({shift}))");
+            write!(output, "] << UINT32_C({shift}))")?;
         }
     }
-    output.push_str(");\n}\n");
+    output.write_all(b");\n}\n")?;
     Ok(())
 }
 
@@ -70,6 +73,7 @@ fn push_store(
     output: &mut Fragment,
     names: FieldNames<'_>,
     field: FieldDefinition,
+    writer: &mut dyn Write,
 ) -> Result<(), CHeaderExportError> {
     let c_type = c_type(field.scalar());
     let FieldNames {
@@ -79,27 +83,27 @@ fn push_store(
     } = names;
     let function = format!("{prefix}_STORE_{field_name}");
     output.declare(&function)?;
-    let output = &mut output.text;
-    let _ = writeln!(
+    let output = writer;
+    writeln!(
         output,
         "static inline void {function}(uint8_t bytes[{prefix}_SIZE], {c_type} value) {{"
-    );
+    )?;
     for byte_index in 0..field.width() {
-        let _ = write!(output, "    bytes[{metadata}_OFFSET");
+        write!(output, "    bytes[{metadata}_OFFSET")?;
         if byte_index > 0 {
-            let _ = write!(output, " + UINT64_C({byte_index})");
+            write!(output, " + UINT64_C({byte_index})")?;
         }
         let shift = shift(field, byte_index);
         if shift == 0 {
-            output.push_str("] = (uint8_t)(value & UINT64_C(255));\n");
+            output.write_all(b"] = (uint8_t)(value & UINT64_C(255));\n")?;
         } else {
-            let _ = writeln!(
+            writeln!(
                 output,
                 "] = (uint8_t)((value >> UINT32_C({shift})) & UINT64_C(255));"
-            );
+            )?;
         }
     }
-    output.push_str("}\n");
+    output.write_all(b"}\n")?;
     Ok(())
 }
 

@@ -1,16 +1,18 @@
-//! Veryl rejects collisions in emitted declarations before exposing artifacts.
+//! Veryl validates symbols while streaming each package.
 #![cfg(feature = "export-veryl-layout")]
+/// Caller-owned output capture for exporter tests.
+pub mod output_support;
 use hw_model_schema::analysis::{AnalyzedSchema, Bindings};
 use hw_model_schema::{
     ast::SchemaSet,
     bits_schema,
     export::{
-        ExportError, InMemoryArtifactSink,
+        ExportError,
         backends::veryl::{VerylExportError, VerylRegisterBackend},
-        generate,
     },
     register_schema,
 };
+use output_support::MemoryOutput;
 
 bits_schema! { pub bits Flags(u32) { mode: 0..=1 => enum { variants: { Bits = 0, Active = 1 } } } }
 register_schema! { pub register Status {
@@ -22,23 +24,25 @@ fn enum_name_cannot_overwrite_generated_field_metadata() -> Result<(), Box<dyn s
     // Given: an enum discriminant and field-width constant normalize to VALUE_MODE_BITS.
     let mut set = SchemaSet::new();
     set.add::<Status>();
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
     // When: the package is rendered.
-    let result = generate(
+    let result = sink.generate(
         &AnalyzedSchema::from_graph(&set.resolve()?, &Bindings::default())?,
         VerylRegisterBackend::new(),
-        &mut sink,
     );
-    // Then: the conflicting declaration is rejected without emitting a partial package.
+    // Then: the failing package is discarded by this caller, retaining the completed dependency.
     assert!(
         matches!(result, Err(ExportError::Render(VerylExportError::Name(name))) if name == "VALUE_MODE_BITS")
     );
-    assert!(sink.artifacts().is_empty());
+    let [dependency] = sink.outputs() else {
+        return Err("expected one completed dependency".into());
+    };
+    assert_eq!(dependency.metadata.logical_name, "FlagsLayout.veryl");
     Ok(())
 }
 
 #[test]
-fn package_alias_collision_rejects_all_artifacts() -> Result<(), Box<dyn std::error::Error>> {
+fn package_alias_collision_prevents_all_output() -> Result<(), Box<dyn std::error::Error>> {
     use hw_model_schema::ast::DefinitionId;
     // Given: two prepared definitions alias the same target package.
     let mut set = SchemaSet::new();
@@ -61,14 +65,14 @@ fn package_alias_collision_rejects_all_artifacts() -> Result<(), Box<dyn std::er
                 .clone(),
             "Shared",
         );
-    let mut sink = InMemoryArtifactSink::new();
+    let mut bytes = Vec::new();
     // When: common generation renders the complete request.
-    let result = generate(&prepared, renderer, &mut sink);
-    // Then: package alias collision is reported before the sink receives any artifact.
+    let result = hw_model_schema::export::generate(&prepared, renderer, &mut bytes);
+    // Then: metadata preflight rejects the later alias before publishing any package.
     assert!(
         matches!(result, Err(ExportError::Render(VerylExportError::Name(name))) if name == "Shared")
     );
-    assert!(sink.artifacts().is_empty());
+    assert!(bytes.is_empty());
     Ok(())
 }
 
@@ -85,16 +89,16 @@ fn backend_emits_fields_and_enums_once_for_each_expanded_register()
     let mut set = SchemaSet::new();
     set.add::<Controls>();
     let prepared = AnalyzedSchema::from_graph(&set.resolve()?, &Bindings::default())?;
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
     // When: the whole-map handler emits the checked expanded registers.
-    generate(&prepared, VerylRegisterBackend::new(), &mut sink)?;
+    sink.generate(&prepared, VerylRegisterBackend::new())?;
     // Then: whole-node emission retains one set of metadata per placed register.
     let artifact = sink
-        .artifacts()
+        .outputs()
         .iter()
-        .find(|artifact| artifact.logical_name == "ControlsLayout.veryl")
+        .find(|artifact| artifact.metadata.logical_name == "ControlsLayout.veryl")
         .ok_or("missing map")?;
-    let text = std::str::from_utf8(&artifact.contents)?;
+    let text = std::str::from_utf8(&artifact.bytes)?;
     for index in 0..2 {
         for suffix in [
             "LSB: u32 = 4",
@@ -123,24 +127,24 @@ fn independent_record_backend_preserves_record_and_bits_packages()
     set.add::<Packet>();
     set.add::<Mode>();
     let prepared = AnalyzedSchema::from_graph(&set.resolve()?, &Bindings::default())?;
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
     // When: the independent record renderer consumes the semantic tree.
-    generate(&prepared, VerylRecordBackend::new(), &mut sink)?;
+    sink.generate(&prepared, VerylRecordBackend::new())?;
     // Then: both packages retain their checked extents and bit geometry.
     let packet = sink
-        .artifacts()
+        .outputs()
         .iter()
-        .find(|item| item.logical_name == "PacketLayout.veryl")
+        .find(|item| item.metadata.logical_name == "PacketLayout.veryl")
         .ok_or("missing record package")?;
-    let packet = std::str::from_utf8(&packet.contents)?;
+    let packet = std::str::from_utf8(&packet.bytes)?;
     assert!(packet.contains("EXTENT: u64 = 8"));
     assert!(packet.contains("ALIGNMENT: u64 = 8"));
     let bits = sink
-        .artifacts()
+        .outputs()
         .iter()
-        .find(|item| item.logical_name == "ModeLayout.veryl")
+        .find(|item| item.metadata.logical_name == "ModeLayout.veryl")
         .ok_or("missing bits package")?;
-    let bits = std::str::from_utf8(&bits.contents)?;
+    let bits = std::str::from_utf8(&bits.bytes)?;
     assert!(bits.contains("BIT_WIDTH: u32 = 6"));
     assert!(bits.contains("DECLARED_MASK: u64 = 64'h0000000000000030"));
     Ok(())
@@ -164,14 +168,14 @@ fn empty_parameterized_map_emits_zero_extent() -> Result<(), Box<dyn std::error:
     let mut set = SchemaSet::new();
     set.add::<EmptyMap>();
     let prepared = AnalyzedSchema::from_graph(&set.resolve()?, &Bindings::default())?;
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
     // When: the register backend emits its geometry function.
-    generate(&prepared, VerylRegisterBackend::new(), &mut sink)?;
+    sink.generate(&prepared, VerylRegisterBackend::new())?;
     // Then: the completed empty extent is independent of the unused parameter.
-    let [artifact] = sink.artifacts() else {
+    let [artifact] = sink.outputs() else {
         return Err("one package expected".into());
     };
-    let text = std::str::from_utf8(&artifact.contents)?;
+    let text = std::str::from_utf8(&artifact.bytes)?;
     assert!(text.contains("function extent(p_unused: input u64) -> u64"));
     assert!(text.contains("return 0;"));
     Ok(())
@@ -199,21 +203,19 @@ fn multiline_documentation_stays_inside_comments_in_both_domains()
     records.add::<DocumentedPacket>();
     let mut registers = SchemaSet::new();
     registers.add::<DocumentedControl>();
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
     // When: both independent backends render through the common documentation traversal.
-    generate(
+    sink.generate(
         &AnalyzedSchema::from_graph(&records.resolve()?, &Bindings::default())?,
         VerylRecordBackend::new(),
-        &mut sink,
     )?;
-    generate(
+    sink.generate(
         &AnalyzedSchema::from_graph(&registers.resolve()?, &Bindings::default())?,
         VerylRegisterBackend::new(),
-        &mut sink,
     )?;
     // Then: every supplied line remains a line comment, including both description kinds.
-    for (artifact, domain) in sink.artifacts().iter().zip(["record", "register"]) {
-        let text = std::str::from_utf8(&artifact.contents)?;
+    for (artifact, domain) in sink.outputs().iter().zip(["record", "register"]) {
+        let text = std::str::from_utf8(&artifact.bytes)?;
         for line in [
             format!("{domain} summary"),
             "second */".into(),
@@ -226,6 +228,31 @@ fn multiline_documentation_stays_inside_comments_in_both_domains()
             );
         }
     }
-    assert_eq!(sink.artifacts().len(), 2);
+    assert_eq!(sink.outputs().len(), 2);
+    Ok(())
+}
+
+#[test]
+fn writer_failure_stops_before_later_symbol_collision() -> Result<(), Box<dyn std::error::Error>> {
+    use hw_model_schema::export::generate;
+    use std::error::Error;
+    // Given: a fixed-capacity writer and a schema with a later symbol collision.
+    let mut set = SchemaSet::new();
+    set.add::<Status>();
+    let prepared = AnalyzedSchema::from_graph(&set.resolve()?, &Bindings::default())?;
+    let mut bytes = [0; 20];
+    let mut output = bytes.as_mut_slice();
+    // When: the opening package bytes exhaust the caller's writer.
+    let result = generate(&prepared, VerylRegisterBackend::new(), &mut output);
+    // Then: the write error wins over the later render error and retains its source.
+    let Err(ExportError::Render(error @ VerylExportError::Io(_))) = result else {
+        return Err("expected streaming write error".into());
+    };
+    let source = error
+        .source()
+        .and_then(|source| source.downcast_ref::<std::io::Error>())
+        .ok_or("missing IO source")?;
+    assert_eq!(source.kind(), std::io::ErrorKind::WriteZero);
+    assert_eq!(&bytes, b"// Generated schema ");
     Ok(())
 }

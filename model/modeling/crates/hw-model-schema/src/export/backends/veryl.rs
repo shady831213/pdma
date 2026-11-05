@@ -3,7 +3,7 @@ mod package;
 mod record;
 mod register;
 mod values;
-use crate::export::{Artifact, SymbolScope};
+use crate::export::{OutputMetadata, SymbolScope};
 use crate::traversal::NodeId;
 use std::collections::HashMap;
 
@@ -12,8 +12,8 @@ use std::collections::HashMap;
 pub enum VerylExportError {
     /// An expression was not completed by semantic analysis.
     Layout(crate::ast::LayoutError),
-    /// Formatting failed while producing an artifact.
-    Format(std::fmt::Error),
+    /// Writing the output failed.
+    Io(std::io::Error),
     /// An invalid or colliding target symbol.
     Name(String),
 }
@@ -21,7 +21,7 @@ impl std::fmt::Display for VerylExportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Layout(error) => error.fmt(f),
-            Self::Format(error) => error.fmt(f),
+            Self::Io(error) => error.fmt(f),
             Self::Name(name) => write!(f, "invalid or conflicting Veryl symbol {name}"),
         }
     }
@@ -30,7 +30,7 @@ impl std::error::Error for VerylExportError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Layout(source) => Some(source),
-            Self::Format(source) => Some(source),
+            Self::Io(source) => Some(source),
             Self::Name(_) => None,
         }
     }
@@ -40,18 +40,17 @@ impl From<crate::ast::LayoutError> for VerylExportError {
         Self::Layout(value)
     }
 }
-impl From<std::fmt::Error> for VerylExportError {
-    fn from(value: std::fmt::Error) -> Self {
-        Self::Format(value)
+impl From<std::io::Error> for VerylExportError {
+    fn from(value: std::io::Error) -> Self {
+        Self::Io(value)
     }
 }
 
-/// Target package storage shared by the independent domain renderers.
+/// Naming state shared by the independent domain renderers.
 #[derive(Debug, Default)]
 struct Output {
     names: HashMap<NodeId, String>,
     symbols: SymbolScope<NodeId>,
-    artifacts: Vec<Artifact>,
     package: package::Package,
 }
 impl Output {
@@ -102,23 +101,30 @@ impl VerylRegisterBackend {
     }
 }
 impl Output {
-    fn begin(&mut self, unit: &crate::analysis::Unit) -> Result<String, VerylExportError> {
+    fn metadata(
+        &mut self,
+        unit: &crate::analysis::Unit,
+    ) -> Result<OutputMetadata, VerylExportError> {
         let name = self.name(&unit.id, &unit.name);
         if !identifier(&name) || self.symbols.insert(&name, unit.id.clone()).is_err() {
             return Err(VerylExportError::Name(name));
         }
-        self.package = package::Package::default();
-        self.package.text = format!(
-            "// Generated schema layout; do not edit.\n#[fmt(skip)]\npub package {name} {{\n"
-        );
-        Ok(name)
-    }
-    fn end(&mut self, name: &str) {
-        self.package.text.push_str("}\n");
-        self.artifacts.push(Artifact {
+        Ok(OutputMetadata {
             logical_name: format!("{name}.veryl"),
             media_type: "text/x-veryl; charset=utf-8".into(),
-            contents: std::mem::take(&mut self.package.text).into_bytes(),
-        });
+        })
+    }
+    fn begin(
+        &mut self,
+        unit: &crate::analysis::Unit,
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), VerylExportError> {
+        self.package = package::Package::default();
+        writeln!(
+            writer,
+            "// Generated schema layout; do not edit.\n#[fmt(skip)]\npub package {} {{",
+            self.name(&unit.id, &unit.name)
+        )?;
+        Ok(())
     }
 }

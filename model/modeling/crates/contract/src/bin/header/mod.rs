@@ -1,13 +1,11 @@
-use hw_model_schema::analysis::{AnalyzedSchema, Bindings, Pipeline};
+use hw_model_schema::analysis::{AnalyzedSchema, Bindings, Pass};
 use hw_model_schema::{
     ast::{DefinitionBody, SchemaRegistry, SchemaSet},
-    export::InMemoryArtifactSink,
     export::backends::c_header::{CRecordAnalysisPass, CRecordBackend, CRegisterBackend},
+    export::{prepare, value::Backend},
 };
 use pdma_model_contract::dma::DmaRegisters;
 use pdma_model_contract::hw_components::context::ContextTableRegisters;
-use pdma_model_contract::hw_components::control::ControlRegisters;
-use pdma_model_contract::hw_components::firmware::FirmwareRegisters;
 use pdma_model_contract::hw_components::windows::ChannelWindowRegisters;
 use pdma_model_contract::view::RegisterView;
 use std::{error::Error, io::Write};
@@ -27,8 +25,7 @@ pub fn generate_with_contexts(count: usize, contexts: usize) -> Result<HeaderSet
     u32::try_from(layout.extent())?;
     let windows = ChannelWindowRegisters::new(count)?;
     let contexts = ContextTableRegisters::for_channels(contexts, count)?;
-    let registers = layout.resolve()?;
-    let mut common = InMemoryArtifactSink::new();
+    let mut common = Vec::new();
     let mut records = SchemaSet::new();
     for definition in SchemaRegistry::discover().definitions() {
         if definition.id().path().starts_with("pdma_model_contract::")
@@ -41,9 +38,8 @@ pub fn generate_with_contexts(count: usize, contexts: usize) -> Result<HeaderSet
         }
     }
     let schema = AnalyzedSchema::from_graph(&records.resolve()?, &Bindings::default())?;
-    Pipeline::new((&schema, ()))
-        .run(CRecordAnalysisPass)?
-        .generate(CRecordBackend::new, &mut common)?;
+    let (_, analysis) = CRecordAnalysisPass.run((&schema, ()))?;
+    render(&schema, CRecordBackend::new(&analysis), &mut common)?;
     let mut headers = vec![("pdma_common.h", wrap("PDMA_COMMON_H", &common, false))];
     for (role, prefix, filename, guard) in [
         (RegisterView::Host, "h", "pdma_host.h", "PDMA_HOST_H"),
@@ -54,48 +50,26 @@ pub fn generate_with_contexts(count: usize, contexts: usize) -> Result<HeaderSet
             "PDMA_FIRMWARE_H",
         ),
     ] {
-        let mut sink = InMemoryArtifactSink::new();
-        if role == RegisterView::Firmware {
-            render_registers("context", &contexts.resolve()?, "fctx", &mut sink)?;
+        let mut sink = Vec::new();
+        if let Some(context) = role.context_table(&contexts)? {
+            render_registers("context", &context, &format!("{prefix}ctx"), &mut sink)?;
         }
         render_registers(
             "dma",
-            &registers.project_access(|r| role.dma_access(r.id(), r.definition().access()))?,
+            &role.dma(&layout)?,
             &format!("{prefix}dma"),
             &mut sink,
         )?;
-        render_registers(
-            "boot",
-            &FirmwareRegisters::resolve()?.project_access(|_| Some(role.boot_access()))?,
-            &format!("{prefix}boot"),
-            &mut sink,
-        )?;
+        render_registers("boot", &role.boot()?, &format!("{prefix}boot"), &mut sink)?;
         render_registers(
             "control",
-            &ControlRegisters::resolve()?.project_access(|r| role.control_access(r.offset()))?,
+            &role.control()?,
             &format!("{prefix}ctl"),
             &mut sink,
         )?;
-        let window_view = windows.resolve()?.project_access(|register| {
-            let (_, offset) = windows.windows().locate_instance(register.offset())?;
-            role.window_access(offset)
-        })?;
+        let window_view = role.windows(&windows)?;
         render_registers("window", &window_view, &format!("{prefix}win"), &mut sink)?;
-        let mut bytes = wrap(guard, &sink, true);
-        bytes.truncate(bytes.len() - b"#endif\n".len());
-        let role_name = match role {
-            RegisterView::Host => "HOST",
-            RegisterView::Firmware => "FIRMWARE",
-        };
-        let window = windows.windows();
-        writeln!(
-            bytes,
-            "#define PDMA_{role_name}_WINDOW_COUNT UINT32_C({})\n#define PDMA_{role_name}_WINDOW_STRIDE UINT32_C({})",
-            window.count(),
-            window.stride()
-        )?;
-        writeln!(bytes, "#endif")?;
-        headers.push((filename, bytes));
+        headers.push((filename, wrap(guard, &sink, true)));
     }
     Ok(headers)
 }
@@ -104,27 +78,38 @@ fn render_registers<I: Copy + Eq, F: Copy + Eq + core::fmt::Debug>(
     name: &str,
     registers: &hw_model_schema::ResolvedRegisterMap<I, F>,
     prefix: &str,
-    sink: &mut InMemoryArtifactSink,
+    writer: &mut dyn Write,
 ) -> Result<(), Box<dyn Error>> {
     let schema = AnalyzedSchema::register_map(name, registers)?;
     let root = schema.view(name).ok_or("missing register view")?;
-    hw_model_schema::export::generate(
+    render(
         &schema,
         CRegisterBackend::new().with_name(root.id.clone(), prefix),
-        sink,
-    )?;
+        writer,
+    )
+}
+
+fn render<B: Backend>(
+    schema: &AnalyzedSchema,
+    mut backend: B,
+    writer: &mut dyn Write,
+) -> Result<(), Box<dyn Error>>
+where
+    B::Error: Error + 'static,
+{
+    for output in prepare(schema, &mut backend)? {
+        output.emit(&mut backend, writer)?;
+        writer.write_all(b"\n")?;
+    }
     Ok(())
 }
 
-fn wrap(guard: &str, sink: &InMemoryArtifactSink, common: bool) -> Vec<u8> {
+fn wrap(guard: &str, contents: &[u8], common: bool) -> Vec<u8> {
     let mut bytes = format!("/* Generated by pdma-abi-header; do not edit. */\n#ifndef {guard}\n#define {guard}\n#include <stdint.h>\n").into_bytes();
     if common {
         bytes.extend_from_slice(b"#include \"pdma_common.h\"\n");
     }
-    for artifact in sink.artifacts() {
-        bytes.extend_from_slice(&artifact.contents);
-        bytes.push(b'\n');
-    }
+    bytes.extend_from_slice(contents);
     bytes.extend_from_slice(b"#endif\n");
     bytes
 }

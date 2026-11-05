@@ -1,13 +1,16 @@
 //! Consumers can render a graph without knowing how roots were discovered.
 #![cfg(feature = "export-c-header")]
+/// Caller-owned capture for generation tests.
+pub mod output_support;
 use hw_model_schema::analysis::{AnalysisError, AnalyzedSchema, Bindings};
 use hw_model_schema::export::backends::c_header::{CHeaderExportError, CRecordBackend};
 use hw_model_schema::{
     Endian, RecordSpec, RegisterDefinition,
     ast::{Definition, DefinitionId, SchemaSet},
-    export::{ExportError, InMemoryArtifactSink, generate},
+    export::ExportError,
 };
 use hw_model_schema::{record_schema, union_schema};
+use output_support::MemoryOutput;
 
 record_schema! { pub record Payload { alignment: 4, endian: Little, fields: { value: u32 } } }
 union_schema! { pub union Message { cases: { Payload(Payload) } } }
@@ -28,22 +31,26 @@ fn distinct_same_named_types_require_an_explicit_backend_name_override()
     set.add_record::<right::Entry>();
     let graph = set.resolve()?;
     // When: the default backend would emit the same C prefix twice.
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
     let prepared = AnalyzedSchema::from_graph(&graph, &Bindings::new())?;
     let c_prepared = hw_model_schema::analysis::Pipeline::new((&prepared, ()))
         .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?;
-    let failure = c_prepared.generate(CRecordBackend::new, &mut sink);
-    // Then: no partial header is emitted; identity-based renaming resolves the collision.
-    assert_eq!(
-        failure,
-        Err(ExportError::Render(CHeaderExportError::NameCollision {
-            first_path: DefinitionId::of::<left::Entry>().path().into(),
-            second_path: DefinitionId::of::<right::Entry>().path().into(),
-            first_index: 0,
-            second_index: 1,
-        }))
-    );
-    assert!(sink.artifacts().is_empty());
+    let failure = sink.generate_prepared(&c_prepared, CRecordBackend::new);
+    // Then: metadata preflight prevents all output; renaming permits both roots.
+    let Err(ExportError::Render(CHeaderExportError::NameCollision {
+        first_path,
+        second_path,
+        first_index,
+        second_index,
+    })) = failure
+    else {
+        return Err("expected name collision".into());
+    };
+    assert_eq!(first_path, DefinitionId::of::<left::Entry>().path());
+    assert_eq!(second_path, DefinitionId::of::<right::Entry>().path());
+    assert_eq!((first_index, second_index), (0, 1));
+    assert!(sink.outputs().is_empty());
+    let mut sink = MemoryOutput::new();
     let renderer = CRecordBackend::new(&c_prepared.input().1).with_name(
         prepared
             .definition(hw_model_schema::ast::DefinitionId::of::<right::Entry>())
@@ -52,8 +59,8 @@ fn distinct_same_named_types_require_an_explicit_backend_name_override()
             .clone(),
         "right_entry",
     );
-    generate(&prepared, renderer, &mut sink)?;
-    assert_eq!(sink.artifacts().len(), 2);
+    sink.generate(&prepared, renderer)?;
+    assert_eq!(sink.outputs().len(), 2);
     Ok(())
 }
 
@@ -64,18 +71,20 @@ fn c_header_exports_reachable_records_once() -> Result<(), Box<dyn std::error::E
     set.add_record::<Message>();
     let graph = set.resolve()?;
     // When: the built-in C backend renders its complete dependency set.
-    let mut sink = InMemoryArtifactSink::new();
-    hw_model_schema::analysis::Pipeline::new((
-        &AnalyzedSchema::from_graph(&graph, &Bindings::new())?,
-        (),
-    ))
-    .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?
-    .generate(CRecordBackend::new, &mut sink)?;
+    let mut sink = MemoryOutput::new();
+    sink.generate_prepared(
+        &hw_model_schema::analysis::Pipeline::new((
+            &AnalyzedSchema::from_graph(&graph, &Bindings::new())?,
+            (),
+        ))
+        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?,
+        CRecordBackend::new,
+    )?;
     // Then: both storage geometry and the referenced record's accessors are present.
     let output = sink
-        .artifacts()
+        .outputs()
         .iter()
-        .map(|artifact| String::from_utf8_lossy(&artifact.contents))
+        .map(|artifact| String::from_utf8_lossy(&artifact.bytes))
         .collect::<Vec<_>>()
         .join("\n");
     assert_eq!(output.matches("#define C_PAYLOAD_SIZE ").count(), 1);
@@ -120,32 +129,31 @@ fn graph_register_uses_prepared_register_metadata() -> Result<(), Box<dyn std::e
         RegisterDefinition::new("Control", 4, Endian::Little),
     ));
     let graph = set.resolve()?;
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
     let mut records = SchemaSet::new();
     records.add_record::<Payload>();
-    hw_model_schema::analysis::Pipeline::new((
-        &AnalyzedSchema::from_graph(&records.resolve()?, &Bindings::new())?,
-        (),
-    ))
-    .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?
-    .generate(CRecordBackend::new, &mut sink)?;
+    sink.generate_prepared(
+        &hw_model_schema::analysis::Pipeline::new((
+            &AnalyzedSchema::from_graph(&records.resolve()?, &Bindings::new())?,
+            (),
+        ))
+        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?,
+        CRecordBackend::new,
+    )?;
 
     // When: the common preparer supplies register metadata to the C renderer.
-    hw_model_schema::export::generate(
+    sink.generate(
         &AnalyzedSchema::from_graph(&graph, &Bindings::new())?,
         hw_model_schema::export::backends::c_header::CRegisterBackend::new(),
-        &mut sink,
     )?;
 
     // Then: both selected definitions are rendered, including the register width.
-    assert_eq!(sink.artifacts().len(), 2);
+    assert_eq!(sink.outputs().len(), 2);
     let register = sink
-        .artifacts()
+        .outputs()
         .iter()
-        .find(|artifact| artifact.logical_name == "control")
+        .find(|artifact| artifact.metadata.logical_name == "control")
         .ok_or("register artifact")?;
-    assert!(
-        std::str::from_utf8(&register.contents)?.contains("#define C_CONTROL_WIDTH UINT64_C(4)")
-    );
+    assert!(std::str::from_utf8(&register.bytes)?.contains("#define C_CONTROL_WIDTH UINT64_C(4)"));
     Ok(())
 }

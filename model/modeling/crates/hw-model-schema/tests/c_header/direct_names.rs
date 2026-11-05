@@ -19,14 +19,14 @@ fn ancestors_and_existing_names_survive_added_same_leaf_siblings() -> TestResult
     ];
     // Then: the original structural name remains unchanged and native C observes its address.
     for artifact in &artifacts {
-        let text = std::str::from_utf8(&artifact.contents)?;
+        let text = std::str::from_utf8(&artifact.bytes)?;
         assert!(
             text.contains("C_ROOT_C_LEFT_C_VALUE_OFFSET UINT64_C(0)"),
             "{text}"
         );
         compile_fragments(
             "direct-ancestor",
-            &[&artifact.contents],
+            &[&artifact.bytes],
             b"int main(void) { return C_ROOT_C_LEFT_C_VALUE_OFFSET != 0; }\n",
         )?;
     }
@@ -46,14 +46,14 @@ fn projected_subset_preserves_surviving_register_names() -> TestResult {
     ];
     // Then: removing the first same-leaf sibling does not rename the retained register.
     for artifact in &artifacts {
-        let text = std::str::from_utf8(&artifact.contents)?;
+        let text = std::str::from_utf8(&artifact.bytes)?;
         assert!(
             text.contains("C_ROOT_C_RIGHT_C_VALUE_OFFSET UINT64_C(4)"),
             "{text}"
         );
         compile_fragments(
             "direct-subset",
-            &[&artifact.contents],
+            &[&artifact.bytes],
             b"int main(void) { return C_ROOT_C_RIGHT_C_VALUE_OFFSET != 4; }\n",
         )?;
     }

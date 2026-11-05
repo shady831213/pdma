@@ -1,4 +1,5 @@
-use std::fmt::{Display, Write as _};
+use std::fmt::Display;
+use std::io::Write;
 
 use crate::Documentation;
 
@@ -6,7 +7,6 @@ use super::{CHeaderExportError, naming};
 
 #[derive(Debug, Default)]
 pub(super) struct Fragment {
-    pub(super) text: String,
     symbols: naming::Scope,
 }
 
@@ -19,18 +19,20 @@ impl Fragment {
         &mut self,
         name: &str,
         value: impl Display,
+        writer: &mut dyn Write,
     ) -> Result<(), CHeaderExportError> {
         self.declare(name)?;
-        writeln!(self.text, "#define {name} {value}").map_err(CHeaderExportError::Format)
+        writeln!(writer, "#define {name} {value}").map_err(CHeaderExportError::Io)
     }
 
     pub(super) fn constants<const WIDTH: usize>(
         &mut self,
         prefix: &str,
         values: &[(&str, impl Display)],
+        writer: &mut dyn Write,
     ) -> Result<(), CHeaderExportError> {
         for (name, value) in values {
-            self.unsigned::<WIDTH>(&format!("{prefix}_{name}"), value)?;
+            self.unsigned::<WIDTH>(&format!("{prefix}_{name}"), value, writer)?;
         }
         Ok(())
     }
@@ -39,44 +41,52 @@ impl Fragment {
         &mut self,
         name: &str,
         value: impl Display,
+        writer: &mut dyn Write,
     ) -> Result<(), CHeaderExportError> {
-        self.define(name, format_args!("UINT{WIDTH}_C({value})"))
+        self.define(name, format_args!("UINT{WIDTH}_C({value})"), writer)
     }
 
-    pub(super) fn line(&mut self, line: impl Display) -> Result<(), CHeaderExportError> {
-        writeln!(self.text, "{line}").map_err(CHeaderExportError::Format)
+    pub(super) fn line(
+        line: impl Display,
+        writer: &mut dyn Write,
+    ) -> Result<(), CHeaderExportError> {
+        writeln!(writer, "{line}").map_err(CHeaderExportError::Io)
     }
 
     pub(super) fn documentation(
-        &mut self,
         name: &str,
         docs: Documentation,
+        writer: &mut dyn Write,
     ) -> Result<(), CHeaderExportError> {
         if docs == Documentation::EMPTY {
             return Ok(());
         }
-        self.text.push_str("/*\n");
+        writer.write_all(b"/*\n")?;
         if !name.is_empty() {
-            self.comment_text(name)?;
+            Self::comment_text(name, writer)?;
         }
         for fragment in crate::export::value::documentation_fragments(docs) {
             let (crate::export::value::DocumentationFragment::ShortDescription(text)
             | crate::export::value::DocumentationFragment::Description(text)) = fragment;
-            self.comment_text(text)?;
+            Self::comment_text(text, writer)?;
         }
-        self.line(" */")
+        Self::line(" */", writer)
     }
 
-    pub(super) fn comment(&mut self, name: &str, text: &str) -> Result<(), CHeaderExportError> {
-        self.line("/*")?;
+    pub(super) fn comment(
+        name: &str,
+        text: &str,
+        writer: &mut dyn Write,
+    ) -> Result<(), CHeaderExportError> {
+        Self::line("/*", writer)?;
         if !name.is_empty() {
-            self.comment_text(name)?;
+            Self::comment_text(name, writer)?;
         }
-        self.comment_text(text)?;
-        self.line(" */")
+        Self::comment_text(text, writer)?;
+        Self::line(" */", writer)
     }
 
-    fn comment_text(&mut self, text: &str) -> Result<(), CHeaderExportError> {
+    fn comment_text(text: &str, writer: &mut dyn Write) -> Result<(), CHeaderExportError> {
         for line in text.lines() {
             // Keep C preprocessing, comment delimiters and line splicing inert.
             let line = line
@@ -84,7 +94,7 @@ impl Fragment {
                 .replace('?', "? ")
                 .replace("/*", "/ *")
                 .replace("*/", "* /");
-            self.line(format_args!(" * {line}"))?;
+            Self::line(format_args!(" * {line}"), writer)?;
         }
         Ok(())
     }

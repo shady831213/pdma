@@ -2,7 +2,54 @@ use crate::hw_components::control::ControlConfiguration;
 use crate::hw_components::control::ControlNotificationRegisters;
 use crate::hw_components::control::ControlRegisters;
 use crate::hw_components::windows::ChannelWindowBlock;
-use hw_model_schema::Access;
+use crate::{
+    dma::{DmaRegistersLayout, DmaRegistersRegisterId},
+    hw_components::{
+        context::{ContextTableRegistersLayout, ContextTableRegistersRegisterId},
+        control::ControlRegistersRegisterId,
+        firmware::{FirmwareRegisters, FirmwareRegistersRegisterId},
+        windows::{ChannelWindowRegistersLayout, ChannelWindowRegistersRegisterId},
+    },
+};
+use hw_model_schema::{
+    Access, RegisterMapError, ResolvedRegisterMap, register_map::AccessProjectionError,
+};
+use std::fmt;
+
+/// Failure resolving a physical map or applying a role's access permissions.
+#[derive(Debug)]
+pub enum RegisterViewError<I> {
+    /// Invalid physical register layout.
+    Layout(RegisterMapError<I>),
+    /// Role permissions exceed the source register's permissions.
+    Access(AccessProjectionError),
+}
+impl<I: fmt::Debug> fmt::Display for RegisterViewError<I> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Layout(error) => error.fmt(f),
+            Self::Access(error) => error.fmt(f),
+        }
+    }
+}
+impl<I: fmt::Debug + 'static> std::error::Error for RegisterViewError<I> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Layout(error) => Some(error),
+            Self::Access(error) => Some(error),
+        }
+    }
+}
+impl<I> From<RegisterMapError<I>> for RegisterViewError<I> {
+    fn from(error: RegisterMapError<I>) -> Self {
+        Self::Layout(error)
+    }
+}
+impl<I> From<AccessProjectionError> for RegisterViewError<I> {
+    fn from(error: AccessProjectionError) -> Self {
+        Self::Access(error)
+    }
+}
 
 /// Software domain whose static register permissions are exported.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -14,6 +61,67 @@ pub enum RegisterView {
 }
 
 impl RegisterView {
+    /// Resolves the complete DMA aperture with this role's static permissions.
+    pub fn dma(
+        self,
+        layout: &DmaRegistersLayout,
+    ) -> Result<
+        ResolvedRegisterMap<DmaRegistersRegisterId>,
+        RegisterViewError<DmaRegistersRegisterId>,
+    > {
+        Ok(layout
+            .resolve()?
+            .project_access(|r| self.dma_access(r.id(), r.definition().access()))?)
+    }
+
+    /// Resolves the firmware boot report as seen by this role.
+    pub fn boot(
+        self,
+    ) -> Result<
+        ResolvedRegisterMap<FirmwareRegistersRegisterId>,
+        RegisterViewError<FirmwareRegistersRegisterId>,
+    > {
+        Ok(FirmwareRegisters::resolve()?.project_access(|_| Some(self.boot_access()))?)
+    }
+
+    /// Resolves control-channel configuration and notifications for this role.
+    pub fn control(
+        self,
+    ) -> Result<
+        ResolvedRegisterMap<ControlRegistersRegisterId>,
+        RegisterViewError<ControlRegistersRegisterId>,
+    > {
+        Ok(ControlRegisters::resolve()?.project_access(|r| self.control_access(r.offset()))?)
+    }
+
+    /// Projects channel-window leaves while retaining the physical bank geometry.
+    pub fn windows(
+        self,
+        layout: &ChannelWindowRegistersLayout,
+    ) -> Result<
+        ResolvedRegisterMap<ChannelWindowRegistersRegisterId>,
+        RegisterViewError<ChannelWindowRegistersRegisterId>,
+    > {
+        Ok(layout.resolve()?.project_access(|register| {
+            let (_, offset) = layout.windows().locate_instance(register.offset())?;
+            self.window_access(offset)
+        })?)
+    }
+
+    /// Resolves firmware context administration; Host has no view of this aperture.
+    pub fn context_table(
+        self,
+        layout: &ContextTableRegistersLayout,
+    ) -> Result<
+        Option<ResolvedRegisterMap<ContextTableRegistersRegisterId>>,
+        RegisterViewError<ContextTableRegistersRegisterId>,
+    > {
+        match self {
+            Self::Host => Ok(None),
+            Self::Firmware => Ok(Some(layout.resolve()?)),
+        }
+    }
+
     /// Projects the DMA layout without exposing administrative blocks to managed Host software.
     pub const fn dma_access(
         self,

@@ -1,13 +1,15 @@
 //! Source-field validation is independent of physical storage lowering.
+/// Caller-owned capture for generation tests.
+pub mod output_support;
 use hw_model_schema::analysis::{AnalysisError, AnalyzedSchema};
 use hw_model_schema::ast::{
     Definition, DefinitionId, Field, FieldType, GraphError, RecordDefinition, Reference,
     ReferenceKind,
 };
-use hw_model_schema::export::generate;
-use hw_model_schema::export::{Artifact, InMemoryArtifactSink, record::Backend, value};
+use hw_model_schema::export::{record::Backend, value};
 use hw_model_schema::traversal::record::Context as RecordContext;
 use hw_model_schema::{Endian, FieldDefinition, RecordSpec, ScalarKind};
+use output_support::MemoryOutput;
 
 const fn field(name: &'static str, offset: usize) -> Field {
     Field::new(
@@ -78,21 +80,34 @@ fn manual_record() -> RecordDefinition {
 #[derive(Default)]
 struct DefinitionList(Vec<String>);
 impl Backend for DefinitionList {
-    fn root(&mut self, ctx: RecordContext<'_>) -> Result<(), Self::Error> {
-        self.0.push(ctx.unit().name.clone());
+    fn root(
+        &mut self,
+        ctx: RecordContext<'_>,
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), Self::Error> {
+        {
+            let event: String = ctx.unit().name.clone();
+            if !self.0.is_empty() {
+                writer.write_all(b"\n")?;
+            }
+            writer.write_all(event.as_bytes())?;
+            self.0.push(event);
+        }
         Ok(())
     }
 }
 impl value::Backend for DefinitionList {
     type Domain = hw_model_schema::export::record::Domain;
-    type Error = std::convert::Infallible;
+    type Error = std::io::Error;
     type Context<'a> = RecordContext<'a>;
-    fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
-        Ok(vec![Artifact {
-            logical_name: "definitions.txt".into(),
+    fn metadata(
+        &mut self,
+        ctx: &Self::Context<'_>,
+    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
+        Ok(hw_model_schema::export::OutputMetadata {
+            logical_name: ctx.unit().name.clone(),
             media_type: "text/plain".into(),
-            contents: self.0.join("\n").into_bytes(),
-        }])
+        })
     }
 }
 
@@ -100,12 +115,16 @@ impl value::Backend for DefinitionList {
 fn manual_record_emits_transitive_dependencies_once_before_its_own_definition() {
     // Given: two fields share a dependency which itself references another record.
     let analysis = AnalyzedSchema::record("Manual", manual_record()).expect("valid record");
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
     // When: a downstream backend generates the selected manual record.
-    generate(&analysis, DefinitionList::default(), &mut sink).expect("generation");
+    sink.generate(&analysis, DefinitionList::default())
+        .expect("generation");
     // Then: both dependencies are emitted once before their users.
     assert_eq!(
-        sink.artifacts().first().expect("definition list").contents,
+        sink.outputs()
+            .iter()
+            .flat_map(|output| output.bytes.iter().copied())
+            .collect::<Vec<_>>(),
         b"Leaf\nMiddle\nManual"
     );
 }

@@ -9,6 +9,7 @@ pub(super) fn emit<'a, B: Backend>(
     node: Node<'a>,
     ctx: Context<'a>,
     backend: &mut B,
+    writer: &mut dyn std::io::Write,
 ) -> Result<(), B::Error> {
     let documentation = match node {
         Node::Record(v) => Some((
@@ -47,22 +48,23 @@ pub(super) fn emit<'a, B: Backend>(
             super::super::value::DocumentationOwner { name, kind },
             &ctx,
             backend,
+            writer,
         )?;
     }
     match node {
-        Node::Record(v) => backend.record(v, ctx),
-        Node::Union(v) => backend.union(v, ctx),
-        Node::Field(v) => backend.field(v, ctx),
-        Node::Case(v) => backend.case(v, ctx),
+        Node::Record(v) => backend.record(v, ctx, writer),
+        Node::Union(v) => backend.union(v, ctx, writer),
+        Node::Field(v) => backend.field(v, ctx, writer),
+        Node::Case(v) => backend.case(v, ctx, writer),
         Node::Attribute(v) => match (v, matches!(ctx.ancestors().last(), Some(Node::Field(_)))) {
-            (Attribute::Size(v), false) => backend.record_size(v, ctx),
-            (Attribute::Size(v), true) => backend.field_size(v, ctx),
-            (Attribute::Alignment(v), _) => backend.record_alignment(v, ctx),
-            (Attribute::Offset(v), _) => backend.field_offset(v, ctx),
-            (Attribute::Endian(v), false) => backend.record_endian(v, ctx),
-            (Attribute::Endian(v), true) => backend.field_endian(v, ctx),
+            (Attribute::Size(v), false) => backend.record_size(v, ctx, writer),
+            (Attribute::Size(v), true) => backend.field_size(v, ctx, writer),
+            (Attribute::Alignment(v), _) => backend.record_alignment(v, ctx, writer),
+            (Attribute::Offset(v), _) => backend.field_offset(v, ctx, writer),
+            (Attribute::Endian(v), false) => backend.record_endian(v, ctx, writer),
+            (Attribute::Endian(v), true) => backend.field_endian(v, ctx, writer),
         },
-        Node::Constant(v) => backend.constant(v, ctx),
-        Node::Value(v) => super::super::value::emit(v, ctx, backend),
+        Node::Constant(v) => backend.constant(v, ctx, writer),
+        Node::Value(v) => super::super::value::emit(v, ctx, backend, writer),
     }
 }

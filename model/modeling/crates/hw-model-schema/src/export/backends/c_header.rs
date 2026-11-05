@@ -7,7 +7,6 @@ mod record;
 mod register;
 mod values;
 
-use crate::export::Artifact;
 use crate::traversal::NodeId;
 pub use analysis::{CRecordAnalysis, CRecordAnalysisPass};
 pub use error::CHeaderExportError;
@@ -17,8 +16,6 @@ pub use error::CHeaderExportError;
 pub struct CRecordBackend<'a> {
     analysis: &'a CRecordAnalysis,
     names: naming::Names,
-    artifacts: Vec<Artifact>,
-    logical_name: String,
     prefix: String,
     output: fragment::Fragment,
 }
@@ -28,8 +25,6 @@ impl<'a> CRecordBackend<'a> {
         Self {
             analysis,
             names: naming::Names::default(),
-            artifacts: Vec::new(),
-            logical_name: String::new(),
             prefix: String::new(),
             output: fragment::Fragment::default(),
         }
@@ -50,8 +45,6 @@ impl<'a> CRecordBackend<'a> {
 #[derive(Debug, Default)]
 pub struct CRegisterBackend {
     names: naming::Names,
-    artifacts: Vec<Artifact>,
-    logical_name: String,
     prefix: String,
     output: fragment::Fragment,
     geometry: register::Geometry,

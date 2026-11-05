@@ -3,7 +3,7 @@ use core::convert::Infallible;
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Bindings, Pass, Pipeline},
     ast::SchemaSet,
-    export::{Artifact, InMemoryArtifactSink, record, value},
+    export::{record, value},
     record_schema,
 };
 record_schema! { pub record Header { endian: Little, fields: { value: u32 } } }
@@ -36,17 +36,27 @@ impl<'a> Pass<(&'a AnalyzedSchema, Vec<String>)> for Join {
     }
 }
 struct Text<'a>(&'a str);
-impl record::Backend for Text<'_> {}
+impl record::Backend for Text<'_> {
+    fn root(
+        &mut self,
+        _: Self::Context<'_>,
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), Self::Error> {
+        writer.write_all(self.0.as_bytes())
+    }
+}
 impl value::Backend for Text<'_> {
     type Domain = record::Domain;
-    type Error = Infallible;
+    type Error = std::io::Error;
     type Context<'a> = hw_model_schema::traversal::record::Context<'a>;
-    fn finish(self) -> Result<Vec<Artifact>, Infallible> {
-        Ok(vec![Artifact {
-            logical_name: "names".into(),
+    fn metadata(
+        &mut self,
+        ctx: &Self::Context<'_>,
+    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
+        Ok(hw_model_schema::export::OutputMetadata {
+            logical_name: ctx.unit().name.clone(),
             media_type: "text/plain".into(),
-            contents: self.0.as_bytes().to_vec(),
-        }])
+        })
     }
 }
 #[test]
@@ -57,9 +67,9 @@ fn chained_pass_data_is_borrowed_by_custom_backend() {
         .unwrap()
         .run(Join)
         .unwrap();
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = Vec::new();
     prepared.generate(|data| Text(data), &mut sink).unwrap();
-    assert_eq!(sink.artifacts().first().unwrap().contents, b"Header/Pair");
+    assert_eq!(sink, b"Header/PairHeader/Pair");
 }
 #[derive(Debug, PartialEq, Eq)]
 enum Failure {
@@ -76,7 +86,7 @@ impl<'a> Pass<(&'a AnalyzedSchema, Vec<String>)> for Reject {
 #[test]
 fn failed_pass_preserves_typed_error_without_generation() {
     let schema = schema().unwrap();
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = Vec::new();
     let mut constructed = false;
     let result = Pipeline::new((&schema, ()))
         .run(Names)
@@ -95,7 +105,7 @@ fn failed_pass_preserves_typed_error_without_generation() {
         });
     assert_eq!(result, Err(Failure::Rejected));
     assert!(!constructed);
-    assert!(sink.artifacts().is_empty());
+    assert!(sink.is_empty());
 }
 #[test]
 fn replacing_schema_discards_prior_data_and_requires_fresh_pass() {
@@ -131,11 +141,11 @@ impl<'a> Pass<(&'a AnalyzedSchema, ())> for BorrowNames {
 fn pass_output_borrows_schema_metadata_through_generation() {
     let schema = schema().unwrap();
     let prepared = Pipeline::new((&schema, ())).run(BorrowNames).unwrap();
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = Vec::new();
     prepared
         .generate(|names| Text(names.first().unwrap()), &mut sink)
         .unwrap();
-    assert_eq!(sink.artifacts().first().unwrap().contents, b"Header");
+    assert_eq!(sink, b"HeaderHeader");
     for (name, unit) in prepared.input().1.iter().zip(schema.units()) {
         assert!(core::ptr::eq(*name, unit.name.as_str()));
     }

@@ -1,126 +1,22 @@
 //! Bound visits preserve lexical ancestry when a target reorders or omits children.
+/// Caller-owned capture for generation tests.
+pub mod output_support;
 use hw_model_schema::traversal::register::{Context as RegisterContext, LayoutProperty};
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Bindings, CompleteMapLayout},
     ast::{SchemaSet, register::Parameter},
     export::{
-        Artifact, InMemoryArtifactSink, generate, register,
+        generate, register,
         value::{self, Backend},
     },
     register_map, register_schema,
 };
+use output_support::MemoryOutput;
 register_schema! { pub register Word { width:4, endian:Little, access:ReadOnly, reset:Zero(0), writable_mask:0, fields:{} } }
 register_map! { pub map Pair(n: usize) { alignment:4, placements:[pub zeta:Word[n], pub alpha:Word] } }
-struct Probe {
-    events: Vec<String>,
-    fail: bool,
-    binding: Option<usize>,
-}
-impl register::Backend for Probe {
-    fn map_layout<'a>(
-        &mut self,
-        _: &'a CompleteMapLayout,
-        ctx: RegisterContext<'a>,
-    ) -> Result<(), Self::Error> {
-        assert_eq!(ctx.declared_parameters(), &["n"]);
-        assert_eq!(
-            ctx.parameters(),
-            if self.binding.is_some() {
-                &[][..]
-            } else {
-                &["n"][..]
-            }
-        );
-        assert_eq!(
-            ctx.bindings().and_then(|b| b.first().copied()),
-            self.binding
-        );
-        let mut children: Vec<_> = ctx.children().collect();
-        children.reverse();
-        self.emit_all(children)
-    }
-    fn parameter(&mut self, p: Parameter, ctx: RegisterContext<'_>) -> Result<(), Self::Error> {
-        assert_eq!(ctx.declared_parameters().get(p.index), Some(&p.name));
-        assert_eq!(
-            p.binding,
-            ctx.bindings().and_then(|b| b.get(p.index).copied())
-        );
-        self.events.push("parameter".into());
-        Ok(())
-    }
-    fn layout_property<'a>(
-        &mut self,
-        property: LayoutProperty<'a>,
-        ctx: RegisterContext<'a>,
-    ) -> Result<(), Self::Error> {
-        assert_eq!(ctx.declared_parameters(), &["n"]);
-        assert_eq!(
-            ctx.parameters(),
-            if self.binding.is_some() {
-                &[][..]
-            } else {
-                &["n"][..]
-            }
-        );
-        assert_eq!(
-            ctx.bindings().and_then(|b| b.first().copied()),
-            self.binding
-        );
-        match ctx.ancestors().last().ok_or("missing parent")? {
-            hw_model_schema::traversal::register::Node::MapLayout(_) => {
-                assert_eq!(property.owner, None);
-            }
-            hw_model_schema::traversal::register::Node::Placement(p) => {
-                assert_eq!(property.owner, Some(p.reference.name()));
-                assert_eq!(
-                    ctx.resolve(&p.reference).ok_or("missing reference")?.name,
-                    "Word"
-                );
-            }
-            hw_model_schema::traversal::register::Node::Bank(bank) => {
-                use hw_model_schema::ast::{LayoutExpr, register::LayoutPropertyKind as K};
-                assert_eq!(
-                    (bank.index(), bank.name(), bank.path()),
-                    (0, "zeta", "Pair.zeta")
-                );
-                assert_eq!(ctx.bank().ok_or("missing bank")?.index(), bank.index());
-                assert_eq!(property.owner, Some(bank.name()));
-                let (name, expected) = match property.kind {
-                    K::Offset => ("offset", 0),
-                    K::Count => ("count", self.binding.ok_or("bound bank count")?),
-                    K::Stride => ("stride", 4),
-                    K::End | K::OccupiedEnd | K::Extent => return Err("unexpected bank property"),
-                };
-                assert_eq!(property.name, name);
-                assert_eq!(property.expression, &LayoutExpr::Constant(expected));
-                self.events
-                    .push(format!("bank:{}:{name}={expected}", bank.name()));
-            }
-            _ => return Err("wrong parent"),
-        }
-        self.events.push(format!(
-            "{}:{}",
-            property.owner.unwrap_or("root"),
-            property.name
-        ));
-        if self.fail {
-            return Err("layout rejected");
-        }
-        self.emit_all(ctx.children())
-    }
-}
-impl value::Backend for Probe {
-    type Domain = register::Domain;
-    type Error = &'static str;
-    type Context<'a> = RegisterContext<'a>;
-    fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
-        Ok(vec![Artifact {
-            logical_name: "probe".into(),
-            media_type: "text/plain".into(),
-            contents: self.events.join("\n").into_bytes(),
-        }])
-    }
-}
+/// Custom backend used to observe traversal context.
+pub mod register_context_probe;
+use register_context_probe::Probe;
 fn schema() -> Result<AnalyzedSchema, hw_model_schema::analysis::AnalysisError> {
     let mut set = SchemaSet::new();
     set.add::<Pair>();
@@ -128,41 +24,47 @@ fn schema() -> Result<AnalyzedSchema, hw_model_schema::analysis::AnalysisError> 
 }
 #[test]
 fn reverse_children_retain_parents_and_lexical_parameters() {
-    let mut sink = InMemoryArtifactSink::new();
-    generate(
+    let mut sink = MemoryOutput::new();
+    sink.generate(
         &schema().expect("valid schema"),
         Probe {
             events: vec![],
             fail: false,
             binding: None,
         },
-        &mut sink,
     )
     .unwrap();
-    let output =
-        String::from_utf8(sink.artifacts().first().expect("artifact").contents.clone()).unwrap();
+    let output = String::from_utf8(
+        sink.outputs()
+            .iter()
+            .flat_map(|output| output.bytes.iter().copied())
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
     assert_eq!(output.lines().next(), Some("root:extent"));
     assert_eq!(output.lines().last(), Some("parameter"));
     assert!(output.find("alpha:offset").unwrap() < output.find("zeta:offset").unwrap());
 }
 #[test]
-fn typed_failure_publishes_no_artifacts() {
-    let mut sink = InMemoryArtifactSink::new();
+fn typed_failure_preserves_completed_dependency() {
+    let mut sink = MemoryOutput::new();
     assert!(matches!(
-        generate(
+        sink.generate(
             &schema().expect("valid schema"),
             Probe {
                 events: vec![],
                 binding: None,
                 fail: true
             },
-            &mut sink
         ),
         Err(hw_model_schema::export::ExportError::Render(
             "layout rejected"
         ))
     ));
-    assert!(sink.artifacts().is_empty());
+    assert_eq!(sink.outputs().len(), 1);
+    let completed = sink.outputs().first().expect("completed dependency");
+    assert_eq!(completed.metadata.logical_name, "Word");
+    assert!(completed.bytes.is_empty());
 }
 
 #[test]
@@ -172,19 +74,24 @@ fn bound_parameters_remain_available_before_parameter_visitation() {
     let mut bindings = Bindings::new();
     bindings.bind::<Pair>(&[3]);
     let schema = AnalyzedSchema::analyze(set, &bindings).unwrap();
-    let mut sink = InMemoryArtifactSink::new();
-    generate(
+    let mut sink = MemoryOutput::new();
+    sink.generate(
         &schema,
         Probe {
             events: vec![],
             fail: false,
             binding: Some(3),
         },
-        &mut sink,
     )
     .unwrap();
-    assert!(!sink.artifacts().is_empty());
-    let output = String::from_utf8(sink.artifacts().first().unwrap().contents.clone()).unwrap();
+    assert!(!sink.outputs().is_empty());
+    let output = String::from_utf8(
+        sink.outputs()
+            .iter()
+            .flat_map(|output| output.bytes.iter().copied())
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
     assert_eq!(
         output
             .lines()
@@ -215,7 +122,7 @@ fn roots_are_bound_visits_with_default_recursive_dispatch() {
         assert!(
             matches!(visit.node(), hw_model_schema::traversal::register::Node::Root(unit) if core::ptr::eq(unit, ctx.unit()))
         );
-        <register::Domain as Domain<Probe>>::root(visit, &mut probe).unwrap();
+        <register::Domain as Domain<Probe>>::root(visit, &mut probe, &mut std::io::sink()).unwrap();
     }
     assert_eq!(
         probe.events.first().map(String::as_str),
@@ -225,15 +132,8 @@ fn roots_are_bound_visits_with_default_recursive_dispatch() {
 }
 
 #[test]
-fn rendering_failure_preserves_existing_sink_artifacts() {
-    use hw_model_schema::export::ArtifactSink;
-    let mut sink = InMemoryArtifactSink::new();
-    let existing = Artifact {
-        logical_name: "existing".into(),
-        media_type: "text/plain".into(),
-        contents: b"retained".to_vec(),
-    };
-    sink.emit(existing.clone()).unwrap();
+fn rendering_failure_preserves_existing_bytes_and_partial_direct_writes() {
+    let mut sink = b"retained".to_vec();
     let result = generate(
         &schema().unwrap(),
         Probe {
@@ -249,5 +149,5 @@ fn rendering_failure_preserves_existing_sink_artifacts() {
             "layout rejected"
         ))
     ));
-    assert_eq!(sink.artifacts(), &[existing]);
+    assert_eq!(sink, b"retainedroot:extent");
 }

@@ -1,3 +1,4 @@
+use crate::output_support::MemoryOutput;
 use hw_model_schema::analysis::{AnalyzedSchema, Bindings, Pipeline};
 use hw_model_schema::ast::{DefinitionId, DescribeSchema, SchemaSet};
 use std::{
@@ -7,13 +8,14 @@ use std::{
     process::{Command, Output},
 };
 
+use crate::output_support::CapturedOutput;
 use hw_model_schema::export::backends::c_header::{
     CRecordAnalysisPass, CRecordBackend, CRegisterBackend,
 };
-use hw_model_schema::export::{Artifact, InMemoryArtifactSink, generate};
+
 use hw_model_schema::{Endian, FieldSpec, RecordSpec, ScalarKind};
 
-pub type TestResult<T = ()> = Result<T, Box<dyn Error>>;
+pub(super) type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
 const RECORD_FIELDS: [FieldSpec; 4] = [
     FieldSpec::new(1, "tag", 0, ScalarKind::U8),
@@ -23,7 +25,7 @@ const RECORD_FIELDS: [FieldSpec; 4] = [
 ];
 
 /// Shared record fixture for fragment rendering and C11 consumer tests.
-pub const RECORD: RecordSpec = RecordSpec::new(18, 2, &RECORD_FIELDS);
+pub(super) const RECORD: RecordSpec = RecordSpec::new(18, 2, &RECORD_FIELDS);
 
 const STRICT_C11_FLAGS: [&str; 5] = [
     "-std=c11",
@@ -33,25 +35,24 @@ const STRICT_C11_FLAGS: [&str; 5] = [
     "-Werror",
 ];
 
-pub fn render_record(
+pub(super) fn render_record(
     name: &str,
     prefix: &str,
     schema: &hw_model_schema::RecordSpec,
-) -> TestResult<hw_model_schema::export::Artifact> {
-    let mut sink = InMemoryArtifactSink::new();
+) -> TestResult<crate::output_support::CapturedOutput> {
+    let mut sink = MemoryOutput::new();
     let schema = AnalyzedSchema::opaque(name, *schema)?;
     let id = schema.view(name).ok_or("missing view")?.id.clone();
-    hw_model_schema::analysis::Pipeline::new((&schema, ()))
-        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?
-        .generate(
-            |data| CRecordBackend::new(data).with_name(id, prefix),
-            &mut sink,
-        )?;
+    sink.generate_prepared(
+        &hw_model_schema::analysis::Pipeline::new((&schema, ()))
+            .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?,
+        |data| CRecordBackend::new(data).with_name(id, prefix),
+    )?;
     one_artifact(sink)
 }
 
 /// Renders one source record root with its explicit C preparation pass.
-pub fn source<T: DescribeSchema + 'static>(prefix: &str) -> TestResult<Artifact> {
+pub(super) fn source<T: DescribeSchema + 'static>(prefix: &str) -> TestResult<CapturedOutput> {
     let mut set = SchemaSet::new();
     set.add::<T>();
     let graph = set.resolve()?;
@@ -62,35 +63,33 @@ pub fn source<T: DescribeSchema + 'static>(prefix: &str) -> TestResult<Artifact>
         .ok_or("missing definition")?
         .id
         .clone();
-    let mut sink = InMemoryArtifactSink::new();
-    preparation.generate(
-        |data| CRecordBackend::new(data).with_name(id, prefix),
-        &mut sink,
-    )?;
-    sink.into_artifacts()
+    let mut sink = MemoryOutput::new();
+    sink.generate_prepared(&preparation, |data| {
+        CRecordBackend::new(data).with_name(id, prefix)
+    })?;
+    sink.into_outputs()
         .into_iter()
         .last()
         .ok_or_else(|| "missing artifact".into())
 }
 
-pub fn render_map<I: Copy + Eq, F: Copy + Eq + core::fmt::Debug>(
+pub(super) fn render_map<I: Copy + Eq, F: Copy + Eq + core::fmt::Debug>(
     name: &str,
     prefix: &str,
     schema: &hw_model_schema::ResolvedRegisterMap<I, F>,
-) -> TestResult<hw_model_schema::export::Artifact> {
-    let mut sink = InMemoryArtifactSink::new();
+) -> TestResult<crate::output_support::CapturedOutput> {
+    let mut sink = MemoryOutput::new();
     let schema = AnalyzedSchema::register_map(name, schema)?;
-    generate(
+    sink.generate(
         &schema,
         CRegisterBackend::new()
             .with_name(schema.view(name).ok_or("missing view")?.id.clone(), prefix),
-        &mut sink,
     )?;
     one_artifact(sink)
 }
 
-fn one_artifact(sink: InMemoryArtifactSink) -> TestResult<hw_model_schema::export::Artifact> {
-    let mut artifacts = sink.into_artifacts().into_iter();
+fn one_artifact(sink: MemoryOutput) -> TestResult<crate::output_support::CapturedOutput> {
+    let mut artifacts = sink.into_outputs().into_iter();
     let artifact = artifacts
         .next()
         .ok_or_else(|| io::Error::other("exporter emitted no artifact"))?;
@@ -100,7 +99,7 @@ fn one_artifact(sink: InMemoryArtifactSink) -> TestResult<hw_model_schema::expor
     Ok(artifact)
 }
 
-pub fn compile_fragments(label: &str, fragments: &[&[u8]], main: &[u8]) -> TestResult {
+pub(super) fn compile_fragments(label: &str, fragments: &[&[u8]], main: &[u8]) -> TestResult {
     let temp = TempDirectory::new(label)?;
     let source = temp.path.join("wrapper.c");
     let binary = temp.path.join("wrapper");
@@ -168,7 +167,7 @@ impl Drop for TempDirectory {
     }
 }
 
-pub const HAPPY_C_MAIN: &[u8] = br"
+pub(super) const HAPPY_C_MAIN: &[u8] = br"
 int main(void) {
     uint8_t bytes[C_QULABQX2D9QX20PACKET_SIZE] = {0};
     C_QULABQX2D9QX20PACKET_STORE_C_SEQQUENCE(bytes, UINT16_C(0x1234));
@@ -186,7 +185,7 @@ int main(void) {
 }
 ";
 
-pub const COLLISION_C_MAIN: &[u8] = br"
+pub(super) const COLLISION_C_MAIN: &[u8] = br"
 int main(void) {
     uint8_t bytes[C_COLLISIONQX20RECORD_SIZE] = {0};
     C_COLLISIONQX20RECORD_STORE_C_AQX2DB(bytes, UINT8_C(7));
@@ -205,9 +204,9 @@ int main(void) {
 }
 ";
 
-pub const PREFIX_C_MAIN: &[u8] = b"int main(void) { return 0; }\n";
+pub(super) const PREFIX_C_MAIN: &[u8] = b"int main(void) { return 0; }\n";
 
-pub const NESTED_C_MAIN: &[u8] = br"
+pub(super) const NESTED_C_MAIN: &[u8] = br"
 int main(void) {
     if (C_NESTED_C_ITEMSQX5B0QX5DQX2EVALUE_OFFSET != UINT64_C(4)) return 1;
     if (C_NESTED_C_ITEMSQX5B1QX5DQX2EVALUE_OFFSET != UINT64_C(8)) return 2;

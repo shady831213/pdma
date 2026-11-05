@@ -47,11 +47,11 @@ fn generated_enums_reach_real_c_consumers_from_each_embedding() -> TestResult {
     let map_artifact = render_map("map.h", "map", &map)?;
     // Then: generated metadata retains the same numeric codes and safe descriptions.
     for artifact in [&record_artifact, &map_artifact] {
-        assert!(std::str::from_utf8(&artifact.contents)?.contains("Active / * state * /"));
+        assert!(std::str::from_utf8(&artifact.bytes)?.contains("Active / * state * /"));
     }
     compile_fragments(
         "generated-enum",
-        &[&record_artifact.contents, &map_artifact.contents],
+        &[&record_artifact.bytes, &map_artifact.bytes],
         br#"
 _Static_assert(C_PACKET_C_STATUS_C_QUACTIVE == 5, "scalar enum");
 _Static_assert(C_PACKET_C_FLAGS_C_STATE_C_QUACTIVE == 5, "record bits enum");

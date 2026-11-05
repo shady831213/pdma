@@ -1,10 +1,10 @@
 use core::fmt;
 
 /// Failure rendering a C fragment or selected definition graph.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum CHeaderExportError {
-    /// Formatting failed while building an artifact.
-    Format(fmt::Error),
+    /// Writing the C output failed.
+    Io(std::io::Error),
     /// A mathematical expression is not complete.
     Layout(crate::ast::LayoutError),
     /// A callback refers to unavailable target naming metadata.
@@ -25,7 +25,7 @@ pub enum CHeaderExportError {
 impl fmt::Display for CHeaderExportError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Format(error) => error.fmt(formatter),
+            Self::Io(error) => error.fmt(formatter),
             Self::Layout(error) => error.fmt(formatter),
             Self::InvalidVisit(context) => {
                 write!(formatter, "invalid C formatting visit: {context}")
@@ -46,7 +46,7 @@ impl fmt::Display for CHeaderExportError {
 impl std::error::Error for CHeaderExportError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Format(source) => Some(source),
+            Self::Io(source) => Some(source),
             Self::Layout(source) => Some(source),
             Self::InvalidVisit(_) | Self::NameCollision { .. } => None,
         }
@@ -56,5 +56,11 @@ impl std::error::Error for CHeaderExportError {
 impl From<crate::ast::LayoutError> for CHeaderExportError {
     fn from(error: crate::ast::LayoutError) -> Self {
         Self::Layout(error)
+    }
+}
+
+impl From<std::io::Error> for CHeaderExportError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
     }
 }

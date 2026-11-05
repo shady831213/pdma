@@ -1,3 +1,4 @@
+use crate::output_support::MemoryOutput;
 use hw_model_schema::{
     BitsFieldDefinition, BitsFieldSpec, Documentation, Endian, FieldSpec, RecordSpec, ScalarKind,
     register::{RegisterDefinition, RegisterSpec},
@@ -58,7 +59,7 @@ fn record_comments_follow_the_described_declaration() -> TestResult {
     let exporter = ("record.h", "request");
     // When: the resolved record is rendered by the public exporter.
     let artifact = render_record(exporter.0, exporter.1, &RECORD)?;
-    let text = std::str::from_utf8(&artifact.contents)?;
+    let text = std::str::from_utf8(&artifact.bytes)?;
     // Then: root and member comments precede their unchanged C declarations.
     assert!(
         text.find("Copy request").expect("root comment")
@@ -73,7 +74,7 @@ fn record_comments_follow_the_described_declaration() -> TestResult {
     );
     compile_fragments(
         "description-record",
-        &[&artifact.contents],
+        &[&artifact.bytes],
         b"int main(void) { return C_REQQUEST_SIZE != 4; }\n",
     )?;
     Ok(())
@@ -85,7 +86,7 @@ fn register_comments_preserve_placement_fallback_bits_and_banks() -> TestResult 
     let exporter = ("map.h", "device");
     // When: fixed registers and repeated banks are exported together.
     let artifact = render_map(exporter.0, exporter.1, &MAP.resolve()?)?;
-    let text = std::str::from_utf8(&artifact.contents)?;
+    let text = std::str::from_utf8(&artifact.bytes)?;
     // Then: every ownership level and bit field remains documented.
     assert!(text.contains("Device registers"));
     assert!(text.contains("Channel bank"));
@@ -96,7 +97,7 @@ fn register_comments_preserve_placement_fallback_bits_and_banks() -> TestResult 
     assert!(!text.contains("Transfer length"));
     compile_fragments(
         "description-map",
-        &[&artifact.contents],
+        &[&artifact.bytes],
         b"int main(void) { return C_DEVICE_SIZE != 12; }\n",
     )?;
     Ok(())
@@ -114,7 +115,7 @@ fn hostile_description_remains_a_comment_in_strict_c11() -> TestResult {
     // Then: the text cannot escape its comments, and generated access still works.
     compile_fragments(
         "description-hostile",
-        &[&artifact.contents],
+        &[&artifact.bytes],
         br"
 int main(void) {
     uint8_t bytes[C_REQQUEST_SIZE] = {0};
@@ -131,11 +132,7 @@ fn reusable_bits_documentation_is_emitted_once_in_each_c_backend() -> TestResult
     use hw_model_schema::{
         analysis::{AnalyzedSchema, Bindings},
         ast::SchemaSet,
-        export::{
-            InMemoryArtifactSink,
-            backends::c_header::{CRecordBackend, CRegisterBackend},
-            generate,
-        },
+        export::backends::c_header::{CRecordBackend, CRegisterBackend},
     };
     hw_model_schema::bits_schema! {
         #[short_description = "Reusable flags summary"]
@@ -151,29 +148,24 @@ fn reusable_bits_documentation_is_emitted_once_in_each_c_backend() -> TestResult
     set.add::<DocumentedFlags>();
     let graph = set.resolve()?;
     let schema = AnalyzedSchema::from_graph(&graph, &Bindings::new())?;
-    let mut record = InMemoryArtifactSink::new();
-    let mut register = InMemoryArtifactSink::new();
+    let mut record = MemoryOutput::new();
+    let mut register = MemoryOutput::new();
     let id = schema
         .definition(hw_model_schema::ast::DefinitionId::of::<DocumentedFlags>())
         .ok_or("missing flags")?
         .id
         .clone();
     // When: each public backend renders the same documented source definition.
-    hw_model_schema::analysis::Pipeline::new((&schema, ()))
-        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?
-        .generate(
-            |data| CRecordBackend::new(data).with_name(id.clone(), "flags"),
-            &mut record,
-        )?;
-    generate(
-        &schema,
-        CRegisterBackend::new().with_name(id, "flags"),
-        &mut register,
+    record.generate_prepared(
+        &hw_model_schema::analysis::Pipeline::new((&schema, ()))
+            .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?,
+        |data| CRecordBackend::new(data).with_name(id.clone(), "flags"),
     )?;
+    register.generate(&schema, CRegisterBackend::new().with_name(id, "flags"))?;
     // Then: each fragment appears exactly once and escaped output compiles strictly.
     for (label, sink) in [("bits-doc-record", record), ("bits-doc-register", register)] {
-        let artifact = sink.artifacts().first().ok_or("missing bits artifact")?;
-        let text = std::str::from_utf8(&artifact.contents)?;
+        let artifact = sink.outputs().first().ok_or("missing bits artifact")?;
+        let text = std::str::from_utf8(&artifact.bytes)?;
         for fragment in [
             "Reusable flags summary",
             "Flags details.",
@@ -185,7 +177,7 @@ fn reusable_bits_documentation_is_emitted_once_in_each_c_backend() -> TestResult
         }
         compile_fragments(
             label,
-            &[&artifact.contents],
+            &[&artifact.bytes],
             b"int main(void) { return C_FLAGS_SIZE != 1; }\n",
         )?;
     }

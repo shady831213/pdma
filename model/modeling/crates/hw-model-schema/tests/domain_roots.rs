@@ -1,13 +1,16 @@
 //! Backend-independent roots filter domains without weakening generation preflight.
+/// Caller-owned capture for generation tests.
+pub mod output_support;
 use core::convert::Infallible;
 use hw_model_schema::{
     RecordSpec,
     analysis::{AnalysisError, AnalyzedSchema, Bindings},
     ast::{Definition, SchemaSet},
     bits_schema,
-    export::{Artifact, ExportError, InMemoryArtifactSink, generate, register, value},
+    export::{ExportError, register, value},
     record_schema, register_map, register_schema, union_schema,
 };
+use output_support::MemoryOutput;
 bits_schema! { pub bits Flags(u8) { enabled: 0..1 } }
 record_schema! { pub record Payload { endian: Little, fields: { flags: bits(Flags) } } }
 union_schema! { pub union Choice { cases: { Payload(Payload) } } }
@@ -46,6 +49,7 @@ impl register::Backend for Probe<'_> {
     fn root(
         &mut self,
         _: hw_model_schema::traversal::register::Context<'_>,
+        _writer: &mut dyn std::io::Write,
     ) -> Result<(), Infallible> {
         self.0.set(self.0.get() + 1);
         Ok(())
@@ -55,16 +59,22 @@ impl value::Backend for Probe<'_> {
     type Domain = register::Domain;
     type Error = Infallible;
     type Context<'a> = hw_model_schema::traversal::register::Context<'a>;
-    fn finish(self) -> Result<Vec<Artifact>, Infallible> {
-        Ok(Vec::new())
+    fn metadata(
+        &mut self,
+        ctx: &Self::Context<'_>,
+    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
+        Ok(hw_model_schema::export::OutputMetadata {
+            logical_name: ctx.unit().name.clone(),
+            media_type: "text/plain".into(),
+        })
     }
 }
 #[test]
 fn generation_rejects_mixed_schema_before_filtered_root_callbacks() {
     let schema = mixed().unwrap();
     let callbacks = std::cell::Cell::new(0);
-    let mut sink = InMemoryArtifactSink::new();
-    let result = generate(&schema, Probe(&callbacks), &mut sink);
+    let mut sink = MemoryOutput::new();
+    let result = sink.generate(&schema, Probe(&callbacks));
     assert!(matches!(
         result,
         Err(ExportError::Analysis(AnalysisError::Domain {
@@ -73,5 +83,5 @@ fn generation_rejects_mixed_schema_before_filtered_root_callbacks() {
         }))
     ));
     assert_eq!(callbacks.get(), 0);
-    assert!(sink.artifacts().is_empty());
+    assert!(sink.outputs().is_empty());
 }

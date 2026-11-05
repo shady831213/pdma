@@ -1,5 +1,6 @@
+use crate::output_support::MemoryOutput;
 use hw_model_schema::analysis::AnalyzedSchema;
-use hw_model_schema::export::generate;
+
 use hw_model_schema::{
     bits_schema, export::backends::c_header::CRegisterBackend, record_schema, register_map,
     register_schema,
@@ -59,35 +60,33 @@ fn long_rust_paths_export_when_actual_c_symbols_are_distinct() -> TestResult {
     })?;
     let projected = render_map("deep-subset.h", "deep", &subset)?;
     let declaration = "C_DEEP_C_CHANNELSQSWIT_B3B1D0CC33E9931B_OFFSET UINT64_C(44)";
-    assert!(std::str::from_utf8(&artifact.contents)?.contains(declaration));
-    assert!(std::str::from_utf8(&projected.contents)?.contains(declaration));
+    assert!(std::str::from_utf8(&artifact.bytes)?.contains(declaration));
+    assert!(std::str::from_utf8(&projected.bytes)?.contains(declaration));
     compile_fragments(
         "deep-subset",
-        &[&projected.contents],
+        &[&projected.bytes],
         b"int main(void) { return C_DEEP_C_CHANNELSQSWIT_B3B1D0CC33E9931B_OFFSET != 44; }\n",
     )?;
     // Then: the actual symbols compile and expose the final repeated register.
-    compile_fragments("deep-map", &[&artifact.contents],
+    compile_fragments("deep-map", &[&artifact.bytes],
         b"_Static_assert(C_DEEP_C_CHANNELSQSWIT_B3B1D0CC33E9931B_OFFSET == 44, \"last register\");\nint main(void) { return C_DEEP_SIZE != 48; }\n")?;
     Ok(())
 }
 
 #[test]
 fn long_actual_c_prefix_collisions_are_rejected_before_emission() -> TestResult {
-    use hw_model_schema::export::InMemoryArtifactSink;
     // Given: a prefix that consumes C11's complete significant identifier length.
     let resolved = Channels::resolve()?;
     let exporter = ("long.h", "a".repeat(64));
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = MemoryOutput::new();
     // When: rendering symbols whose distinguishing suffix lies beyond that length.
     let schema = AnalyzedSchema::register_map(exporter.0, &resolved)?;
-    let result = generate(
+    let result = sink.generate(
         &schema,
         CRegisterBackend::new().with_name(
             schema.view(exporter.0).ok_or("missing view")?.id.clone(),
             exporter.1.as_ref(),
         ),
-        &mut sink,
     );
     // Then: no artifact is emitted and the collision remains a typed error.
     assert!(matches!(
@@ -96,7 +95,7 @@ fn long_actual_c_prefix_collisions_are_rejected_before_emission() -> TestResult 
             hw_model_schema::export::backends::c_header::CHeaderExportError::NameCollision { .. }
         ))
     ));
-    assert!(sink.artifacts().is_empty());
+    assert!(sink.outputs().is_empty());
     Ok(())
 }
 
@@ -135,7 +134,7 @@ fn nested_map_descriptions_survive_macro_resolution_and_export() -> TestResult {
     let resolved = Device::resolve()?;
     // When: its complete resolved structure is exported.
     let artifact = render_map("device.h", "device", &resolved)?;
-    let text = std::str::from_utf8(&artifact.contents)?;
+    let text = std::str::from_utf8(&artifact.bytes)?;
     // Then: container comments retain ownership and all six leaves retain their own text.
     assert!(text.contains("Primary channel group"));
     assert!(text.contains("Repeated auxiliary channels"));
@@ -143,7 +142,7 @@ fn nested_map_descriptions_survive_macro_resolution_and_export() -> TestResult {
     assert_eq!(text.matches("Status word").count(), 6);
     compile_fragments(
         "nested-map-descriptions",
-        &[&artifact.contents],
+        &[&artifact.bytes],
         b"int main(void) { return C_DEVICE_SIZE != 24; }\n",
     )?;
     Ok(())
@@ -155,7 +154,7 @@ fn nested_record_and_shared_bit_descriptions_reach_c_comments() -> TestResult {
     let resolved = Packet::SPEC;
     // When: the public exporter renders that composed schema.
     let artifact = render_record("packet.h", "packet", &resolved)?;
-    let text = std::str::from_utf8(&artifact.contents)?;
+    let text = std::str::from_utf8(&artifact.bytes)?;
     // Then: placement, inherited type and bit member descriptions all survive.
     for description in [
         "Returned response",
@@ -167,7 +166,7 @@ fn nested_record_and_shared_bit_descriptions_reach_c_comments() -> TestResult {
     }
     compile_fragments(
         "nested-record-descriptions",
-        &[&artifact.contents],
+        &[&artifact.bytes],
         b"int main(void) { return C_PACKET_SIZE != 4; }\n",
     )?;
     Ok(())
@@ -179,7 +178,7 @@ fn ordered_repeated_registers_are_present_in_the_export() -> TestResult {
     let resolved = Channels::resolve()?;
     // When: the public C exporter consumes that map.
     let artifact = render_map("channels.h", "channels", &resolved)?;
-    let text = std::str::from_utf8(&artifact.contents)?;
+    let text = std::str::from_utf8(&artifact.bytes)?;
     // Then: each expanded register has a declaration at its own address.
     assert_eq!(
         text.lines()
@@ -191,7 +190,7 @@ fn ordered_repeated_registers_are_present_in_the_export() -> TestResult {
     assert!(text.contains("_OFFSET UINT64_C(4)"));
     compile_fragments(
         "ordered-descriptions",
-        &[&artifact.contents],
+        &[&artifact.bytes],
         b"int main(void) { return 0; }\n",
     )?;
     Ok(())

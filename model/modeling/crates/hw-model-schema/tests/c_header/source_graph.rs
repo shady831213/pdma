@@ -8,10 +8,10 @@ record_schema! { pub record Pair { endian: Little, fields: { first: Leaf, gap: u
 fn repeated_source_references_preserve_storage_names_and_native_bytes() -> TestResult {
     let actual = source::<Pair>("pair")?;
     let expected = render_record("pair", "pair", &Pair::SPEC)?;
-    assert_eq!(actual.contents, expected.contents);
+    assert_eq!(actual.bytes, expected.bytes);
     compile_fragments(
         "source-pair",
-        &[&actual.contents],
+        &[&actual.bytes],
         br#"
 _Static_assert(C_PAIR_C_FIRSTQX2EVALUE_OFFSET == 0, "first occurrence");
 _Static_assert(C_PAIR_C_SECONDQX2EVALUE_OFFSET == 8, "second occurrence");
@@ -31,11 +31,11 @@ fn source_enum_bits_and_tagged_unions_match_existing_c_projection() -> TestResul
     let named = source::<super::enum_bit_union::Named>("named")?;
     let expected_inline = render_record("inline", "inline", &super::enum_bit_union::Inline::SPEC)?;
     let expected_named = render_record("named", "named", &super::enum_bit_union::Named::SPEC)?;
-    assert_eq!(inline.contents, expected_inline.contents);
-    assert_eq!(named.contents, expected_named.contents);
+    assert_eq!(inline.bytes, expected_inline.bytes);
+    assert_eq!(named.bytes, expected_named.bytes);
     compile_fragments(
         "source-tagged",
-        &[&inline.contents, &named.contents],
+        &[&inline.bytes, &named.bytes],
         br"
 int main(void) {
     uint8_t a[C_INLINE_SIZE] = {0}; uint8_t b[C_NAMED_SIZE] = {0};
@@ -56,13 +56,13 @@ fn source_scalar_enums_and_untagged_envelopes_preserve_c_bytes() -> TestResult {
         "packet",
         &super::generated_enumeration::Packet::SPEC,
     )?;
-    assert_eq!(packet.contents, expected.contents);
+    assert_eq!(packet.bytes, expected.bytes);
     let union = source::<super::untagged::Packet>("envelope")?;
     let expected = render_record("envelope", "envelope", &super::untagged::Packet::SPEC)?;
-    assert_eq!(union.contents, expected.contents);
+    assert_eq!(union.bytes, expected.bytes);
     compile_fragments(
         "source-enum-envelope",
-        &[&packet.contents, &union.contents],
+        &[&packet.bytes, &union.bytes],
         br#"
 _Static_assert(C_ENVELOPE_SIZE == 16, "opaque union extent");
 _Static_assert(C_PACKET_C_STATUS_C_QUACTIVE == 5, "enum code");
@@ -85,12 +85,12 @@ fn source_nested_documentation_preserves_existing_c_comments() -> TestResult {
         &super::ordered_descriptions::Packet::SPEC,
     )?;
     assert_eq!(
-        std::str::from_utf8(&actual.contents)?,
-        std::str::from_utf8(&expected.contents)?
+        std::str::from_utf8(&actual.bytes)?,
+        std::str::from_utf8(&expected.bytes)?
     );
     compile_fragments(
         "source-documentation",
-        &[&actual.contents],
+        &[&actual.bytes],
         b"int main(void) { return 0; }\n",
     )
 }
@@ -111,12 +111,12 @@ fn source_tagged_external_case_retains_opaque_placement_metadata() -> TestResult
     let actual = source::<Envelope>("envelope")?;
     let expected = render_record("envelope", "envelope", &Envelope::SPEC)?;
     assert_eq!(
-        std::str::from_utf8(&actual.contents)?,
-        std::str::from_utf8(&expected.contents)?
+        std::str::from_utf8(&actual.bytes)?,
+        std::str::from_utf8(&expected.bytes)?
     );
     compile_fragments(
         "source-tagged-envelope",
-        &[&actual.contents],
+        &[&actual.bytes],
         br#"
 _Static_assert(C_ENVELOPE_RECORD_C_PAYLOAD_OFFSET == 2, "envelope offset");
 _Static_assert(C_ENVELOPE_RECORD_C_PAYLOAD_SIZE == 2, "envelope extent");

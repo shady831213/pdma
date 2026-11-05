@@ -1,51 +1,52 @@
+use crate::export::backends::c_header::fragment::Fragment;
 use crate::traversal::record::Context;
+use std::io::Write;
 mod accessors;
 mod opaque;
 
 use super::analysis;
-use super::{CHeaderExportError, CRecordBackend, fragment::Fragment, naming};
+use super::{CHeaderExportError, CRecordBackend, naming};
 use crate::ast::{Field, FieldType, RecordDefinition, UnionDefinition, record::Node};
+use crate::export::record::Backend;
 use crate::export::value::Backend as _;
-use crate::export::{Artifact, record::Backend};
 use crate::{EnumDefinition, ResolvedMemberKind};
 type CResult<T = ()> = Result<T, CHeaderExportError>;
 impl Backend for CRecordBackend<'_> {
-    fn root(&mut self, ctx: Context<'_>) -> CResult {
-        (self.logical_name, self.prefix) = self.names.unit(ctx.unit())?;
+    fn root(&mut self, ctx: Context<'_>, writer: &mut dyn Write) -> CResult {
+        self.prefix = self.names.unit_name(ctx.unit()).1;
         self.output = Fragment::default();
-        self.emit(ctx.current())?;
-        self.artifacts.push(Artifact {
-            logical_name: self.logical_name.clone(),
-            media_type: "text/x-c; charset=utf-8".into(),
-            contents: std::mem::take(&mut self.output.text).into_bytes(),
-        });
-        Ok(())
+        self.emit(ctx.current(), writer)
     }
-    fn record(&mut self, value: &RecordDefinition, ctx: Context<'_>) -> CResult {
+    fn record(
+        &mut self,
+        value: &RecordDefinition,
+        ctx: Context<'_>,
+        writer: &mut dyn Write,
+    ) -> CResult {
         if ctx.ancestors().is_empty() {
-            self.header(value.spec())?;
+            self.header(value.spec(), writer)?;
         }
-        self.emit_all(ctx.children())
+        self.emit_all(ctx.children(), writer)
     }
-    fn field(&mut self, field: &Field, ctx: Context<'_>) -> CResult {
+    fn field(&mut self, field: &Field, ctx: Context<'_>, writer: &mut dyn Write) -> CResult {
         let path = analysis::path(&ctx);
         let offset = self.analysis.at(&ctx)?;
         match field.ty() {
             FieldType::Scalar { definition, .. } | FieldType::Enum(definition) => {
-                self.field_intro(field)?;
-                self.emit_all(ctx.children())?;
-                self.scalar(&path, offset, *definition)
+                Self::field_intro(field, writer)?;
+                self.emit_all(ctx.children(), writer)?;
+                self.scalar(&path, offset, *definition, writer)
             }
             FieldType::Bits(_) => {
-                self.field_intro(field)?;
-                self.emit_all(ctx.children())
+                Self::field_intro(field, writer)?;
+                self.emit_all(ctx.children(), writer)
             }
             FieldType::Reference(_) => {
                 let visit = ctx
                     .referent()
                     .ok_or(CHeaderExportError::InvalidVisit("record referent"))?;
                 if matches!(visit.node(), Node::Value(crate::ast::value::Node::Bits(_))) {
-                    self.field_intro(field)?;
+                    Self::field_intro(field, writer)?;
                 } else {
                     let documentation = match visit.node() {
                         Node::Record(record) => record.spec().documentation(),
@@ -53,16 +54,21 @@ impl Backend for CRecordBackend<'_> {
                         Node::Value(crate::ast::value::Node::Opaque(spec)) => spec.documentation(),
                         _ => crate::Documentation::EMPTY,
                     };
-                    self.placement(field, &ctx, documentation)?;
+                    self.placement(field, &ctx, documentation, writer)?;
                 }
-                self.emit(visit)
+                self.emit(visit, writer)
             }
-            FieldType::Union(_) => self.emit_all(ctx.children()),
+            FieldType::Union(_) => self.emit_all(ctx.children(), writer),
         }
     }
-    fn union(&mut self, value: &UnionDefinition, ctx: Context<'_>) -> CResult {
+    fn union(
+        &mut self,
+        value: &UnionDefinition,
+        ctx: Context<'_>,
+        writer: &mut dyn Write,
+    ) -> CResult {
         if ctx.ancestors().is_empty() {
-            return self.header(value.storage());
+            return self.header(value.storage(), writer);
         }
         let analysis = self.analysis;
         let storage = analysis.union_storage(&ctx)?;
@@ -70,13 +76,13 @@ impl Backend for CRecordBackend<'_> {
             && let Some(field) = ctx.field()
             && matches!(field.ty(), FieldType::Union(_))
         {
-            self.placement(field, &ctx, value.storage().documentation())?;
+            self.placement(field, &ctx, value.storage().documentation(), writer)?;
         }
         for member in storage {
             let (path, field) = (&member.path, &member.field);
-            self.output.text.push('\n');
-            self.output.documentation("", field.documentation())?;
-            self.scalar(path, member.offset, field.definition())?;
+            writer.write_all(b"\n")?;
+            Fragment::documentation("", field.documentation(), writer)?;
+            self.scalar(path, member.offset, field.definition(), writer)?;
         }
         Ok(())
     }
@@ -88,6 +94,7 @@ impl CRecordBackend<'_> {
         field: &Field,
         ctx: &Context<'_>,
         documentation: crate::Documentation,
+        writer: &mut dyn Write,
     ) -> CResult {
         let path = analysis::path(ctx);
         let root = ctx
@@ -98,39 +105,46 @@ impl CRecordBackend<'_> {
                 _ => None,
             })
             .ok_or(CHeaderExportError::InvalidVisit("record reference parent"))?;
-        self.output.documentation(
+        Fragment::documentation(
             &format!("{root}.{path}"),
             field.documentation().with_fallback(documentation),
+            writer,
         )?;
         self.output.constants::<64>(
             &format!("{}_RECORD_{}", self.prefix, naming::c_identifier(&path)),
             &[("OFFSET", self.analysis.at(ctx)?), ("SIZE", field.width())],
+            writer,
         )
     }
 
-    fn header(&mut self, spec: crate::RecordSpec) -> CResult {
-        self.output.documentation("", spec.documentation())?;
+    fn header(&mut self, spec: crate::RecordSpec, writer: &mut dyn Write) -> CResult {
+        Fragment::documentation("", spec.documentation(), writer)?;
         self.output.constants::<64>(
             &self.prefix,
             &[("SIZE", spec.size()), ("ALIGNMENT", spec.alignment())],
+            writer,
         )?;
-        self.output
-            .constants::<32>(&self.prefix, &[("ENDIAN_LITTLE", 0), ("ENDIAN_BIG", 1)])
+        self.output.constants::<32>(
+            &self.prefix,
+            &[("ENDIAN_LITTLE", 0), ("ENDIAN_BIG", 1)],
+            writer,
+        )
     }
-    fn field_intro(&mut self, field: &Field) -> CResult {
-        self.output.text.push('\n');
-        self.output.documentation("", field.documentation())
+    fn field_intro(field: &Field, writer: &mut dyn Write) -> CResult {
+        writer.write_all(b"\n")?;
+        Fragment::documentation("", field.documentation(), writer)
     }
     pub(super) fn scalar(
         &mut self,
         path: &str,
         offset: usize,
         definition: crate::FieldDefinition,
+        writer: &mut dyn Write,
     ) -> CResult {
         let name = naming::c_identifier(path);
         let metadata = format!("{}_{}", self.prefix, name);
         self.output
-            .constants::<64>(&metadata, &[("OFFSET", offset)])?;
+            .constants::<64>(&metadata, &[("OFFSET", offset)], writer)?;
         accessors::scalar_accessors(
             &mut self.output,
             accessors::FieldNames {
@@ -139,6 +153,7 @@ impl CRecordBackend<'_> {
                 metadata: &metadata,
             },
             definition,
+            writer,
         )
     }
 
@@ -146,13 +161,14 @@ impl CRecordBackend<'_> {
         &mut self,
         prefix: &str,
         enumeration: EnumDefinition,
+        writer: &mut dyn Write,
     ) -> Result<(), CHeaderExportError> {
         for variant in enumeration.variants() {
-            self.output
-                .documentation(variant.name(), variant.documentation())?;
+            Fragment::documentation(variant.name(), variant.documentation(), writer)?;
             self.output.unsigned::<64>(
                 &format!("{prefix}_{}", naming::c_identifier(variant.name())),
                 variant.value(),
+                writer,
             )?;
         }
         Ok(())

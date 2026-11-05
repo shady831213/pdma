@@ -65,14 +65,15 @@ pub fn emit_documentation<B: Backend>(
     owner: DocumentationOwner<'_>,
     ctx: &B::Context<'_>,
     backend: &mut B,
+    writer: &mut dyn std::io::Write,
 ) -> Result<(), B::Error> {
     for fragment in documentation_fragments(documentation) {
         match fragment {
             DocumentationFragment::ShortDescription(text) => {
-                backend.short_description(text, owner, ctx.clone())?;
+                backend.short_description(text, owner, ctx.clone(), writer)?;
             }
             DocumentationFragment::Description(text) => {
-                backend.description(text, owner, ctx.clone())?;
+                backend.description(text, owner, ctx.clone(), writer)?;
             }
         }
     }

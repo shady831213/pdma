@@ -10,7 +10,7 @@ use std::io::{self, Write};
 
 use hw_model_schema::{
     export::backends::c_header::{CRecordAnalysisPass, CRecordBackend, CRegisterBackend},
-    export::{InMemoryArtifactSink, generate},
+    export::generate,
     record_schema, register_map, register_schema,
 };
 
@@ -57,9 +57,9 @@ register_map! {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Resolve metadata once, then export to an injected sink. No output files are
-    // created: this program writes the resulting headers to standard output.
-    let mut sink = InMemoryArtifactSink::new();
+    // The application owns stdout and flushes it after both exports complete.
+    let mut output = io::stdout().lock();
+    output.write_all(b"#include <stdint.h>\n\n")?;
     let mut records = SchemaSet::new();
     records.add::<CopyRequest>();
     let schema = AnalyzedSchema::from_graph(&records.resolve()?, &Bindings::new())?;
@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .run(CRecordAnalysisPass)?
         .generate(
             |data| CRecordBackend::new(data).with_name(id, "copy"),
-            &mut sink,
+            &mut output,
         )?;
     let schema = AnalyzedSchema::register_map("channel.h", &Channel::resolve()?)?;
     generate(
@@ -85,13 +85,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .clone(),
             "channel",
         ),
-        &mut sink,
+        &mut output,
     )?;
-    let mut output = io::stdout().lock();
-    output.write_all(b"#include <stdint.h>\n\n")?;
-    for artifact in sink.artifacts() {
-        output.write_all(&artifact.contents)?;
-        output.write_all(b"\n")?;
-    }
+    output.flush()?;
     Ok(())
 }

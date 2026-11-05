@@ -48,10 +48,10 @@ impl DescribeSchema for Container {
 fn opaque_reference_keeps_explicit_metadata_at_its_source_occurrence() -> TestResult {
     let actual = source::<Container>("container")?;
     let expected = render_record("container", "container", &CONTAINER)?;
-    assert_eq!(actual.contents, expected.contents);
+    assert_eq!(actual.bytes, expected.bytes);
     compile_fragments(
         "source-opaque",
-        &[&actual.contents],
+        &[&actual.bytes],
         br#"
 _Static_assert(C_CONTAINER_C_CHILDQX2EVALUE_OFFSET == 4, "opaque child rebased");
 int main(void) {

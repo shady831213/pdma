@@ -1,96 +1,60 @@
 //! Downstream-style checks for the format-neutral export extension boundary.
-use hw_model_schema::analysis::AnalyzedSchema;
-use hw_model_schema::export::generate;
-use hw_model_schema::traversal::record::Context as RecordContext;
-
-use core::convert::Infallible;
-
+/// Caller-owned capture for generation tests.
+pub mod output_support;
 use hw_model_schema::{
     RecordSpec,
-    export::{Artifact, ArtifactSink, ExportError, InMemoryArtifactSink, record::Backend, value},
+    analysis::AnalyzedSchema,
+    export::{ExportError, OutputMetadata, generate, record::Backend, value},
+    traversal::record::Context as RecordContext,
 };
+use output_support::{CapturedOutput, MemoryOutput};
+use std::io::Write;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LocalExportError {
     RendererRejected,
-    SinkRejected,
+    Write(std::io::ErrorKind),
 }
-
-#[derive(Debug, Default, PartialEq, Eq)]
-struct LocalCollectingSink {
-    artifacts: Vec<Artifact>,
-}
-
-impl ArtifactSink for LocalCollectingSink {
-    type Error = LocalExportError;
-
-    fn emit(&mut self, artifact: Artifact) -> Result<(), Self::Error> {
-        self.artifacts.push(artifact);
-        Ok(())
-    }
-}
-
 #[derive(Default)]
-struct RejectingSink {
+struct RejectingWriter {
     attempted: usize,
 }
-
-impl ArtifactSink for RejectingSink {
-    type Error = LocalExportError;
-
-    fn emit(&mut self, _artifact: Artifact) -> Result<(), Self::Error> {
+impl Write for RejectingWriter {
+    fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
         self.attempted += 1;
-        Err(LocalExportError::SinkRejected)
+        Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
     }
-}
-
-#[derive(Debug, Default, PartialEq, Eq)]
-struct CountingSink {
-    emitted: usize,
-}
-
-impl ArtifactSink for CountingSink {
-    type Error = LocalExportError;
-
-    fn emit(&mut self, _artifact: Artifact) -> Result<(), Self::Error> {
-        self.emitted += 1;
+    fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
 }
-
-#[derive(Default)]
-struct LocalRenderer {
-    record_size: Option<usize>,
-}
+struct LocalRenderer;
 impl Backend for LocalRenderer {}
 impl value::Backend for LocalRenderer {
     type Domain = hw_model_schema::export::record::Domain;
     type Error = LocalExportError;
     type Context<'a> = RecordContext<'a>;
-    fn opaque(&mut self, record: &RecordSpec, _: RecordContext<'_>) -> Result<(), Self::Error> {
-        self.record_size = Some(record.size());
-        Ok(())
+    fn opaque(
+        &mut self,
+        record: &RecordSpec,
+        _: RecordContext<'_>,
+        writer: &mut dyn Write,
+    ) -> Result<(), Self::Error> {
+        let size = u8::try_from(record.size()).map_err(|_| LocalExportError::RendererRejected)?;
+        writer
+            .write_all(&[size, 255, 7])
+            .map_err(|error| LocalExportError::Write(error.kind()))
     }
-    fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
-        let size = self.record_size.ok_or(LocalExportError::RendererRejected)?;
-        let size = u8::try_from(size).map_err(|_| LocalExportError::RendererRejected)?;
-        Ok(vec![
-            Artifact {
-                logical_name: "record-layout.bin".into(),
-                media_type: "application/x-local-schema".into(),
-                contents: vec![size, 255, 7],
-            },
-            Artifact {
-                logical_name: "record-layout.note".into(),
-                media_type: "text/plain".into(),
-                contents: Vec::new(),
-            },
-        ])
+    fn metadata(&mut self, ctx: &RecordContext<'_>) -> Result<OutputMetadata, Self::Error> {
+        Ok(OutputMetadata {
+            logical_name: format!("{}.bin", ctx.unit().name),
+            media_type: "application/x-local-schema".into(),
+        })
     }
 }
 struct RejectingRenderer;
 impl Backend for RejectingRenderer {
-    fn root(&mut self, _: RecordContext<'_>) -> Result<(), Self::Error> {
+    fn root(&mut self, _: RecordContext<'_>, _: &mut dyn Write) -> Result<(), Self::Error> {
         Err(LocalExportError::RendererRejected)
     }
 }
@@ -98,113 +62,106 @@ impl value::Backend for RejectingRenderer {
     type Domain = hw_model_schema::export::record::Domain;
     type Error = LocalExportError;
     type Context<'a> = RecordContext<'a>;
-    fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
-        Ok(Vec::new())
+    fn metadata(&mut self, ctx: &RecordContext<'_>) -> Result<OutputMetadata, Self::Error> {
+        Ok(OutputMetadata {
+            logical_name: ctx.unit().name.clone(),
+            media_type: "text/plain".into(),
+        })
     }
 }
-struct InfallibleLocalRenderer;
-impl Backend for InfallibleLocalRenderer {}
-impl value::Backend for InfallibleLocalRenderer {
-    type Domain = hw_model_schema::export::record::Domain;
-    type Error = Infallible;
-    type Context<'a> = RecordContext<'a>;
-    fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
-        Ok(vec![Artifact {
-            logical_name: "odd-content".into(),
-            media_type: "application/x-local-schema".into(),
-            contents: vec![0, 255, 7],
-        }])
-    }
-}
-
 const fn record_schema() -> RecordSpec {
-    const FIELDS: [hw_model_schema::FieldSpec; 0] = [];
-    RecordSpec::new(0, 1, &FIELDS)
+    RecordSpec::new(0, 1, &[])
 }
-
 #[test]
-fn downstream_local_renderer_and_sink_preserve_owned_artifacts_in_emission_order() {
-    // Given
+fn caller_capture_preserves_owned_odd_contents_after_renderer_locals_drop() {
+    // Given: a local renderer with binary output and caller-selected capture storage.
     let schema = AnalyzedSchema::opaque("record", record_schema()).expect("fixture must resolve");
-    let renderer = LocalRenderer::default();
-    let mut sink = LocalCollectingSink::default();
-
-    // When
-    let result = generate(&schema, renderer, &mut sink);
-
-    // Then
+    let mut output = MemoryOutput::new();
+    // When: the renderer writes through the caller's writer.
+    let result = output.generate(&schema, LocalRenderer);
+    // Then: the caller retains exact metadata and non-text bytes.
     assert_eq!(result, Ok(()));
     assert_eq!(
-        sink.artifacts,
-        vec![
-            Artifact {
-                logical_name: String::from("record-layout.bin"),
-                media_type: String::from("application/x-local-schema"),
-                contents: vec![0, 255, 7],
+        output.outputs(),
+        &[CapturedOutput {
+            metadata: OutputMetadata {
+                logical_name: "record.bin".into(),
+                media_type: "application/x-local-schema".into(),
             },
-            Artifact {
-                logical_name: String::from("record-layout.note"),
-                media_type: String::from("text/plain"),
-                contents: Vec::new(),
-            },
-        ]
-    );
-}
-
-#[test]
-fn in_memory_sink_preserves_owned_odd_contents_after_renderer_locals_drop() {
-    // Given
-    let schema = AnalyzedSchema::opaque("record", record_schema()).expect("fixture must resolve");
-    let renderer = InfallibleLocalRenderer;
-    let mut sink = InMemoryArtifactSink::new();
-
-    // When
-    let result = generate(&schema, renderer, &mut sink);
-
-    // Then
-    assert_eq!(result, Ok(()));
-    assert_eq!(
-        sink.artifacts(),
-        &[Artifact {
-            logical_name: String::from("odd-content"),
-            media_type: String::from("application/x-local-schema"),
-            contents: vec![0, 255, 7],
+            bytes: vec![0, 255, 7],
         }]
     );
 }
-
 #[test]
-fn sink_rejection_reaches_the_caller_as_the_exact_typed_error() {
-    // Given
+fn writer_rejection_reaches_the_caller_as_the_exact_typed_error() {
+    // Given: the caller supplies a writer that rejects byte writes.
     let schema = AnalyzedSchema::opaque("record", record_schema()).expect("fixture must resolve");
-    let renderer = LocalRenderer::default();
-    let mut sink = RejectingSink::default();
-
-    // When
-    let result = generate(&schema, renderer, &mut sink);
-
-    // Then
+    let mut output = RejectingWriter::default();
+    // When: generation writes the root output.
+    let result = generate(&schema, LocalRenderer, &mut output);
+    // Then: the backend preserves the IO error kind and only one write was attempted.
     assert_eq!(
         result,
-        Err(ExportError::Sink(LocalExportError::SinkRejected))
+        Err(ExportError::Render(LocalExportError::Write(
+            std::io::ErrorKind::PermissionDenied
+        )))
     );
-    assert_eq!(sink.attempted, 1);
+    assert_eq!(output.attempted, 1);
 }
-
 #[test]
-fn renderer_rejection_does_not_invoke_the_sink() {
-    // Given
+fn renderer_rejection_does_not_publish_staged_output() {
+    // Given: rendering rejects the root with application-owned staging.
     let schema = AnalyzedSchema::opaque("record", record_schema()).expect("fixture must resolve");
-    let renderer = RejectingRenderer;
-    let mut sink = CountingSink::default();
-
-    // When
-    let result = generate(&schema, renderer, &mut sink);
-
-    // Then
+    let mut output = MemoryOutput::new();
+    // When: generation invokes the root callback.
+    let result = output.generate(&schema, RejectingRenderer);
+    // Then: the typed rendering failure prevents completion of that output.
     assert_eq!(
         result,
         Err(ExportError::Render(LocalExportError::RendererRejected))
     );
-    assert_eq!(sink.emitted, 0);
+    assert!(output.outputs().is_empty());
+}
+
+#[test]
+fn downstream_local_renderer_and_output_preserve_root_emission_order() {
+    use hw_model_schema::{
+        analysis::Bindings,
+        ast::{Definition, SchemaSet},
+    };
+    struct First;
+    struct Second;
+    // Given: two selected opaque definitions added in reverse name order.
+    let mut set = SchemaSet::new();
+    set.add_definition(Definition::opaque::<Second>(RecordSpec::named(
+        "second",
+        8,
+        1,
+        &[],
+        &[],
+    )));
+    set.add_definition(Definition::opaque::<First>(RecordSpec::named(
+        "first",
+        4,
+        1,
+        &[],
+        &[],
+    )));
+    let schema = AnalyzedSchema::analyze(set, &Bindings::new()).unwrap();
+    let mut output = MemoryOutput::new();
+    // When: generation visits each root through the downstream implementation.
+    output.generate(&schema, LocalRenderer).unwrap();
+    // Then: the caller observes stable root ordering and independent binary contents.
+    let actual: Vec<_> = output
+        .outputs()
+        .iter()
+        .map(|value| (value.metadata.logical_name.as_str(), value.bytes.as_slice()))
+        .collect();
+    assert_eq!(
+        actual,
+        [
+            ("first.bin", &[4, 255, 7][..]),
+            ("second.bin", &[8, 255, 7][..])
+        ]
+    );
 }

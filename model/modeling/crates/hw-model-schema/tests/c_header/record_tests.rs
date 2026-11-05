@@ -1,8 +1,8 @@
 use hw_model_schema::analysis::AnalyzedSchema;
 use hw_model_schema::{
     FieldSpec, RecordPlacement, RecordSpec, ScalarKind,
+    export::ExportError,
     export::backends::c_header::{CHeaderExportError, CRecordBackend},
-    export::{Artifact, ArtifactSink, ExportError},
 };
 
 use super::support::{
@@ -38,9 +38,9 @@ fn c_header_record_is_exact_and_deterministic_when_rendered_twice() -> TestResul
 
     // Then: both owned UTF-8 artifacts exactly match the reviewed golden fragment.
     assert_eq!(first, second);
-    assert_eq!(first.logical_name, "packet.fragment.h");
-    assert_eq!(first.media_type, "text/x-c; charset=utf-8");
-    assert_eq!(first.contents, RECORD_GOLDEN);
+    assert_eq!(first.metadata.logical_name, "packet.fragment.h");
+    assert_eq!(first.metadata.media_type, "text/x-c; charset=utf-8");
+    assert_eq!(first.bytes, RECORD_GOLDEN);
     Ok(())
 }
 
@@ -52,10 +52,10 @@ fn c_header_nested_record_uses_resolved_paths_and_absolute_offsets() -> TestResu
 
     // When: the resolved graph is rendered and compiled as strict C11.
     let artifact = render_record(exporter.0, exporter.1, &resolved)?;
-    compile_fragments("nested", &[&artifact.contents], NESTED_C_MAIN)?;
+    compile_fragments("nested", &[&artifact.bytes], NESTED_C_MAIN)?;
 
     // Then: repeated paths name distinct fields at their absolute offsets.
-    let fragment = std::str::from_utf8(&artifact.contents)?;
+    let fragment = std::str::from_utf8(&artifact.bytes)?;
     assert!(fragment.contains("C_NESTED_C_ITEMSQX5B0QX5DQX2EVALUE_OFFSET UINT64_C(4)"));
     assert!(fragment.contains("C_NESTED_C_ITEMSQX5B1QX5DQX2EVALUE_OFFSET UINT64_C(8)"));
     Ok(())
@@ -64,15 +64,18 @@ fn c_header_nested_record_uses_resolved_paths_and_absolute_offsets() -> TestResu
 #[derive(Debug, Default)]
 struct RejectingSink {
     attempted: usize,
-    artifacts: Vec<Artifact>,
 }
 
-impl ArtifactSink for RejectingSink {
-    type Error = u32;
-
-    fn emit(&mut self, _artifact: Artifact) -> Result<(), Self::Error> {
+impl std::io::Write for RejectingSink {
+    fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
         self.attempted += 1;
-        Err(17)
+        Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "rejected 17",
+        ))
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 
@@ -80,18 +83,18 @@ impl ArtifactSink for RejectingSink {
 struct CountingSink {
     attempted: usize,
 }
-
-impl ArtifactSink for CountingSink {
-    type Error = core::convert::Infallible;
-
-    fn emit(&mut self, _artifact: Artifact) -> Result<(), Self::Error> {
+impl std::io::Write for CountingSink {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
         self.attempted += 1;
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
 }
 
 #[test]
-fn c_header_resolved_collision_is_typed_before_sink_emission() -> TestResult {
+fn c_header_resolved_collision_is_typed_before_bytes_are_written() -> TestResult {
     // Given: distinct resolved paths whose C11-significant prefixes are identical.
     let resolved = LONG_COLLISION_RECORD;
     let exporter = ("collision", "collision");
@@ -107,7 +110,7 @@ fn c_header_resolved_collision_is_typed_before_sink_emission() -> TestResult {
             &mut sink,
         );
 
-    // Then: collision validation reports both paths and never reaches the sink.
+    // Then: collision validation retains both paths before writing bytes.
     let expected = CHeaderExportError::NameCollision {
         first_path: format!("CollisionRoot.{LONG_COLLISION_FIRST}"),
         second_path: format!("CollisionRoot.{LONG_COLLISION_SECOND}"),
@@ -120,7 +123,21 @@ fn c_header_resolved_collision_is_typed_before_sink_emission() -> TestResult {
             .to_string(),
         expected.to_string()
     );
-    assert_eq!(result, Err(ExportError::Render(expected.clone())));
+    let ExportError::Render(CHeaderExportError::NameCollision {
+        first_path,
+        second_path,
+        first_index,
+        second_index,
+    }) = result.unwrap_err()
+    else {
+        panic!("expected collision");
+    };
+    assert_eq!(first_path, format!("CollisionRoot.{LONG_COLLISION_FIRST}"));
+    assert_eq!(
+        second_path,
+        format!("CollisionRoot.{LONG_COLLISION_SECOND}")
+    );
+    assert_eq!((first_index, second_index), (0, 1));
     assert_eq!(sink.attempted, 0);
     println!("collision={expected:?};sink_attempts={}", sink.attempted);
     Ok(())
@@ -144,13 +161,13 @@ fn c_header_sink_rejection_is_typed_and_emits_no_partial_artifact() -> TestResul
         );
 
     // Then: the exact sink variant escapes and no artifact was accepted.
-    assert_eq!(result, Err(ExportError::Sink(17)));
+    assert!(
+        matches!(&result, Err(ExportError::Render(CHeaderExportError::Io(error))) if error.kind() == std::io::ErrorKind::PermissionDenied && error.to_string() == "rejected 17")
+    );
     assert_eq!(sink.attempted, 1);
-    assert!(sink.artifacts.is_empty());
     println!(
         "sink_result={result:?};attempted={};accepted={}",
-        sink.attempted,
-        sink.artifacts.len()
+        sink.attempted, 0
     );
     Ok(())
 }
@@ -166,7 +183,7 @@ fn c_header_symbol_prefix_is_portable_when_caller_name_contains_special_characte
     // Then: the fragment uses the deterministic sanitized C identifier.
     assert!(
         artifact
-            .contents
+            .bytes
             .starts_with(b"#define C_9QX20WEIRDQX2DQX2DNAMEQX21_SIZE ")
     );
     Ok(())
@@ -190,12 +207,12 @@ fn c_header_keeps_independent_prefixes_collision_free_in_one_translation_unit() 
     // When: all independently rendered fragments share one strict C11 translation unit.
     compile_fragments(
         "prefix-collision",
-        &[&first.contents, &second.contents, &third.contents],
+        &[&first.bytes, &second.bytes, &third.bytes],
         PREFIX_C_MAIN,
     )?;
 
     // Then: each caller prefix owns a distinct deterministic C namespace.
-    assert_ne!(first.contents, second.contents);
-    assert_ne!(second.contents, third.contents);
+    assert_ne!(first.bytes, second.bytes);
+    assert_ne!(second.bytes, third.bytes);
     Ok(())
 }

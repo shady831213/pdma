@@ -105,17 +105,20 @@ impl Names {
     pub(super) fn prefix(&self, source: &NodeId, fallback: &str) -> String {
         c_identifier(self.overrides.get(source).map_or(fallback, String::as_str))
     }
-    pub(super) fn unit(
-        &mut self,
-        definition: &Unit,
-    ) -> Result<(String, String), CHeaderExportError> {
-        let (logical_name, path) = definition.id.source_path().map_or_else(
-            || (definition.name.clone(), definition.name.as_str()),
-            |path| (definition.name.to_ascii_lowercase(), path),
-        );
+    pub(super) fn unit_name(&self, definition: &Unit) -> (String, String) {
+        let logical_name = if definition.id.source_path().is_some() {
+            definition.name.to_ascii_lowercase()
+        } else {
+            definition.name.clone()
+        };
         let prefix = self.prefix(&definition.id, &logical_name);
+        (logical_name, prefix)
+    }
+    pub(super) fn reserve_unit(&mut self, definition: &Unit) -> Result<String, CHeaderExportError> {
+        let (logical_name, prefix) = self.unit_name(definition);
+        let path = definition.id.source_path().unwrap_or(&definition.name);
         self.symbols.insert(&prefix, path)?;
-        Ok((logical_name, prefix))
+        Ok(logical_name)
     }
 }
 

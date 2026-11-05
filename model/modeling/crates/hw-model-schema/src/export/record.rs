@@ -9,9 +9,10 @@ impl<B: Backend> super::Domain<B> for Domain {
     fn emit(
         visit: crate::traversal::Visit<B::Context<'_>>,
         backend: &mut B,
+        writer: &mut dyn std::io::Write,
     ) -> Result<(), B::Error> {
         let ctx = visit.into_context();
-        emit::emit(ctx.node(), ctx, backend)
+        emit::emit(ctx.node(), ctx, backend, writer)
     }
     fn validate(unit: &crate::analysis::Unit) -> Result<(), crate::analysis::AnalysisError> {
         if matches!(
@@ -38,7 +39,8 @@ impl<B: Backend> super::Domain<B> for Domain {
     fn root(
         visit: crate::traversal::Visit<B::Context<'_>>,
         backend: &mut B,
+        writer: &mut dyn std::io::Write,
     ) -> Result<(), B::Error> {
-        backend.root(visit.into_context())
+        backend.root(visit.into_context(), writer)
     }
 }

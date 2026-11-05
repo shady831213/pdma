@@ -7,11 +7,8 @@ use pdma_model_contract::view::RegisterView;
 fn host_bank_templates_and_expanded_leaves_exclude_administration() {
     // Given: multiple data and administration blocks with overlapping local offsets.
     let layout = DmaRegisters::new(3).unwrap();
-    let full = layout.resolve().unwrap();
     // When: projecting the managed Host's register view.
-    let host = full
-        .project_access(|r| RegisterView::Host.dma_access(r.id(), r.access()))
-        .unwrap();
+    let host = RegisterView::Host.dma(&layout).unwrap();
     // Then: both representations retain all data registers and no admin registers.
     for bank in host.banks() {
         for register in bank.registers() {

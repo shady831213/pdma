@@ -10,15 +10,8 @@ fn role_views_preserve_the_complete_channel_window_geometry()
     // Given: a bank containing three complete channel permission blocks.
     let layout = ChannelWindowRegisters::new(3)?;
     // When: each software role selects its accessible registers.
-    let full = layout.resolve()?;
-    let project = |role: RegisterView| {
-        full.project_access(|register| {
-            let (_, offset) = layout.windows().locate_instance(register.offset())?;
-            role.window_access(offset)
-        })
-    };
-    let host = project(RegisterView::Host)?;
-    let firmware = project(RegisterView::Firmware)?;
+    let host = RegisterView::Host.windows(&layout)?;
+    let firmware = RegisterView::Firmware.windows(&layout)?;
     // Then: both views retain the same bank while exposing disjoint leaves.
     assert_eq!(
         (layout.extent(), host.size(), firmware.size()),

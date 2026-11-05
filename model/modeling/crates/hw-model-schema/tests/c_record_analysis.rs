@@ -1,14 +1,13 @@
 //! C preparation retains distinct source occurrences.
 #![cfg(feature = "export-c-header")]
+pub mod output_support;
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Bindings, Pipeline},
     ast::SchemaSet,
-    export::{
-        InMemoryArtifactSink,
-        backends::c_header::{CRecordAnalysisPass, CRecordBackend},
-    },
+    export::backends::c_header::{CRecordAnalysisPass, CRecordBackend},
     record_schema,
 };
+use output_support::MemoryOutput;
 record_schema! { pub record Leaf { endian: Little, fields: { value: u16 } } }
 record_schema! { pub record Pair { endian: Little, fields: { first: Leaf, gap: u32, second: Leaf } } }
 #[test]
@@ -39,14 +38,14 @@ fn prepared_occurrences_keep_reference_site_offsets() -> Result<(), Box<dyn std:
         }
     }
     assert_eq!(offsets, [("first", Some(0)), ("second", Some(8))]);
-    let mut sink = InMemoryArtifactSink::new();
-    prepared.generate(CRecordBackend::new, &mut sink)?;
+    let mut sink = MemoryOutput::new();
+    sink.generate_prepared(&prepared, CRecordBackend::new)?;
     let text = sink
-        .artifacts()
+        .outputs()
         .iter()
-        .find(|a| a.logical_name == "pair")
+        .find(|a| a.metadata.logical_name == "pair")
         .ok_or("pair missing")?;
-    let text = std::str::from_utf8(&text.contents)?;
+    let text = std::str::from_utf8(&text.bytes)?;
     assert!(text.contains("C_SECONDQX2EVALUE_OFFSET UINT64_C(8)"));
     assert!(text.contains("C_FIRSTQX2EVALUE_OFFSET UINT64_C(0)"));
     Ok(())
@@ -106,19 +105,23 @@ fn duplicate_source_names_keep_distinct_offsets_and_fail_target_naming()
         fields.get(1).ok_or("second field")?.0,
         fields.get(2).ok_or("third field")?.0
     );
-    let mut sink = InMemoryArtifactSink::new();
-    let error = prepared
-        .generate(CRecordBackend::new, &mut sink)
+    let mut sink = MemoryOutput::new();
+    let error = sink
+        .generate_prepared(&prepared, CRecordBackend::new)
         .unwrap_err();
-    assert_eq!(
-        error,
-        hw_model_schema::export::ExportError::Render(CHeaderExportError::NameCollision {
-            first_path: "C_DUPLICATE_C_DUPLICATE_OFFSET".into(),
-            second_path: "C_DUPLICATE_C_DUPLICATE_OFFSET".into(),
-            first_index: 9,
-            second_index: 14,
-        })
-    );
-    assert!(sink.artifacts().is_empty());
+    let hw_model_schema::export::ExportError::Render(CHeaderExportError::NameCollision {
+        first_path,
+        second_path,
+        first_index,
+        second_index,
+    }) = error
+    else {
+        panic!("expected name collision");
+    };
+    assert_eq!(first_path, "C_DUPLICATE_C_DUPLICATE_OFFSET".to_string());
+    assert_eq!(second_path, "C_DUPLICATE_C_DUPLICATE_OFFSET".to_string());
+    assert_eq!(first_index, 9);
+    assert_eq!(second_index, 14);
+    assert!(sink.outputs().is_empty());
     Ok(())
 }

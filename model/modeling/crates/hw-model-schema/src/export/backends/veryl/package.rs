@@ -1,17 +1,17 @@
 use super::{VerylExportError, identifier};
 use crate::export::SymbolScope;
-use std::fmt::{Display, Write};
+use std::fmt::Display;
+use std::io::Write;
 
 #[derive(Debug, Default)]
 pub(super) struct Package {
-    pub(super) text: String,
     symbols: SymbolScope<()>,
 }
 impl Package {
-    pub(super) fn comment(&mut self, text: &str) -> Result<(), VerylExportError> {
+    pub(super) fn comment(text: &str, writer: &mut dyn Write) -> Result<(), VerylExportError> {
         for line in text.lines() {
             writeln!(
-                self.text,
+                writer,
                 "    // {}",
                 line.replace(['\r', '\u{2028}', '\u{2029}'], " ")
             )?;
@@ -29,18 +29,20 @@ impl Package {
         name: &str,
         ty: &str,
         value: impl Display,
+        writer: &mut dyn Write,
     ) -> Result<(), VerylExportError> {
         self.declare(name)?;
-        writeln!(self.text, "    const {name}: {ty} = {value};")?;
+        writeln!(writer, "    const {name}: {ty} = {value};")?;
         Ok(())
     }
     pub(super) fn extent(
         &mut self,
         extent: usize,
         alignment: usize,
+        writer: &mut dyn Write,
     ) -> Result<(), VerylExportError> {
-        self.constant("EXTENT", "u64", extent)?;
-        self.constant("ALIGNMENT", "u64", alignment)
+        self.constant("EXTENT", "u64", extent, writer)?;
+        self.constant("ALIGNMENT", "u64", alignment, writer)
     }
 }
 

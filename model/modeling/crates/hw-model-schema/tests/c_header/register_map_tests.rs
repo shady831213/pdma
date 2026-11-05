@@ -81,8 +81,8 @@ fn c_header_register_map_is_exact_when_fixed_and_repeated_registers_are_present(
     let artifact = render_map(exporter.0, exporter.1, &MAP.resolve()?)?;
 
     // Then: exact metadata and expanded offsets match the reviewed golden fragment.
-    assert_eq!(artifact.logical_name, "map.fragment.h");
-    assert_eq!(artifact.contents, MAP_GOLDEN);
+    assert_eq!(artifact.metadata.logical_name, "map.fragment.h");
+    assert_eq!(artifact.bytes, MAP_GOLDEN);
     Ok(())
 }
 
@@ -121,7 +121,7 @@ fn c_header_register_map_includes_independently_declared_fixed_groups() -> TestR
     let artifact = render_map(exporter.0, exporter.1, &GROUPED_MAP.resolve()?)?;
 
     // Then: each grouped register contributes its offset and metadata to the fragment.
-    let fragment = std::str::from_utf8(&artifact.contents)?;
+    let fragment = std::str::from_utf8(&artifact.bytes)?;
     assert!(fragment.contains("C_GROUPEDQX20MAP_C_STATUS_OFFSET UINT64_C(0)"));
     assert!(fragment.contains("C_GROUPEDQX20MAP_C_COMMAND_OFFSET UINT64_C(8)"));
     Ok(())
@@ -135,7 +135,7 @@ fn c_header_fragments_compile_and_run_when_wrapped_as_strict_c11() -> TestResult
     // When: a real C compiler builds the wrapper and the resulting binary runs.
     compile_fragments(
         "compile",
-        &[&record.contents, &register_map.contents],
+        &[&record.bytes, &register_map.bytes],
         HAPPY_C_MAIN,
     )?;
 
@@ -160,14 +160,10 @@ fn c_header_preserves_distinct_punctuation_names_when_compiled_as_strict_c11() -
         map,
         render_map(map_exporter.0, map_exporter.1, &collision_map)?
     );
-    assert_eq!(record.contents, COLLISION_RECORD_GOLDEN);
-    assert_eq!(map.contents, COLLISION_MAP_GOLDEN);
+    assert_eq!(record.bytes, COLLISION_RECORD_GOLDEN);
+    assert_eq!(map.bytes, COLLISION_MAP_GOLDEN);
     // When: the collision-bearing fragments are compiled and their C checks execute.
-    compile_fragments(
-        "collision",
-        &[&record.contents, &map.contents],
-        COLLISION_C_MAIN,
-    )?;
+    compile_fragments("collision", &[&record.bytes, &map.bytes], COLLISION_C_MAIN)?;
 
     // Then: injective escaping retains distinct helpers and macro values.
     Ok(())

@@ -3,7 +3,7 @@
 `hw-model-schema` is a reusable, runtime-neutral vocabulary for describing
 fixed byte records and register maps. It supplies explicit scalar codecs, typed
 metadata, checked record views, deterministic validation, exact-start register lookup,
-and a format-neutral artifact-export boundary. The facade re-exports the declaration
+and a format-neutral streaming export boundary. The facade re-exports the declaration
 macros, so downstream crates normally depend on this crate rather than on the
 procedural-macro implementation crate.
 
@@ -77,8 +77,8 @@ Generation has three steps:
 
 1. Resolve a `SchemaSet` dependency graph.
 2. Build `analysis::AnalyzedSchema` with optional root `Bindings`.
-3. Call `export::generate(&schema, backend, sink)` with a record or register
-   backend and an artifact sink.
+3. Call `export::generate(&schema, backend, output)` with a record or register
+   backend and a caller-selected output destination.
 
 `AnalyzedSchema::analyze` runs the default sequence directly from a `SchemaSet`.
 The sequence in `analysis/pipeline.rs` calls separate resolve, validate, layout
@@ -563,50 +563,59 @@ Those checks belong to the application runtime.
 
 ## Export without a storage policy
 
-`Artifact` owns its logical name, media type and bytes. `Backend` produces
-artifacts; `ArtifactSink` controls storage. `generate` completes all node emission
-before calling the sink, so backend errors emit nothing. Sink failure retains
-previously accepted artifacts; rollback belongs to the sink. `ExportError`
-distinguishes analysis, backend and sink failures.
+`generate` takes a caller-owned `std::io::Write`. It preflights the dependency
+closure and prepares all root metadata before emitting any bytes, then concatenates
+root output in dependency order. Rendering failures can leave partial bytes.
+Buffering, flushing and file publication are ordinary caller-owned I/O operations.
+`ExportError` distinguishes analysis and backend failures and retains their sources.
+
+For separate destinations, `prepare` returns bound generation units with
+`OutputMetadata` (logical name and media type), stable source identity and `emit`.
+Inspect the metadata, choose a writer and call `unit.emit(&mut backend, &mut writer)`.
+No storage trait or callback implementation is required.
 
 ```rust
-use core::convert::Infallible;
+use std::io::{self, Write};
 use hw_model_schema::{
     RecordSpec,
     analysis::AnalyzedSchema,
-    export::{Artifact, InMemoryArtifactSink, generate, record, value},
+    export::{OutputMetadata, generate, record, value},
     traversal::record::Context,
 };
 #[derive(Default)]
-struct NameListing { names: String }
+struct NameListing;
 impl record::Backend for NameListing {
-    fn root(&mut self, ctx: Context<'_>) -> Result<(), Self::Error> {
-        self.names.push_str(&ctx.unit().name);
-        self.names.push('\n');
-        Ok(())
+    fn root(&mut self, ctx: Context<'_>, writer: &mut dyn Write) -> Result<(), Self::Error> {
+        writeln!(writer, "{}", ctx.unit().name)
     }
 }
 impl value::Backend for NameListing {
-    type Error = Infallible;
+    type Error = io::Error;
     type Context<'a> = Context<'a>;
     type Domain = record::Domain;
-    fn finish(self) -> Result<Vec<Artifact>, Self::Error> {
-        Ok(vec![Artifact {
+    fn metadata(&mut self, _: &Context<'_>) -> Result<OutputMetadata, Self::Error> {
+        Ok(OutputMetadata {
             logical_name: "names.txt".into(),
             media_type: "text/plain".into(),
-            contents: self.names.into_bytes(),
-        }])
+        })
     }
 }
 let schema = AnalyzedSchema::opaque("Empty", RecordSpec::new(0, 1, &[]))?;
-let mut sink = InMemoryArtifactSink::new();
-generate(&schema, NameListing::default(), &mut sink)?;
-assert_eq!(sink.artifacts().first().map(|a| a.contents.as_slice()), Some(b"Empty\n".as_slice()));
+let mut output = Vec::new();
+generate(&schema, NameListing, &mut output)?;
+assert_eq!(output, b"Empty\n");
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-The sink chooses memory, filesystem or transport storage; the crate writes no
-files implicitly.
+Pass a `File`, `BufWriter` or `Vec<u8>` directly. Call `flush()` when required and
+handle its I/O error in the application. For atomic publication, render into a
+caller-owned temporary destination before publishing it. Logical names are not
+filesystem paths; naming and path selection remain separate decisions.
+
+`prepare_roots` accepts explicitly selected bound root visits, allowing independent
+domain backends to share one analyzed graph. Select each shared definition once
+and check the combined target namespace before emitting. Do not deduplicate by
+rendered bytes: distinct definitions with the same target name are a naming error.
 
 ## Optional C11 fragments
 
@@ -620,7 +629,7 @@ hw-model-schema = { version = "0.2.0", features = ["export-c-header"] }
 
 With that feature enabled, the backend lives at
 `export::backends::c_header`; optional backends are not nested outside `export`.
-It emits an owned deterministic C fragment through a sink and leaves include guards,
+It streams deterministic C fragments through a writer and leaves include guards,
 file layout, and integration policy to the caller.
 
 Register symbols follow the complete structural path, including bank instance
@@ -642,7 +651,6 @@ Final macro and scalar accessor function declarations use the same collision sco
 #[cfg(feature = "export-c-header")]
 fn main() {
     use hw_model_schema::{
-        export::InMemoryArtifactSink,
         ast::{DefinitionId, SchemaSet},
         analysis::{AnalyzedSchema, Bindings, Pipeline},
         export::backends::c_header::{CRecordAnalysisPass, CRecordBackend},
@@ -657,7 +665,7 @@ fn main() {
         }
     }
 
-    let mut sink = InMemoryArtifactSink::new();
+    let mut output = Vec::new();
     let mut selected = SchemaSet::new();
     selected.add::<Header>();
     let graph = selected.resolve().expect("example references must resolve");
@@ -666,12 +674,9 @@ fn main() {
     let prepared = Pipeline::new((&schema, ())).run(CRecordAnalysisPass).expect("C analysis must succeed");
     assert!(prepared.generate(
         |data| CRecordBackend::new(data).with_name(root.id.clone(), "demo header"),
-        &mut sink,
+        &mut output,
     ).is_ok());
-    let artifacts = sink.into_artifacts();
-    assert_eq!(artifacts.len(), 1);
-    assert_eq!(artifacts[0].logical_name, "header");
-    assert!(artifacts[0].contents.starts_with(b"#define C_DEMOQX20HEADER_SIZE"));
+    assert!(output.starts_with(b"#define C_DEMOQX20HEADER_SIZE"));
 }
 
 #[cfg(not(feature = "export-c-header"))]

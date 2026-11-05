@@ -86,10 +86,7 @@ fn repeated_window_metadata_matches_configured_count_and_role()
             (RegisterView::Firmware, Access::ReadWrite, 0),
         ] {
             // When: filtering one complete physical bank for this role.
-            let map = layout.resolve()?.project_access(|register| {
-                let (_, offset) = layout.windows().locate_instance(register.offset())?;
-                role.window_access(offset)
-            })?;
+            let map = role.windows(&layout)?;
             // Then: each role retains whole blocks and its original leaf addresses.
             assert_window_metadata(&map, (count, layout.windows().stride(), first), access);
             assert_eq!(layout.windows().count(), count);

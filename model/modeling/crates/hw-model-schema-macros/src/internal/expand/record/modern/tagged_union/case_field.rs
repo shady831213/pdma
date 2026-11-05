@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 
 use crate::internal::syntax::{TaggedUnionFieldDecl, TaggedUnionFieldType};
 
@@ -24,7 +25,7 @@ pub(super) fn decode(context: Context<'_>) -> TokenStream {
         endian,
     } = context;
     let name = &field.name;
-    let identity = format_ident!("{}_IDENTITY", name.to_string().to_ascii_uppercase());
+    let identity = format_ident!("{}_IDENTITY", name.unraw().to_string().to_ascii_uppercase());
     let decoded = match &field.ty {
         TaggedUnionFieldType::Scalar(scalar_type) => {
             let ty = scalar::ty(*scalar_type);
@@ -57,7 +58,7 @@ pub(super) fn encode(context: Context<'_>) -> TokenStream {
         ..
     } = context;
     let name = &field.name;
-    let identity = format_ident!("{}_IDENTITY", name.to_string().to_ascii_uppercase());
+    let identity = format_ident!("{}_IDENTITY", name.unraw().to_string().to_ascii_uppercase());
     let binding = binding(name);
     let encoded = match &field.ty {
         TaggedUnionFieldType::Scalar(_) => {

@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 
 use crate::internal::validate;
 
@@ -114,7 +115,8 @@ fn encoded_fields(context: &SchemaContext<'_>) -> Vec<TokenStream> {
         .iter()
         .map(|field| {
             let name = &field.name;
-            let identity = format_ident!("{}_IDENTITY", name.to_string().to_ascii_uppercase());
+            let identity =
+                format_ident!("{}_IDENTITY", name.unraw().to_string().to_ascii_uppercase());
             let lsb = field.start.0;
             let bit_width = super::super::width(field);
             let maximum = validate::bits::bit_mask(bit_width);

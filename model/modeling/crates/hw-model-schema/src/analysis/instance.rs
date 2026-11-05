@@ -123,10 +123,10 @@ impl InstanceWalk {
                     DefinitionBody::RegisterMap(child) => {
                         self.map(child, &shape.arguments, &child_scope)?;
                     }
+                    DefinitionBody::Opaque(_) => {}
                     DefinitionBody::Bits(_)
                     | DefinitionBody::Record(_)
-                    | DefinitionBody::Union { .. }
-                    | DefinitionBody::Opaque(_) => return Err(LayoutError::Geometry),
+                    | DefinitionBody::Union { .. } => return Err(LayoutError::Geometry),
                 }
                 if let Some(index) = bank_index {
                     let instance = self

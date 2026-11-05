@@ -210,7 +210,7 @@ fn group_methods(groups: &[Group], context: &ExpansionContext<'_>) -> (TokenStre
 fn type_names(marker: &syn::Ident, path: &[syn::Ident]) -> (syn::Ident, syn::Ident) {
     let suffix = path
         .iter()
-        .map(|segment| variant(&segment.to_string()).to_string())
+        .map(|segment| variant(segment).to_string())
         .collect::<String>();
     (
         format_ident!("{marker}{suffix}View"),

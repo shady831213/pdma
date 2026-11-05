@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 
 use super::{codec, scalar, tag_info, tagged_union_geometry};
 use crate::internal::syntax::{ModernRecordDecl, TaggedUnionDecl};
@@ -20,7 +21,10 @@ pub(in crate::internal::expand::record::modern) fn expand(
     let tag = tag_info(record, &decl.tag, &quote!(value))?.ty;
     let ast = super::ast::codecs(&name, decl, &tag, facade)?;
     let owner = &record.name;
-    let identity = format_ident!("{}_IDENTITY", field.to_string().to_ascii_uppercase());
+    let identity = format_ident!(
+        "{}_IDENTITY",
+        field.unraw().to_string().to_ascii_uppercase()
+    );
     let mut declarations = Vec::new();
     let mut decode = Vec::new();
     let mut encode = Vec::new();

@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 
 use crate::internal::syntax::{RegisterDefinitionDecl, RegisterFieldsDecl};
 
@@ -114,7 +115,10 @@ fn expand_inline(
         let name = method.to_string();
         let documentation = field.documentation.metadata(facade);
         let rust_docs = field.documentation.rust_docs();
-        let identity = format_ident!("{}_IDENTITY", name.to_ascii_uppercase());
+        let identity = format_ident!(
+            "{}_IDENTITY",
+            method.unraw().to_string().to_ascii_uppercase()
+        );
         let id = u16::try_from(index.saturating_add(1))
             .map_err(|_| syn::Error::new(method.span(), "register field ID exceeds u16"))?;
         let lsb = field.start.0;
@@ -125,7 +129,7 @@ fn expand_inline(
                 #facade::SchemaMemberIdentity::new(stringify!(#marker), #name);
         });
         let semantic_type = crate::internal::expand::bits::field_type(marker, field);
-        variants.push(super::super::variant(&name));
+        variants.push(super::super::variant(method));
         let enumeration = field.enumeration.as_ref().map(|decl| {
             let metadata = crate::internal::expand::enumeration::metadata(decl, facade);
             quote!(.with_enum(#metadata))

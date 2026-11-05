@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::quote;
+use syn::ext::IdentExt;
 use syn::parse2;
 
 use crate::internal::syntax::{BitFieldDecl, BitsSchemaDecl};
@@ -66,7 +67,7 @@ pub(in crate::internal) fn enum_items(
             field.enumeration.as_ref().map(|decl| {
                 let identity = quote::format_ident!(
                     "{}_IDENTITY",
-                    field.name.to_string().to_ascii_uppercase()
+                    field.name.unraw().to_string().to_ascii_uppercase()
                 );
                 let start = field.start.0;
                 super::enumeration::expand(

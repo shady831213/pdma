@@ -47,6 +47,13 @@ pub(super) fn node(value: Node<'_>) -> Result<(), AnalysisError> {
         Node::Record(crate::ast::record::Node::Record(value)) => return record(value),
         Node::Record(crate::ast::record::Node::Case(case)) => {
             if let CaseBody::Inline(value) = case.body() {
+                value
+                    .spec()
+                    .resolve()
+                    .map_err(|source| AnalysisError::Record {
+                        path: case.name(),
+                        source,
+                    })?;
                 return record(value);
             }
         }

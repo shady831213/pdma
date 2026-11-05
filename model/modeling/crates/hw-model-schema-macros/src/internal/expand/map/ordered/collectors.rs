@@ -23,7 +23,7 @@ pub(super) fn leaf_collectors(
             let placement_constant = &geometry.placement;
             let symbol = placement.symbol.to_string();
             let register_name = symbol.to_ascii_uppercase();
-            let item_variant = variant(&symbol);
+            let item_variant = variant(&placement.symbol);
             let id = if root { quote!(#id_name::#item_variant) } else { quote!(id) };
             let parent_path = if root {
                 quote!(::std::string::String::from(#marker_name))

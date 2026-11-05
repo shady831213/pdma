@@ -98,6 +98,15 @@ impl<I: fmt::Debug> std::error::Error for RegisterMapValidationError<I> {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RegisterMapError<I = u16, F = u16> {
+    /// Attached placement metadata disagrees with the resolved layout.
+    PlacementGeometry {
+        /// Root map name.
+        root: &'static str,
+        /// Invalid placement path.
+        path: String,
+        /// Checked geometry failure.
+        source: crate::RegisterBankError,
+    },
     /// Complete placement envelopes intersect, including reserved holes.
     PlacementEnvelopeOverlap {
         #[doc = "Root map name."]

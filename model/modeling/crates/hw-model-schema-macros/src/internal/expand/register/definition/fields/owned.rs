@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 
 use crate::internal::{
     expand::{bits, scalar},
@@ -41,7 +42,10 @@ pub(super) fn expand(
             }
         };
     }
-    let identity = format_ident!("{}_IDENTITY", method.to_string().to_ascii_uppercase());
+    let identity = format_ident!(
+        "{}_IDENTITY",
+        method.unraw().to_string().to_ascii_uppercase()
+    );
     let decoded_value = bits::decode(field, &quote!(u64::from(self.0)));
     quote! {
         #rust_docs

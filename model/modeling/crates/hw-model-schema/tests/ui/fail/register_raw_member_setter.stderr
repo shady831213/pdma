@@ -1,0 +1,5 @@
+error: field generates conflicting member `set_foo`
+ --> tests/ui/fail/register_raw_member_setter.rs:4:29
+  |
+4 |     fields: { r#foo: 0..=0, set_foo: 1..=1 },
+  |                             ^^^^^^^

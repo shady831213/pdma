@@ -206,5 +206,5 @@ pub(super) fn case_type(
     case: &syn::Ident,
 ) -> syn::Ident {
     let union = scalar::type_name(&record.name, field, "");
-    format_ident!("{union}{case}Values")
+    format_ident!("{}{}Values", union, case)
 }

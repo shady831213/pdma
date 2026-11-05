@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 
 use super::{SchemaContext, values::narrow_raw};
 
@@ -21,7 +22,8 @@ pub(super) fn expand(context: &SchemaContext<'_>) -> syn::Result<TokenStream> {
     let specs = specs(context)?;
     let field_count = context.decl.fields.len();
     let member_identities = context.decl.fields.iter().map(|field| {
-        let identity = format_ident!("{}_IDENTITY", field.name.to_string().to_ascii_uppercase());
+        let constant = field.name.unraw().to_string().to_ascii_uppercase();
+        let identity = format_ident!("{}_IDENTITY", constant);
         let member = field.name.to_string();
         quote! {
             #[doc = "Stable identity for one declared bit member."]

@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 
 #[derive(Clone, Copy)]
 pub(super) struct ViewContext<'a> {
@@ -20,7 +21,7 @@ pub(super) fn getter(context: ViewContext<'_>) -> TokenStream {
         facade,
         endian,
     } = context;
-    let identity = format_ident!("{}_IDENTITY", name.to_string().to_ascii_uppercase());
+    let identity = format_ident!("{}_IDENTITY", name.unraw().to_string().to_ascii_uppercase());
     quote! {
         #[doc = "Decodes one reusable typed bits field."]
         pub fn #name(&self) -> ::core::result::Result<<#path as #facade::BitsLayout>::Value, #facade::SchemaCodecError> {
@@ -41,8 +42,8 @@ pub(super) fn setter(context: ViewContext<'_>) -> TokenStream {
         facade,
         endian,
     } = context;
-    let setter = format_ident!("set_{name}");
-    let identity = format_ident!("{}_IDENTITY", name.to_string().to_ascii_uppercase());
+    let setter = format_ident!("set_{}", name);
+    let identity = format_ident!("{}_IDENTITY", name.unraw().to_string().to_ascii_uppercase());
     quote! {
         #[doc = "Encodes one reusable typed bits field."]
         pub fn #setter(&mut self, value: <#path as #facade::BitsLayout>::Value) -> ::core::result::Result<(), #facade::SchemaCodecError> {

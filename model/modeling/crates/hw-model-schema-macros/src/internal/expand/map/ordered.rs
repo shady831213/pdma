@@ -101,7 +101,7 @@ fn expand_fixed(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
         .map(|entry| {
             let group_names = entry.groups.iter().map(syn::Ident::to_string);
             let leaf_name = entry.leaf.to_string();
-            let target = variant(&entry.target.to_string());
+            let target = variant(&entry.target);
             quote!(#facade::RegisterAccessPath::new(
                 &[#(#facade::RegisterAccessGroup::new(#group_names)),*],
                 #facade::RegisterAccessLeaf::new(#leaf_name, #id_name::#target),

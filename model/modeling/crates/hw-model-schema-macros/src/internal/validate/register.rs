@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use syn::ext::IdentExt;
 
 use crate::internal::syntax::{RegisterDefinitionDecl, RegisterFieldsDecl};
 
@@ -43,12 +44,12 @@ pub(in crate::internal) fn check_definition(register: &RegisterDefinitionDecl) -
     let mut views = super::members::Members::new(&["new", "value", "set_value"]);
     let mut owned = super::members::Members::new(&["new", "raw", "ZERO", "RESET"]);
     for field in fields {
-        let name = field.name.to_string();
+        let name = field.name.unraw().to_string();
         views.insert(&field.name, &name)?;
         views.insert(&field.name, &format!("set_{name}"))?;
         owned.insert(&field.name, &name)?;
         owned.insert(&field.name, &format!("with_{name}"))?;
-        if !generated.insert(generated_ident(&field.name.to_string())) {
+        if !generated.insert(generated_ident(&name)) {
             return Err(syn::Error::new(
                 field.name.span(),
                 "generated register field identifier collision",

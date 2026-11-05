@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 
 use crate::internal::syntax::BitsDecl;
 
@@ -101,7 +102,7 @@ pub(super) fn expand(
 fn encoded_fields(decl: &BitsDecl, facade: &TokenStream) -> TokenStream {
     let fields = decl.fields.iter().map(|field| {
         let name = &field.name;
-        let identity = format_ident!("{}_IDENTITY", name.to_string().to_ascii_uppercase());
+        let identity = format_ident!("{}_IDENTITY", name.unraw().to_string().to_ascii_uppercase());
         let lsb = field.start.0;
         let width = crate::internal::expand::bits::width(field);
         let maximum = crate::internal::validate::bits::bit_mask(width);
@@ -129,7 +130,10 @@ fn encoded_fields(decl: &BitsDecl, facade: &TokenStream) -> TokenStream {
 
 fn member_identities(decl: &BitsDecl, owner: &syn::Ident, facade: &TokenStream) -> TokenStream {
     let identities = decl.fields.iter().map(|field| {
-        let identity = format_ident!("{}_IDENTITY", field.name.to_string().to_ascii_uppercase());
+        let identity = format_ident!(
+            "{}_IDENTITY",
+            field.name.unraw().to_string().to_ascii_uppercase()
+        );
         let member = field.name.to_string();
         quote! {
             #[doc = "Stable identity for one declared bit member."]

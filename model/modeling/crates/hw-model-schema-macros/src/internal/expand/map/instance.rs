@@ -5,6 +5,7 @@ use crate::internal::expand::register::variant;
 use crate::internal::{crate_path, syntax::OrderedMapDecl};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 
 pub(super) fn expand(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
     let cursor = local("cursor");
@@ -17,10 +18,10 @@ pub(super) fn expand(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
     let documentation = decl.documentation.metadata(&facade);
     let parameters = &decl.parameters;
     let symbols: Vec<_> = decl.placements.iter().map(|p| &p.symbol).collect();
-    let variants: Vec<_> = symbols.iter().map(|s| variant(&s.to_string())).collect();
+    let variants: Vec<_> = symbols.iter().map(|s| variant(s)).collect();
     let bindings: Vec<_> = symbols
         .iter()
-        .map(|s| local(&format!("__placement_{s}")))
+        .map(|s| local(&format!("__placement_{}", s.unraw())))
         .collect();
     let mut fields = Vec::new();
     let mut initializers = Vec::new();
@@ -80,7 +81,7 @@ pub(super) fn expand(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
                 let mut declaration_index = 0usize;
                 #collectors
                 #facade::finish_ordered_register_map(stringify!(#marker), self.extent, registers)
-                    .map(|map| map.with_documentation(#marker::DOCUMENTATION).with_placements(placements))
+                    .and_then(|map| map.with_documentation(#marker::DOCUMENTATION).with_placements(placements))
             }
         }
         impl #facade::RegisterShape for #layout {

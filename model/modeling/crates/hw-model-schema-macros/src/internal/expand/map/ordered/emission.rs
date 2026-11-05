@@ -94,7 +94,7 @@ pub(super) fn emit(input: Emission<'_>) -> TokenStream {
                     let mut placements = ::std::vec::Vec::new();
                     let mut declaration_index = 0usize;
                     #root_collectors
-                    #facade::finish_ordered_register_map(#marker_name, Self::EXTENT, registers).map(|map| map.with_documentation(Self::DOCUMENTATION).with_placements(placements))
+                    #facade::finish_ordered_register_map(#marker_name, Self::EXTENT, registers).and_then(|map| map.with_documentation(Self::DOCUMENTATION).with_placements(placements))
                 })
             }
             fn __append_registers<I: ::core::marker::Copy + 'static>(collection: #facade::RegisterCollection<'_, I>) {

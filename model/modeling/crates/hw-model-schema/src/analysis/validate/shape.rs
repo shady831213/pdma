@@ -118,6 +118,13 @@ const fn extent(body: &DefinitionBody) -> Option<usize> {
     }
 }
 pub(super) fn union(union: &UnionDefinition) -> Result<(), AnalysisError> {
+    union
+        .storage()
+        .resolve()
+        .map_err(|source| AnalysisError::Record {
+            path: union.storage().name(),
+            source,
+        })?;
     for case in union.cases() {
         let width = match case.body() {
             CaseBody::Inline(record) => record.spec().size(),

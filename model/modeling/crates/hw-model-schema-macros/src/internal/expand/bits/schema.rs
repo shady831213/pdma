@@ -39,7 +39,7 @@ fn identities(context: &SchemaContext<'_>) -> TokenStream {
     let visibility = &context.decl.visibility;
     let field_id = &context.field_id;
     let variants = context.decl.fields.iter().map(|field| {
-        let variant = super::super::register::variant(&field.name.to_string());
+        let variant = super::super::register::variant(&field.name);
         quote!(#[doc = "Stable generated field ID."] #variant)
     });
     quote! {

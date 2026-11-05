@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 
 use crate::internal::syntax::ScalarType;
 
@@ -83,14 +84,14 @@ pub(in crate::internal) fn type_name(
     field: &syn::Ident,
     suffix: &str,
 ) -> syn::Ident {
-    let field = pascal(&field.to_string());
+    let field = pascal(&field.unraw().to_string());
     format_ident!("{record}{field}{suffix}")
 }
 
 pub(super) fn suffixed_path(path: &syn::Path, field: &syn::Ident) -> syn::Path {
     let mut output = path.clone();
     if let Some(last) = output.segments.last_mut() {
-        last.ident = format_ident!("{}{}", last.ident, pascal(&field.to_string()));
+        last.ident = format_ident!("{}{}", last.ident, pascal(&field.unraw().to_string()));
     }
     output
 }

@@ -67,7 +67,7 @@ pub(in crate::internal::expand) fn expand(
                 quote!(<#path as #facade::BitsLayout>::EXTENT),
             ),
             ModernTypeDecl::TaggedUnion(_) => {
-                let ty = format_ident!("{}{}Values", marker, crate::internal::expand::register::variant(&name));
+                let ty = format_ident!("{}{}Values", marker, crate::internal::expand::register::variant(&field.name));
                 (quote!(#facade::ast::FieldType::Union(::std::boxed::Box::new(<#ty as #facade::ast::DescribeUnion>::schema_union()))), quote!(<#ty as #facade::ast::DescribeUnion>::schema_union().storage().size()))
             }
         };

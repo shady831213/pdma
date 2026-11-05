@@ -1,4 +1,5 @@
 mod access;
+mod attachment;
 mod envelope;
 mod error;
 mod layout;

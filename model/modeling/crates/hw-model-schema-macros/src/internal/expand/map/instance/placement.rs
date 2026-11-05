@@ -1,6 +1,7 @@
 use crate::internal::{expand::register::variant, syntax::OrderedPlacementDecl};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 
 pub(super) struct Tokens {
     pub field: TokenStream,
@@ -16,7 +17,7 @@ pub(super) fn expand(
     prefix: &mut Option<TokenStream>,
 ) -> Tokens {
     let symbol = &p.symbol;
-    let binding = super::local(&format!("__placement_{symbol}"));
+    let binding = super::local(&format!("__placement_{}", symbol.unraw()));
     let cursor = super::local("cursor");
     let child = super::local("child");
     let child_alignment = super::local("alignment");
@@ -49,7 +50,7 @@ pub(super) fn expand(
         || quote!(#facade::checked_align_up(#cursor, #facade::RegisterShape::alignment(&#child)).ok_or(#facade::RegisterBankError::Overflow)?),
         |(n, _)| quote!(#n),
     );
-    let constant = format_ident!("{}", symbol.to_string().to_uppercase());
+    let constant = format_ident!("{}", symbol.unraw().to_string().to_uppercase());
     let offset_name = format_ident!("{}_OFFSET", constant);
     let stride_name = format_ident!("{}_STRIDE", constant);
     let mut constants = Vec::new();
@@ -63,7 +64,7 @@ pub(super) fn expand(
     }
     if let (Some(offset), Some(stride)) = (&static_offset, &static_stride) {
         if p.arguments.is_none() && p.count_parameter.is_none() {
-            let variant = variant(&symbol.to_string());
+            let variant = variant(symbol);
             let name = symbol.to_string();
             constants.push(quote!(#[doc = "Fixed placement metadata."] pub const #constant: #facade::RegisterMapPlacement<#id> = #facade::RegisterMapPlacement::new(#id::#variant, #name, #offset, #count, #stride, #facade::RegisterLayoutGeometry::new(<#definition as #facade::RegisterLayout>::ALIGNMENT, <#definition as #facade::RegisterLayout>::EXTENT));));
             let end = quote!(match #facade::checked_placement_end(#offset, #count, #stride, <#definition as #facade::RegisterLayout>::EXTENT) { ::core::option::Option::Some(end) => end, ::core::option::Option::None => usize::MAX });

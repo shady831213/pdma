@@ -7,6 +7,7 @@ use hw_model_schema::{
 
 use located_child::LocatedChild;
 
+mod analysis;
 mod errors;
 mod layout;
 pub mod located_child;

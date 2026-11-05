@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 
 use crate::internal::{expand::register::variant, syntax::OrderedPlacementDecl};
 
@@ -27,8 +28,8 @@ pub(super) fn placement_geometry(
     let definition = &placement.definition;
     let documentation = placement.documentation.metadata(facade);
     let rust_docs = placement.documentation.rust_docs();
-    let item_variant = variant(&symbol.to_string());
-    let constant = format_ident!("{}", symbol.to_string().to_uppercase());
+    let item_variant = variant(symbol);
+    let constant = format_ident!("{}", symbol.unraw().to_string().to_uppercase());
     let identity_name = format_ident!("{}_IDENTITY", constant);
     let offset_name = format_ident!("__{}_OFFSET", constant);
     let stride_name = format_ident!("__{}_STRIDE", constant);

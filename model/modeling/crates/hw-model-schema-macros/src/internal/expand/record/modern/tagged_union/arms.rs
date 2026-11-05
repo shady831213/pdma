@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 
 use crate::internal::syntax::{ModernRecordDecl, TaggedUnionDecl};
 
@@ -22,7 +23,7 @@ pub(super) fn decode(context: &Context<'_>) -> Vec<TokenStream> {
     let record_marker = &context.record.name;
     let union_identity = format_ident!(
         "{}_IDENTITY",
-        context.field.to_string().to_ascii_uppercase()
+        context.field.unraw().to_string().to_ascii_uppercase()
     );
     let storage_type = &context.storage.ty;
     context

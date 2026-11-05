@@ -108,7 +108,8 @@ fn ordered_collection_keeps_container_docs_separate_from_leaf_docs() {
     );
     let resolved = finish_ordered_register_map("Root", 4, registers)
         .expect("valid map")
-        .with_placements(placements);
+        .with_placements(placements)
+        .expect("valid placement metadata");
     // Then container documentation stays queryable without becoming leaf fallback.
     let group = resolved.placements().first().expect("group");
     assert_eq!(

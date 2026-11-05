@@ -13,7 +13,7 @@ pub(super) fn expand(
         let symbol = &p.symbol;
         let name = symbol.to_string();
         let register_name = name.to_ascii_uppercase();
-        let variant = variant(&name);
+        let variant = variant(symbol);
         let documentation = p.documentation.metadata(facade);
         let parent = if root { quote!(stringify!(#marker)) } else { quote!(path) };
         let base = if root { quote!(0usize) } else { quote!(offset) };

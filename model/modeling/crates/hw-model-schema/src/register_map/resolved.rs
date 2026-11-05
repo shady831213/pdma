@@ -162,12 +162,15 @@ pub struct ResolvedRegisterMap<I: 'static = u16, F: 'static = u16> {
 
 impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegisterMap<I, F> {
     /// Attaches nested map instances in depth-first declaration order.
-    #[must_use]
-    pub fn with_placements(mut self, placements: Vec<ResolvedRegisterMapPlacement<I>>) -> Self {
+    pub fn with_placements(
+        mut self,
+        placements: Vec<ResolvedRegisterMapPlacement<I>>,
+    ) -> Result<Self, super::RegisterMapError<I, F>> {
+        self.validate_placements(&placements)?;
         self.placements = placements;
         self.collect_banks();
         self.placements.retain(|node| !node.placement().is_bank());
-        self
+        Ok(self)
     }
 
     /// Returns nested map instances in depth-first declaration order.

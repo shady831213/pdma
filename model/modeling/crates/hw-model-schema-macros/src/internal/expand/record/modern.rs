@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 
 use crate::internal::{
     crate_path,
@@ -28,8 +29,10 @@ pub(super) fn expand(decl: &ModernRecordDecl) -> syn::Result<TokenStream> {
     members::check(decl, &plan, &facade)?;
     let type_items = decl.fields.iter().map(|field| match &field.ty {
         crate::internal::syntax::ModernTypeDecl::Enum(enum_decl) => {
-            let identity =
-                format_ident!("{}_IDENTITY", field.name.to_string().to_ascii_uppercase());
+            let identity = format_ident!(
+                "{}_IDENTITY",
+                field.name.unraw().to_string().to_ascii_uppercase()
+            );
             enumeration::expand(
                 marker,
                 &field.name,

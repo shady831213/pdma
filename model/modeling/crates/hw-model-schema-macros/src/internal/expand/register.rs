@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 use syn::parse2;
 
 use crate::internal::syntax::RegisterDefinitionDecl;
@@ -17,10 +18,12 @@ pub(in crate::internal) fn run(input: TokenStream) -> TokenStream {
         .unwrap_or_else(syn::Error::into_compile_error)
 }
 
-pub(in crate::internal) fn variant(name: &str) -> syn::Ident {
+pub(in crate::internal) fn variant(name: &syn::Ident) -> syn::Ident {
     format_ident!(
         "{}",
-        name.split('_')
+        name.unraw()
+            .to_string()
+            .split('_')
             .map(|part| {
                 let mut chars = part.chars();
                 chars.next().map_or_else(String::new, |first| {

@@ -54,7 +54,7 @@ pub(super) fn emit<'a, B: Backend>(
         Node::Union(v) => backend.union(v, ctx),
         Node::Field(v) => backend.field(v, ctx),
         Node::Case(v) => backend.case(v, ctx),
-        Node::Attribute(v) => match (v, ctx.field().is_some()) {
+        Node::Attribute(v) => match (v, matches!(ctx.ancestors().last(), Some(Node::Field(_)))) {
             (Attribute::Size(v), false) => backend.record_size(v, ctx),
             (Attribute::Size(v), true) => backend.field_size(v, ctx),
             (Attribute::Alignment(v), _) => backend.record_alignment(v, ctx),

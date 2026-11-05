@@ -115,8 +115,8 @@ fn duplicate_source_names_keep_distinct_offsets_and_fail_target_naming()
         hw_model_schema::export::ExportError::Render(CHeaderExportError::NameCollision {
             first_path: "C_DUPLICATE_C_DUPLICATE_OFFSET".into(),
             second_path: "C_DUPLICATE_C_DUPLICATE_OFFSET".into(),
-            first_index: 7,
-            second_index: 10,
+            first_index: 9,
+            second_index: 14,
         })
     );
     assert!(sink.artifacts().is_empty());

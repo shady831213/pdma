@@ -78,3 +78,42 @@ fn bits_macro_declarations_reject_collisions_after_the_significant_prefix()
     assert!(sink.artifacts().is_empty());
     Ok(())
 }
+
+#[test]
+fn accessor_function_names_use_the_final_c_symbol_scope() -> super::support::TestResult {
+    use hw_model_schema::{FieldSpec, RecordSpec, ScalarKind};
+    const PREFIX: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const FIELDS: [FieldSpec; 2] = [
+        FieldSpec::new(
+            0,
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab",
+            0,
+            ScalarKind::U8,
+        ),
+        FieldSpec::new(
+            1,
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac",
+            1,
+            ScalarKind::U8,
+        ),
+    ];
+    let schema = AnalyzedSchema::opaque("r", RecordSpec::new(2, 1, &FIELDS))?;
+    let mut sink = InMemoryArtifactSink::new();
+    let result = hw_model_schema::analysis::Pipeline::new((&schema, ()))
+        .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?
+        .generate(CRecordBackend::new, &mut sink);
+    let first = format!("C_R_LOAD_C_{}B", PREFIX.to_ascii_uppercase());
+    let second = format!("C_R_LOAD_C_{}C", PREFIX.to_ascii_uppercase());
+    assert_eq!(first.len(), 64);
+    assert_eq!(
+        result,
+        Err(ExportError::Render(CHeaderExportError::NameCollision {
+            first_path: first,
+            second_path: second,
+            first_index: 7,
+            second_index: 12,
+        }))
+    );
+    assert!(sink.artifacts().is_empty());
+    Ok(())
+}

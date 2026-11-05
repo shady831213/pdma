@@ -11,12 +11,16 @@ pub(super) struct Fragment {
 }
 
 impl Fragment {
+    pub(super) fn declare(&mut self, name: &str) -> Result<(), CHeaderExportError> {
+        self.symbols.insert(name, name)
+    }
+
     pub(super) fn define(
         &mut self,
         name: &str,
         value: impl Display,
     ) -> Result<(), CHeaderExportError> {
-        self.symbols.insert(name, name)?;
+        self.declare(name)?;
         writeln!(self.text, "#define {name} {value}").map_err(CHeaderExportError::Format)
     }
 

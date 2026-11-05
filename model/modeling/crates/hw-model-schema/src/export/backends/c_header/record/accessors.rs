@@ -16,25 +16,31 @@ pub(super) fn scalar_accessors(
         &format!("{}_ENDIAN", names.metadata),
         format_args!("{}_ENDIAN_{endian}", names.prefix),
     )?;
-    push_load(&mut output.text, names, field);
-    push_store(&mut output.text, names, field);
-    Ok(())
+    push_load(output, names, field)?;
+    push_store(output, names, field)
 }
 
-fn push_load(output: &mut String, names: FieldNames<'_>, field: FieldDefinition) {
+fn push_load(
+    output: &mut Fragment,
+    names: FieldNames<'_>,
+    field: FieldDefinition,
+) -> Result<(), CHeaderExportError> {
     let c_type = c_type(field.scalar());
     let FieldNames {
         prefix,
         field: field_name,
         metadata,
     } = names;
+    let function = format!("{prefix}_LOAD_{field_name}");
+    output.declare(&function)?;
+    let output = &mut output.text;
     let _ = writeln!(
         output,
-        "static inline {c_type} {prefix}_LOAD_{field_name}(const uint8_t bytes[{prefix}_SIZE]) {{"
+        "static inline {c_type} {function}(const uint8_t bytes[{prefix}_SIZE]) {{"
     );
     if field.width() == 1 {
         let _ = writeln!(output, "    return ({c_type})bytes[{metadata}_OFFSET];\n}}");
-        return;
+        return Ok(());
     }
     let _ = write!(output, "    return ({c_type})(");
     for byte_index in 0..field.width() {
@@ -57,18 +63,26 @@ fn push_load(output: &mut String, names: FieldNames<'_>, field: FieldDefinition)
         }
     }
     output.push_str(");\n}\n");
+    Ok(())
 }
 
-fn push_store(output: &mut String, names: FieldNames<'_>, field: FieldDefinition) {
+fn push_store(
+    output: &mut Fragment,
+    names: FieldNames<'_>,
+    field: FieldDefinition,
+) -> Result<(), CHeaderExportError> {
     let c_type = c_type(field.scalar());
     let FieldNames {
         prefix,
         field: field_name,
         metadata,
     } = names;
+    let function = format!("{prefix}_STORE_{field_name}");
+    output.declare(&function)?;
+    let output = &mut output.text;
     let _ = writeln!(
         output,
-        "static inline void {prefix}_STORE_{field_name}(uint8_t bytes[{prefix}_SIZE], {c_type} value) {{"
+        "static inline void {function}(uint8_t bytes[{prefix}_SIZE], {c_type} value) {{"
     );
     for byte_index in 0..field.width() {
         let _ = write!(output, "    bytes[{metadata}_OFFSET");
@@ -86,6 +100,7 @@ fn push_store(output: &mut String, names: FieldNames<'_>, field: FieldDefinition
         }
     }
     output.push_str("}\n");
+    Ok(())
 }
 
 #[derive(Clone, Copy)]

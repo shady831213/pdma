@@ -1,12 +1,33 @@
 # Publishing the reusable libraries
 
-The schema release candidate is **0.2.0** for both `hw-model-schema` and
+The published schema release is **0.2.0** for both `hw-model-schema` and
 `hw-model-schema-macros`, edition 2024, with **Rust 1.96** as its supported baseline
-and **MIT OR Apache-2.0** licensing. Their published baseline is 0.1.0; this candidate
-has not been uploaded. Other reusable crates are not part of this release.
+and **MIT OR Apache-2.0** licensing. Both versions were uploaded on 2026-11-05;
+other reusable crates remain at 0.1.0 and are not part of this release.
 The six library manifests allow only
 the `crates-io` registry; the workspace default, PDMA packages and standalone test
 fixtures keep publication disabled.
+
+## Schema 0.2.0 provenance
+
+Reviewed source: `6813eba7ae05810a028055c2dd086761d106bc8c`. Both packages passed
+archive tests, all eight facade feature combinations, strict lint/docs checks,
+native C/Veryl consumers and downstream discovery/exporter validation. Publication
+used normal Cargo verification and the existing crates.io credential provider,
+with no sibling patch, `--no-verify` or `--allow-dirty` option.
+
+The workspace's application dependencies already required the unpublished schema
+version. Cargo therefore rejected direct workspace publication during resolution,
+before uploading anything. Publication proceeded from the verified package
+directories outside that workspace, macros first, then facade against the newly
+published macros. Source, tests, examples, README and license files were compared
+byte-for-byte with the reviewed archives before upload. Cargo regenerated package
+manifests/lockfiles; these standalone uploads have no automatic Git VCS stamp.
+The reviewed source commit above records their provenance explicitly.
+
+PDMA's dependency requirements were already 0.2.0 during review. Release adoption
+updates the workspace and standalone fixture lockfiles to registry identities and
+checksums; local maintenance members remain distinct from those dependencies.
 
 ## Release contents and order
 
@@ -71,7 +92,7 @@ Configure credentials through `cargo login` or an approved credential provider;
 never put tokens in this repository, shell command arguments or review logs.
 Recheck version availability just before upload; preparation does not reserve a version.
 
-Only after explicit release authorization, publish this schema release from the
+Only after explicit release authorization, publish a schema release from the
 reviewed commit in order:
 
 ```sh
@@ -79,6 +100,12 @@ cargo publish --registry crates-io -p hw-model-schema-macros
 # Wait for prerequisites to become available in the registry before dependents.
 cargo publish --registry crates-io -p hw-model-schema
 ```
+
+If unpublished application dependencies prevent workspace resolution, use the
+verified package directories as isolated manifests with `--manifest-path` instead.
+Compare all shipped source with the reviewed commit, use an unpatched Cargo
+environment, and retain normal package verification for each upload. Record the
+source commit separately when the isolated package has no Git VCS metadata.
 
 If an upload fails, stop and check which versions actually reached the registry;
 resume from the first unpublished package rather than republishing a completed one.

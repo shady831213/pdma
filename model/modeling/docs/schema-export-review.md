@@ -1,4 +1,4 @@
-# Schema export review candidate
+# Schema export design and review record
 
 Current output contract: backends stream directly into caller-provided `io::Write`.
 `prepare` exposes bound units with `OutputMetadata` carrying logical name and media
@@ -6,13 +6,14 @@ type without owning bytes. Historical validation notes below describe earlier ch
 their no-partial-artifact guarantee no longer applies to direct streaming.
 Callers may explicitly stage output before publication.
 
-Status: unpublished 0.2.0. Publication requires renewed user approval. Normal
-consumers keep crates.io dependencies; candidate checks use an external Cargo-home
-patch configuration, never a checked-in default override.
+Status: schema and schema-macros 0.2.0 were published on 2026-11-05 after user
+authorization and final review of `6813eba7ae05810a028055c2dd086761d106bc8c`.
+Normal PDMA and downstream builds now consume these registry releases without
+preview patches. See [publishing.md](publishing.md) for release provenance.
 
-Next user review: inspect the C header backend implementation, including record
-accessors and register metadata/naming. The Veryl backend has been inspected by
-the user; this checkpoint does not authorize publication.
+The candidate status, temporary patch recipe and intermediate validation results
+below are historical checkpoints, not current publication restrictions or normal
+build instructions. Both C and Veryl backends completed review before release.
 
 ## Decision and checkpoint
 

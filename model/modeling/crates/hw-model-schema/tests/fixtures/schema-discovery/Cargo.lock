@@ -17,6 +17,8 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 [[package]]
 name = "hw-model-schema"
 version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b623635263a60dbbcefecf00b55fc114af9fc4864e19c5f7dc0ed497efea8c87"
 dependencies = [
  "hw-model-schema-macros",
  "inventory",
@@ -25,6 +27,8 @@ dependencies = [
 [[package]]
 name = "hw-model-schema-macros"
 version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "559462c0c5a9f4a734f99ce6ed0c21f1f581ff66481375e59de91ef87066c72b"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",

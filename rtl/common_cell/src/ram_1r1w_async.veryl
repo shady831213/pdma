@@ -1,0 +1,13 @@
+// No forwarding across unrelated clocks. Caller owns collision exclusion and data publication.
+pub module Ram1R1WAsync::<CELL: Ram1R1WAsyncContract> #(
+    param DEPTH     : u32 = 8                                ,
+    param WIDTH     : u32 = 32                               ,
+    const ADDR_WIDTH: u32 = if DEPTH >: 1 ? $clog2(DEPTH) : 1,
+) (
+    read_clk  : input   'r clock               ,
+    write_clk : input   'w clock               ,
+    read_port : modport 'r RamReadPort::memory ,
+    write_port: modport 'w RamWritePort::memory,
+) {
+    inst u_ram: CELL #( DEPTH, WIDTH ) ( read_clk, write_clk, read_port, write_port );
+}

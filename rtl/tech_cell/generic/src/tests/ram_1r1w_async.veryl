@@ -1,0 +1,44 @@
+#[test(ram_async_clocked_read_mask_and_handoff)]
+module RamAsyncTest {
+    inst read_clk  :    $tb::clock_gen #( period: 14 );
+    inst write_clk :    $tb::clock_gen #( period: 10 );
+    inst read_port : 'r common_cell::RamReadPort #( ADDR_WIDTH: 2, WIDTH: 13 );
+    inst write_port: 'w common_cell::RamWritePort #( ADDR_WIDTH: 2, WIDTH: 13 );
+    inst dut       :    Ram1R1WAsync #( DEPTH: 3, WIDTH: 13 ) ( read_clk, write_clk, read_port, write_port );
+    initial {
+        read_port.enable   = 0;
+        read_port.address  = 2;
+        write_port.enable  = 0;
+        write_port.address = 2;
+        write_port.data    = 13'h123;
+        write_port.mask    = '1;
+        write_clk.next(2);
+        write_port.enable = 1;
+        write_clk.next();
+        write_port.enable = 0;
+        read_clk.next(2);
+        read_port.enable = 1;
+        read_clk.next();
+        $assert(read_port.data == 13'h123);
+        read_port.enable = 0;
+        write_clk.next(2);
+        write_port.data   = '1;
+        write_port.mask   = 13'h1004;
+        write_port.enable = 1;
+        write_clk.next();
+        write_port.enable = 0;
+        read_clk.next(2);
+        read_port.enable = 1;
+        read_clk.next();
+        $assert(read_port.data == 13'h1127);
+        // A zero mask causes no write, so a concurrent same-address read remains legal.
+        write_clk.next();
+        write_port.enable = 1;
+        write_port.mask   = 0;
+        write_port.data   = 0;
+        write_clk.next(2);
+        read_clk.next(2);
+        $assert(read_port.data == 13'h1127);
+        $finish();
+    }
+}

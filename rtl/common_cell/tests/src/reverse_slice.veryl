@@ -1,0 +1,75 @@
+#[test(reverse_slice_registered_ready_and_custody)]
+module ReverseSliceTest {
+    struct Beat {
+        tag    : logic<3> ,
+        payload: logic<13>,
+    }
+    inst clk: $tb::clock_gen #( period: 10 );
+    inst rst: $tb::reset_gen ( clk );
+    var i_valid : logic;
+    var o_ready : logic;
+    var i_data  : Beat ;
+    var o_valid : logic;
+    var i_ready : logic;
+    var o_data  : Beat ;
+    var o_empty : logic;
+    var occupied: logic;
+    assign o_empty = !occupied;
+    inst dut: common_cell::ReadyValidSlice #(
+        TYPE: Beat                                       ,
+        MODE: common_cell::ReadyValid::SliceMode::Reverse,
+    ) (
+        clk              ,
+        rst_n   : rst    ,
+        s_valid : i_valid,
+        s_ready : o_ready,
+        s_data  : i_data ,
+        m_valid : o_valid,
+        m_ready : i_ready,
+        m_data  : o_data ,
+        occupied         ,
+    );
+    initial {
+        i_valid = 0;
+        i_ready = 0;
+        i_data  = '0;
+        rst.assert();
+        clk.next(3);
+        $assert(o_empty && o_ready && !o_valid, "RESET_EMPTY");
+        i_valid        = 1;
+        i_data.tag     = 5;
+        i_data.payload = 13'h123;
+        $assert(o_ready && o_empty && o_valid && o_data == i_data, "EMPTY_FALLTHROUGH");
+        i_ready = 1;
+        $assert(o_ready, "READY_INDEPENDENT_DOWNSTREAM_RISE");
+        i_ready = 0;
+        $assert(o_ready, "READY_INDEPENDENT_DOWNSTREAM_FALL");
+        clk.next();
+        i_valid = 0;
+        i_data  = '0;
+        $assert(!o_ready && !o_empty && o_valid, "CAPTURE_CUSTODY");
+        for cycle in 0..4 {
+            $assert(o_data.tag == 5 && o_data.payload == 13'h123, "STALL_STABLE");
+            clk.next();
+        }
+        i_valid    = 1;
+        i_data.tag = 2;
+        i_ready    = 1;
+        $assert(!o_ready && o_data.tag == 5, "DRAIN_NO_REPLACE");
+        clk.next();
+        $assert(o_ready && o_empty && o_valid && o_data.tag == 2, "POST_DRAIN_FALLTHROUGH");
+        for beat in 0..16 {
+            i_data.payload = beat as 13;
+            $assert(o_ready && o_valid && o_data == i_data, "ZERO_LATENCY_II1");
+            clk.next();
+        }
+        i_ready = 0;
+        clk.next();
+        $assert(!o_empty && !o_ready, "REFILL");
+        i_valid = 0;
+        rst.assert();
+        clk.next(3);
+        $assert(o_empty && !o_valid && o_ready, "RESET_DISCARDS_CUSTODY");
+        $finish();
+    }
+}

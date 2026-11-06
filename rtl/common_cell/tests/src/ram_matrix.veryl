@@ -1,0 +1,202 @@
+#[test(ram_depth_mask_concurrency_and_forwarding)]
+module RamMatrixTest {
+    // Generate type widths are checked even when test support is inactive.
+    const DEPTHS: u32 [6] = '{3, 3, 3, 1, 1, 1};
+    #[ifdef(TEST_SUPPORT)]
+    {
+        type Word = RamReference::Word;
+        inst clk: $tb::clock_gen #( period: 10 );
+        var read_enable  : logic [6];
+        var write_enable : logic [6];
+        var read_address : u32   [6];
+        var write_address: u32   [6];
+        var write_data   : Word  [6];
+        var write_mask   : Word  [6];
+        var read_data    : Word  [6];
+    }
+    for n in 0..6 :cases {
+        const AW : u32       = if DEPTHS[n] >: 1 ? $clog2(DEPTHS[n]) : 1;
+        type Row = logic<AW>;
+        #[ifdef(TEST_SUPPORT)]
+        {
+            if n % 3 == 0 :single {
+                inst port: common_cell::RamReadWritePort #( ADDR_WIDTH: AW, WIDTH: 32 );
+                assign port.enable       = read_enable[n] || write_enable[n];
+                assign port.write_enable = write_enable[n];
+                assign port.address      = (if write_enable[n] ? write_address[n] : read_address[n]) as Row;
+                assign port.write_data   = write_data[n];
+                assign port.write_mask   = write_mask[n];
+                assign read_data[n]      = port.read_data;
+                inst ram: common_cell::Ram1RW::<tech_cell_generic::Ram1RW> #(
+                    DEPTH: DEPTHS[n],
+                    WIDTH: 32       ,
+                ) (
+                    clk   ,
+                    port  ,
+                );
+            } else :dual {
+                inst rp: common_cell::RamReadPort #( ADDR_WIDTH: AW, WIDTH: 32 );
+                inst wp: common_cell::RamWritePort #( ADDR_WIDTH: AW, WIDTH: 32 );
+                assign rp.enable    = read_enable[n];
+                assign rp.address   = read_address[n] as Row;
+                assign read_data[n] = rp.data;
+                assign wp.enable    = write_enable[n];
+                assign wp.address   = write_address[n] as Row;
+                assign wp.data      = write_data[n];
+                assign wp.mask      = write_mask[n];
+                inst ram: common_cell::Ram1R1W::<tech_cell_generic::Ram1R1W> #(
+                    DEPTH           : DEPTHS[n] ,
+                    WIDTH           : 32        ,
+                    FORWARD_NEW_DATA: n % 3 == 2,
+                ) (
+                    clk           ,
+                    read_port : rp,
+                    write_port: wp,
+                );
+            }
+        }
+    }
+    #[ifdef(TEST_SUPPORT)]
+    {
+        var words        : Word [6, 3];
+        var expected     : Word [6]   ;
+        var random_state : u32        ;
+        var random_states: u32  [6]   ;
+        var reads        : u32  [6]   ;
+        var partial      : u32  [6]   ;
+        var zero         : u32  [6]   ;
+        var concurrent   : u32  [6]   ;
+        var forwarded    : u32  [6]   ;
+
+        function cycle () {
+            for n in 0..6 {
+                if read_enable[n] && write_enable[n] {
+                    $assert(
+                        n % 3 != 0 && RamReference::dual_access_allowed(read_address[n] == write_address[n], write_mask[n], n % 3 == 2),
+                        "RAM_INPUT_COLLISION",
+                    );
+                    concurrent[n] += 1;
+                }
+                if read_enable[n] {
+                    expected[n] = words[n][read_address[n]];
+                    if write_enable[n]
+                        && RamReference::forwards(read_address[n] == write_address[n], write_mask[n], n % 3 == 2) {
+                        expected[n]  =  write_data[n];
+                        forwarded[n] += 1;
+                    }
+                    #[ifdef(RAM_SCOREBOARD_NEGATIVE)]
+                    if n == 0 && reads[n] == 2 {
+                        expected[n] ^= 1;
+                    }
+                    reads[n] += 1;
+                }
+                if write_enable[n] {
+                    words[n][write_address[n]] = RamReference::masked_write(
+                        words[n][write_address[n]],
+                        write_data[n],
+                        write_mask[n],
+                    );
+                    if write_mask[n] == 0 {
+                        zero[n] += 1;
+                    } else if write_mask[n] != 32'hffff_ffff {
+                        partial[n] += 1;
+                    }
+                }
+            }
+            clk.next();
+            for n in 0..6 {
+                if read_enable[n] {
+                    $assert(read_data[n] == expected[n], "RAM_SCOREBOARD case=%0d", n);
+                }
+            }
+        }
+
+        initial {
+            random_state = 32'h71429;
+            for n in 0..6 {
+                random_states[n] = 32'h71429 + n;
+                read_enable[n]   = 0;
+                write_enable[n]  = 0;
+                read_address[n]  = 0;
+                write_address[n] = 0;
+                write_data[n]    = 0;
+                write_mask[n]    = '1;
+                reads[n]         = 0;
+                partial[n]       = 0;
+                zero[n]          = 0;
+                concurrent[n]    = 0;
+                forwarded[n]     = 0;
+            }
+            clk.next(2);
+            for row in 0..3 {
+                for n in 0..6 {
+                    write_enable[n]  = row <: DEPTHS[n];
+                    write_address[n] = if row <: DEPTHS[n] ? row : 0;
+                    write_data[n]    = row + 17;
+                }
+                cycle();
+            }
+            #[ifdef(RAM_COLLISION_NEGATIVE)]
+            if 1 {
+                read_enable[1]   = 1;
+                write_enable[1]  = 1;
+                read_address[1]  = 0;
+                write_address[1] = 0;
+                cycle();
+            }
+            #[ifdef(RAM_PARTIAL_COLLISION_NEGATIVE)]
+            if 1 {
+                read_enable[2]   = 1;
+                write_enable[2]  = 1;
+                read_address[2]  = 0;
+                write_address[2] = 0;
+                write_mask[2]    = 1;
+                cycle();
+            }
+            for iteration in 0..4096 {
+                for n in 0..6 {
+                    random_states[n] = random_states[n] * 32'd1664525 + 32'd1013904223;
+                    random_state     = random_states[n];
+                    read_enable[n]   = random_state[3:2] != 0;
+                    write_enable[n]  = random_state[5:4] != 0;
+                    read_address[n]  = (random_state >> 8) % DEPTHS[n];
+                    write_address[n] = (random_state >> 16) % DEPTHS[n];
+                    write_data[n]    = random_state;
+                    case iteration % 4 {
+                        0      : write_mask[n] = 0;
+                        1      : write_mask[n] = '1;
+                        2      : write_mask[n] = 32'h80000001;
+                        default: write_mask[n] = random_state;
+                    }
+                    if n % 3 == 0 && read_enable[n] {
+                        write_enable[n] = 0;
+                    }
+                    if n % 3 != 0 && read_enable[n]
+                        && !RamReference::dual_access_allowed(
+                            read_address[n] == write_address[n],
+                            write_mask[n],
+                            n % 3 == 2,
+                        ) {
+                        write_enable[n] = 0;
+                    }
+                }
+                cycle();
+            }
+            for n in 0..6 {
+                $assert(reads[n] == 3072 && partial[n] >: 0 && zero[n] >: 0, "RAM_COVERAGE");
+                if n % 3 != 0 {
+                    $assert(concurrent[n] >: 0);
+                }
+                if n % 3 == 2 {
+                    $assert(forwarded[n] >: 0);
+                }
+            }
+            $display("RAM_MATRIX_PASS configurations=6 reads=18432");
+            $finish();
+        }
+    }
+    #[ifndef(TEST_SUPPORT)]
+    initial {
+        $assert(0, "TEST_SUPPORT_REQUIRED");
+    }
+}

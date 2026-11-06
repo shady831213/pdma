@@ -1,0 +1,15 @@
+// Fixed synchronous read per port clock; no reset or idle-output validity.
+// Positive dimensions/in-range addresses; masked writes preserve unselected bits.
+// Unrelated clocks, not asynchronous read. Caller owns stable-address handoff/collision exclusion.
+// Exclusion covers the physical macro's time aperture, not merely coincident clock edges.
+// Match interface dimensions to the cell; this contract provides no FIFO/CDC controller.
+pub proto module Ram1R1WAsyncContract #(
+    param DEPTH     : u32 = 8                                ,
+    param WIDTH     : u32 = 32                               ,
+    const ADDR_WIDTH: u32 = if DEPTH >: 1 ? $clog2(DEPTH) : 1,
+) (
+    read_clk  : input   'r clock               ,
+    write_clk : input   'w clock               ,
+    read_port : modport 'r RamReadPort::memory ,
+    write_port: modport 'w RamWritePort::memory,
+);

@@ -1,0 +1,39 @@
+pub module Ram1R1W::<CELL: Ram1R1WContract> #(
+    param DEPTH           : u32   = 8                                ,
+    param WIDTH           : u32   = 32                               ,
+    const ADDR_WIDTH      : u32   = if DEPTH >: 1 ? $clog2(DEPTH) : 1,
+    param FORWARD_NEW_DATA: bbool = false                            ,
+) (
+    clk       : input   clock               ,
+    read_port : modport RamReadPort::memory ,
+    write_port: modport RamWritePort::memory,
+) {
+    inst raw_read: RamReadPort #( ADDR_WIDTH, WIDTH );
+    let active_write: logic = write_port.enable && (|write_port.mask);
+    let collision   : logic = read_port.enable && active_write && read_port.address == write_port.address;
+    // Partial-mask same-address read/write is illegal even with forwarding enabled.
+    let forward: logic = FORWARD_NEW_DATA && collision && (&write_port.mask);
+    assign raw_read.enable  = read_port.enable && !forward;
+    assign raw_read.address = read_port.address;
+    inst u_ram: CELL #(
+        DEPTH  ,
+        WIDTH  ,
+    ) (
+        clk                 ,
+        read_port : raw_read,
+        write_port          ,
+    );
+    if FORWARD_NEW_DATA :g_forward {
+        var forward_q: logic       ;
+        var data_q   : logic<WIDTH>;
+        always_ff (clk) {
+            forward_q = forward;
+            if forward {
+                data_q = write_port.data;
+            }
+        }
+        assign read_port.data = if forward_q ? data_q : raw_read.data;
+    } else :g_direct {
+        assign read_port.data = raw_read.data;
+    }
+}

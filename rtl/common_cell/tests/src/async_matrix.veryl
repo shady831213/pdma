@@ -1,0 +1,211 @@
+#[test(ram_async_depth_width_edge_interleaving_and_concurrency)]
+module AsyncMatrixTest {
+    #[ifdef(TEST_SUPPORT)]
+    {
+        const DEPTHS: u32                [3] = '{1, 3, 5};
+        const WIDTHS: u32                [3] = '{13, 32, 13};
+        type Word   = RamReference::Word    ;
+        inst read0 :    $tb::clock_gen #( period: 14 );
+        inst write0:    $tb::clock_gen #( period: 10 );
+        inst read1 :    $tb::clock_gen #( period: 10 );
+        inst write1:    $tb::clock_gen #( period: 14 );
+        inst read2 :    $tb::clock_gen #( period: 22 );
+        inst write2:    $tb::clock_gen #( period: 6 );
+        var read_enable      : 'r logic     [3];
+        var write_enable     : 'w logic     [3];
+        var read_address     : 'r u32       [3];
+        var write_address    : 'w u32       [3];
+        var write_data       : 'w Word      [3];
+        var write_mask       : 'w Word      [3];
+        var read_data        : 'r Word      [3];
+        var expected         : 'r Word      [3];
+        var width_mask       : 'r Word      [3];
+        var concurrent_checks:    u32          ;
+        type Row0              = logic<1>     ;
+        type Data0             = logic<13>    ;
+        inst rp0: 'r common_cell::RamReadPort #( ADDR_WIDTH: 1, WIDTH: 13 );
+        inst wp0: 'w common_cell::RamWritePort #( ADDR_WIDTH: 1, WIDTH: 13 );
+        assign rp0.enable   = read_enable[0];
+        assign rp0.address  = read_address[0] as Row0;
+        assign read_data[0] = rp0.data as Word;
+        assign wp0.enable   = write_enable[0];
+        assign wp0.address  = write_address[0] as Row0;
+        assign wp0.data     = write_data[0] as Data0;
+        assign wp0.mask     = write_mask[0] as Data0;
+        inst memory0: common_cell::Ram1R1WAsync::<tech_cell_generic::Ram1R1WAsync> #(
+            DEPTH: 1 ,
+            WIDTH: 13,
+        ) (
+            read_clk  : read0 ,
+            write_clk : write0,
+            read_port : rp0   ,
+            write_port: wp0   ,
+        );
+        type Row1  = logic<2> ;
+        type Data1 = logic<32>;
+        inst rp1: 'r common_cell::RamReadPort #( ADDR_WIDTH: 2, WIDTH: 32 );
+        inst wp1: 'w common_cell::RamWritePort #( ADDR_WIDTH: 2, WIDTH: 32 );
+        assign rp1.enable   = read_enable[1];
+        assign rp1.address  = read_address[1] as Row1;
+        assign read_data[1] = rp1.data as Word;
+        assign wp1.enable   = write_enable[1];
+        assign wp1.address  = write_address[1] as Row1;
+        assign wp1.data     = write_data[1] as Data1;
+        assign wp1.mask     = write_mask[1] as Data1;
+        inst memory1: common_cell::Ram1R1WAsync::<tech_cell_generic::Ram1R1WAsync> #(
+            DEPTH: 3 ,
+            WIDTH: 32,
+        ) (
+            read_clk  : read1 ,
+            write_clk : write1,
+            read_port : rp1   ,
+            write_port: wp1   ,
+        );
+        type Row2  = logic<3> ;
+        type Data2 = logic<13>;
+        inst rp2: 'r common_cell::RamReadPort #( ADDR_WIDTH: 3, WIDTH: 13 );
+        inst wp2: 'w common_cell::RamWritePort #( ADDR_WIDTH: 3, WIDTH: 13 );
+        assign rp2.enable   = read_enable[2];
+        assign rp2.address  = read_address[2] as Row2;
+        assign read_data[2] = rp2.data as Word;
+        assign wp2.enable   = write_enable[2];
+        assign wp2.address  = write_address[2] as Row2;
+        assign wp2.data     = write_data[2] as Data2;
+        assign wp2.mask     = write_mask[2] as Data2;
+        inst memory2: common_cell::Ram1R1WAsync::<tech_cell_generic::Ram1R1WAsync> #(
+            DEPTH: 5 ,
+            WIDTH: 13,
+        ) (
+            read_clk  : read2 ,
+            write_clk : write2,
+            read_port : rp2   ,
+            write_port: wp2   ,
+        );
+        function check_last () {
+            for n in 0..3 {
+                $assert(read_data[n] == expected[n], "RAM_ASYNC_SCOREBOARD case=%0d", n);
+            }
+        }
+        // Native clock.next drives only its named clock; explicitly exercise both edge orders.
+        function advance () {
+            write0.next(7);
+            read0.next(5);
+            read1.next(7);
+            write1.next(5);
+            write2.next(11);
+            read2.next(3);
+        }
+        initial {
+            concurrent_checks = 0;
+            for n in 0..3 {
+                read_enable[n]   = 0;
+                write_enable[n]  = 0;
+                read_address[n]  = 0;
+                write_address[n] = 0;
+                write_data[n]    = 0;
+                write_mask[n]    = '1;
+                width_mask[n]    = if WIDTHS[n] == 32 ? 32'hffff_ffff : 32'h1fff;
+                expected[n]      = 0;
+            }
+            advance();
+            // Each held write spans multiple write clocks; repeated masked writes are idempotent.
+            for row in 0..5 {
+                for n in 0..3 {
+                    write_enable[n]  = row <: DEPTHS[n];
+                    write_address[n] = if row <: DEPTHS[n] ? row : 0;
+                    write_data[n]    = 32'h123 + row;
+                    if row == DEPTHS[n] - 1 {
+                        expected[n] = 32'h123 + row;
+                    }
+                }
+                advance();
+            }
+            for n in 0..3 {
+                write_enable[n] = 0;
+            }
+            advance();
+            for n in 0..3 {
+                read_enable[n]  = 1;
+                read_address[n] = DEPTHS[n] - 1;
+            }
+            advance();
+            #[ifdef(ASYNC_SCOREBOARD_NEGATIVE)]
+            expected[0] ^= 1;
+            check_last();
+            for n in 0..3 {
+                read_enable[n] = 0;
+            }
+            advance();
+            for n in 0..3 {
+                write_enable[n]  =  1;
+                write_address[n] =  DEPTHS[n] - 1;
+                write_data[n]    =  '1;
+                write_mask[n]    =  32'h1005;
+                expected[n]      |= 32'h1005;
+            }
+            advance();
+            for n in 0..3 {
+                write_enable[n] = 0;
+            }
+            advance();
+            for n in 0..3 {
+                read_enable[n] = 1;
+            }
+            advance();
+            check_last();
+            for n in 0..3 {
+                write_enable[n] = 1;
+                write_mask[n]   = 0;
+                write_data[n]   = 0;
+            }
+            advance();
+            check_last();
+            for n in 0..3 {
+                read_enable[n]  = 0;
+                write_enable[n] = 0;
+            }
+            advance();
+            // Static row ownership excludes collisions without inventing a macro timing aperture.
+            for n in 0..3 {
+                read_address[n] = 0;
+                read_enable[n]  = DEPTHS[n] >: 1;
+            }
+            advance();
+            for iteration in 0..128 {
+                for n in 0..3 {
+                    write_enable[n] = DEPTHS[n] >: 1;
+                    write_data[n]   = iteration;
+                    write_mask[n]   = 32'h1555;
+                    if DEPTHS[n] >: 1 {
+                        expected[n] = RamReference::masked_write(expected[n], iteration, 32'h1555) & width_mask[n];
+                    }
+                }
+                for _sample in 0..64 {
+                    advance();
+                    for n in 1..3 {
+                        $assert(read_data[n] == 32'h123, "RAM_ASYNC_CONCURRENT_ROW");
+                        concurrent_checks += 1;
+                    }
+                }
+            }
+            for n in 0..3 {
+                write_enable[n] = 0;
+                read_enable[n]  = 0;
+            }
+            advance();
+            for n in 0..3 {
+                read_address[n] = DEPTHS[n] - 1;
+                read_enable[n]  = 1;
+            }
+            advance();
+            check_last();
+            $assert(concurrent_checks == 16384);
+            $display("RAM_ASYNC_MATRIX_PASS configurations=3 concurrent_checks=16384");
+            $finish();
+        }
+    }
+    #[ifndef(TEST_SUPPORT)]
+    initial {
+        $assert(0, "TEST_SUPPORT_REQUIRED");
+    }
+}

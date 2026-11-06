@@ -1,0 +1,166 @@
+#[test(slice_modes_capacity_latency_stall_reset_and_rate)]
+module SliceMatrixTest {
+    const MODES   : common_cell::ReadyValid::SliceMode [4] = '{
+        common_cell::ReadyValid::SliceMode::Bypass, common_cell::ReadyValid::SliceMode::Forward,
+        common_cell::ReadyValid::SliceMode::Reverse, common_cell::ReadyValid::SliceMode::Full,
+    };
+    const CAPACITY: u32                                [4] = '{0, 1, 1, 2};
+    const LATENCY : u32                                [4] = '{0, 1, 0, 1};
+    inst clk  : $tb::clock_gen #( period: 10 );
+    inst rst_n: $tb::reset_gen ( clk );
+    var s_valid  : logic     [4];
+    var s_ready  : logic     [4];
+    var s_data   : logic<17> [4];
+    var m_valid  : logic     [4];
+    var m_ready  : logic     [4];
+    var m_data   : logic<17> [4];
+    var occupied : logic     [4];
+    var sent     : u32       [4];
+    var received : u32       [4];
+    var accepted : logic     [4];
+    var held     : logic     [4];
+    var held_data: logic<17> [4];
+    for n in 0..4 :cases {
+        inst dut: common_cell::ReadyValidSlice #(
+            TYPE: logic<17>,
+            MODE: MODES[n] ,
+        ) (
+            clk                  ,
+            rst_n                ,
+            s_valid : s_valid[n] ,
+            s_ready : s_ready[n] ,
+            s_data  : s_data[n]  ,
+            m_valid : m_valid[n] ,
+            m_ready : m_ready[n] ,
+            m_data  : m_data[n]  ,
+            occupied: occupied[n],
+        );
+    }
+    function cycle () {
+        for n in 0..4 {
+            s_data[n] = (17'h10000 + sent[n]) as 17;
+            if held[n] {
+                $assert(m_valid[n] && m_data[n] == held_data[n], "HELD_OUTPUT mode=%0d", n);
+            }
+            held[n]      = m_valid[n] && !m_ready[n];
+            held_data[n] = m_data[n];
+            accepted[n]  = s_valid[n] && s_ready[n];
+            if accepted[n] {
+                sent[n] += 1;
+            }
+            if m_valid[n] && m_ready[n] {
+                $assert(received[n] <: sent[n], "NO_UNACCEPTED_OUTPUT mode=%0d", n);
+                $assert(m_data[n] == 17'h10000 + received[n], "FIFO_ORDER mode=%0d", n);
+                received[n] += 1;
+            }
+        }
+        clk.next();
+        for n in 0..4 {
+            $assert(sent[n] - received[n] <= CAPACITY[n], "CAPACITY_BOUND mode=%0d", n);
+            $assert(occupied[n] == (sent[n] != received[n]), "STORED_CUSTODY mode=%0d", n);
+        }
+    }
+    function reset_empty () {
+        for n in 0..4 {
+            s_valid[n]   = 0;
+            m_ready[n]   = 0;
+            s_data[n]    = 0;
+            sent[n]      = 0;
+            received[n]  = 0;
+            accepted[n]  = 0;
+            held[n]      = 0;
+            held_data[n] = 0;
+        }
+        rst_n.assert();
+        clk.next(3);
+        for n in 0..4 {
+            $assert(!occupied[n] && !m_valid[n], "RESET_DISCARD mode=%0d", n);
+        }
+    }
+    initial {
+        reset_empty();
+        for n in 0..4 {
+            s_valid[n] = 1;
+            m_ready[n] = 1;
+        }
+        for beat in 0..32 {
+            cycle();
+            for n in 0..4 {
+                $assert(sent[n] == beat + 1, "INPUT_II1 mode=%0d", n);
+                $assert(received[n] == beat + 1 - LATENCY[n], "LATENCY_AND_OUTPUT_II1 mode=%0d", n);
+            }
+        }
+        for n in 0..4 {
+            s_valid[n] = 0;
+        }
+        cycle();
+        for n in 0..4 {
+            $assert(sent[n] == received[n] && !occupied[n], "STREAM_DRAIN");
+        }
+        reset_empty();
+        for n in 0..4 {
+            s_valid[n] = 1;
+        }
+        for beat in 0..4 {
+            cycle();
+        }
+        for n in 0..4 {
+            $assert(sent[n] == CAPACITY[n] && received[n] == 0, "EXACT_CAPACITY mode=%0d", n);
+            m_ready[n] = 1;
+        }
+        $assert(!s_ready[2] && !s_ready[3], "REGISTERED_READY_FULL_NO_REPLACE");
+        $assert(s_ready[1], "FORWARD_SAME_EDGE_REPLACE");
+        for beat in 0..8 {
+            cycle();
+        }
+        for n in 0..4 {
+            s_valid[n] = 0;
+        }
+        for beat in 0..3 {
+            cycle();
+        }
+        for n in 0..4 {
+            $assert(sent[n] == received[n], "SATURATION_DRAIN");
+        }
+        reset_empty();
+        for tick in 0..256 {
+            for n in 0..4 {
+                // Keep every offered beat valid until its source handshake.
+                if !s_valid[n] || accepted[n] {
+                    s_valid[n] = tick % 7 != 3;
+                }
+                m_ready[n] = (tick % 11) >= 4;
+            }
+            cycle();
+        }
+        // Finish the final held source offer before lowering VALID.
+        for n in 0..4 {
+            m_ready[n] = 1;
+        }
+        for tick in 0..3 {
+            cycle();
+        }
+        for n in 0..4 {
+            s_valid[n] = 0;
+        }
+        for tick in 0..3 {
+            cycle();
+        }
+        for n in 0..4 {
+            $assert(sent[n] == received[n] && received[n] >: 100, "PRESSURE_DRAIN mode=%0d", n);
+        }
+        for n in 0..4 {
+            s_valid[n] = 1;
+            m_ready[n] = 0;
+        }
+        for tick in 0..3 {
+            cycle();
+        }
+        for n in 1..4 {
+            $assert(occupied[n], "RESET_PRECONDITION");
+        }
+        reset_empty();
+        $display("SLICE_MATRIX_PASS modes=4 stream_beats=32 pressure_cycles=256");
+        $finish();
+    }
+}

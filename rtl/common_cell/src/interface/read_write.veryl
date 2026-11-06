@@ -1,0 +1,23 @@
+// Wiring only; no handshake or storage. Write-mask bits are active-high.
+pub interface RamReadWritePort #(
+    param ADDR_WIDTH: u32 = 3 ,
+    param WIDTH     : u32 = 32,
+) {
+    var enable      : logic            ;
+    var write_enable: logic            ;
+    var address     : logic<ADDR_WIDTH>;
+    var write_data  : logic<WIDTH>     ;
+    var write_mask  : logic<WIDTH>     ;
+    var read_data   : logic<WIDTH>     ;
+    modport memory {
+        enable      : input ,
+        write_enable: input ,
+        address     : input ,
+        write_data  : input ,
+        write_mask  : input ,
+        read_data   : output,
+    }
+    modport client {
+        ..converse(memory)
+    }
+}

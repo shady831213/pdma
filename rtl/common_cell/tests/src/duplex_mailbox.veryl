@@ -1,0 +1,118 @@
+package MailboxTestData {
+    struct Request {
+        address: logic<32> ,
+        data   : logic<193>,
+        strobe : logic<8>  ,
+        write  : logic     ,
+        wide   : logic     ,
+    }
+    struct Response {
+        data  : logic<257>,
+        status: logic<2>  ,
+    }
+}
+#[test(duplex_mailbox_typed_custody)]
+module DuplexMailboxTest {
+    inst s_clk:    $tb::clock_gen #( period: 10 );
+    inst d_clk:    $tb::clock_gen #( period: 14 );
+    inst s_rst: $tb::reset_gen (
+        clk: s_clk,
+    );
+    inst d_rst: $tb::reset_gen (
+        clk: d_clk,
+    );
+    var s_valid         : 's logic                    ;
+    var s_ready         : 's logic                    ;
+    var s_request       : 's MailboxTestData::Request ;
+    var s_response_valid: 's logic                    ;
+    var s_response_ready: 's logic                    ;
+    var s_response      : 's MailboxTestData::Response;
+    var d_valid         : 'd logic                    ;
+    var d_ready         : 'd logic                    ;
+    var d_request       : 'd MailboxTestData::Request ;
+    var d_response_valid: 'd logic                    ;
+    var d_response_ready: 'd logic                    ;
+    var d_response      : 'd MailboxTestData::Response;
+    inst dut: common_cell::DuplexMailbox #(
+        REQUEST_TYPE : MailboxTestData::Request ,
+        RESPONSE_TYPE: MailboxTestData::Response,
+    ) (
+        s_clk                  ,
+        s_rst_n         : s_rst,
+        s_valid                ,
+        s_ready                ,
+        s_request              ,
+        s_response_valid       ,
+        s_response_ready       ,
+        s_response             ,
+        d_clk                  ,
+        d_rst_n         : d_rst,
+        d_valid                ,
+        d_ready                ,
+        d_request              ,
+        d_response_valid       ,
+        d_response_ready       ,
+        d_response             ,
+    );
+    initial {
+        s_valid          = 0;
+        s_request        = '0;
+        s_response_ready = 0;
+        d_ready          = 0;
+        d_response_valid = 0;
+        d_response       = '0;
+        s_rst.assert();
+        d_rst.assert();
+        for i in 0..8 {
+            s_clk.next();
+            d_clk.next();
+        }
+        for transaction in 0..4 {
+            $assert(s_ready, "REQUEST_CREDIT");
+            s_request.address = 4 * transaction;
+            s_request.data    = ((193'd1 << 192) | (64'hfedcba9876543210 + transaction));
+            s_request.strobe  = 8'hf0;
+            s_request.write   = 1;
+            s_request.wide    = 1;
+            s_valid           = 1;
+            s_clk.next();
+            s_valid        = 0;
+            s_request.data = 0;
+            d_clk.next(8);
+            $assert(d_valid, "DESTINATION_VALID");
+            $assert(!s_ready, "SOURCE_BACKPRESSURE");
+            $assert(d_request.data == ((193'd1 << 192) | (64'hfedcba9876543210 + transaction)), "REQUEST_SNAPSHOT");
+            $assert(d_request.address == 4 * transaction && d_request.strobe == 8'hf0, "REQUEST_FIELDS");
+            d_clk.next(3);
+            $assert(d_valid, "REQUEST_HELD");
+            d_ready = 1;
+            d_clk.next();
+            d_ready           = 0;
+            d_response.data   = ((257'd1 << 256) | 64'h0123456789abcdef);
+            d_response.status = 2'b10;
+            $assert(d_response_ready, "RESPONSE_CREDIT");
+            d_response_valid = 1;
+            d_clk.next();
+            d_response_valid = 0;
+            d_response.data  = 0;
+            s_clk.next(8);
+            $assert(
+                s_response_valid && s_response.data == ((257'd1 << 256) | 64'h0123456789abcdef),
+                "RESPONSE_SNAPSHOT",
+            );
+            $assert(s_response.status == 2'b10, "RESPONSE_STATUS");
+            s_clk.next(3);
+            $assert(s_response_valid, "RESPONSE_HELD");
+            s_response_ready = 1;
+            s_clk.next();
+            s_response_ready = 0;
+            for i in 0..8 {
+                d_clk.next();
+                s_clk.next();
+            }
+            $assert(!d_valid, "NO_DUPLICATE_REQUEST");
+            $assert(!s_response_valid, "NO_DUPLICATE_RESPONSE");
+        }
+        $finish();
+    }
+}

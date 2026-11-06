@@ -1,0 +1,4 @@
+// Keep prototype spelling local while binding the existing common interfaces.
+alias interface RamReadPort = common_cell::RamReadPort;
+alias interface RamWritePort = common_cell::RamWritePort;
+alias interface RamReadWritePort = common_cell::RamReadWritePort;

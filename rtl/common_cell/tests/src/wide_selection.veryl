@@ -1,0 +1,50 @@
+#[test(wide_eligible_round_robin)]
+module WideSelectionTest {
+    alias package RR = common_cell::RoundRobin::<577>;
+    var checks      : u32;
+    var entries     : u32;
+    var patterns    : u32;
+    var cursor_limit: u32;
+    initial {
+        checks       = 0;
+        entries      = 577;
+        patterns     = 7;
+        cursor_limit = 1024;
+        for kind in 0..patterns {
+            for cursor in 0..cursor_limit {
+                var eligible: RR::Mask;
+                var expected: RR::Mask;
+                var actual  : RR::Mask;
+                var start   : u32     ;
+                var index   : u32     ;
+                eligible = '0;
+                for i in 0..entries {
+                    case kind {
+                        0      : eligible[i] = 0;
+                        1      : eligible[i] = 1;
+                        2      : eligible[i] = i == 0 || i == 576;
+                        3      : eligible[i] = i % 32 == 31;
+                        4      : eligible[i] = i % 64 == 0;
+                        5      : eligible[i] = i == cursor % 577;
+                        6      : eligible[i] = (i * 17 + cursor * 11) % 101 <: 5;
+                        default: $assert(0, "WIDE_PROFILE");
+                    }
+                }
+                expected = '0;
+                start    = if cursor <: 577 ? cursor : 0;
+                for offset in 0..entries {
+                    index = (start + offset) % 577;
+                    if expected == 0 && eligible[index] {
+                        expected[index] = 1;
+                    }
+                }
+                actual = RR::select(eligible, cursor as RR::Index);
+                $assert(actual == expected, "WIDE_RR_ORDER kind=%0d cursor=%0d", kind, cursor);
+                checks += 1;
+            }
+        }
+        $assert(checks == 7168, "WIDE_ALL_CASES");
+        $display("WIDE_SELECTION_PASS checks=%0d entries=577", checks);
+        $finish();
+    }
+}

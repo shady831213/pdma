@@ -1,0 +1,141 @@
+#[test(bounded_index_and_eligible_round_robin)]
+module SelectionTest {
+    var checks: u32;
+    initial {
+        checks = 0;
+        for kind in 0..6 {
+            var n : u32;
+            var iw: u32;
+            n  = if kind == 0 ? 1 : if kind == 1 ? 2 : if kind == 2 ? 3 : if kind == 3 ? 5 : if kind == 4 ? 8 : 9;
+            iw = if n <= 2 ? 1 : if n == 3 ? 2 : if n == 9 ? 4 : 3;
+            for bits in 0..(1 << n) {
+                var count: u32;
+                var index: u32;
+                count = 0;
+                index = 0;
+                for i in 0..n {
+                    if ((bits >> i) & 1) != 0 {
+                        count += 1;
+                        index =  i;
+                    }
+                }
+                for cursor in 0..(1 << iw) {
+                    var actual_valid: logic;
+                    var actual_index: u32  ;
+                    var actual_mask : u32  ;
+                    var selected    : u32  ;
+                    var expected    : u32  ;
+                    var start       : u32  ;
+                    var candidate   : u32  ;
+                    actual_valid = 0;
+                    actual_index = 0;
+                    actual_mask  = 0;
+                    selected     = 0;
+                    case kind {
+                        0: {
+                            var d: common_cell::BoundedIndex::<1>::Decoded;
+                            d = common_cell::BoundedIndex::<1>::decode(bits as 1);
+                            if count <= 1 {
+                                $assert(
+                                    common_cell::BoundedIndex::<1>::encode_onehot(bits as 1) == index,
+                                    "ONEHOT_PRECONDITION_ENCODER",
+                                );
+                            }
+                            actual_valid = d.valid;
+                            actual_index = d.index as u32;
+                            actual_mask  = common_cell::BoundedIndex::<1>::to_onehot(cursor as 1) as u32;
+                            selected     = common_cell::RoundRobin::<1>::select(bits as 1, cursor as 1) as u32;
+                        }
+                        1: {
+                            var d: common_cell::BoundedIndex::<2>::Decoded;
+                            d = common_cell::BoundedIndex::<2>::decode(bits as 2);
+                            if count <= 1 {
+                                $assert(
+                                    common_cell::BoundedIndex::<2>::encode_onehot(bits as 2) == index,
+                                    "ONEHOT_PRECONDITION_ENCODER",
+                                );
+                            }
+                            actual_valid = d.valid;
+                            actual_index = d.index as u32;
+                            actual_mask  = common_cell::BoundedIndex::<2>::to_onehot(cursor as 1) as u32;
+                            selected     = common_cell::RoundRobin::<2>::select(bits as 2, cursor as 1) as u32;
+                        }
+                        2: {
+                            var d: common_cell::BoundedIndex::<3>::Decoded;
+                            d = common_cell::BoundedIndex::<3>::decode(bits as 3);
+                            if count <= 1 {
+                                $assert(
+                                    common_cell::BoundedIndex::<3>::encode_onehot(bits as 3) == index,
+                                    "ONEHOT_PRECONDITION_ENCODER",
+                                );
+                            }
+                            actual_valid = d.valid;
+                            actual_index = d.index as u32;
+                            actual_mask  = common_cell::BoundedIndex::<3>::to_onehot(cursor as 2) as u32;
+                            selected     = common_cell::RoundRobin::<3>::select(bits as 3, cursor as 2) as u32;
+                        }
+                        3: {
+                            var d: common_cell::BoundedIndex::<5>::Decoded;
+                            d = common_cell::BoundedIndex::<5>::decode(bits as 5);
+                            if count <= 1 {
+                                $assert(
+                                    common_cell::BoundedIndex::<5>::encode_onehot(bits as 5) == index,
+                                    "ONEHOT_PRECONDITION_ENCODER",
+                                );
+                            }
+                            actual_valid = d.valid;
+                            actual_index = d.index as u32;
+                            actual_mask  = common_cell::BoundedIndex::<5>::to_onehot(cursor as 3) as u32;
+                            selected     = common_cell::RoundRobin::<5>::select(bits as 5, cursor as 3) as u32;
+                        }
+                        4: {
+                            var d: common_cell::BoundedIndex::<8>::Decoded;
+                            d = common_cell::BoundedIndex::<8>::decode(bits as 8);
+                            if count <= 1 {
+                                $assert(
+                                    common_cell::BoundedIndex::<8>::encode_onehot(bits as 8) == index,
+                                    "ONEHOT_PRECONDITION_ENCODER",
+                                );
+                            }
+                            actual_valid = d.valid;
+                            actual_index = d.index as u32;
+                            actual_mask  = common_cell::BoundedIndex::<8>::to_onehot(cursor as 3) as u32;
+                            selected     = common_cell::RoundRobin::<8>::select(bits as 8, cursor as 3) as u32;
+                        }
+                        5: {
+                            var d: common_cell::BoundedIndex::<9>::Decoded;
+                            d = common_cell::BoundedIndex::<9>::decode(bits as 9);
+                            if count <= 1 {
+                                $assert(
+                                    common_cell::BoundedIndex::<9>::encode_onehot(bits as 9) == index,
+                                    "ONEHOT_PRECONDITION_ENCODER",
+                                );
+                            }
+                            actual_valid = d.valid;
+                            actual_index = d.index as u32;
+                            actual_mask  = common_cell::BoundedIndex::<9>::to_onehot(cursor as 4) as u32;
+                            selected     = common_cell::RoundRobin::<9>::select(bits as 9, cursor as 4) as u32;
+                        }
+                        default: $assert(0, "PROFILE");
+                    }
+                    $assert(actual_valid == (count == 1), "DECODE_VALID");
+                    $assert(actual_index == (if count == 1 ? index : 0), "DECODE_INDEX");
+                    $assert(actual_mask == (if cursor <: n ? 1 << cursor : 0), "ENCODE_BOUND");
+                    expected = 0;
+                    start    = if cursor <: n ? cursor : 0;
+                    for offset in 0..n {
+                        candidate = (start + offset) % n;
+                        if expected == 0 && ((bits >> candidate) & 1) != 0 {
+                            expected = 1 << candidate;
+                        }
+                    }
+                    $assert(selected == expected, "RR_ORDER n=%0d bits=%0d cursor=%0d", n, bits, cursor);
+                    checks += 1;
+                }
+            }
+        }
+        $assert(checks == 10540, "ALL_CASES");
+        $display("SELECTION_PASS checks=%0d widths=1,2,3,5,8,9", checks);
+        $finish();
+    }
+}

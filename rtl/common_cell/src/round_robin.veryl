@@ -1,0 +1,36 @@
+// Stateless eligible selection. Cursor is inclusive; caller advances only on grant.
+pub package RoundRobin::<ENTRIES: u32> {
+    const INDEX_WIDTH: u32                = if ENTRIES >: 1 ? $clog2(ENTRIES) : 1;
+    type Mask        = logic<ENTRIES>    ;
+    type Index       = logic<INDEX_WIDTH>;
+
+    // Returns zero or one-hot, not an ambiguous index for an empty eligible set.
+    // Out-of-range cursors start at zero. Eligibility/lifecycle remain caller-owned.
+    function select (
+        eligible: input Mask ,
+        cursor  : input Index,
+    ) -> Mask {
+        var preferred       : Mask;
+        var preferred_first : Mask;
+        var wrapped_first   : Mask;
+        var preferred_prefix: Mask;
+        var wrapped_prefix  : Mask;
+        preferred        = '0;
+        for i in 0..ENTRIES {
+            preferred[i] = eligible[i] && i >= (cursor as u32);
+        }
+        // Parallel prefix OR: stage k covers the preceding 2**k positions.
+        // The final mask excludes any bit with an eligible lower position.
+        // Both branches finish before the wrap mux; no priority/carry chain
+        // crosses all entries, and the caller still owns cursor advancement.
+        preferred_prefix = preferred;
+        wrapped_prefix   = eligible;
+        for level in 0..INDEX_WIDTH {
+            preferred_prefix |= preferred_prefix << (1 << level);
+            wrapped_prefix   |= wrapped_prefix << (1 << level);
+        }
+        preferred_first = preferred & ~(preferred_prefix << 1);
+        wrapped_first   = eligible & ~(wrapped_prefix << 1);
+        return if preferred != 0 ? preferred_first : wrapped_first;
+    }
+}

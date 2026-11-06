@@ -1,0 +1,47 @@
+// ENTRIES >= 1. Index encodings outside ENTRIES map to zero, never wrap.
+pub package BoundedIndex::<ENTRIES: u32> {
+    const INDEX_WIDTH: u32                = if ENTRIES >: 1 ? $clog2(ENTRIES) : 1;
+    type Mask        = logic<ENTRIES>    ;
+    type Index       = logic<INDEX_WIDTH>;
+    struct Decoded {
+        valid: logic,
+        index: Index,
+    }
+
+    function to_onehot (
+        index: input Index,
+    ) -> Mask {
+        var result: Mask;
+        result = '0;
+        for i in 0..ENTRIES {
+            result[i] = (index as u32) == i;
+        }
+        return result;
+    }
+
+    // Caller must prove zero/one-hot. Zero returns zero; multi-hot has no contract.
+    function encode_onehot (
+        mask: input Mask,
+    ) -> Index {
+        var result: Index;
+        result = '0;
+        for digit in 0..INDEX_WIDTH {
+            for i in 0..ENTRIES {
+                if ((i >> digit) & 1) != 0 {
+                    result[digit] |= mask[i];
+                }
+            }
+        }
+        return result;
+    }
+
+    // Zero and multi-hot are invalid; index is zero in both cases, not a priority.
+    function decode (
+        mask: input Mask,
+    ) -> Decoded {
+        var result      : Decoded;
+        result.valid = mask != 0 && (mask & (mask - (1 as Mask))) == 0;
+        result.index = if result.valid ? encode_onehot(mask) : '0;
+        return result;
+    }
+}

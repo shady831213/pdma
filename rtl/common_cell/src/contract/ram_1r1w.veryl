@@ -1,0 +1,13 @@
+// Fixed synchronous read per port clock; no reset or idle-output validity.
+// Positive dimensions/in-range addresses; masked writes preserve unselected bits.
+// Match interface dimensions to the cell. Exclude same-address read/nonzero-mask write.
+// Optional forwarding belongs to the common wrapper, not this raw-cell contract.
+pub proto module Ram1R1WContract #(
+    param DEPTH     : u32 = 8                                ,
+    param WIDTH     : u32 = 32                               ,
+    const ADDR_WIDTH: u32 = if DEPTH >: 1 ? $clog2(DEPTH) : 1,
+) (
+    clk       : input   clock               ,
+    read_port : modport RamReadPort::memory ,
+    write_port: modport RamWritePort::memory,
+);

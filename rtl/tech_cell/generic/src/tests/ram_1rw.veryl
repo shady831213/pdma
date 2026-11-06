@@ -1,0 +1,58 @@
+#[test(ram_1rw_fixed_read_latency)]
+module Ram1RWTest {
+    inst clk : $tb::clock_gen #( period: 10 );
+    inst port: common_cell::RamReadWritePort #( ADDR_WIDTH: 2, WIDTH: 32 );
+    inst dut : Ram1RW #( DEPTH: 3, WIDTH: 32 ) ( clk, port );
+    initial {
+        port.write_mask   = '1;
+        port.enable       = 0;
+        port.write_enable = 0;
+        port.address      = 0;
+        port.write_data   = 0;
+        clk.next(2);
+        port.enable       = 1;
+        port.write_enable = 1;
+        port.write_data   = 32'h11;
+        clk.next();
+        port.address    = 2;
+        port.write_data = 32'h33;
+        clk.next();
+        port.write_enable = 0;
+        port.address      = 0;
+        clk.next();
+        $assert(port.read_data == 32'h11);
+        port.address = 2;
+        clk.next();
+        $assert(port.read_data == 32'h33);
+        port.enable = 0;
+        clk.next(3);
+        port.enable       = 1;
+        port.write_enable = 1;
+        port.address      = 0;
+        port.write_data   = 32'h99;
+        clk.next();
+        port.write_enable = 0;
+        clk.next();
+        $assert(port.read_data == 32'h99);
+        port.address = 2;
+        clk.next();
+        $assert(port.read_data == 32'h33);
+        #[ifdef(RAM_NEGATIVE)]
+        $assert(0, "RAM_NEGATIVE_SENTINEL");
+        port.write_enable = 1;
+        port.write_data   = '1;
+        port.write_mask   = 32'h80000005;
+        clk.next();
+        port.write_enable = 0;
+        clk.next();
+        $assert(port.read_data == 32'h80000037);
+        port.write_enable = 1;
+        port.write_data   = 0;
+        port.write_mask   = 0;
+        clk.next();
+        port.write_enable = 0;
+        clk.next();
+        $assert(port.read_data == 32'h80000037);
+        $finish();
+    }
+}

@@ -1,0 +1,91 @@
+pub package ReadyValid {
+    enum SliceMode {
+        Bypass,
+        Forward,
+        Reverse,
+        Full,
+    }
+}
+
+// Single-clock transport only. Reset discards stored beats; owners must fence traffic.
+// The integrator synchronizes active-low reset release to clk.
+pub module ReadyValidSlice #(
+    param TYPE: type                  = logic<1>                   ,
+    param MODE: ReadyValid::SliceMode = ReadyValid::SliceMode::Full,
+) (
+    clk     : input  clock          ,
+    rst_n   : input  reset_async_low,
+    s_valid : input  logic          ,
+    s_ready : output logic          ,
+    s_data  : input  TYPE           ,
+    m_valid : output logic          ,
+    m_ready : input  logic          ,
+    m_data  : output TYPE           ,
+    occupied: output logic          ,
+) {
+    if MODE == ReadyValid::SliceMode::Bypass :g_bypass {
+        assign s_ready  = m_ready;
+        assign m_valid  = s_valid;
+        assign m_data   = s_data;
+        assign occupied = 0;
+    } else if MODE == ReadyValid::SliceMode::Forward :g_forward {
+        var stored: logic;
+        var data  : TYPE ;
+        assign s_ready  = !stored || m_ready;
+        assign m_valid  = stored;
+        assign m_data   = data;
+        assign occupied = stored;
+        always_ff {
+            if_reset {
+                stored = 0;
+            } else if s_ready {
+                stored = s_valid;
+            }
+        }
+        always_ff {
+            if s_ready && s_valid {
+                data = s_data;
+            }
+        }
+    } else if MODE == ReadyValid::SliceMode::Reverse :g_reverse {
+        var stored: logic;
+        var data  : TYPE ;
+        assign s_ready  = !stored;
+        assign m_valid  = stored || s_valid;
+        assign m_data   = if stored ? data : s_data;
+        assign occupied = stored;
+        always_ff {
+            if_reset {
+                stored = 0;
+            } else if stored {
+                if m_ready {
+                    stored = 0;
+                }
+            } else if s_valid && !m_ready {
+                stored = 1;
+            }
+        }
+        always_ff {
+            if !stored && s_valid && !m_ready {
+                data = s_data;
+            }
+        }
+    } else :g_full {
+        inst storage: $std::slicer #(
+            TYPE          : TYPE,
+            STAGES        : 1   ,
+            FULL_BANDWIDTH: true,
+        ) (
+            i_clk  : clk    ,
+            i_rst  : rst_n  ,
+            i_valid: s_valid,
+            o_ready: s_ready,
+            i_data : s_data ,
+            o_valid: m_valid,
+            i_ready: m_ready,
+            o_data : m_data ,
+        );
+        // The std head-valid covers both occupied states, including its spill row.
+        assign occupied = m_valid;
+    }
+}

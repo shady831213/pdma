@@ -1,0 +1,30 @@
+#[ifdef(TEST_SUPPORT)]
+package RamReference {
+    // Scoreboards hold up to 32 bits; narrow cases truncate explicitly at their boundary.
+    type Word = logic<32>;
+
+    function masked_write (
+        previous: input Word,
+        data    : input Word,
+        mask    : input Word,
+    ) -> Word {
+        return (previous & ~mask) | (data & mask);
+    }
+
+    // These predicates describe simultaneous enabled read/write requests, not edge timing.
+    function forwards (
+        same_row        : input logic,
+        mask            : input Word ,
+        forward_new_data: input logic,
+    ) -> logic {
+        return forward_new_data && same_row && mask == 32'hffff_ffff;
+    }
+
+    function dual_access_allowed (
+        same_row        : input logic,
+        mask            : input Word ,
+        forward_new_data: input logic,
+    ) -> logic {
+        return mask == 0 || !same_row || forwards(same_row, mask, forward_new_data);
+    }
+}

@@ -1,0 +1,10 @@
+pub module Ram1RW::<CELL: Ram1RWContract> #(
+    param DEPTH     : u32 = 8                                ,
+    param WIDTH     : u32 = 32                               ,
+    const ADDR_WIDTH: u32 = if DEPTH >: 1 ? $clog2(DEPTH) : 1,
+) (
+    clk : input   clock                   ,
+    port: modport RamReadWritePort::memory,
+) {
+    inst u_ram: CELL #( DEPTH, WIDTH ) ( clk, port );
+}

@@ -1,0 +1,15 @@
+[project]
+name = "tech_cell_generic"
+version = "0.1.0"
+
+[build]
+sources = ["src"]
+target = {type = "directory", path = "target"}
+
+[dependencies]
+common_cell = {path = "../../common_cell"}
+
+[test]
+seed = 20260928
+four_state = true
+waveform_target = {type = "directory", path = "target/waves"}

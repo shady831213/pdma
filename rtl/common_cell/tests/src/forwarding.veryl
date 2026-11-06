@@ -1,0 +1,147 @@
+#[test(ram_forwarding_and_direct_contract)]
+module ForwardingTest {
+    #[ifdef(TEST_SUPPORT)]
+    {
+        inst clk           : $tb::clock_gen #( period: 10 );
+        inst direct_read   : common_cell::RamReadPort #( ADDR_WIDTH: 2, WIDTH: 32 );
+        inst forwarded_read: common_cell::RamReadPort #( ADDR_WIDTH: 2, WIDTH: 32 );
+        inst write_port    : common_cell::RamWritePort #( ADDR_WIDTH: 2, WIDTH: 32 );
+        inst direct: common_cell::Ram1R1W::<tech_cell_generic::Ram1R1W> #(
+            DEPTH           : 3    ,
+            WIDTH           : 32   ,
+            FORWARD_NEW_DATA: false,
+        ) (
+            clk                    ,
+            read_port : direct_read,
+            write_port             ,
+        );
+        inst forwarded: common_cell::Ram1R1W::<tech_cell_generic::Ram1R1W> #(
+            DEPTH           : 3   ,
+            WIDTH           : 32  ,
+            FORWARD_NEW_DATA: true,
+        ) (
+            clk                       ,
+            read_port : forwarded_read,
+            write_port                ,
+        );
+        var words             : RamReference::Word [3];
+        var direct_expected   : RamReference::Word    ;
+        var forwarded_expected: RamReference::Word    ;
+
+        function cycle () {
+            if direct_read.enable {
+                if write_port.enable {
+                    $assert(
+                        RamReference::dual_access_allowed(
+                            direct_read.address == write_port.address,
+                            write_port.mask,
+                            false,
+                        ),
+                        "RAM_DIRECT_INPUT_COLLISION",
+                    );
+                }
+                direct_expected = words[direct_read.address];
+            }
+            if forwarded_read.enable {
+                if write_port.enable {
+                    $assert(
+                        RamReference::dual_access_allowed(
+                            forwarded_read.address == write_port.address,
+                            write_port.mask,
+                            true,
+                        ),
+                        "RAM_FORWARDING_INPUT_COLLISION",
+                    );
+                }
+                forwarded_expected = words[forwarded_read.address];
+                if write_port.enable
+                    && RamReference::forwards(forwarded_read.address == write_port.address, write_port.mask, true) {
+                    forwarded_expected = write_port.data;
+                }
+            }
+            if write_port.enable {
+                words[write_port.address] = RamReference::masked_write(
+                    words[write_port.address],
+                    write_port.data,
+                    write_port.mask,
+                );
+            }
+            clk.next();
+            if direct_read.enable {
+                $assert(direct_read.data == direct_expected, "RAM_DIRECT_SCOREBOARD");
+            }
+            if forwarded_read.enable {
+                $assert(forwarded_read.data == forwarded_expected, "RAM_FORWARDING_SCOREBOARD");
+            }
+        }
+
+        initial {
+            direct_read.enable     = 0;
+            direct_read.address    = 0;
+            forwarded_read.enable  = 0;
+            forwarded_read.address = 0;
+            write_port.enable      = 0;
+            write_port.address     = 0;
+            write_port.data        = 32'h11;
+            write_port.mask        = '1;
+            clk.next(2);
+            write_port.enable = 1;
+            cycle();
+            direct_read.enable    = 1;
+            forwarded_read.enable = 1;
+            write_port.address    = 2;
+            write_port.data       = 32'h33;
+            cycle();
+            $assert(direct_read.data == 32'h11 && forwarded_read.data == 32'h11);
+            write_port.enable      = 0;
+            direct_read.address    = 2;
+            forwarded_read.address = 2;
+            cycle();
+            $assert(direct_read.data == 32'h33 && forwarded_read.data == 32'h33);
+            // Only the forwarding instance admits a nonzero-mask same-address read/write.
+            direct_read.enable = 0;
+            write_port.enable  = 1;
+            write_port.data    = 32'h77;
+            cycle();
+            $assert(forwarded_read.data == 32'h77);
+            write_port.enable  = 0;
+            direct_read.enable = 1;
+            cycle();
+            $assert(direct_read.data == 32'h77 && forwarded_read.data == 32'h77);
+            direct_read.address    = 0;
+            forwarded_read.address = 0;
+            cycle();
+            $assert(direct_read.data == 32'h11 && forwarded_read.data == 32'h11);
+            direct_read.enable    = 0;
+            forwarded_read.enable = 0;
+            clk.next(3);
+            direct_read.enable     = 1;
+            forwarded_read.enable  = 1;
+            direct_read.address    = 2;
+            forwarded_read.address = 2;
+            write_port.enable      = 1;
+            write_port.address     = 0;
+            write_port.data        = '1;
+            write_port.mask        = 32'h80000005;
+            cycle();
+            $assert(direct_read.data == 32'h77 && forwarded_read.data == 32'h77);
+            write_port.enable      = 0;
+            direct_read.address    = 0;
+            forwarded_read.address = 0;
+            cycle();
+            $assert(direct_read.data == 32'h80000015 && forwarded_read.data == 32'h80000015);
+            write_port.enable = 1;
+            write_port.mask   = 0;
+            write_port.data   = 0;
+            cycle();
+            $assert(direct_read.data == 32'h80000015 && forwarded_read.data == 32'h80000015);
+            #[ifdef(FORWARDING_NEGATIVE)]
+            $assert(0, "FORWARDING_NEGATIVE_SENTINEL");
+            $finish();
+        }
+    }
+    #[ifndef(TEST_SUPPORT)]
+    initial {
+        $assert(0, "TEST_SUPPORT_REQUIRED");
+    }
+}

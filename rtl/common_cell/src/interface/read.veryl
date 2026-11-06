@@ -1,0 +1,17 @@
+// Wiring only; sampling follows the module's explicit read clock, not a handshake.
+pub interface RamReadPort #(
+    param ADDR_WIDTH: u32 = 3 ,
+    param WIDTH     : u32 = 32,
+) {
+    var enable : logic            ;
+    var address: logic<ADDR_WIDTH>;
+    var data   : logic<WIDTH>     ;
+    modport memory {
+        enable : input ,
+        address: input ,
+        data   : output,
+    }
+    modport client {
+        ..converse(memory)
+    }
+}

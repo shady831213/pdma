@@ -1,10 +1,10 @@
 /model/modeling/target/
 /target/
 /.omo/
-/rtl/target/
-/rtl/.build/
-/rtl/dependencies/
-/rtl/pdma_rtl.f
+/rtl/**/target/
+/rtl/**/.build/
+/rtl/**/dependencies/
+/rtl/**/*.f
 /verification/**/.run/
 /impl/**/.run/
 /tools/rtl-flow/.run/

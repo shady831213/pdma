@@ -1,0 +1,62 @@
+#[test(ram_1r1w_concurrent_access_and_masks)]
+module Ram1R1WTest {
+    inst clk       : $tb::clock_gen #( period: 10 );
+    inst read_port : common_cell::RamReadPort #( ADDR_WIDTH: 2, WIDTH: 32 );
+    inst write_port: common_cell::RamWritePort #( ADDR_WIDTH: 2, WIDTH: 32 );
+    inst dut       : Ram1R1W #( DEPTH: 3, WIDTH: 32 ) ( clk, read_port, write_port );
+    initial {
+        write_port.mask    = '1;
+        read_port.enable   = 0;
+        read_port.address  = 0;
+        write_port.enable  = 0;
+        write_port.address = 0;
+        write_port.data    = 0;
+        clk.next(2);
+        write_port.enable = 1;
+        write_port.data   = 32'h11;
+        clk.next();
+        read_port.enable   = 1;
+        write_port.address = 2;
+        write_port.data    = 32'h33;
+        clk.next();
+        $assert(read_port.data == 32'h11);
+        write_port.enable = 0;
+        read_port.address = 2;
+        clk.next();
+        $assert(read_port.data == 32'h33);
+        write_port.enable = 1;
+        write_port.data   = 32'h77;
+        read_port.enable  = 0;
+        clk.next();
+
+        write_port.enable = 0;
+        read_port.enable  = 1;
+        clk.next();
+        $assert(read_port.data == 32'h77);
+        read_port.address = 0;
+        clk.next();
+        $assert(read_port.data == 32'h11);
+        read_port.enable = 0;
+        clk.next(3);
+        read_port.enable  = 1;
+        read_port.address = 2;
+        clk.next();
+        $assert(read_port.data == 32'h77);
+        write_port.enable  = 1;
+        write_port.address = 0;
+        write_port.data    = '1;
+        write_port.mask    = 32'h80000005;
+        clk.next();
+        $assert(read_port.data == 32'h77);
+        write_port.enable = 0;
+        read_port.address = 0;
+        clk.next();
+        $assert(read_port.data == 32'h80000015);
+        write_port.enable = 1;
+        write_port.mask   = 0;
+        write_port.data   = 0;
+        clk.next();
+        $assert(read_port.data == 32'h80000015);
+        $finish();
+    }
+}

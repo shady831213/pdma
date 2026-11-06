@@ -1,0 +1,100 @@
+// Two bounded mailboxes. Cold reset must cover both domains; protocol drain remains outside this cell.
+pub module DuplexMailbox #(
+    param REQUEST_TYPE : type = logic<1>,
+    param RESPONSE_TYPE: type = logic<1>,
+) (
+    s_clk           : input  's clock          ,
+    s_rst_n         : input  's reset_async_low,
+    s_valid         : input  's logic          ,
+    s_ready         : output 's logic          ,
+    s_request       : input  's REQUEST_TYPE   ,
+    s_response_valid: output 's logic          ,
+    s_response_ready: input  's logic          ,
+    s_response      : output 's RESPONSE_TYPE  ,
+    d_clk           : input  'd clock          ,
+    d_rst_n         : input  'd reset_async_low,
+    d_valid         : output 'd logic          ,
+    d_ready         : input  'd logic          ,
+    d_request       : output 'd REQUEST_TYPE   ,
+    d_response_valid: input  'd logic          ,
+    d_response_ready: output 'd logic          ,
+    d_response      : input  'd RESPONSE_TYPE  ,
+) {
+    var s_up          : 's logic;
+    var d_up          : 'd logic;
+    var s_up_at_d     : 'd logic;
+    var d_up_at_s     : 's logic;
+    var request_ready : 's logic;
+    var request_valid : 'd logic;
+    var response_ready: 'd logic;
+    var response_valid: 's logic;
+    let s_live        : 's logic = s_up && d_up_at_s;
+    let d_live        : 'd logic = d_up && s_up_at_d;
+
+    always_ff (s_clk, s_rst_n) {
+        if_reset {
+            s_up = 0;
+        } else {
+            s_up = 1;
+        }
+    }
+    always_ff (d_clk, d_rst_n) {
+        if_reset {
+            d_up = 0;
+        } else {
+            d_up = 1;
+        }
+    }
+    inst source_started: $std::synchronizer_basic #(
+        WIDTH : 1,
+        STAGES: 2,
+    ) (
+        i_clk: d_clk    ,
+        i_rst: d_rst_n  ,
+        i_d  : s_up     ,
+        o_d  : s_up_at_d,
+    );
+    inst destination_started: $std::synchronizer_basic #(
+        WIDTH : 1,
+        STAGES: 2,
+    ) (
+        i_clk: s_clk    ,
+        i_rst: s_rst_n  ,
+        i_d  : d_up     ,
+        o_d  : d_up_at_s,
+    );
+    inst requests: $std::async_handshake::<$std::synchronizer_basic> #(
+        TYPE  : REQUEST_TYPE,
+        STAGES: 2           ,
+    ) (
+        is_clk  : s_clk            ,
+        is_rst  : s_rst_n          ,
+        is_valid: s_valid && s_live,
+        os_ready: request_ready    ,
+        is_data : s_request        ,
+        id_clk  : d_clk            ,
+        id_rst  : d_rst_n          ,
+        od_valid: request_valid    ,
+        id_ready: d_ready && d_live,
+        od_data : d_request        ,
+    );
+    inst responses: $std::async_handshake::<$std::synchronizer_basic> #(
+        TYPE  : RESPONSE_TYPE,
+        STAGES: 2            ,
+    ) (
+        is_clk  : d_clk                     ,
+        is_rst  : d_rst_n                   ,
+        is_valid: d_response_valid && d_live,
+        os_ready: response_ready            ,
+        is_data : d_response                ,
+        id_clk  : s_clk                     ,
+        id_rst  : s_rst_n                   ,
+        od_valid: response_valid            ,
+        id_ready: s_response_ready && s_live,
+        od_data : s_response                ,
+    );
+    assign s_ready          = request_ready && s_live;
+    assign d_valid          = request_valid && d_live;
+    assign d_response_ready = response_ready && d_live;
+    assign s_response_valid = response_valid && s_live;
+}

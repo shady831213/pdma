@@ -1,0 +1,24 @@
+// Behavioral memory; does not guarantee SRAM inference or qualify a physical macro.
+pub module Ram1R1W for common_cell::Ram1R1WContract #(
+    param DEPTH     : u32 = 8                                ,
+    param WIDTH     : u32 = 32                               ,
+    const ADDR_WIDTH: u32 = if DEPTH >: 1 ? $clog2(DEPTH) : 1,
+) (
+    clk       : input   clock               ,
+    read_port : modport RamReadPort::memory ,
+    write_port: modport RamWritePort::memory,
+) {
+    var words: logic<WIDTH> [DEPTH];
+    always_ff (clk) {
+        if write_port.enable {
+            for lane in 0..WIDTH {
+                if write_port.mask[lane] {
+                    words[write_port.address][lane] = write_port.data[lane];
+                }
+            }
+        }
+    }
+    always_ff (clk) {
+        read_port.data = if read_port.enable ? words[read_port.address] : '0;
+    }
+}

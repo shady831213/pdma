@@ -23,10 +23,12 @@ commit-email disclosure remain separate user decisions; confirm the final public
 scope with the user before switching visibility.
 
 History was sanitized on 2026-11-06 to replace machine-local reference paths.
-Use the rewritten GitHub history; do not merge old GitLab/archive branches into
-active branches. Push only to `github`. The `origin` GitLab remote is a read-only
-historical archive and must not receive pushes. Do not use `--all` or `--mirror`
-to publish local archive refs. Author and committer identities were preserved.
+Use the rewritten history on `github` and `origin`; do not merge pre-cleanup
+archive branches into active branches. Push active changes explicitly to both
+remotes. The local default push destination and active branch upstreams remain
+GitHub. Do not use `--all` or `--mirror` to publish local archive refs. Author and
+committer identities were preserved. Both remotes accepted the sanitized active
+branches and checkpoint tag on 2026-11-06.
 The post-rewrite check found that GitHub still serves old unreferenced commits
 through its API. Clean reachable history is not proof of server-side erasure.
 Keep visibility private until the user resolves that remaining public-release scope.

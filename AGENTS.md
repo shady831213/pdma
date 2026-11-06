@@ -10,17 +10,20 @@ DMA-core-only. Do not describe modeled isolation as complete SR-IOV, FLR, ATS/PR
 or logical-channel oversubscription support, and do not rename existing DMA APIs
 merely to match the project tagline.
 
-## Public-release preparation
+## Public repository policy
+
+The GitHub repository became public on 2026-11-06 with explicit user authorization.
+The public scope includes its existing branches, tags, history and commit identities.
+The GitLab repository's visibility was not changed.
 
 PDMA-authored RTL, model, firmware, software, tools, tests and documentation are
 licensed under MIT OR Apache-2.0; see the repository-root licenses and README.
 Third-party notices and terms remain applicable to their respective material.
-Public-release preparation retains the pinned Veryl compiler and checked-in
+The public repository retains the pinned Veryl compiler and checked-in
 patches. Reference the [pcie_modeling repository](https://github.com/shady831213/pcie_modeling)
 for their origins, not machine-local checkout paths. External upgrades do not
-automatically change PDMA's toolchain. Repository visibility, history and
-commit-email disclosure remain separate user decisions; confirm the final public
-scope with the user before switching visibility.
+automatically change PDMA's toolchain. Any further changes to repository visibility,
+history or commit-email disclosure require explicit user authorization.
 
 History was sanitized on 2026-11-06 to replace machine-local reference paths.
 Use the rewritten history on `github` and `origin`; do not merge pre-cleanup
@@ -33,7 +36,8 @@ Force pushes are now disabled on both remotes. Use ordinary fast-forward pushes;
 do not force-push or weaken branch protection without new explicit user authorization.
 The post-rewrite check found that GitHub still serves old unreferenced commits
 through its API. Clean reachable history is not proof of server-side erasure.
-Keep visibility private until the user resolves that remaining public-release scope.
+The user accepted the residual visibility of old machine-local reference paths
+before authorizing publication; do not describe those old objects as erased.
 
 ## Current state
 

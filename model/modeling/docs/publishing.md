@@ -117,9 +117,9 @@ Afterward verify versions, owners and docs.rs builds, then smoke-test a fresh
 consumer with registry dependencies only. Record the release commit and tag only
 after confirming the intended release state; do not mark this candidate released early.
 
-The private Git repository need not be made public for Cargo to build an uploaded
-archive. The archive itself must be self-contained; source links to the private
-repository remain accessible only to authorized repository users.
+PDMA's GitHub repository became public on 2026-11-06. A public Git repository is
+not a prerequisite for publishing a crate: the uploaded archive must be
+self-contained, while links to a private source repository require access to it.
 
 References: [Cargo publishing guide](https://doc.rust-lang.org/cargo/reference/publishing.html)
 and [manifest publish setting](https://doc.rust-lang.org/cargo/reference/manifest.html#the-publish-field).

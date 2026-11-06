@@ -50,10 +50,12 @@ pub module CopyMemoryEndpoint (
     assign axi.wvalid    = phase == Phase::Write && !data_done;
     assign axi.wdata     = if job.size == 0 ?
         (job.data[7:0] as 64) << (lane * 8)
+    : if job.size == 2 ?
+        (job.data[31:0] as 64) << (lane * 8)
     :
         (job.data >> ((beat as u32) * 64)) as 64
     ;
-    assign axi.wstrb     = if job.size == 0 ? 8'h01 << lane : 8'hff;
+    assign axi.wstrb     = if job.size == 0 ? 8'h01 << lane : if job.size == 2 ? 8'h0f << lane : 8'hff;
     assign axi.wlast     = beat == job.length;
     assign axi.wuser     = 0;
     assign axi.bready    = phase == Phase::Write && address_done && data_done;

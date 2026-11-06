@@ -1,5 +1,5 @@
 // One accepted command owns the copy cursors and scratch until retirement or reset.
-// This initial engine implements Linear Copy; unsupported valid opcodes stop with an event.
+// This initial engine implements Linear Copy and Fence; other valid opcodes stop with an event.
 pub module CopyEngine (
     clk            : input   clock                        ,
     rst_n          : input   reset_async_low              ,
@@ -59,6 +59,9 @@ pub module CopyEngine (
     let destination_sum    : logic<65>  = (descriptor[575:512] as 65) + (descriptor[639:576] as 65);
     let source_end         : logic<65>  = source_sum + (descriptor[191:128] as 65);
     let destination_end    : logic<65>  = destination_sum + (descriptor[191:128] as 65);
+    let fence              : logic      = descriptor[7:0] == 6;
+    let fence_bytes        : logic<7>   = if descriptor[255:224] == 0 ? 4 : 8;
+    let fence_end          : logic<65>  = (descriptor[191:128] as 65) + (fence_bytes as 65);
     let fetch_address      : logic<64>  = descriptor_address + fetched;
     let descriptor_start   : logic<65>  = (command.base as 65) + ((command.consumer & (command.capacity - 1)) as 65)
         * CommandLayout::EXTENT;
@@ -88,11 +91,10 @@ pub module CopyEngine (
         if portion >: 4096 - (destination_address[11:0] as u32) {
             portion = (4096 - (destination_address[11:0] as u32)) as 7;
         }
-        amount       = if source_address[2:0] == 0 && destination_address[2:0] == 0 && portion >= 8 ?
-            portion & 7'h78
-        :
-            1
-        ;
+        amount = if source_address[2:0] == 0 && destination_address[2:0] == 0 && portion >= 8 ? portion & 7'h78 : 1;
+        if fence {
+            amount = fence_bytes;
+        }
         fetch_amount = if fetched <= 32 ? 64 : (96 - fetched) as 7;
         if fetch_amount >: 4096 - (fetch_address[11:0] as u32) {
             fetch_amount = (4096 - (fetch_address[11:0] as u32)) as 7;
@@ -118,6 +120,11 @@ pub module CopyEngine (
         if phase == Phase::Write {
             memory.request.address  = destination_address;
             memory.request.selector = descriptor[255:224];
+            if fence {
+                memory.request.selector = descriptor[223:192];
+                memory.request.size     = if fence_bytes == 4 ? 2 : 3;
+                memory.request.length   = 0;
+            }
         }
         if phase == Phase::Publish {
             memory.request.address  = event_address;
@@ -214,6 +221,21 @@ pub module CopyEngine (
                         if descriptor[7:0] >: 8 || descriptor[15:10] != 0 {
                             channel_fatal = ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD as 32;
                             phase         = Phase::Stopped;
+                        } else if fence {
+                            if descriptor[255:224] >: 1 {
+                                channel_fatal = ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD as 32;
+                                phase         = Phase::Stopped;
+                            } else if descriptor[129:128] != 0 || (fence_bytes == 8 && descriptor[130])
+                                || fence_end[64] {
+                                error_code = 7;
+                                stopped    = 1;
+                                phase      = Phase::Publish;
+                            } else {
+                                destination_address = descriptor[191:128];
+                                remaining           = fence_bytes as 64;
+                                scratch             = descriptor[319:256] as 512;
+                                phase               = Phase::Write;
+                            }
                         } else if descriptor[7:0] != 0 || descriptor[9:8] != 0 {
                             error_code = 6;
                             stopped    = 1;

@@ -4,7 +4,7 @@ Place Veryl native tests here, grouped by the hardware block they exercise.
 Keep stimulus, clock/reset control, independent expectations and assertions visible
 in each test. Shared support must not become a second hardware executor.
 
-The seven executable tests cover:
+The seven register and layout tests cover:
 
 | Test | Observable behavior |
 | --- | --- |
@@ -17,7 +17,8 @@ The seven executable tests cover:
 | `DmaRegisterInterfaceTest` | Complete 32- and 64-bit AXI→CDC→owner paths, nonzero aperture base, read snapshot retention and exactly-once Resume under response backpressure |
 
 The minimal execution slice adds `CopyEngineTest`, `CopyErrorTest` and
-`CopyFaultTest`. Their scenarios and scope are recorded in the
+`CopyFaultTest`, plus `FenceTest`, `FenceOrderTest` and `FenceMemoryTest`, for
+thirteen native tests in total. Their scenarios and scope are recorded in the
 [slice description](../../../docs/rtl/minimal-copy.md#verification-entry-points).
 
 Run both native CC and Cranelift backends with `VERYL_DUT_REUSE=0`, as shown in

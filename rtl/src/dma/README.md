@@ -60,7 +60,7 @@ is unsupported. Software channel/DMA reset must leave the transport running.
 The memory clock domain has no implementation in this slice.
 
 The register modules alone do not implement transaction drain or execution.
-`DmaCopy` supplies a first single-channel Linear Copy owner and memory endpoint;
+`DmaCopy` supplies a first single-channel Linear Copy/Fence32/64 owner and memory endpoint;
 see the [slice boundaries](../../../docs/rtl/minimal-copy.md). Its software reset
 closes admission and consumes all accepted memory receipts before register clear.
 Native tests verify digital handshake/state behavior; bundled-data CDC constraints

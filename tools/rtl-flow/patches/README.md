@@ -1,41 +1,35 @@
 # Veryl patch provenance
 
-Snapshot date: 2026-10-28. Upstream source:
-[Veryl bacc4453](https://github.com/veryl-lang/veryl/tree/bacc44532af83058bdaab97dbe66ca1b89976be2).
+Snapshot date: 2026-11-06. Upstream source:
+[Veryl 8521c8c2](https://github.com/veryl-lang/veryl/tree/8521c8c21e495916ca33648ddab746320953e11d).
+Tool inputs follow [pcie_modeling's reviewed snapshot](https://github.com/shady831213/pcie_modeling/tree/67989b3ebbdc8466e79ded2c65ad64c0da5585b0/tools/rtl-flow).
 Apply only in the order recorded in `../toolchain.env`.
 
-- `veryl-guarded-read.patch`: upstream author commit
-  `75e35bc59f6dcc69584474bf310f1639d4dca362`, submitted as
-  [PR #3585](https://github.com/veryl-lang/veryl/pull/3585); proves guarded prior writes.
-- `veryl-generic-parameters.patch`: a fix from
-  [pcie_modeling](https://github.com/shady831213/pcie_modeling) for resolved generic
-  module parameter forwarding and known literal interface widths.
-- `veryl-generic-constant-context.patch`: a fix from the same project preserving
-  originating namespaces for package constants introduced by generic substitution.
-- `veryl-struct-member-width.patch`: PDMA's 2026-10-29 simulator fix. A struct
-  constructor must resize each expression to its declared member width, including
-  truncation; extension alone left an unsized-zero ternary at 32 bits when assigned
-  to an 8-bit member and panicked in the real DMA frontend test. The fix reuses
-  `resize_to_width` at that call site without changing global extension behavior.
-  Regression cases cover ternaries, arithmetic, adjacent sentinels and X values.
+- `veryl-generic-parameters.patch`: preserves resolved generic module parameter
+  forwarding and known literal interface widths on the new upstream revision.
+- `veryl-wide-array-guard.patch`: the simulator selects valid wide-array storage
+  before extracting a guarded element. An invalid/unknown index must not leave
+  a scalar sentinel where a pointer to wide storage is required. See upstream
+  [issue #3671](https://github.com/veryl-lang/veryl/issues/3671) and
+  [PR #3672](https://github.com/veryl-lang/veryl/pull/3672). Test registration is
+  adapted to follow the generic-parameters patch.
 
-The source project's qualification record for this snapshot reports 4075 passing
-upstream workspace tests and 22 original ignored tests for the initial three-patch
-manifest. That is inherited evidence, not a compiler-suite run performed by PDMA.
-It also reports existing upstream Clippy findings; no all-clean Clippy claim is made.
+The old guarded-read, generic-constant-context and struct-member-width patches
+are no longer part of this pin. The new upstream handles their exercised cases;
+the PDMA struct-width smoke and register frontend tests remain regression oracles.
+Old patch bytes and their original evidence remain in Git history.
 
-Initial three-patch manifest SHA-256:
-`fbfcb32cd20a0aa622a81bea6190a2444347926aeab65fc777dc9de1db769feb`.
-The qualified Linux x86_64 dev binary used to seed the initial local installation:
-`41d6c38f5a510164aba31f395870530031bd54613df9be689a4b161e8b97a7c5`.
-This binary digest identifies that artifact, not byte-for-byte reproducibility
-across build hosts. New builds record their own digest and provenance.
+Ordered patch manifest SHA-256:
+`481f5b9ad45f88c9f0a867cf75ced2b470400e9cc0397b598b56a2fc13fa201b`.
+Version: `0.22.1+generic-parameters+wide-array-guard`.
+Build: Rust 1.97.0, upstream Cargo.lock, `release-verylup` profile.
+The independently verified Linux x86_64 executable reused for qualification has
+SHA-256 `da80c14bd2c989549ca17dfac05a7250682533b61aabe44b2a42a59200c562cc`.
+This identifies the reused artifact; it is not a fresh PDMA cold build or a
+claim of byte-identical builds across hosts.
 
-Current four-patch manifest SHA-256:
-`f5013240f67e6549cb3eb6e972dbda10d15aa9755ef0f789edf4d27b64c57b7b`.
-Current version: `0.22.0+upstream.bacc4453.guardfix.generics.context.structwidth`.
-PDMA reproduced the width panic before the fix, then ran the full
-`veryl-simulator` package suite: **1342 passed, 0 failed, 0 ignored**. The original
-DMA test and both compiler smoke tests also run through the installed launcher
-on CC and Cranelift backends. This is fresh simulator/downstream evidence, not a
-fresh run of the entire upstream workspace or independent SystemVerilog simulation.
+PDMA validation: build, **7 DMA register tests** and **2 compiler smoke tests**
+pass on each of CC and Cranelift, with `VERYL_DUT_REUSE=0`. Launcher tests cover
+profile-specific cache selection, empty and nonempty manifests, changed patch
+rejection and installed-binary integrity. This is downstream qualification,
+not a fresh full upstream compiler suite or physical implementation signoff.

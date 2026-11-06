@@ -1,32 +1,26 @@
-diff --git a/crates/analyzer/src/conv/utils.rs b/crates/analyzer/src/conv/utils.rs
-index 81b85ab0..95c19612 100644
 --- a/crates/analyzer/src/conv/utils.rs
 +++ b/crates/analyzer/src/conv/utils.rs
-@@ -4214,8 +4214,10 @@ pub fn get_overridden_params(
+@@ -4528,8 +4528,9 @@
      arg: &ComponentInstantiation,
  ) -> IrResult<HashMap<VarPath, (Comptime, ir::Expression)>> {
      let token: TokenRange = arg.scoped_identifier.as_ref().into();
 -    let symbol =
 -        symbol_table::resolve(arg.scoped_identifier.as_ref()).map_err(|_| ir_error!(token))?;
 +    // A generic component parameter does not own the target's parameters.
-+    // Substitute it before looking up the parameter namespace.
 +    let path = context.resolve_path(arg.scoped_identifier.as_ref().into());
 +    let symbol = symbol_table::resolve(&path).map_err(|_| ir_error!(token))?;
      // An `alias module` has its own namespace, and the parameters live in the
      // TARGET's. Resolving them in the alias's finds nothing, and the loop
      // below skips what it cannot resolve -- so every override through an
-diff --git a/crates/analyzer/src/ir/signature.rs b/crates/analyzer/src/ir/signature.rs
-index 1b0fde2f..32118ea0 100644
 --- a/crates/analyzer/src/ir/signature.rs
 +++ b/crates/analyzer/src/ir/signature.rs
-@@ -234,6 +234,31 @@ impl Signature {
+@@ -237,6 +237,30 @@
                          .append(&mut found.inner_namespace().paths.to_vec());
                  }
              }
 +        } else {
-+            // A template's known value arguments still size nested interfaces.
-+            // Carry only literals here: a caller's symbolic package argument
-+            // cannot safely be substituted by name inside the callee's scope.
++            // Known template arguments still size nested interfaces. Symbolic
++            // caller arguments cannot be substituted by name in the callee.
 +            let path = context.resolve_path(path);
 +            for map in path.to_generic_maps() {
 +                for (name, arg) in map.map {
@@ -51,21 +45,16 @@ index 1b0fde2f..32118ea0 100644
          }
  
          Some(sig)
-diff --git a/crates/analyzer/src/tests.rs b/crates/analyzer/src/tests.rs
-index d19dff17..18338fe7 100644
 --- a/crates/analyzer/src/tests.rs
 +++ b/crates/analyzer/src/tests.rs
-@@ -29,6 +29,7 @@ mod comb_loop_tier_tests;
- mod constant_evaluation_tests;
+@@ -30,6 +30,7 @@
+ mod driver_check_tests;
  mod dynamic_packed_member_tests;
  mod generic_interface_port_tests;
 +mod generic_interface_width_tests;
  mod instantiation_note_tests;
  mod interface_array_tests;
- mod modport_connection_tests;
-diff --git a/crates/analyzer/src/tests/generic_interface_width_tests.rs b/crates/analyzer/src/tests/generic_interface_width_tests.rs
-new file mode 100644
-index 00000000..f58176ca
+ mod interface_instance_select_tests;
 --- /dev/null
 +++ b/crates/analyzer/src/tests/generic_interface_width_tests.rs
 @@ -0,0 +1,53 @@
@@ -122,7 +111,6 @@ index 00000000..f58176ca
 +    let errors = analyze(code);
 +    assert!(errors.is_empty(), "{errors:?}");
 +}
-diff --git a/crates/simulator/src/tests.rs b/crates/simulator/src/tests.rs
 --- a/crates/simulator/src/tests.rs
 +++ b/crates/simulator/src/tests.rs
 @@ -1,3 +1,5 @@
@@ -131,9 +119,6 @@ diff --git a/crates/simulator/src/tests.rs b/crates/simulator/src/tests.rs
  use crate::ir::Ir;
  use crate::ir::{Config, ModuleVariables, build_ir, parse_hex_content};
  use crate::ir::{Event, Value};
-diff --git a/crates/simulator/src/tests/generic_parameter_forwarding.rs b/crates/simulator/src/tests/generic_parameter_forwarding.rs
-new file mode 100644
-index 00000000..3d551ed5
 --- /dev/null
 +++ b/crates/simulator/src/tests/generic_parameter_forwarding.rs
 @@ -0,0 +1,46 @@

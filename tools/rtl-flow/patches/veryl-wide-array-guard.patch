@@ -1,0 +1,96 @@
+--- a/crates/simulator/src/backend/cranelift/expression.rs
++++ b/crates/simulator/src/backend/cranelift/expression.rs
+@@ -2679,16 +2679,16 @@
+                 // `emit_wide_bit_select_read`).  A dynamic bit-select stays on
+                 // the interpreter (rare).
+                 if nb > 16 {
++                    let addr = match in_range {
++                        Some(c) => {
++                            let d = alloc_wide_out_of_range(builder, nb, context.use_4state);
++                            builder.ins().select(c, addr, d)
++                        }
++                        None => addr,
++                    };
+                     if select.is_none() && dynamic_select.is_none() {
+                         // A wide read hands back storage, so the default is a
+                         // slot holding it rather than a register constant.
+-                        let addr = match in_range {
+-                            Some(c) => {
+-                                let d = alloc_wide_out_of_range(builder, nb, context.use_4state);
+-                                builder.ins().select(c, addr, d)
+-                            }
+-                            None => addr,
+-                        };
+                         let mask_xz = if context.use_4state {
+                             Some(builder.ins().iadd_imm_s(addr, nb as i64))
+                         } else {
+@@ -2710,9 +2710,7 @@
+                         } else {
+                             None
+                         };
+-                        return Some(guard_out_of_range(
+-                            context, builder, in_range, *width, payload, mask_xz,
+-                        ));
++                        return Some((payload, mask_xz));
+                     }
+                     return None;
+                 }
+--- a/crates/simulator/src/tests.rs
++++ b/crates/simulator/src/tests.rs
+@@ -1,4 +1,5 @@
+ mod generic_parameter_forwarding;
++mod wide_array_slice;
+ 
+ use crate::ir::Ir;
+ use crate::ir::{Config, ModuleVariables, build_ir, parse_hex_content};
+--- /dev/null
++++ b/crates/simulator/src/tests/wide_array_slice.rs
+@@ -0,0 +1,48 @@
++use super::*;
++
++#[test]
++fn wide_array_slice_invalid_indices_preserve_value_representation() {
++    for width in [1, 64, 65, 128, 129, 189, 256] {
++        let code = format!(
++            r#"
++            module Top (index: input logic<3>, result: output logic<{width}>) {{
++                var data: logic<320> [4];
++                for i in 0..4 :row {{ assign data[i] = '1; }}
++                assign result = data[index][{high}:22];
++            }}
++            "#,
++            high = width + 21,
++        );
++        let ones = Value::from_str(&format!("{width}'b{}", "1".repeat(width))).unwrap();
++        for config in Config::all() {
++            let ir = analyze(&code, &config);
++            let mut sim = Simulator::new(ir, None);
++            let default = if config.use_4state {
++                Value::new_x(width, false)
++            } else {
++                Value::new(0, width, false)
++            };
++            for index in [0, 3, 4, 7, 0] {
++                sim.set("index", Value::new(index, 3, false));
++                sim.step(&Event::clock(VarId::SYNTHETIC));
++                let expected = if index < 4 { &ones } else { &default };
++                assert_eq!(
++                    &sim.get("result").unwrap(),
++                    expected,
++                    "width={width}, index={index}, config={config:?}"
++                );
++            }
++            if config.use_4state {
++                for index in [Value::new_x(3, false), Value::new_z(3, false)] {
++                    sim.set("index", index);
++                    sim.step(&Event::clock(VarId::SYNTHETIC));
++                    assert_eq!(
++                        sim.get("result").unwrap(),
++                        default,
++                        "width={width}, unknown index, config={config:?}"
++                    );
++                }
++            }
++        }
++    }
++}

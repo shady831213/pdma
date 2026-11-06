@@ -9,14 +9,19 @@ if [[ $(uname -s) != Linux || $(uname -m) != x86_64 ]]; then
 fi
 cache="$here/.run/tools"
 archive="$cache/veryl-$VERYL_COMMIT.tar.gz"
-installed="$cache/veryl-$VERYL_COMMIT-rust$VERYL_RUST_VERSION-p${VERYL_PATCH_SHA256:0:12}"
-digest=$(cd "$here/patches" && sha256sum "${VERYL_PATCH_FILES[@]}" | sha256sum)
+installed="$cache/veryl-$VERYL_COMMIT-rust$VERYL_RUST_VERSION-$VERYL_BUILD_PROFILE-p${VERYL_PATCH_SHA256:0:12}"
+patch_manifest() {
+    for patch_name in "${VERYL_PATCH_FILES[@]}"; do
+        (cd "$here/patches" && sha256sum "$patch_name")
+    done
+}
+digest=$(patch_manifest | sha256sum)
 [[ ${digest%% *} == "$VERYL_PATCH_SHA256" ]] || { printf 'Veryl patch manifest checksum mismatch\n' >&2; exit 1; }
 mkdir -p "$cache"
 exec 9>"$cache/install.lock"
 flock 9
 if [[ ! -d "$installed" ]]; then
-    rust_version=$(rustc --version)
+    rust_version=$(rustup run "$VERYL_RUST_VERSION" rustc --version)
     if [[ $rust_version != "rustc $VERYL_RUST_VERSION "* ]]; then
         printf 'Building Veryl requires Rust %s; found %s\n' "$VERYL_RUST_VERSION" "$rust_version" >&2
         exit 1
@@ -45,14 +50,15 @@ if [[ ! -d "$installed" ]]; then
     (
         cd "$staging/source"
         VERSION="$VERYL_VERSION" CARGO_TARGET_DIR="$target" \
-            cargo build --locked -p veryl --profile dev -j "${VERYL_BUILD_JOBS:-4}" >&2
+            rustup run "$VERYL_RUST_VERSION" cargo build --locked -p veryl \
+            --profile "$VERYL_BUILD_PROFILE" -j "${VERYL_BUILD_JOBS:-4}" >&2
     )
-    install -m 755 "$target/debug/veryl" "$staging/install/bin/veryl"
-    printf 'commit=%s\nsource_sha256=%s\nrust=%s\nprofile=dev\npatch_sha256=%s\n' \
-        "$VERYL_COMMIT" "$VERYL_SOURCE_SHA256" "$rust_version" "$VERYL_PATCH_SHA256" \
+    install -m 755 "$target/$VERYL_BUILD_PROFILE/veryl" "$staging/install/bin/veryl"
+    printf 'commit=%s\nsource_sha256=%s\nrust=%s\nprofile=%s\npatch_sha256=%s\n' \
+        "$VERYL_COMMIT" "$VERYL_SOURCE_SHA256" "$rust_version" "$VERYL_BUILD_PROFILE" "$VERYL_PATCH_SHA256" \
         > "$staging/install/provenance.txt"
     (cd "$staging/install" && sha256sum bin/veryl > SHA256SUMS)
-    (cd "$here/patches" && sha256sum "${VERYL_PATCH_FILES[@]}" > "$staging/install/PATCHES.sha256")
+    patch_manifest > "$staging/install/PATCHES.sha256"
     mv "$staging/install" "$installed"
     rm -rf -- "$staging"
     trap - EXIT

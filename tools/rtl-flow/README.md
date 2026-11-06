@@ -9,13 +9,13 @@ are deliberate PDMA changes, not automatic tracking of that project's work.
 
 ## Pinned compiler
 
-The initial upstream revision is `bacc44532af83058bdaab97dbe66ca1b89976be2`, built
-with Rust 1.96.0 and the upstream Cargo.lock. The source archive and ordered patch
-manifest have SHA-256 pins in `toolchain.env`. This is a locally patched compiler,
-not an official Veryl release. Patches cover guarded-read analysis, generic
-parameter forwarding, cross-project generic constant context and simulator
-struct-member width conversion. See
-[patch provenance](patches/README.md).
+The upstream revision is `8521c8c21e495916ca33648ddab746320953e11d` (Veryl 0.22.1),
+built with Rust 1.97.0, the upstream Cargo.lock and `release-verylup` profile.
+The reported version is `0.22.1+generic-parameters+wide-array-guard`. The source
+archive and ordered patch manifest have SHA-256 pins in `toolchain.env`.
+This is a patched compiler, not an unmodified official release. Two patches
+retain generic parameter forwarding and fix wide-array guarded indexing;
+see [patch provenance](patches/README.md).
 
 The launcher checks patch integrity on every invocation, downloads and verifies
 the source archive when needed, applies patches with zero fuzz, then builds and
@@ -25,11 +25,15 @@ binary without rebuilding. Concurrent installations serialize through `flock`.
 Do not substitute a source Git checkout for the archive: preserved generated
 parser files and timestamps avoid an upstream parser-regeneration problem.
 
-Prerequisites: Linux x86_64, Rust/Cargo 1.96.0 for building, a C compiler/linker,
+Prerequisites: Linux x86_64, rustup with Rust/Cargo 1.97.0 for building, a C compiler/linker,
 Bash, curl, tar, patch, coreutils and flock. `VERYL_BUILD_JOBS` defaults to four;
 Cargo cache/target overrides and normal proxy environment variables are honored.
 No machine-specific proxy or license setting is embedded. The user-level Veryl
-installation is untouched.
+installation is untouched. The launcher selects `rustup run 1.97.0` only for the
+compiler build; it does not change PDMA's Rust model baseline or default toolchain.
+Install that compiler toolchain with `rustup toolchain install 1.97.0 --profile minimal`.
+The cache identity includes the build profile so a development build cannot be
+mistaken for the optimized installation.
 
 From the repository root:
 
@@ -50,14 +54,17 @@ The smoke project checks compilation and native execution only; it is not DMA
 RTL, a complete compiler regression or CDC/RDC qualification. Design commands
 run separately in [rtl](../../rtl/README.md).
 
-For this initial setup, an independently checksummed copy of the already-built
+For this upgrade, an independently checksummed copy of the already-built
 qualified compiler can seed the local ignored installation. That is artifact
 reuse, not a claim of a fresh local build. An absent installation triggers the
 reproducible source-build path above.
 
-The current four-patch installation was built through this source-build path.
-The struct-width fix has a failing-first upstream simulator regression and is
-also exercised by `smoke/src/struct_width.veryl` and the real DMA frontend test.
+The upgrade was checked with both smoke tests and all seven DMA register tests
+on CC and Cranelift. The retained `smoke/src/struct_width.veryl` regression and
+real DMA frontend test pass without the previous struct-width patch.
+Run `node --test tools/rtl-flow/veryl.test.mjs` from the repository root to check
+launcher cache selection and rejection of modified patches or installed binaries.
+These tests use temporary fixtures and clean them up automatically.
 
 ## Contract layout
 
@@ -75,7 +82,7 @@ regressions and downstream positive/negative tests. Never fix a compiler defect
 by hand-editing generated SystemVerilog or weakening a DUT assertion.
 
 Design-specific testbench and implementation logic belong in `verification/pdma`
-and `impl/pdma`. EDA integration remains deferred; this change does not copy
+and `impl/pdma`. Commercial EDA integration remains deferred; this change does not copy
 another project's flows, waivers or qualification claims. Keep machine-local
 settings in ignored `local.env`, tool artifacts in `.run/`, and credentials/license
 details out of tracked files. A future shared tool repository should replace this

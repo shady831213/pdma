@@ -136,8 +136,8 @@ Use SDMA as a copy-engine reference and HSA as a system-semantics cross-check;
 neither complete SDMA instruction coverage nor HSA/AQL compatibility is a current goal.
 
 The Copy-only implementation is restored to
-`a67dbfce2e867b48a571fcb4b39874057d9f1932`. The withdrawn implementation and
-specification remain in `247e914` and `50b38bc`. Generic memory atomic32/atomic64,
+`35715346657a5eebf7012305f7794033b3fb25ce`. The withdrawn implementation and
+specification remain in `a441b06` and `fe41a1b`. Generic memory atomic32/atomic64,
 backend-owned errors and reset during pending context maintenance are retained.
 The Signal/Wait-specific descriptor, response variants, software helper, routed
 atomic extensions and their dedicated tests are withdrawn together. The withdrawal
@@ -146,7 +146,7 @@ restored managed memory adapters to their read/write-only baseline. Preparation 
 memory selection; it does not yet add DMA Atomic/SEM commands or change PF
 control-memory capabilities.
 
-The pipeline/command-continuation refactor remains complete at `ae3b7f3`.
+The pipeline/command-continuation refactor remains complete at `a5660ac`.
 Preserve its hardware ownership, typed dataflow and command/chunk completion
 boundaries. Synchronization is not a reason to reopen the pipeline framework.
 The earlier performance comparison did not establish a significant inherent

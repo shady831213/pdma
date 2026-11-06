@@ -22,6 +22,12 @@ automatically change PDMA's toolchain. Repository visibility, history and
 commit-email disclosure remain separate user decisions; confirm the final public
 scope with the user before switching visibility.
 
+History was sanitized on 2026-11-06 to replace machine-local reference paths.
+Use the rewritten GitHub history; do not merge old GitLab/archive branches into
+active branches. Push only to `github`. The `origin` GitLab remote is a read-only
+historical archive and must not receive pushes. Do not use `--all` or `--mirror`
+to publish local archive refs. Author and committer identities were preserved.
+
 ## Current state
 
 The user authorized a clean PDMA restart on 2026-09-09.
@@ -70,8 +76,9 @@ from crates.io. The library sources remain workspace members for maintenance;
 they do not override registry dependencies. Preserve this distinction and do not
 add local path dependencies or `[patch.crates-io]` overrides to the normal model build.
 
-Schema and schema-macros 0.2.0 are published on crates.io from reviewed source
-commit `6813eba7ae05810a028055c2dd086761d106bc8c`. PDMA and downstream fixtures use
+Schema and schema-macros 0.2.0 are published on crates.io. Their reviewed source
+snapshot maps to `5a3a6f6cf13af855f3505968cfd21f601bfe83d7` in the sanitized history;
+the published package contents and checksums are unchanged. PDMA and downstream fixtures use
 the registry releases with checked-in checksums; no preview patch is needed.
 See `model/modeling/docs/publishing.md` for release provenance and
 `model/modeling/docs/schema-export-review.md` for the historical review record.

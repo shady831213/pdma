@@ -10,7 +10,11 @@ fixtures keep publication disabled.
 
 ## Schema 0.2.0 provenance
 
-Reviewed source: `6813eba7ae05810a028055c2dd086761d106bc8c`. Both packages passed
+Reviewed source snapshot in the sanitized history:
+`5a3a6f6cf13af855f3505968cfd21f601bfe83d7`. The 2026-11-06 history cleanup changed
+commit identities and a reference path outside the published packages; both
+package contents and crates.io checksums remain unchanged. The original history
+and old-to-new commit map are retained in a private backup. Both packages passed
 archive tests, all eight facade feature combinations, strict lint/docs checks,
 native C/Veryl consumers and downstream discovery/exporter validation. Publication
 used normal Cargo verification and the existing crates.io credential provider,

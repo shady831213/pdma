@@ -185,7 +185,7 @@ produce a candidate, and no unselected command is discarded as if it were a samp
 Subsequent review rejected both repetitions: endlessly restarting arbitration rounds,
 and feeding WriteCopy's Continue value into a new chunk invocation. Hardware feedback
 must be modeled as data or shared state, not a command to invoke an earlier pipeline.
-The checkpoint before this change is d6ef776535b9972db0ea1134c0f9e07dd7369743,
+The checkpoint before this change is eccdea5a9d532831a9b02cd290d89f9e8fe91a79,
 pushed to both remotes before implementation.
 
 Repeat and its public exports are removed from the generic framework, not deprecated
@@ -195,7 +195,7 @@ in its channel, and a subsequent externally supplied service input consumes that
 progress. Fresh descriptor acceptance and initial validation occur once; progress
 requests do not reread a descriptor or restart range validation.
 
-At checkpoint d61c137, the healthy command kept its shared-engine grant and accepted references across
+At checkpoint 3ef1091, the healthy command kept its shared-engine grant and accepted references across
 finite service boundaries. Peers run only when that command retires or suspends.
 Reset between chunks must retire channel-owned progress before acknowledging; Abort
 of running work stays command-atomic. A payload fault preserves the exact unfinished
@@ -218,7 +218,7 @@ state must have explicit hardware ownership rather than relying on an endless ca
 
 ### Channel state is hardware state, not a pipeline invocation
 
-Review of d61c137 found a remaining ownership error: CommandScope and a bank of
+Review of 3ef1091 found a remaining ownership error: CommandScope and a bank of
 generic child states preserved the Rust pipeline's execution position. Removing
 Repeat alone had not separated a DMA channel from the code processing it. The
 user clarified that Channel is a shared hardware context containing visible
@@ -813,7 +813,7 @@ User review approved separating command-level execution from its chunk-level
 child stages. The following motivation describes the checkpoint before that change;
 the implementation is described below. The software-visible contract is unchanged.
 
-At checkpoint f4fe857c9c57bb613cd374e2082d8da40f8c2cf2, a healthy intermediate chunk
+At checkpoint 3dd15f57db14b4a5917731a31c28e657559e7a63, a healthy intermediate chunk
 write updates retained channel progress and returns a successful Flow without a
 command completion. CompletionInput and Responses forward that empty result to
 Retire, which clears invocation residency while retaining the accepted command

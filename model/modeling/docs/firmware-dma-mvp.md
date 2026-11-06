@@ -14,7 +14,7 @@ as a side effect of firmware readiness.
 
 ## Review follow-up: 2026-09-16
 
-The working MVP checkpoint is preserved at `43515cb`. Its standalone
+The working MVP checkpoint is preserved at `7282f6b`. Its standalone
 `managed-runtime` crate was a provisional placement, not an architectural requirement.
 The follow-up keeps the behavior while changing ownership and reusable mechanics:
 

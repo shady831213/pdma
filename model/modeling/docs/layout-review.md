@@ -10,7 +10,7 @@ kept outside generic union storage. The current wire table is in
 The context-header, channel-group and control-configuration changes below are
 implemented. The following inventory and initial command decision are retained
 as the **2026-10-23 baseline**, measured at commit
-`79260ae18ff32b358b1546c7403fae9ccf51b6aa`. They explain the earlier 112-byte format,
+`dfcc3ff2a0340f8898bbee4f6706a83959247ca2`. They explain the earlier 112-byte format,
 not the current ABI. Offsets are decimal bytes relative to the containing
 record/map. Wire records are little-endian; Rust object sizes are not wire sizes.
 
@@ -252,7 +252,7 @@ preserving its exactly-one-read assertion.
 
 The first uncommitted complete-record tagged-union implementation was discarded
 at the user's request, without a backup branch. The retained checkpoint is
-36fe54e (enum bitfields as tagged-union selectors). Its design inferred an opcode
+9c023f9 (enum bitfields as tagged-union selectors). Its design inferred an opcode
 from a singleton enum in every complete command, which duplicated the public
 header/opcode definition and gave `self.header.opcode` no clear outer owner.
 

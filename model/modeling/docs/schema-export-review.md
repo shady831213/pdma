@@ -7,7 +7,10 @@ their no-partial-artifact guarantee no longer applies to direct streaming.
 Callers may explicitly stage output before publication.
 
 Status: schema and schema-macros 0.2.0 were published on 2026-11-05 after user
-authorization and final review of `6813eba7ae05810a028055c2dd086761d106bc8c`.
+authorization and final review. The reviewed snapshot maps to
+`5a3a6f6cf13af855f3505968cfd21f601bfe83d7` after the 2026-11-06 history cleanup;
+commit references in this document use the sanitized history. Published packages
+are unchanged.
 Normal PDMA and downstream builds now consume these registry releases without
 preview patches. See [publishing.md](publishing.md) for release provenance.
 
@@ -19,7 +22,7 @@ build instructions. Both C and Veryl backends completed review before release.
 
 The 2026-11-02 review rejected a second representation of generated programs.
 The implementation was restored to pushed checkpoint
-`165158f60b9c165782f17628b69613f2ea7ff699` before this rewrite. Superseded local
+`62c85cf670cdddd60ccc0c6132105c033c85673f` before this rewrite. Superseded local
 changes were retained in a local stash for recovery, not used as the new design.
 
 There is one semantic schema representation. Its contents describe records,
@@ -106,7 +109,7 @@ application-owned.
 ## Independent record and register emission
 
 The C-specific two-view experiment was rejected and restored to the pushed
-`6a36d025b98598ae2ea4c59290c387ba0e4b966b` checkpoint before this revision.
+`5ca02bf983a2fcf04ea7757090697245419f2d7e` checkpoint before this revision.
 Record emission continues to use the source AST nodes. No public RecordLayout /
 RecordMember traversal or layout-selection mode is added.
 
@@ -445,7 +448,7 @@ use the new names; wire layout, offsets, access masks and enum codes are unchang
 
 ## Full-crate audit corrections
 
-The comprehensive audit after checkpoint `2354314f` reproduced three correctness
+The comprehensive audit after checkpoint `9c86f657` reproduced three correctness
 defects: public ASTs could describe a field smaller than its actual representation;
 following a record reference confused declaration attributes with outer placement
 attributes; C scalar accessor names bypassed the final symbol collision guard.

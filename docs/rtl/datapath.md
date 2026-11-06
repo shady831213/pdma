@@ -232,12 +232,13 @@ FAULT_STATUS.faulted 只在窗口达到安全 park 边界后发布。软件修�
 
 ## 接下来可独立落实的顺序
 
-先落实 DMA 自有 map 的访问规则，再做带真实握手的寄存器前端/CDC；ContextRequest
-格式在外围阶段决定，不是此前置条件。设计层面继续完善 AXI slot/return/atomic
-profile 和关闭账本。第一条功能
-切片用两个 channel 共享执行、真实内存响应、Copy/Fence/Trap 和 reset，先证明责任
-边界，再扩大参数与 DMA 命令覆盖。保留 managed 接入边界，但不以实现外围、CPU
-或完整子系统作为当前验收条件，也不减少 DMA 原有 opcode 和维护语义。
+DMA 自有 map、寄存器前端和 reg/core CDC 已有实现及原生测试。下一步落实 AXI
+slot/return/atomic profile、buffer/credit 资源及关闭账本，再实现内存端点。
+随后用两个 channel 共享执行、真实内存响应、Copy/Fence/Trap 和 reset 贯通功能
+切片，先证明责任边界，再扩大参数与 DMA 命令覆盖。完整顺序与验收边界见
+[架构路线](architecture.md#后续执行顺序)。ContextRequest 格式在外围阶段决定，
+不是此前置条件；不以外围、CPU 或完整子系统作为当前验收条件，也不减少 DMA
+原有 opcode 和维护语义。
 
 重叠访问合同已明确；在高速 Copy 发射优化前，还要把已提出的 event prefix 快照规则
 写入正式规范和对应验证场景；通过现有 Rust tests 或工具 smoke 都不能替代这些工作。

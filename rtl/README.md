@@ -24,6 +24,10 @@ the tested register slice from outstanding lifecycle/datapath integration.
 The related [memory interface](../docs/rtl/memory-interface.md),
 [datapath](../docs/rtl/datapath.md) and [reset/CDC](../docs/rtl/reset-cdc.md) drafts
 define transaction ownership and identify correctness constraints on pipelining.
+The [next implementation steps](../docs/rtl/architecture.md#后续执行顺序)
+start with concrete transaction resources and reset drain, then a two-channel
+functional slice. The existing evaluation environment remains the baseline;
+future tool/technology migration does not block this work.
 
 ## Source ownership
 

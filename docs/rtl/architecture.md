@@ -1,6 +1,7 @@
 # PDMA Copy Engine RTL 架构设计输入
 
-状态：编码前设计草案，2026-10-28。本文区分已经确认的目标、已有体系结构约定和
+状态：微架构设计草案，2026-11-06 更新。寄存器访问切片已实现，其余部分仍在设计。
+本文区分已经确认的目标、已有体系结构约定和
 尚待评审的微架构选择；不宣称完整 Copy Engine RTL 已实现或已经满足时序。规范入口仍是
 [system specification](../../model/modeling/docs/spec.md)。
 涉及寄存器提交协议的变化，必须先同步 contract、Host/Firmware 和 model 测试，不能只改 RTL。
@@ -36,6 +37,10 @@ Function/context 外围、firmware 资源管理与 PCIe/SoC 集成保持既定�
 | 内存数据位宽 | 实例参数，按 AMBA 合法档位约束；不能把数据位宽误当作地址、descriptor 或 atomic operand 的位宽 |
 | channel/context | 实例参数；数量影响真实存储和访问结构，不只是 generate 次数 |
 | 吞吐 | 无不合理的内部吞吐损失；在声明的工作条件下，zero-delay 外部系统不能被内部周期性空泡限速 |
+
+2026-11-06 决定：当前沿用既有实现评估环境推进 DMA 微架构，后续环境迁移不作为
+本阶段前置条件。迁移时重新建立物理评估基线，不直接混用不同环境的面积/时序结果。
+商业工具与工艺库的具体配置及迁移记录在仓库外维护。
 
 2026-10-29 用户明确：**先只做 DMA RTL，收敛后再考虑 CPU、外围组件和子系统**。
 当前范围是 DMA 自有寄存器、channel、共享执行、内存端口、通知及 reset/维护边界。
@@ -286,7 +291,7 @@ VIP，也不能用 DUT 自己报告的值生成同一项检查的 expected。
 
 | 项目 | 已形成的草案 | 仍需落实的门槛 |
 | --- | --- | --- |
-| 寄存器 | DMA map 的 lane/strobe、配置发布和错误映射 | 桥接兼容性与 DMA owner 行为验证；外围格式不阻塞本阶段 |
+| 寄存器 | 32/64 位前端、reg/core CDC、对象自有存储及七项原生测试已实现 | 连接真实执行、IRQ/lifecycle owner；现有 action/clear 端口不代表排空已实现 |
 | AXI5 | slot 责任、ID 生命周期、原子映射、reason 编码 | 精确协议 profile、参数组合、VIP 检查与返回异常测试 |
 | Reset/CDC | 请求接收前计债、Close/Drain/Open、通知/timer 归属 | 实际 CDC/RDC 结构、初始化和同拍断言 |
 | 数据通路 | owner/阶段接口、任务和事务分层、软件重叠义务及 prefix 快照建议 | 正式记录错误进度保证并验证实际返回交错 |
@@ -298,5 +303,37 @@ VIP，也不能用 DUT 自己报告的值生成同一项检查的 expected。
 建议先实现的验证切片仍包含两个 channel 共享执行能力，贯通 Copy、Fence/Trap 和
 reset；这是验证顺序建议，不删除其余 DMA 命令。managed 模式仅保留接口边界，
 CPU/外围/子系统实现与资格验证在 DMA 收敛后另行开展。
-目录与原生 Veryl manifest 已建立，见 [RTL 入口](../../rtl/README.md)。尚无 RTL
-设计源文件或可执行测试；本阶段没有修改 contract/model，也没有改动 pcie_modeling。
+目录、原生 Veryl manifest 和寄存器切片已有设计源文件及可执行测试，见
+[RTL 入口](../../rtl/README.md)。AXI5 内存端口、执行流水、IRQ/lifecycle owner
+尚未实现；寄存器测试通过不能代替完整 DMA、CDC/RDC 或物理实现验证。
+
+## 后续执行顺序
+
+以下是工作依赖和验收边界，不是已经完成的实现。先闭合每一切片所需的设计决定，
+再实现和验证；不以一次冻结完整 DMA 或扩展外围子系统作为开工条件。
+
+1. **落实事务与资源微架构。** 在内存接口、数据通路、reset 草案中明确模块接口和
+   状态 owner，画出 core/bus 跨域请求、返回及 credit 通路。为 slot/ID、buffer、
+   parked channel 列出分配/释放条件、RAM 端口和容量预算；定出首个验证配置及
+   参数合法性约束。把 error prefix 的建议与正式规范逐项对齐，涉及外部行为的
+   改动先补合同和模型边界测试。产物应足够直接实现端点，不能只保留概念状态图。
+2. **实现内存事务端点及排空。** 先贯通普通读写、请求/回执 CDC、有界 credit 和
+   AXI ID 关联；用真实握手测试 AW/W 独立背压、返回交错、错误、关闭和 outstanding
+   排空。reset 必须覆盖已 offer 但尚未握手的请求。资源不足只能反压，不能丢责任。
+   atomic 的返回/排序需求须在第一步预留，其执行覆盖在后续命令阶段补齐。
+3. **贯通两个 channel 的最小 DMA 通路。** 连接现有寄存器、候选/仲裁、descriptor
+   fetch、Linear Copy、Fence、Trap、error event 和通知 owner。共享一条执行通路，
+   每条 command 的 chunk 在内部推进。同步完成 channel/DMA reset 和 payload
+   fault/park/resume；验收包括一个 channel 停顿或 reset 时另一个仍能推进，
+   reset 完成前所有旧责任退出、恢复后不重放已成功写入。
+4. **覆盖完整 DMA 命令与维护。** 增加独立源/目的 SG、Write、Fill、Wait、Atomic、
+   Semaphore、Timestamp，补齐 Drain/Abort、fatal 和 event 写失败交汇。测试直接驱动
+   DMA 维护接口；不依赖实现 firmware 或 context table。复用模型的语义场景和独立
+   检查器，允许合法的事务拆分、跨 channel 交织和周期差异。
+5. **收敛参数、吞吐和物理实现。** 每个切片都做局部资源/关键路径检查，完整通路后
+   再跑代表与最大配置、三时钟比、非对齐/短任务/长 Copy 等矩阵。以外部吞吐参考
+   解释每类空泡，结合实际存储端口和时序决定规格；完成 CDC/RDC、协议与实现验证。
+   DMA core 收敛后，再规划外围硬件、firmware 和子系统的 RTL 集成。
+
+**下一项具体工作是第 1 步**：优先把 AXI5 事务端点与 reset 排空的物理资源和接口
+落到可编码的粒度；已有寄存器切片继续作为回归基线。

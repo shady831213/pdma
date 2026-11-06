@@ -220,11 +220,54 @@ decisions. HSA is a semantic reference; AQL compatibility is not a current goal.
 - Keep Rust files below 250 pure LOC and use the workspace lint configuration.
 - Do not add unsafe code or weaken tests to pass validation.
 - Do not stage build caches or incidental agent state.
-- Do not add local-machine details, EDA-machine information or EDA-tool-related
-  content to tracked files, including documentation, configuration, scripts,
-  logs and reports. Keep such notes and artifacts outside this repository.
-  Existing explicitly approved Veryl tooling and patches remain retained; this
-  does not authorize adding machine-specific information around them.
+- Do not add local-machine details or commercial EDA deployment information to
+  tracked files: server identities, installation paths, license settings,
+  proprietary technology/library inputs, logs and reports stay outside this
+  repository. This restriction concerns commercial EDA tools, not public
+  open-source tooling. Authorized Veryl versions, patches, generic launchers and
+  public provenance may be maintained here without machine-specific settings.
   Check the staged diff against this restriction before each commit.
 - Use `GIT_MASTER=1` before every git command.
 - Use short English commit messages matching repository history.
+
+## RTL microarchitecture working principles
+
+Adapted from [pcie_modeling](https://github.com/shady831213/pcie_modeling).
+These principles apply to the DMA-core scope; they do not import that project's
+topology, technology targets, tool deployment or implementation results.
+
+- Keep the functional model semantic. Feed missing ownership, ordering and
+  lifecycle contracts back into the specification/model; do not make it mirror
+  RTL RAM ports, muxes or exact cycle counts.
+- Describe hardware top down: module responsibilities, state lifetimes, register
+  cuts, storage access, hazards, timing paths and tradeoffs. Keep experiment
+  chronology and evidence separate from the architecture description.
+- Make allocation, binding and release physical: selection, handshakes, row write
+  enables, identity retention and the terminal event that permits reuse. Define
+  simultaneous-event priority and when released capacity becomes visible.
+- Array syntax does not prove a memory implementation. Account for storage,
+  read/write ports, arbitration, mux depth, fanout and latency. Keep per-entry
+  state and update priority cohesive; place allocation and cross-entry decisions
+  at their actual shared owner. Do not split storage merely to simplify code.
+- Use native interfaces/modports and typed payloads. Flatten only at real
+  integration boundaries; adapters must not silently add storage or latency.
+- Express internal invariants as executable assertions, not synthesized sticky
+  error monitors. Preserve actual protocol, admission and runtime error behavior.
+- Verify the real DUT against an independent oracle. Check identity, causal
+  order and delivery skew, including no early completion or lost ownership;
+  avoid imposing accidental same-cycle behavior or designing around test probes.
+- Compare performance under matched source/configuration and constraints. Do not
+  move cost outside the measured boundary or weaken throughput requirements to
+  claim improvement. Elaboration success is not physical feasibility.
+- Iterate with small and representative configurations and explicit scaling
+  analysis. Validate maximum configurations at stable milestones; keep required
+  final coverage. Run focused regressions first, then affected end-to-end paths.
+- Keep compiler crashes distinct from expected runtime failures. Zero selected
+  tests, retry-only passes or weakened assertions are not qualification evidence.
+- Reuse immutable build artifacts only when all relevant input identities match;
+  isolate outputs and distinguish reuse from fresh builds. Measure build/runtime
+  costs without reducing verification to improve reported turnaround.
+- Replace an unsuitable architecture rather than accumulating wrappers. Reuse
+  mature primitives and remove obsolete paths/tests/dependencies; history is the
+  archive. Distinguish sourced hardware facts, deductions and hypotheses, and do
+  not assume a model's transaction identifiers require a central RTL table.

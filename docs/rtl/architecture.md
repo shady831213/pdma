@@ -19,12 +19,14 @@ Function/context 外围、firmware 资源管理与 PCIe/SoC 集成保持既定�
 | [Reset 与 CDC](reset-cdc.md) | 关闭/排空协议、跨域责任、通知和 timer |
 
 这是同一套设计的不同视角，不新增 Rust runtime、通用 pipeline 组合子或软件命令。
+微架构工作的状态归属、物理资源分析和验证原则见
+[RTL microarchitecture working principles](../../AGENTS.md#rtl-microarchitecture-working-principles)。
 
 ## 已确认的设计输入
 
 | 项目 | 本轮决定 |
 | --- | --- |
-| 设计语言和工具 | 参考 [pcie_modeling](https://github.com/shady831213/pcie_modeling) 的 Veryl、原生测试、VCS/UVM/VIP、DC、VC SpyGlass 流程；本阶段视为可用，不开展工具仓库拆分或重新验证 flow |
+| 设计语言和工具 | 参考 [pcie_modeling](https://github.com/shady831213/pcie_modeling) 的 Veryl 和原生测试；平台实现环境的信息在仓库外维护，本阶段不开展共享工具仓库拆分 |
 | 工具版本 | PDMA 在 tools/rtl-flow 独立维护固定 Veryl 源码版本、有序补丁和安装入口，以 pcie_modeling 已验证快照为起点；后续再统一共享仓库，不自动跟随外部更新 |
 | 内存接口 | AXI5 master；需要明确选择 atomic 支持及相关事务属性 |
 | 寄存器接口 | AXI4-Lite slave，数据位宽在实例化时选择 32 或 64 位 |

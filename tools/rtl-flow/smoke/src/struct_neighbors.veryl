@@ -1,0 +1,48 @@
+package StructNeighbors {
+    struct Request {
+        write   : logic     ,
+        address : logic<64> ,
+        selector: logic<32> ,
+        size    : logic<3>  ,
+        length  : logic<3>  ,
+        data    : logic<512>,
+    }
+}
+#[test(struct_expression_preserves_neighbors)]
+module StructNeighborsTest {
+    inst clk: $tb::clock_gen #( period: 10 );
+    var narrow  : logic                       ;
+    var address : logic                   <64>;
+    var selector: logic                   <32>;
+    var count   : logic                   <7> ;
+    var value   : StructNeighbors::Request    ;
+    always_comb {
+        value         = StructNeighbors::Request'{
+            write        : 0                               ,
+            address      : address                         ,
+            selector     : selector                        ,
+            size         : if narrow ? 0 : 3,
+            length       : if narrow ? 0 : (count - 1) as 3,
+            data         : 0                               ,
+        };
+        if narrow {
+            value.address = address;
+        }
+    }
+    initial {
+        address  = 64'h123456789abcdef0;
+        selector = 32'hdeadbeef;
+        count    = 8;
+        narrow   = 0;
+        clk.next();
+        $assert(value.address == address && value.selector == selector, "NEIGHBORS_INTACT");
+        $assert(value.size == 3 && value.length == 7 && value.data == 0, "MEMBER_WIDTHS");
+        count = 3;
+        clk.next();
+        $assert(value.address == address && value.selector == selector && value.length == 2, "VARIABLE_MEMBER");
+        narrow = 1;
+        clk.next();
+        $assert(value.address == address && value.selector == selector && value.size == 0, "OTHER_BRANCH");
+        $finish();
+    }
+}

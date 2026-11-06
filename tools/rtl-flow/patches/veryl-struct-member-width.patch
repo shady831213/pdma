@@ -1,0 +1,19 @@
+--- a/crates/simulator/src/ir/expression.rs
++++ b/crates/simulator/src/ir/expression.rs
+@@ -4290,9 +4290,13 @@
+                 for ((_name, expr), member_type) in members.iter().zip(struct_members.iter()) {
+                     let converted: ProtoExpression = Conv::conv(context, expr)?;
+                     let elem_width = member_type.width().unwrap();
+-                    // An unsized literal is 32 bits, and the concatenation
+-                    // joins elements at their value width, not `elem_width`.
+-                    let converted = extend_to_width(converted, elem_width);
++                    // Assignment to a struct member both extends and truncates.
++                    // Wider expressions must not occupy neighbouring member bits.
++                    let member_context = ExpressionContext {
++                        width: elem_width,
++                        ..*converted.expr_context()
++                    };
++                    let converted = resize_to_width(converted, elem_width, member_context);
+                     debug_assert_eq!(converted.width(), elem_width);
+                     elements.push((Box::new(converted), 1, elem_width));
+                 }

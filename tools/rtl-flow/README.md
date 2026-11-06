@@ -11,10 +11,11 @@ are deliberate PDMA changes, not automatic tracking of that project's work.
 
 The upstream revision is `8521c8c21e495916ca33648ddab746320953e11d` (Veryl 0.22.1),
 built with Rust 1.97.0, the upstream Cargo.lock and `release-verylup` profile.
-The reported version is `0.22.1+generic-parameters+wide-array-guard`. The source
+The reported version is `0.22.1+generic-parameters+wide-array-guard+struct-width`. The source
 archive and ordered patch manifest have SHA-256 pins in `toolchain.env`.
-This is a patched compiler, not an unmodified official release. Two patches
-retain generic parameter forwarding and fix wide-array guarded indexing;
+This is a patched compiler, not an unmodified official release. Three patches
+retain generic parameter forwarding, fix wide-array guarded indexing and enforce
+struct member expression widths in the native simulator;
 see [patch provenance](patches/README.md).
 
 The launcher checks patch integrity on every invocation, downloads and verifies
@@ -59,9 +60,11 @@ qualified compiler can seed the local ignored installation. That is artifact
 reuse, not a claim of a fresh local build. An absent installation triggers the
 reproducible source-build path above.
 
-The upgrade was checked with both smoke tests and all seven DMA register tests
-on CC and Cranelift. The retained `smoke/src/struct_width.veryl` regression and
-real DMA frontend test pass without the previous struct-width patch.
+The original upgrade passed the two initial smoke tests and seven register tests,
+but those cases did not cover a wide struct assigned in an `always_comb` block.
+The Copy slice exposed adjacent-field corruption in that case; the member-width
+fix is restored and `smoke/src/struct_neighbors.veryl` retains its failing input.
+Run all compiler smoke tests on both native backends after any pin change.
 Run `node --test tools/rtl-flow/veryl.test.mjs` from the repository root to check
 launcher cache selection and rejection of modified patches or installed binaries.
 These tests use temporary fixtures and clean them up automatically.

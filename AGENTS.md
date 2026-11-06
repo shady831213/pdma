@@ -27,6 +27,9 @@ Use the rewritten GitHub history; do not merge old GitLab/archive branches into
 active branches. Push only to `github`. The `origin` GitLab remote is a read-only
 historical archive and must not receive pushes. Do not use `--all` or `--mirror`
 to publish local archive refs. Author and committer identities were preserved.
+The post-rewrite check found that GitHub still serves old unreferenced commits
+through its API. Clean reachable history is not proof of server-side erasure.
+Keep visibility private until the user resolves that remaining public-release scope.
 
 ## Current state
 

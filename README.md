@@ -46,7 +46,7 @@ integration follow after DMA convergence.
 | --- | --- |
 | `model/modeling/` | Executable Rust model, firmware, Host software, contract and system specification |
 | `rtl/` | Veryl design and native block tests |
-| `verification/pdma/` | System-level RTL testbench, VIP integration and scenarios |
+| `verification/dma/` | System-level RTL testbench, VIP integration and scenarios |
 | `impl/pdma/` | Synthesis, timing constraints and CDC/RDC analysis |
 | `tools/rtl-flow/` | Toolchain and shared flow integration |
 | `docs/rtl/` | RTL architecture decisions and model-to-hardware mapping |

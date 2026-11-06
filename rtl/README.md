@@ -6,8 +6,9 @@ outside the first RTL phase; see the [project overview](../README.md).
 
 The first implemented slice is the DMA register-access path: AXI4-Lite 32/64,
 reg/core CDC and channel/ring register owners. Seven native tests exercise it.
-The [minimal Linear Copy slice](../docs/rtl/minimal-copy.md) now connects this
-path to one execution owner and an ordinary AXI memory endpoint. It is not a
+The [minimal Linear Copy and Fence slice](../docs/rtl/minimal-copy.md) now connects
+this path to one execution owner and an ordinary AXI memory endpoint. Fence32/64
+writes a software-observable memory marker after prior channel work. It is not a
 complete DMA or a physically qualified design; the remaining command families,
 multichannel execution and throughput/physical closure still need implementation.
 
@@ -72,7 +73,7 @@ See [DMA register ownership and integration](src/dma/README.md) and
 ## Verification and implementation
 
 Use native Veryl tests for local state transitions and interfaces. DMA-level
-VCS/UVM/VIP verification belongs in [verification/pdma](../verification/pdma/README.md).
+VCS/UVM/VIP verification belongs in [verification/dma](../verification/dma/README.md).
 Synthesis, SDC and CDC/RDC work belongs in [impl/pdma](../impl/pdma/README.md).
 Model scenarios remain executable software/hardware semantic references, not
 cycle-accurate golden traces.

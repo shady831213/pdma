@@ -55,7 +55,7 @@ Do not restore their compatibility interfaces without a user request.
 ## Scope and retained material
 
 The executable model is under `model/modeling`; read its `AGENTS.md` for model work.
-RTL preparation is under `rtl`, `verification/pdma`, `impl/pdma` and `tools/rtl-flow`.
+RTL preparation is under `rtl`, `verification/dma`, `impl/pdma` and `tools/rtl-flow`.
 The first RTL phase is DMA only (confirmed 2026-10-29). CPU, peripheral
 hw-components, firmware execution and subsystem integration wait until DMA RTL
 converges. Keep their future interface boundaries, but do not implement them or
@@ -64,8 +64,10 @@ make their register redesign prerequisites for this phase.
 it does not supersede the system specification under `model/modeling/docs`.
 The DMA register-access slice has native tests: a 32/64-bit AXI4-Lite frontend,
 reg/core CDC and object-owned registers. `DmaCopy` adds a minimal one-channel
-Linear Copy slice with a fixed 32-bit register / 64-bit ordinary memory profile,
-bounded bursts, three-domain handshakes and reset drain. It is not the complete
+Linear Copy and Fence32/64 slice with a fixed 32-bit register / 64-bit ordinary
+memory profile, bounded bursts, three-domain handshakes and reset drain. Software
+can submit Copy followed by Fence and poll its memory marker for completion.
+It is not the complete
 DMA execution/atomic/multichannel implementation or throughput closure; see
 `docs/rtl/minimal-copy.md`. Register reset action/clear ports alone remain
 integration boundaries, not evidence of transaction drain without that owner.
@@ -229,6 +231,11 @@ decisions. HSA is a semantic reference; AQL compatibility is not a current goal.
   repository. This restriction concerns commercial EDA tools, not public
   open-source tooling. Authorized Veryl versions, patches, generic launchers and
   public provenance may be maintained here without machine-specific settings.
+  Reproducible commercial-tool invocation, verification/regression, synthesis,
+  generic constraints and report checks also belong in the repository. Inject
+  deployment settings through arguments/environment or a trusted private config;
+  see `tools/rtl-flow/flows.md`. Do not move reusable flow code out merely because
+  it invokes a commercial tool.
   Check the staged diff against this restriction before each commit.
 - Use `GIT_MASTER=1` before every git command.
 - Use short English commit messages matching repository history.

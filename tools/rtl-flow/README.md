@@ -84,9 +84,9 @@ An upgrade must update source/patch identity together and rerun relevant compile
 regressions and downstream positive/negative tests. Never fix a compiler defect
 by hand-editing generated SystemVerilog or weakening a DUT assertion.
 
-Design-specific testbench and implementation logic belong in `verification/pdma`
-and `impl/pdma`. Commercial EDA integration remains deferred; this change does not copy
-another project's flows, waivers or qualification claims. Keep machine-local
-settings in ignored `local.env`, tool artifacts in `.run/`, and credentials/license
+Design-specific testbench and implementation logic belong in `verification/dma`
+and `impl/pdma`. Their reproducible flows and generic constraints are tracked;
+see [flow configuration](flows.md). Keep machine-local settings in a private
+deployment file, tool artifacts in local run directories, and credentials/license
 details out of tracked files. A future shared tool repository should replace this
 tool directory without changing design source ownership or native manifests.

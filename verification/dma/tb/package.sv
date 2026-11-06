@@ -1,0 +1,34 @@
+`include "uvm_macros.svh"
+package pdma_vip_pkg;
+    timeunit 1ns; timeprecision 1ps;
+    import uvm_pkg::*;
+    import svt_uvm_pkg::*;
+    import svt_mem_uvm_pkg::*;
+    import svt_axi_uvm_pkg::*;
+    import jvs_pkg::*;
+    import pdma_contract_records::*;
+    `include "env/configuration.svh"
+    `include "env/clock_env.svh"
+    `include "env/memory/memory_backing.svh"
+    `include "env/memory/buffer_allocation.svh"
+    `include "env/task_data.svh"
+    `include "env/software/mmio_sequence.svh"
+    `include "env/software/channel_driver.svh"
+    `include "env/software/irq_handler.svh"
+    `include "env/irq/irq_monitor.svh"
+    `include "env/memory/memory_response.svh"
+    `include "env/checking/task_checker.svh"
+    `include "env/coverage/scenario_coverage.svh"
+    `include "env/flow/task_flow.svh"
+    `include "env/environment.svh"
+    `include "tests/tb_selftest/mutation.svh"
+    `include "tests/dut/base.svh"
+    `include "tests/dut/copy.svh"
+    `include "tests/dut/fault.svh"
+    `include "tests/dut/error.svh"
+    `include "tests/dut/reset.svh"
+    `include "tests/dut/descriptor.svh"
+    `include "tests/dut/fatal.svh"
+    `include "tests/dut/irq.svh"
+    `include "tests/dut/ring.svh"
+endpackage

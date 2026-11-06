@@ -1,4 +1,4 @@
-# Minimal Linear Copy RTL slice
+# Minimal Linear Copy and Fence RTL slice
 
 This slice makes the design, native verification and implementation assessment
 runnable before expanding to the complete DMA. It is a fixed representative
@@ -30,8 +30,15 @@ The command ring retains the current 96-byte wire format. The core fetches the
 descriptor, accepts it once, then retains its state across all payload chunks.
 Each access has at most eight 64-bit beats and never crosses 4KiB. Aligned ranges
 use bursts; unmatched alignment and tails use byte accesses without over-reading.
-Source and destination selectors remain independent. Successful commands produce
-no event. Other valid opcodes and SG endpoints report Unsupported in this slice;
+Source and destination selectors remain independent. Fence32/64 writes its
+descriptor value to an aligned 32- or 64-bit destination with its own context
+selector. It issues only after prior channel work has retired, so software may
+submit Copy followed by Fence and poll the marker to observe completion. Fence
+uses one ordinary memory write, preserves adjacent byte lanes and shares payload
+PageFault/Resume, permanent WriteError and reset-drain handling. It does not
+provide a global barrier across channels or memory agents.
+Successful commands produce no event. Other valid opcodes and SG endpoints report
+Unsupported in this slice;
 they are not implemented by an alternative software path.
 
 The bus endpoint captures a complete request before driving AR or independent
@@ -70,7 +77,11 @@ B completion, and a new unaligned copy after reconfiguration. It runs with and
 without artificial memory backpressure, covers channel and DMA-wide reset, and
 reports bus cycles between payload burst completions. `CopyErrorTest` checks a stopping error and
 event publication across 4KiB. `CopyFaultTest` checks write-fault suspension and
-retained read data. The original register tests remain regression coverage.
+retained read data. `FenceTest` covers 32/64-bit markers, recoverable and permanent
+write faults, reset drain and invalid geometry. `FenceOrderTest` checks that a
+Fence waits for the prior Copy write receipt; `FenceMemoryTest` checks word lanes
+and preservation of adjacent bytes. The original register tests remain regression
+coverage, for thirteen native tests in total.
 
 The test memory is an external slave and an independent byte oracle, not a second
 DMA implementation. Native clocks are advanced explicitly; this is digital CDC
@@ -86,7 +97,8 @@ Unaligned byte transfers are also a functional baseline, not an optimized datapa
 
 Implementation assessments use the emitted hardware, excluding test modules,
 and bind source, compiler, constraints and library identities to each result.
-Commercial flow scripts and reports remain outside the repository. A mapped
+Reproducible flow scripts are tracked under `verification/dma/flow` and
+`impl/pdma/flow`; deployment inputs and raw reports remain outside Git. A mapped
 pre-layout estimate does not prove physical CDC/RDC closure or post-route timing;
 power based on synthetic activity is not workload power.
 

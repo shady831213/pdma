@@ -1,0 +1,23 @@
++incdir+${SVT_COMMON_HOME}/sverilog/include
++incdir+${SVT_COMMON_HOME}/sverilog/src/vcs
++incdir+${SVT_AMBA_HOME}/sverilog/include
++incdir+${SVT_AMBA_HOME}/sverilog/src/vcs
++incdir+.
++define+SVT_AMBA_ENABLE_C_BASED_MEM
++define+SVT_AXI_EXCLUDE_ICN_VIP
++define+SVT_AXI_MAX_ADDR_USER_WIDTH=32
++define+SVT_AXI_MAX_WRITE_RESP_DELAY=256
++define+SVT_AXI_MAX_RVALID_DELAY=256
++define+UVM_DISABLE_AUTO_ITEM_RECORDING
+${SVT_COMMON_HOME}/sverilog/include/svt.uvm.pkg
+${SVT_COMMON_HOME}/sverilog/include/svt_mem.uvm.pkg
+${SVT_COMMON_HOME}/sverilog/include/svt_svc.uvm.pkg
+${SVT_AMBA_HOME}/sverilog/include/svt_axi.uvm.pkg
+-f ${JVSUK_HOME}/etc/jvs.f
+tb/control_if.sv
+tb/contract_records.sv
+tb/package.sv
+tb/clock_domain.sv
+tb/assertions.sv
+tb/dut.sv
+tb/top.sv

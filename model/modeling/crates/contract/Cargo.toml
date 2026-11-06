@@ -28,3 +28,8 @@ hw-model-schema = "0.2.0"
 
 [lints]
 workspace = true
+
+[[bin]]
+name = "pdma-sv-records"
+path = "src/bin/pdma-sv-records.rs"
+required-features = ["export-rtl-layout"]

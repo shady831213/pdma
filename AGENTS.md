@@ -29,6 +29,8 @@ remotes. The local default push destination and active branch upstreams remain
 GitHub. Do not use `--all` or `--mirror` to publish local archive refs. Author and
 committer identities were preserved. Both remotes accepted the sanitized active
 branches and checkpoint tag on 2026-11-06.
+Force pushes are now disabled on both remotes. Use ordinary fast-forward pushes;
+do not force-push or weaken branch protection without new explicit user authorization.
 The post-rewrite check found that GitHub still serves old unreferenced commits
 through its API. Clean reachable history is not proof of server-side erasure.
 Keep visibility private until the user resolves that remaining public-release scope.
@@ -214,5 +216,11 @@ decisions. HSA is a semantic reference; AQL compatibility is not a current goal.
 - Keep Rust files below 250 pure LOC and use the workspace lint configuration.
 - Do not add unsafe code or weaken tests to pass validation.
 - Do not stage build caches or incidental agent state.
+- Do not add local-machine details, EDA-machine information or EDA-tool-related
+  content to tracked files, including documentation, configuration, scripts,
+  logs and reports. Keep such notes and artifacts outside this repository.
+  Existing explicitly approved Veryl tooling and patches remain retained; this
+  does not authorize adding machine-specific information around them.
+  Check the staged diff against this restriction before each commit.
 - Use `GIT_MASTER=1` before every git command.
 - Use short English commit messages matching repository history.

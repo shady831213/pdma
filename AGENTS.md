@@ -63,9 +63,12 @@ make their register redesign prerequisites for this phase.
 `docs/rtl/architecture.md` records confirmed inputs and unresolved design choices;
 it does not supersede the system specification under `model/modeling/docs`.
 The DMA register-access slice has native tests: a 32/64-bit AXI4-Lite frontend,
-reg/core CDC and object-owned registers. DMA execution, IRQ/lifecycle owners and
-the AXI5 memory port are not implemented yet. Register reset action/clear ports
-are integration boundaries, not evidence of implemented transaction drain.
+reg/core CDC and object-owned registers. `DmaCopy` adds a minimal one-channel
+Linear Copy slice with a fixed 32-bit register / 64-bit ordinary memory profile,
+bounded bursts, three-domain handshakes and reset drain. It is not the complete
+DMA execution/atomic/multichannel implementation or throughput closure; see
+`docs/rtl/minimal-copy.md`. Register reset action/clear ports alone remain
+integration boundaries, not evidence of transaction drain without that owner.
 Follow `rtl/README.md` for source and verification ownership. PDMA independently
 pins and maintains Veryl under `tools/rtl-flow`, starting from a verified snapshot
 of [pcie_modeling's tool inputs](https://github.com/shady831213/pcie_modeling).
@@ -231,6 +234,13 @@ decisions. HSA is a semantic reference; AQL compatibility is not a current goal.
 - Use short English commit messages matching repository history.
 
 ## RTL microarchitecture working principles
+
+Reusable RTL belongs in `rtl/common_cell`, currently snapshotted from pcie_modeling
+with source identity and tests. Use its existing cells instead of duplicating
+transport/storage/selection logic. Technology-specific implementations stay behind
+the common contracts; `rtl/tech_cell/generic` contains only generic RTL providers.
+Keep DMA/PCIe protocols and lifecycle policies outside common_cell. Shared-repo
+extraction is deferred; do not add machine-local source references to Git.
 
 Adapted from [pcie_modeling](https://github.com/shady831213/pcie_modeling).
 These principles apply to the DMA-core scope; they do not import that project's

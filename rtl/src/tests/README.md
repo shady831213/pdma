@@ -16,8 +16,13 @@ The seven executable tests cover:
 | `DmaRegisterBankTest` | Three-channel isolation, live reset status, request versus cleanup completion |
 | `DmaRegisterInterfaceTest` | Complete 32- and 64-bit AXI→CDC→owner paths, nonzero aperture base, read snapshot retention and exactly-once Resume under response backpressure |
 
+The minimal execution slice adds `CopyEngineTest`, `CopyErrorTest` and
+`CopyFaultTest`. Their scenarios and scope are recorded in the
+[slice description](../../../docs/rtl/minimal-copy.md#verification-entry-points).
+
 Run both native CC and Cranelift backends with `VERYL_DUT_REUSE=0`, as shown in
 [the RTL README](../../README.md). These fixtures drive lifecycle and IRQ status
-inputs explicitly. They do not stand in for an implemented DMA engine, outstanding
-memory drain or interrupt controller. Clock scheduling tests do not simulate
+inputs explicitly. The Copy tests instead connect the real execution/reset owner
+and memory endpoint. Neither set proves the complete DMA or all outstanding-window
+configurations. Clock scheduling tests do not simulate
 metastability or substitute for CDC/RDC analysis and physical timing checks.

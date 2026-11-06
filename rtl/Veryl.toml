@@ -6,6 +6,9 @@ version = "0.1.0"
 sources = ["src"]
 target = {type = "directory", path = "target"}
 
+[dependencies]
+common_cell = {path = "common_cell"}
+
 [test]
 seed = 20261028
 four_state = true

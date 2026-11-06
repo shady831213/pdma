@@ -1,0 +1,301 @@
+// One accepted command owns the copy cursors and scratch until retirement or reset.
+// This initial engine implements Linear Copy; unsupported valid opcodes stop with an event.
+pub module CopyEngine (
+    clk            : input   clock                        ,
+    rst_n          : input   reset_async_low              ,
+    command        : input   RegisterState::Ring          ,
+    events         : input   RegisterState::Ring          ,
+    configuration  : input   RegisterState::ChannelConfig ,
+    actions        : input   RegisterState::ChannelActions,
+    reset_all      : input   logic                        ,
+    fatal_in       : input   logic                        ,
+    event_geometry : input   logic                        ,
+    event_ready    : input   logic                        ,
+    status         : output  RegisterState::ChannelStatus ,
+    clear          : output  logic                        ,
+    command_advance: output  logic                        ,
+    event_advance  : output  logic                        ,
+    internal_fatal : output  logic                        ,
+    memory         : modport CopyMemoryPort::master       ,
+) {
+    enum Phase: logic<4> {
+        Idle,
+        Fetch,
+        FetchReturn,
+        Decode,
+        Read,
+        ReadReturn,
+        Write,
+        WriteReturn,
+        ParkRead,
+        ParkWrite,
+        Publish,
+        PublishReturn,
+        Stopped,
+    }
+    var phase              : Phase     ;
+    var closing            : logic     ;
+    var descriptor         : logic<768>;
+    var fetched            : logic<7>  ;
+    var descriptor_address : logic<64> ;
+    var source_address     : logic<64> ;
+    var destination_address: logic<64> ;
+    var remaining          : logic<64> ;
+    var committed          : logic<64> ;
+    var scratch            : logic<512>;
+    var error_code         : logic<32> ;
+    var stopped            : logic     ;
+    var channel_fatal      : logic<32> ;
+    var bug                : logic     ;
+    var amount             : logic<7>  ;
+    var fetch_amount       : logic<7>  ;
+    var portion            : logic<7>  ;
+    var event_offset       : logic<5>  ;
+    var event_amount       : logic<5>  ;
+    let shutdown           : logic      = closing || actions.reset_request || reset_all;
+    let waiting            : logic      = phase == Phase::FetchReturn || phase == Phase::ReadReturn || phase
+        == Phase::WriteReturn || phase == Phase::PublishReturn;
+    let source_sum         : logic<65>  = (descriptor[319:256] as 65) + (descriptor[383:320] as 65);
+    let destination_sum    : logic<65>  = (descriptor[575:512] as 65) + (descriptor[639:576] as 65);
+    let source_end         : logic<65>  = source_sum + (descriptor[191:128] as 65);
+    let destination_end    : logic<65>  = destination_sum + (descriptor[191:128] as 65);
+    let fetch_address      : logic<64>  = descriptor_address + fetched;
+    let descriptor_start   : logic<65>  = (command.base as 65) + ((command.consumer & (command.capacity - 1)) as 65)
+        * CommandLayout::EXTENT;
+    let descriptor_end     : logic<65>  = descriptor_start + CommandLayout::EXTENT;
+    let event_start        : logic<65>  = (events.base as 65) + ((events.producer & (events.capacity - 1)) as 65)
+        * EventLayout::EXTENT;
+    let event_end          : logic<65>  = event_start + EventLayout::EXTENT;
+    let event_address      : logic<64>  = (event_start as 64) + event_offset;
+    assign internal_fatal  = bug;
+    assign status          = RegisterState::ChannelStatus'{
+        resetting: closing                                              ,
+        fatal    : channel_fatal                                        ,
+        faulted  : phase == Phase::ParkRead || phase == Phase::ParkWrite,
+        error    : stopped                                              ,
+        trap     : 0                                                    ,
+    };
+    assign clear           = closing && !waiting;
+    assign command_advance = phase == Phase::Decode && !shutdown && descriptor[7:0] <= 8 && descriptor[15:10] == 0;
+    assign event_advance   = phase == Phase::PublishReturn && memory.returned && !memory.receipt.failed
+        && !memory.receipt.protocol_error && !shutdown && event_offset + event_amount == EventLayout::EXTENT;
+    assign memory.accepted = waiting;
+    always_comb {
+        portion = if remaining >= 64 ? 64 : remaining as 7;
+        if portion >: 4096 - (source_address[11:0] as u32) {
+            portion = (4096 - (source_address[11:0] as u32)) as 7;
+        }
+        if portion >: 4096 - (destination_address[11:0] as u32) {
+            portion = (4096 - (destination_address[11:0] as u32)) as 7;
+        }
+        amount       = if source_address[2:0] == 0 && destination_address[2:0] == 0 && portion >= 8 ?
+            portion & 7'h78
+        :
+            1
+        ;
+        fetch_amount = if fetched <= 32 ? 64 : (96 - fetched) as 7;
+        if fetch_amount >: 4096 - (fetch_address[11:0] as u32) {
+            fetch_amount = (4096 - (fetch_address[11:0] as u32)) as 7;
+        }
+        event_amount = (EventLayout::EXTENT - event_offset) as 5;
+        if event_amount >: 4096 - (event_address[11:0] as u32) {
+            event_amount = (4096 - (event_address[11:0] as u32)) as 5;
+        }
+        memory.request = CopyMemory::Request'{
+            write         : phase == Phase::Write || phase == Phase::Publish,
+            address       : source_address                                  ,
+            selector      : descriptor[223:192]                             ,
+            size          : if amount == 1 ? 0 : 3,
+            length        : if amount == 1 ? 0 : ((amount >> 3) - 1) as 3,
+            data          : scratch                                         ,
+        };
+        if phase == Phase::Fetch {
+            memory.request.address  = fetch_address;
+            memory.request.selector = configuration.ring_context;
+            memory.request.size     = 3;
+            memory.request.length   = ((fetch_amount >> 3) - 1) as 3;
+        }
+        if phase == Phase::Write {
+            memory.request.address  = destination_address;
+            memory.request.selector = descriptor[255:224];
+        }
+        if phase == Phase::Publish {
+            memory.request.address  = event_address;
+            memory.request.selector = configuration.ring_context;
+            memory.request.size     = 3;
+            memory.request.length   = ((event_amount >> 3) - 1) as 3;
+            memory.request.data     = ((descriptor[127:64] as 512) | ((error_code as 512) << 64)
+                    | ((committed as 512) << 128)) >> (event_offset * 8);
+        }
+        memory.valid = !shutdown && !fatal_in
+            && (phase == Phase::Fetch || phase == Phase::Read || phase == Phase::Write
+                || (phase == Phase::Publish && event_geometry && event_ready && !event_end[64]));
+    }
+    always_ff (clk, rst_n) {
+        if_reset {
+            phase               = Phase::Idle;
+            closing             = 0;
+            descriptor          = 0;
+            fetched             = 0;
+            descriptor_address  = 0;
+            source_address      = 0;
+            destination_address = 0;
+            remaining           = 0;
+            committed           = 0;
+            scratch             = 0;
+            error_code          = 0;
+            stopped             = 0;
+            channel_fatal       = 0;
+            bug                 = 0;
+            event_offset        = 0;
+        } else {
+            if actions.reset_request || reset_all {
+                closing = 1;
+            }
+            if clear {
+                closing       = 0;
+                phase         = Phase::Idle;
+                descriptor    = 0;
+                fetched       = 0;
+                remaining     = 0;
+                committed     = 0;
+                scratch       = 0;
+                stopped       = 0;
+                channel_fatal = 0;
+                event_offset  = 0;
+                // Device fatal is cleared only by the DMA-wide lifecycle owner.
+                if reset_all {
+                    bug = 0;
+                }
+            } else if shutdown {
+                if !waiting || memory.returned {
+                    phase = Phase::Idle;
+                }
+            } else if waiting && memory.returned && memory.receipt.protocol_error {
+                bug   = 1;
+                phase = Phase::Stopped;
+            } else {
+                case phase {
+                    Phase::Idle       : if configuration.enable && !fatal_in && !stopped && channel_fatal == 0
+                        && command.producer != command.consumer {
+                        descriptor_address = descriptor_start as 64;
+                        fetched            = 0;
+                        descriptor         = 0;
+                        committed          = 0;
+                        event_offset       = 0;
+                        if descriptor_end[64] {
+                            channel_fatal = ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD as 32;
+                            phase         = Phase::Stopped;
+                        } else {
+                            phase = Phase::Fetch;
+                        }
+                    }
+                    Phase::Fetch      : if memory.ready && memory.valid {
+                        phase = Phase::FetchReturn;
+                    }
+                    Phase::FetchReturn: if memory.returned {
+                        if memory.receipt.failed {
+                            channel_fatal = ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD as 32;
+                            phase         = Phase::Stopped;
+                        } else {
+                            descriptor = descriptor | ((memory.receipt.data as 768) << (fetched * 8));
+                            if fetched + fetch_amount == 96 {
+                                phase = Phase::Decode;
+                            } else {
+                                fetched += fetch_amount;
+                                phase   =  Phase::Fetch;
+                            }
+                        }
+                    }
+                    Phase::Decode     : {
+                        source_address      = source_sum as 64;
+                        destination_address = destination_sum as 64;
+                        remaining           = descriptor[191:128];
+                        if descriptor[7:0] >: 8 || descriptor[15:10] != 0 {
+                            channel_fatal = ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD as 32;
+                            phase         = Phase::Stopped;
+                        } else if descriptor[7:0] != 0 || descriptor[9:8] != 0 {
+                            error_code = 6;
+                            stopped    = 1;
+                            phase      = Phase::Publish;
+                        } else if descriptor[191:128] == 0 {
+                            phase = Phase::Idle;
+                        } else if source_sum[64] || destination_sum[64] || source_end[64] || destination_end[64] {
+                            error_code = 1;
+                            stopped    = 1;
+                            phase      = Phase::Publish;
+                        } else {
+                            phase = Phase::Read;
+                        }
+                    }
+                    Phase::Read       : if memory.ready && memory.valid {
+                        phase = Phase::ReadReturn;
+                    }
+                    Phase::ReadReturn : if memory.returned {
+                        if memory.receipt.failed {
+                            if memory.receipt.page_fault {
+                                phase = Phase::ParkRead;
+                            } else {
+                                error_code = 2;
+                                stopped    = 1;
+                                phase      = Phase::Publish;
+                            }
+                        } else {
+                            scratch = memory.receipt.data;
+                            phase   = Phase::Write;
+                        }
+                    }
+                    Phase::Write      : if memory.ready && memory.valid {
+                        phase = Phase::WriteReturn;
+                    }
+                    Phase::WriteReturn: if memory.returned {
+                        if memory.receipt.failed {
+                            if memory.receipt.page_fault {
+                                phase = Phase::ParkWrite;
+                            } else {
+                                error_code = 3;
+                                stopped    = 1;
+                                phase      = Phase::Publish;
+                            }
+                        } else {
+                            source_address      += amount;
+                            destination_address += amount;
+                            remaining           -= amount;
+                            committed           += amount;
+                            phase               =  if remaining == amount ? Phase::Idle : Phase::Read;
+                        }
+                    }
+                    Phase::ParkRead   : if actions.resume_request {
+                        phase = Phase::Read;
+                    }
+                    Phase::ParkWrite  : if actions.resume_request {
+                        phase = Phase::Write;
+                    }
+                    Phase::Publish    : {
+                        if !event_geometry || event_end[64] {
+                            channel_fatal = ChannelRecoveryLayout::FATAL_CODE_EVENTCONFIGURATION as 32;
+                            phase         = Phase::Stopped;
+                        } else if !event_ready {
+                            channel_fatal = ChannelRecoveryLayout::FATAL_CODE_EVENTFULL as 32;
+                            phase         = Phase::Stopped;
+                        } else if memory.valid && memory.ready {
+                            phase = Phase::PublishReturn;
+                        }
+                    }
+                    Phase::PublishReturn: if memory.returned {
+                        if memory.receipt.failed {
+                            channel_fatal = ChannelRecoveryLayout::FATAL_CODE_EVENTWRITE as 32;
+                            phase         = Phase::Stopped;
+                        } else if event_offset + event_amount == EventLayout::EXTENT {
+                            phase = Phase::Stopped;
+                        } else {
+                            event_offset += event_amount;
+                            phase        =  Phase::Publish;
+                        }
+                    }
+                    Phase::Stopped      : {}
+                }
+            }
+        }
+    }
+}

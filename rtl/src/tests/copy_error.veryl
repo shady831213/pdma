@@ -1,0 +1,89 @@
+#[test(copy_error_event_at_page_boundary)]
+module CopyErrorTest {
+    inst clk   : $tb::clock_gen #( period: 10 );
+    inst rst   : $tb::reset_gen ( clk );
+    inst memory: CopyMemoryPort;
+    var status         : RegisterState::ChannelStatus;
+    var clear          : logic                       ;
+    var command_advance: logic                       ;
+    var event_advance  : logic                       ;
+    var internal_fatal : logic                       ;
+    var configuration  : RegisterState::ChannelConfig;
+    inst dut: CopyEngine (
+        clk                                                                                         ,
+        rst_n          : rst                                                                        ,
+        command        : RegisterState::Ring'{base: 0, capacity: 2, producer: 1, consumer: 0},
+        events         : RegisterState::Ring'{base: 64'hfff0, capacity: 2, producer: 0, consumer: 0},
+        configuration                                                                               ,
+        actions        : '0                                                                         ,
+        reset_all      : 0                                                                          ,
+        fatal_in       : 0                                                                          ,
+        event_geometry : 1                                                                          ,
+        event_ready    : 1                                                                          ,
+        status                                                                                      ,
+        clear                                                                                       ,
+        command_advance                                                                             ,
+        event_advance                                                                               ,
+        internal_fatal                                                                              ,
+        memory                                                                                      ,
+    );
+    initial {
+        configuration   = '0;
+        memory.ready    = 1;
+        memory.returned = 0;
+        memory.receipt  = '0;
+        rst.assert();
+        clk.next(3);
+        configuration.enable = 1;
+        for part in 0..2 {
+            for timeout in 0..10 {
+                if memory.valid {
+                    break;
+                }
+                clk.next();
+            }
+            $assert(memory.valid && !memory.request.write, "DESCRIPTOR_REQUEST");
+            clk.next();
+            memory.receipt = '0;
+            if part == 0 {
+                memory.receipt.data[127:64]  = 9;
+                memory.receipt.data[191:128] = 8;
+                memory.receipt.data[319:256] = 64'hffffffffffffffff;
+            }
+            memory.returned = 1;
+            clk.next();
+            memory.returned = 0;
+        }
+        for timeout in 0..10 {
+            if memory.valid {
+                break;
+            }
+            clk.next();
+        }
+        $assert(status.error && !internal_fatal, "STOP_BEFORE_EVENT");
+        $assert(memory.valid && memory.request.write && memory.request.address == 64'hfff0, "ERROR_EVENT_ADDRESS");
+        $assert(memory.request.length == 1, "EVENT_SPLITS_AT_4K");
+        $assert(memory.request.data[63:0] == 9 && memory.request.data[95:64] == 1, "ERROR_ID_AND_CODE");
+        clk.next();
+        memory.returned = 1;
+        $assert(!event_advance, "NO_EARLY_EVENT_PUBLICATION");
+        clk.next();
+        memory.returned = 0;
+        for timeout in 0..10 {
+            if memory.valid {
+                break;
+            }
+            clk.next();
+        }
+        $assert(memory.valid && memory.request.address == 64'h10000 && memory.request.length == 0, "EVENT_FINAL_WORD");
+        $assert(memory.request.data[63:0] == 0, "ZERO_COMMITTED_PREFIX");
+        clk.next();
+        memory.returned = 1;
+        $assert(event_advance, "PUBLISH_AFTER_ALL_EVENT_WRITES");
+        clk.next();
+        memory.returned = 0;
+        clk.next(3);
+        $assert(!memory.valid && status.error && !clear, "STOPPED_UNTIL_RESET");
+        $finish();
+    }
+}

@@ -5,17 +5,25 @@ pub module RegisterFrontend::<B: $std::axi4_lite_prototype> (
     axi  : modport $std::axi4_lite_if::<B>::slave,
     core : modport RegisterPort::master          ,
 ) {
+    struct AddressBeat {
+        address : logic  <32>,
+        identity: B::id_t    ,
+    }
+    struct WriteBeat {
+        data  : logic<64>,
+        strobe: logic<8> ,
+    }
     var aw_full       : logic                   ;
     var w_full        : logic                   ;
     var ar_full       : logic                   ;
-    var aw_address    : logic               <32>;
-    var ar_address    : logic               <32>;
-    var aw_identity   : B::id_t                 ;
-    var ar_identity   : B::id_t                 ;
+    var aw_head       : AddressBeat             ;
+    var ar_head       : AddressBeat             ;
+    var w_head        : WriteBeat               ;
+    var aw_ready      : logic                   ;
+    var w_ready       : logic                   ;
+    var ar_ready      : logic                   ;
     var write_identity: B::id_t                 ;
     var read_identity : B::id_t                 ;
-    var write_data    : logic               <64>;
-    var write_strobe  : logic               <8> ;
     var write_busy    : logic                   ;
     var read_busy     : logic                   ;
     var active        : logic                   ;
@@ -29,10 +37,55 @@ pub module RegisterFrontend::<B: $std::axi4_lite_prototype> (
     var r_status      : logic               <2> ;
     var r_data        : logic               <64>;
     let choose_write  : logic                    = aw_full && w_full && !(ar_full && prefer_read);
+    let dispatch      : logic                    = !active && ((aw_full && w_full) || ar_full);
 
-    assign axi.awready         = !aw_full && !write_busy && rst_n;
-    assign axi.wready          = !w_full && !write_busy && rst_n;
-    assign axi.arready         = !ar_full && !read_busy && rst_n;
+    // Transport owns held beats; AXI credit still lasts until the matching response.
+    inst aw_storage: common_cell::ReadyValidSlice #(
+        TYPE: AddressBeat                                ,
+        MODE: common_cell::ReadyValid::SliceMode::Forward,
+    ) (
+        clk                                                                  ,
+        rst_n                                                                ,
+        s_valid : axi.awvalid && !aw_full && !write_busy && rst_n,
+        s_ready : aw_ready                                                   ,
+        s_data  : AddressBeat'{address: axi.awaddr as 32, identity: axi.awid},
+        m_valid : aw_full                                                    ,
+        m_ready : dispatch && choose_write,
+        m_data  : aw_head                                                    ,
+        occupied: _                                                          ,
+    );
+    inst w_storage: common_cell::ReadyValidSlice #(
+        TYPE: WriteBeat                                  ,
+        MODE: common_cell::ReadyValid::SliceMode::Forward,
+    ) (
+        clk                                                                ,
+        rst_n                                                              ,
+        s_valid : axi.wvalid && !w_full && !write_busy && rst_n,
+        s_ready : w_ready                                                  ,
+        s_data  : WriteBeat'{data: axi.wdata as 64, strobe: axi.wstrb as 8},
+        m_valid : w_full                                                   ,
+        m_ready : dispatch && choose_write,
+        m_data  : w_head                                                   ,
+        occupied: _                                                        ,
+    );
+    inst ar_storage: common_cell::ReadyValidSlice #(
+        TYPE: AddressBeat                                ,
+        MODE: common_cell::ReadyValid::SliceMode::Forward,
+    ) (
+        clk                                                                  ,
+        rst_n                                                                ,
+        s_valid : axi.arvalid && !ar_full && !read_busy && rst_n,
+        s_ready : ar_ready                                                   ,
+        s_data  : AddressBeat'{address: axi.araddr as 32, identity: axi.arid},
+        m_valid : ar_full                                                    ,
+        m_ready : dispatch && !choose_write,
+        m_data  : ar_head                                                    ,
+        occupied: _                                                          ,
+    );
+
+    assign axi.awready         = aw_ready && !aw_full && !write_busy && rst_n;
+    assign axi.wready          = w_ready && !w_full && !write_busy && rst_n;
+    assign axi.arready         = ar_ready && !ar_full && !read_busy && rst_n;
     assign axi.bvalid          = b_valid;
     assign axi.bresp           = b_status as B::resp_t;
     assign axi.bid             = write_identity;
@@ -46,17 +99,8 @@ pub module RegisterFrontend::<B: $std::axi4_lite_prototype> (
 
     always_ff (clk, rst_n) {
         if_reset {
-            aw_full        = 0;
-            w_full         = 0;
-            ar_full        = 0;
-            aw_address     = 0;
-            ar_address     = 0;
-            aw_identity    = 0;
-            ar_identity    = 0;
             write_identity = 0;
             read_identity  = 0;
-            write_data     = 0;
-            write_strobe   = 0;
             write_busy     = 0;
             read_busy      = 0;
             active         = 0;
@@ -70,42 +114,24 @@ pub module RegisterFrontend::<B: $std::axi4_lite_prototype> (
             r_status       = RegisterBus::OKAY;
             r_data         = 0;
         } else {
-            if axi.awvalid && axi.awready {
-                aw_full     = 1;
-                aw_address  = axi.awaddr as 32;
-                aw_identity = axi.awid;
-            }
-            if axi.wvalid && axi.wready {
-                w_full       = 1;
-                write_data   = axi.wdata as 64;
-                write_strobe = axi.wstrb as 8;
-            }
-            if axi.arvalid && axi.arready {
-                ar_full     = 1;
-                ar_address  = axi.araddr as 32;
-                ar_identity = axi.arid;
-            }
-            if !active && ((aw_full && w_full) || ar_full) {
+            if dispatch {
                 active        = 1;
                 active_write  = choose_write;
                 prefer_read   = choose_write;
                 request_valid = 1;
                 request       = RegisterBus::Request'{
-                    write        : choose_write                             ,
-                    address      : if choose_write ? aw_address : ar_address,
-                    data         : if choose_write ? write_data : 0,
-                    strobe       : if choose_write ? write_strobe : 0,
+                    write        : choose_write                                       ,
+                    address      : if choose_write ? aw_head.address : ar_head.address,
+                    data         : if choose_write ? w_head.data : 0,
+                    strobe       : if choose_write ? w_head.strobe : 0,
                     wide         : if B::DATA_WIDTH_BYTES == 8 ? 1 : 0,
                 };
                 if choose_write {
-                    aw_full        = 0;
-                    w_full         = 0;
                     write_busy     = 1;
-                    write_identity = aw_identity;
+                    write_identity = aw_head.identity;
                 } else {
-                    ar_full       = 0;
                     read_busy     = 1;
-                    read_identity = ar_identity;
+                    read_identity = ar_head.identity;
                 }
             }
             if core.request_valid && core.request_ready {

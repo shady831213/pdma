@@ -36,7 +36,10 @@ pub module DmaRegisterInterface::<B: $std::axi4_lite_prototype> #(
         axi               ,
         core : source_port,
     );
-    inst crossing: RegisterCdc (
+    inst crossing: common_cell::DuplexMailbox #(
+        REQUEST_TYPE : RegisterBus::Request ,
+        RESPONSE_TYPE: RegisterBus::Response,
+    ) (
         s_clk           : reg_clk                   ,
         s_rst_n         : reg_rst_n                 ,
         s_valid         : source_port.request_valid ,

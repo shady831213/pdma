@@ -9,13 +9,16 @@ to the deferred sibling `hw_components` directory.
 
 ## Implemented register path
 
-`DmaRegisterInterface` assembles `RegisterFrontend` → `RegisterCdc` →
+`DmaRegisterInterface` assembles `RegisterFrontend` → `common_cell::DuplexMailbox` →
 `DmaRegisterBank`. The frontend pairs independent AW/W and retains B/R responses;
 the CDC uses the standard library's acknowledged mailboxes. The bank routes
 accesses to `ChannelRegisters`, which composes two `RingRegisters`. Each ring
 owns its configuration and cursors; the bank has no shadow channel storage.
 `RegisterAccess::leaf` computes a candidate access without committing effects.
 Only the owning module commits a validated write at the core handshake.
+The frontend delegates AW/W/AR storage to `common_cell::ReadyValidSlice` while
+retaining AXI credit, pairing and selection policy. The memory crossing also
+uses `DuplexMailbox`; there is no parallel DMA-specific CDC implementation.
 
 `layout.veryl` is generated from contract metadata. It contains offsets,
 permissions, field masks/positions, enum values and command/event record geometry.
@@ -56,6 +59,9 @@ tree. CDC startup waits for both domains. Independently resetting one live domai
 is unsupported. Software channel/DMA reset must leave the transport running.
 The memory clock domain has no implementation in this slice.
 
-No data engine, memory transaction drain, interrupt controller or end-to-end DMA
-reset is claimed by these modules. Native tests verify digital handshake/state
-behavior; bundled-data CDC constraints and CDC/RDC/timing signoff remain required.
+The register modules alone do not implement transaction drain or execution.
+`DmaCopy` supplies a first single-channel Linear Copy owner and memory endpoint;
+see the [slice boundaries](../../../docs/rtl/minimal-copy.md). Its software reset
+closes admission and consumes all accepted memory receipts before register clear.
+Native tests verify digital handshake/state behavior; bundled-data CDC constraints
+and CDC/RDC/timing signoff remain required.

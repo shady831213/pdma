@@ -1,0 +1,155 @@
+// Test-only memory slave. Expected bytes originate here, independently of the DUT.
+module CopyTestMemory (
+    clk             : input   clock                                            ,
+    rst_n           : input   reset_async_low                                  ,
+    axi             : modport $std::axi4_if::<CopyMemory::Bus>::slave          ,
+    backpressure    : input   logic                                            ,
+    hold_b          : input   logic                                            ,
+    delay_aw        : input   logic                                            ,
+    unaligned       : input   logic                                            ,
+    completed_writes: output  logic                                  <32>      ,
+    observed        : output  logic                                  <64> [128],
+) {
+    var reading          : logic        ;
+    var read_address     : logic<64>    ;
+    var read_length      : logic<8>     ;
+    var read_size        : logic<3>     ;
+    var read_beat        : logic<8>     ;
+    var aw_seen          : logic        ;
+    var w_seen           : logic        ;
+    var write_address    : logic<64>    ;
+    var write_length     : logic<8>     ;
+    var write_data       : logic<64> [8];
+    var write_strobe     : logic<8>  [8];
+    var write_beat       : logic<3>     ;
+    var pending_b        : logic        ;
+    var cycle            : logic<32>    ;
+    var first_write_cycle: logic<32>    ;
+    assign axi.arready = !reading && (!backpressure || cycle[1:0] != 0);
+    assign axi.rvalid  = reading;
+    assign axi.rdata   = observed[(read_address >> 3) as 7];
+    assign axi.rlast   = read_beat == read_length;
+    assign axi.rresp   = 0 as CopyMemory::Bus::resp_t;
+    assign axi.rid     = 0;
+    assign axi.ruser   = 0;
+    assign axi.awready = !aw_seen && !pending_b && !delay_aw;
+    assign axi.wready  = !w_seen && !pending_b && (!backpressure || cycle[1:0] != 1);
+    assign axi.bvalid  = pending_b && !hold_b;
+    assign axi.bresp   = 0 as CopyMemory::Bus::resp_t;
+    assign axi.bid     = 0;
+    assign axi.buser   = 0;
+    always_ff (clk, rst_n) {
+        if_reset {
+            cycle             = 0;
+            reading           = 0;
+            read_address      = 0;
+            read_length       = 0;
+            read_size         = 0;
+            read_beat         = 0;
+            aw_seen           = 0;
+            w_seen            = 0;
+            write_address     = 0;
+            write_length      = 0;
+            write_beat        = 0;
+            write_data        = '{default: '0};
+            write_strobe      = '{default: '0};
+            pending_b         = 0;
+            completed_writes  = 0;
+            first_write_cycle = 0;
+            for i in 0..128 {
+                observed[i] = 64'hdeadbeefdeadbeef;
+            }
+            // Canonical little-endian 96-byte Copy descriptor (contract C layout).
+            for i in 0..24 {
+                observed[i] = 0;
+            }
+            observed[1] = 64'h1234;
+            observed[2] = 128;
+            observed[3] = (64'd13 << 32) | 11;
+            observed[4] = 64'h200;
+            observed[8] = 64'h300;
+            // A second identical command lets reset interrupt a fresh transfer.
+            observed[13] = 64'h5678;
+            observed[14] = 128;
+            observed[15] = (64'd13 << 32) | 11;
+            observed[16] = 64'h200;
+            observed[20] = 64'h300;
+            for i in 0..16 {
+                observed[64 + i] = 64'h1020304050607000 + i;
+            }
+        } else {
+            cycle += 1;
+            // Software prepares the descriptor only while the channel is reset.
+            if unaligned {
+                observed[2] = 19;
+                observed[4] = 64'h201;
+                observed[8] = 64'h303;
+            }
+            if axi.arvalid && axi.arready {
+                reading      = 1;
+                read_address = axi.araddr;
+                read_beat    = 0;
+                read_length  = axi.arlen;
+                read_size    = axi.arsize as 3;
+                $assert(axi.arid == 0 && axi.arlen <: 8, "BOUNDED_READ");
+                $assert(
+                    (axi.araddr[11:0] as u32) + ((axi.arlen as u32 + 1) << (axi.arsize as 3)) <= 4096,
+                    "READ_PAGE_BOUNDARY",
+                );
+                $assert(axi.aruser == (if axi.araddr <: 192 ? 7 : 11), "READ_CONTEXT");
+            }
+            if axi.rvalid && axi.rready {
+                if axi.rlast {
+                    reading = 0;
+                } else {
+                    read_beat    += 1;
+                    read_address += 64'd1 << read_size;
+                }
+            }
+            if axi.awvalid && axi.awready {
+                aw_seen       = 1;
+                write_address = axi.awaddr;
+                write_length  = axi.awlen;
+                $assert(axi.awuser == 13, "WRITE_CONTEXT");
+            }
+            if axi.wvalid && axi.wready {
+                write_data[write_beat]   = axi.wdata;
+                write_strobe[write_beat] = axi.wstrb;
+                if axi.wlast {
+                    w_seen = 1;
+                } else {
+                    write_beat += 1;
+                }
+            }
+            if aw_seen && w_seen && !pending_b {
+                for i in 0..8 {
+                    if i <= write_length {
+                        for b in 0..8 {
+                            if write_strobe[i][b] {
+                                observed[((write_address >> 3) as 7) + i][b * 8+:8] = write_data[i][b * 8+:8];
+                            }
+                        }
+                    }
+                }
+                pending_b = 1;
+            }
+            if axi.bvalid && axi.bready {
+                if completed_writes == 0 {
+                    first_write_cycle = cycle;
+                }
+                if completed_writes == 1 {
+                    $display(
+                        "COPY_BASELINE bytes=64 bus_cycles=%d backpressure=%d",
+                        cycle - first_write_cycle,
+                        backpressure,
+                    );
+                }
+                pending_b        =  0;
+                aw_seen          =  0;
+                w_seen           =  0;
+                write_beat       =  0;
+                completed_writes += 1;
+            }
+        }
+    }
+}

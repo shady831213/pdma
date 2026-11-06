@@ -1,0 +1,269 @@
+#[test(linear_copy_three_clocks_and_reset)]
+module CopyEngineTest {
+    alias package Cfg = $std::axi4_lite_pkg::<32, 4, 1>;
+    inst reg_clk :            $tb::clock_gen #( period: 10 );
+    inst core_clk:            $tb::clock_gen #( period: 14 );
+    inst bus_clk :            $tb::clock_gen #( period: 8 );
+    inst reg_rst: $tb::reset_gen (
+        clk: reg_clk,
+    );
+    inst core_rst: $tb::reset_gen (
+        clk: core_clk,
+    );
+    inst bus_rst: $tb::reset_gen (
+        clk: bus_clk,
+    );
+    inst cfg     : 'registers $std::axi4_lite_if::<Cfg>;
+    inst memory  : 'bus       $std::axi4_if::<CopyMemory::Bus>;
+    var atop            : 'bus       logic<6>       ;
+    var irq             : 'core      logic          ;
+    var fatal           : 'core      logic          ;
+    var hold_b          : 'bus       logic          ;
+    var delay_aw        : 'bus       logic          ;
+    var backpressure    : 'bus       logic          ;
+    var unaligned       : 'bus       logic          ;
+    var completed_writes: 'bus       logic<32>      ;
+    var observed        : 'bus       logic<64> [128];
+    inst dut: DmaCopy (
+        reg_clk             ,
+        reg_rst_n : reg_rst ,
+        core_clk            ,
+        core_rst_n: core_rst,
+        bus_clk             ,
+        bus_rst_n : bus_rst ,
+        cfg                 ,
+        memory              ,
+        awatop    : atop    ,
+        irq                 ,
+        irq_ready : 1       ,
+        fatal               ,
+    );
+    inst ram: CopyTestMemory (
+        clk             : bus_clk,
+        rst_n           : bus_rst,
+        axi             : memory ,
+        hold_b                   ,
+        delay_aw                 ,
+        unaligned                ,
+        backpressure             ,
+        completed_writes         ,
+        observed                 ,
+    );
+    initial {
+        for scenario in 0..2 {
+            let reset_address: u32 = (DmaRegistersLayout::admin_offset(1)
+                + (if scenario == 0 ?
+                    DmaAdminLayout::channels_offset(1) + ChannelAdminLayout::RESET_OFFSET
+                :
+                    DmaAdminLayout::control_offset(1) + DmaControlLayout::RESET_OFFSET
+                )) as u32;
+            backpressure  = scenario != 0;
+            cfg.awvalid   = 0;
+            cfg.wvalid    = 0;
+            cfg.bready    = 0;
+            cfg.arvalid   = 0;
+            cfg.rready    = 0;
+            cfg.awaddr    = 0;
+            cfg.awprot    = '0;
+            cfg.awid      = 0;
+            cfg.araddr    = 0;
+            cfg.arprot    = '0;
+            cfg.arid      = 0;
+            cfg.wdata     = 0;
+            cfg.wstrb     = 4'hf;
+            hold_b        = 0;
+            delay_aw      = 0;
+            unaligned     = 0;
+            reg_rst.assert();
+            core_rst.assert();
+            bus_rst.assert();
+            for i in 0..20 {
+                reg_clk.next();
+                core_clk.next();
+                bus_clk.next();
+            }
+            // Publish one 96-byte Copy: ring at zero, source 0x200, destination 0x300.
+            // MMIO offsets are generated from the current contract.
+            for setup in 0..4 {
+                cfg.awaddr = (DmaRegistersLayout::channels_offset(1) as u32)
+                    + case setup {
+                        0      : ChannelBlockLayout::COMMAND_CAPACITY_OFFSET as u32,
+                        1      : ChannelBlockLayout::CONTROL_CONFIG_RING_CONTEXT_OFFSET as u32,
+                        2      : ChannelBlockLayout::COMMAND_PRODUCER_OFFSET as u32,
+                        default: ChannelBlockLayout::CONTROL_CONFIG_ENABLE_OFFSET as u32,
+                    };
+                cfg.wdata = case setup {
+                    0      : 2,
+                    1      : 7,
+                    default: 1,
+                };
+                cfg.awvalid = 1;
+                cfg.wvalid  = 1;
+                reg_clk.next();
+                cfg.awvalid = 0;
+                cfg.wvalid  = 0;
+                for timeout in 0..100 {
+                    if cfg.bvalid {
+                        break;
+                    }
+                    reg_clk.next();
+                    core_clk.next();
+                    bus_clk.next();
+                }
+                $assert(cfg.bvalid && (cfg.bresp as 2) == 0, "CONFIG_WRITE");
+                cfg.bready = 1;
+                reg_clk.next();
+                cfg.bready = 0;
+            }
+            for timeout in 0..2000 {
+                if completed_writes == 2 {
+                    break;
+                }
+                reg_clk.next();
+                core_clk.next();
+                bus_clk.next();
+            }
+            $assert(completed_writes == 2, "COPY_COMPLETES_TWO_BURSTS");
+            for i in 0..100 {
+                reg_clk.next();
+                core_clk.next();
+                bus_clk.next();
+            }
+            for word in 0..16 {
+                $assert(observed[96 + word] == (64'h1020304050607000 + word), "EXACT_COPY_DATA");
+            }
+            $assert(!irq && !fatal, "NO_SUCCESS_EVENT");
+            $assert(atop == 0, "NO_ATOMIC");
+            // A second command offers AW and W independently. Reset must not retract
+            // the stalled AW, and must stay busy after AW until the delayed B arrives.
+            hold_b   = 1;
+            delay_aw = 1;
+            for operation in 0..2 {
+                cfg.awaddr  = if operation == 0 ?
+                    (DmaRegistersLayout::channels_offset(1) + ChannelBlockLayout::COMMAND_PRODUCER_OFFSET) as u32
+                :
+                    reset_address
+                ;
+                cfg.wdata   = if operation == 0 ? 2 : 1;
+                cfg.awvalid = 1;
+                cfg.wvalid  = 1;
+                reg_clk.next();
+                cfg.awvalid = 0;
+                cfg.wvalid  = 0;
+                for timeout in 0..100 {
+                    if cfg.bvalid {
+                        break;
+                    }
+                    reg_clk.next();
+                    core_clk.next();
+                    bus_clk.next();
+                }
+                $assert(cfg.bvalid && (cfg.bresp as 2) == 0, "RESET_OR_PUBLICATION_ACCEPTED");
+                cfg.bready = 1;
+                reg_clk.next();
+                cfg.bready = 0;
+                if operation == 0 {
+                    for timeout in 0..1000 {
+                        if memory.awvalid {
+                            break;
+                        }
+                        reg_clk.next();
+                        core_clk.next();
+                        bus_clk.next();
+                    }
+                    $assert(memory.awvalid && memory.awaddr == 64'h300, "WRITE_OFFERED");
+                    for i in 0..20 {
+                        reg_clk.next();
+                        core_clk.next();
+                        bus_clk.next();
+                    }
+                    $assert(!memory.wvalid && memory.awvalid, "W_COMPLETES_BEFORE_AW");
+                }
+            }
+            for check in 0..3 {
+                cfg.araddr  = reset_address;
+                cfg.arvalid = 1;
+                reg_clk.next();
+                cfg.arvalid = 0;
+                for timeout in 0..100 {
+                    if cfg.rvalid {
+                        break;
+                    }
+                    reg_clk.next();
+                    core_clk.next();
+                    bus_clk.next();
+                }
+                $assert(cfg.rvalid && (cfg.rresp as 2) == 0, "RESET_STATUS_READ");
+                $assert(cfg.rdata == (if check == 2 ? 0 : 1), "RESET_WAITS_FOR_ALL_RESPONSES");
+                cfg.rready = 1;
+                reg_clk.next();
+                cfg.rready = 0;
+                if check == 0 {
+                    $assert(memory.awvalid && memory.awaddr == 64'h300, "RESET_PRESERVES_OFFER");
+                    delay_aw = 0;
+                }
+                if check == 1 {
+                    hold_b = 0;
+                }
+                for i in 0..80 {
+                    reg_clk.next();
+                    core_clk.next();
+                    bus_clk.next();
+                }
+            }
+            $assert(completed_writes == 3, "RESET_DRAINS_ONLY_ACCEPTED_WRITE");
+            // Reset has cleared configuration and cursors. Reprogram and execute anew.
+            unaligned = 1;
+            bus_clk.next();
+            for setup in 0..4 {
+                cfg.awaddr = (DmaRegistersLayout::channels_offset(1) as u32)
+                    + case setup {
+                        0      : ChannelBlockLayout::COMMAND_CAPACITY_OFFSET as u32,
+                        1      : ChannelBlockLayout::CONTROL_CONFIG_RING_CONTEXT_OFFSET as u32,
+                        2      : ChannelBlockLayout::COMMAND_PRODUCER_OFFSET as u32,
+                        default: ChannelBlockLayout::CONTROL_CONFIG_ENABLE_OFFSET as u32,
+                    };
+                cfg.wdata = case setup {
+                    0      : 2,
+                    1      : 7,
+                    default: 1,
+                };
+                cfg.awvalid = 1;
+                cfg.wvalid  = 1;
+                reg_clk.next();
+                cfg.awvalid = 0;
+                cfg.wvalid  = 0;
+                for timeout in 0..100 {
+                    if cfg.bvalid {
+                        break;
+                    }
+                    reg_clk.next();
+                    core_clk.next();
+                    bus_clk.next();
+                }
+                $assert(cfg.bvalid && (cfg.bresp as 2) == 0, "RECONFIGURE_AFTER_RESET");
+                cfg.bready = 1;
+                reg_clk.next();
+                cfg.bready = 0;
+            }
+            for timeout in 0..2000 {
+                if completed_writes == 22 {
+                    break;
+                }
+                reg_clk.next();
+                core_clk.next();
+                bus_clk.next();
+            }
+            $assert(completed_writes == 22, "NEW_UNALIGNED_COPY_AFTER_RESET");
+            for byte_index in 0..19 {
+                let source_byte     : logic<8> = ((64'h1020304050607000 + ((byte_index + 1) / 8))
+                    >> (((byte_index + 1) % 8) * 8)) as 8;
+                let destination_byte: logic<8> = (observed[96 + (byte_index + 3) / 8]
+                    >> (((byte_index + 3) % 8) * 8)) as 8;
+                $assert(destination_byte == source_byte, "POST_RESET_UNALIGNED_DATA");
+            }
+            $assert(observed[96][23:0] == 24'h607000, "UNCHANGED_LEADING_BYTES");
+        }
+        $finish();
+    }
+}

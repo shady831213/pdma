@@ -1,0 +1,110 @@
+#[test(copy_write_fault_retains_read_data)]
+module CopyFaultTest {
+    inst clk   : $tb::clock_gen #( period: 10 );
+    inst rst   : $tb::reset_gen ( clk );
+    inst memory: CopyMemoryPort;
+    var command        : RegisterState::Ring          ;
+    var configuration  : RegisterState::ChannelConfig ;
+    var actions        : RegisterState::ChannelActions;
+    var status         : RegisterState::ChannelStatus ;
+    var command_advance: logic                        ;
+    var event_advance  : logic                        ;
+    var clear          : logic                        ;
+    var internal_fatal : logic                        ;
+    inst dut: CopyEngine (
+        clk                 ,
+        rst_n          : rst,
+        command             ,
+        events         : '0 ,
+        configuration       ,
+        actions             ,
+        reset_all      : 0  ,
+        fatal_in       : 0  ,
+        event_geometry : 0  ,
+        event_ready    : 0  ,
+        status              ,
+        clear               ,
+        command_advance     ,
+        event_advance       ,
+        internal_fatal      ,
+        memory              ,
+    );
+    initial {
+        command         = RegisterState::Ring'{base: 0, capacity: 2, producer: 1, consumer: 0};
+        configuration   = '0;
+        actions         = '0;
+        memory.ready    = 1;
+        memory.returned = 0;
+        memory.receipt  = '0;
+        rst.assert();
+        clk.next(3);
+        configuration.enable = 1;
+        for part in 0..2 {
+            for timeout in 0..10 {
+                if memory.valid {
+                    break;
+                }
+                clk.next();
+            }
+            $assert(memory.valid && !memory.request.write, "FETCH");
+            clk.next();
+            memory.receipt = '0;
+            if part == 0 {
+                memory.receipt.data[191:128] = 8;
+                memory.receipt.data[319:256] = 64'h200;
+            } else {
+                memory.receipt.data[63:0] = 64'h300;
+            }
+            memory.returned = 1;
+            clk.next();
+            memory.returned = 0;
+        }
+        $assert(command_advance, "ACCEPTED_COMMAND");
+        command.consumer = 1;
+        for timeout in 0..10 {
+            if memory.valid {
+                break;
+            }
+            clk.next();
+        }
+        $assert(memory.valid && !memory.request.write && memory.request.address == 64'h200, "PAYLOAD_READ");
+        clk.next();
+        memory.receipt      = '0;
+        memory.receipt.data = 64'h123456789abcdef0;
+        memory.returned     = 1;
+        clk.next();
+        memory.returned = 0;
+        for timeout in 0..10 {
+            if memory.valid {
+                break;
+            }
+            clk.next();
+        }
+        $assert(memory.valid && memory.request.write && memory.request.address == 64'h300, "PAYLOAD_WRITE");
+        clk.next();
+        memory.receipt            = '0;
+        memory.receipt.failed     = 1;
+        memory.receipt.page_fault = 1;
+        memory.returned           = 1;
+        clk.next();
+        memory.returned = 0;
+        clk.next(3);
+        $assert(status.faulted && !status.error && !event_advance && !internal_fatal, "FAULT_IS_NOT_ERROR");
+        $assert(!memory.valid, "PARKED_UNTIL_SOFTWARE_RESUME");
+        // The repair may have changed source memory. No new read is permitted.
+        memory.receipt.data    = '1;
+        actions.resume_request = 1;
+        clk.next();
+        actions.resume_request = 0;
+        $assert(memory.valid && memory.request.write, "RESUME_RETRIES_WRITE_ONLY");
+        $assert(memory.request.data[63:0] == 64'h123456789abcdef0, "RETAIN_SUCCESSFUL_READ");
+        clk.next();
+        memory.receipt  = '0;
+        memory.returned = 1;
+        clk.next();
+        memory.returned = 0;
+        clk.next(3);
+        $assert(!memory.valid && !status.faulted && !status.error && !event_advance, "RETIRED_WITHOUT_SUCCESS_EVENT");
+        $finish();
+    }
+}

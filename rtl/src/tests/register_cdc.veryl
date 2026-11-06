@@ -20,7 +20,10 @@ module RegisterCdcTest {
     var d_response_valid: 'd logic                ;
     var d_response_ready: 'd logic                ;
     var d_response      : 'd RegisterBus::Response;
-    inst dut: RegisterCdc (
+    inst dut: common_cell::DuplexMailbox #(
+        REQUEST_TYPE : RegisterBus::Request ,
+        RESPONSE_TYPE: RegisterBus::Response,
+    ) (
         s_clk                  ,
         s_rst_n         : s_rst,
         s_valid                ,

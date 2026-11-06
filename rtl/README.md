@@ -6,8 +6,10 @@ outside the first RTL phase; see the [project overview](../README.md).
 
 The first implemented slice is the DMA register-access path: AXI4-Lite 32/64,
 reg/core CDC and channel/ring register owners. Seven native tests exercise it.
-This is not yet a complete DMA or a physically qualified design: execution,
-IRQ/lifecycle owners and the AXI5 memory endpoint remain to be implemented.
+The [minimal Linear Copy slice](../docs/rtl/minimal-copy.md) now connects this
+path to one execution owner and an ordinary AXI memory endpoint. It is not a
+complete DMA or a physically qualified design; the remaining command families,
+multichannel execution and throughput/physical closure still need implementation.
 
 The first RTL phase is **DMA only**, confirmed 2026-10-29. CPU implementation,
 managed peripheral hardware, firmware execution and full subsystem integration
@@ -36,9 +38,13 @@ future tool/technology migration does not block this work.
 | `src/dma/` | DMA channels, shared execution, register behavior and bus endpoints |
 | `src/hw_components/` | Deferred placeholder for managed peripheral hardware; outside the first RTL phase |
 | `src/tests/` | Native Veryl block tests and their local support |
+| `common_cell/` | Protocol-independent reusable cells and separate native tests |
+| `tech_cell/generic/` | Technology-independent RAM providers for common-cell contracts |
 
-Start with one native project. Add subdirectories and shared packages when real
-modules require them; the Rust module tree is not a prescribed RTL hierarchy.
+Keep DMA in one native project, with reusable cells in their own library project;
+the Rust module tree is not a prescribed RTL hierarchy.
+The DMA project now depends on the [local common-cell library](common_cell/README.md),
+with an explicit upstream snapshot and no runtime access to the source repository.
 Do not create empty pipeline controllers or one project per proposed module.
 Firmware stays software under `model/modeling/crates/firmware`; a hardware wrapper
 does not own its policy or introduce another software runtime.

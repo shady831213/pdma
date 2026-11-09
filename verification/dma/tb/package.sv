@@ -7,12 +7,12 @@ package pdma_vip_pkg;
     import svt_axi_uvm_pkg::*;
     import jvs_pkg::*;
     import pdma_contract_records::*;
+    import pdma_uvm_regs::*;
     `include "env/configuration.svh"
     `include "env/clock_env.svh"
     `include "env/memory/memory_backing.svh"
     `include "env/memory/buffer_allocation.svh"
     `include "env/task_data.svh"
-    `include "env/software/mmio_sequence.svh"
     `include "env/software/channel_driver.svh"
     `include "env/software/irq_handler.svh"
     `include "env/irq/irq_monitor.svh"
@@ -31,4 +31,6 @@ package pdma_vip_pkg;
     `include "tests/dut/fatal.svh"
     `include "tests/dut/irq.svh"
     `include "tests/dut/ring.svh"
+    `include "tests/dut/event.svh"
+    `include "tests/dut/registers.svh"
 endpackage

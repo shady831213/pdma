@@ -16,6 +16,7 @@ ${SVT_AMBA_HOME}/sverilog/include/svt_axi.uvm.pkg
 -f ${JVSUK_HOME}/etc/jvs.f
 tb/control_if.sv
 tb/contract_records.sv
+tb/register_model.sv
 tb/package.sv
 tb/clock_domain.sv
 tb/assertions.sv

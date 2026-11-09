@@ -1,8 +1,101 @@
 # Scenario-level verification checkpoints
 
-The baseline below predates the independent-test split, persistent channel-owned
-rings and schema-generated SV records. Its coverage and timing figures do not
-qualify those newer changes.
+## UVM RAL qualification (2026-11-09)
+
+Final testbench manifest SHA-256:
+`2dcb7a6b8abf293c938cbf642d1a0ff07aa44a82bee53518ba0658851bfeb874`.
+All **19 tests x 8 random seeds**, plus all **19 fixed-clock tests at seed 29**,
+pass against this single fresh build: **171 positive runs, 369 scenarios,
+405 terminal checks and 32,238 checked bytes**. Each batch also rejects all 7
+checker mutations with the intended diagnostics. No positive run has a UVM
+error/fatal or assertion failure. The external run watchdog is 300 seconds;
+software polling and hardware reset/fault checks were not relaxed.
+
+The new RAL scenario round-trips a 64-bit ring base through 32-bit AXI4-Lite, checks
+that an unmapped read returns UVM_NOT_OK, restores configuration and completes
+Copy/Fence. It first performs a real channel reset because disabling an already
+configured channel does not unfreeze its ring configuration.
+
+Separate real-UVM metadata tests cover 1/3 channels with 4/8-byte maps and 1020
+channels across an aperture-alignment boundary, including relocation, fields,
+access and reset metadata. A custom-schema oracle verifies valid zero parameters
+and a source parameter named bus_bytes. Seven generator tests, one CLI test,
+clippy, formatting and generated-output checks pass.
+
+The initial RAL matrix exposed an existing directed write-fault fixture
+assumption: one allocation allowed only 40 bytes before a page boundary, although
+the test mutated all 64 source bytes. The final fixture aligns its 64-byte range
+to 64 bytes so the full-source scratch-retention assertion is valid; no data
+assertion was removed. General random/unaligned/page-crossing Copy tests remain.
+The entire matrix was rerun after this correction.
+
+Coverage summary uses all 152 positive random runs, with no metric/bin exclusions:
+
+| RTL module | Line | Condition | Branch |
+| --- | ---: | ---: | ---: |
+| DmaCopy | 100.00% | 86.21% | 100.00% |
+| CopyEngine | 93.09% | 78.07% | 85.90% |
+| CopyMemoryEndpoint | 98.70% | 81.45% | 90.32% |
+
+The scenario covergroup reaches 100% of its declared bins. Detailed report
+generation crashes for this input set, including with 64-bit mode. Summary output
+with the identical complete inputs succeeds. The flow uses text summaries and
+retains raw databases; detailed report generation remains a tool limitation.
+The executable tool selection was checked privately; no deployment paths are
+included here. DUT RTL is unchanged, so this is register-model/verification
+qualification, not a new synthesis or physical signoff result.
+
+## Pre-RAL qualification (2026-11-09)
+
+This checkpoint predates the generated UVM register-model migration. Its hardware
+results remain useful history; it does not qualify the new register transport.
+
+Testbench manifest SHA-256:
+`6c43a423b3b7e68ac9cbe9d757740f6bb88e11eebed0adaae505b81283353547`.
+One fresh build is shared by isolated test/seed runs; executable integrity is
+checked before each launch. Raw logs and tool reports remain private.
+
+- All **18 tests x 8 random seeds** pass: seeds 1, 7, 19, 41, 97, 211, 503, 997.
+- All **18 tests** pass under the fixed-clock profile with seed **29**.
+- Together these are **162 positive runs, 360 scenarios, 396 terminal checks**
+  and **32,779 checked payload bytes**. No positive run has a UVM error/fatal
+  or assertion failure.
+- Both batches reject all **7 checker mutations** with their intended diagnostic.
+  Early Fence publication through the IRQ error path and understated progress
+  were incorrectly accepted before the checker fixes; both are now detected.
+- The explicit event-boundary test checks a split error-event write, decoded
+  identity/code/progress, exactly-once consumption and the untouched next slot.
+- Runner fixtures cover parallel overlap, fixed-clock forwarding, input rejection,
+  aggregate failure and child cleanup. A fatal message followed by a timeout is
+  now a failed run, not an expected rejection; all real negative runs exited
+  normally. Shell syntax, C11 layout checks and generated-record freshness pass.
+
+The random-profile coverage merge includes all 144 positive runs, excluding
+negative tests. The scenario covergroup reaches **100% of its declared bins**,
+including actual allocation alignment and event-page crossing. This does not
+mean exhaustive architecture coverage.
+
+| RTL module | Line | Condition | Branch |
+| --- | ---: | ---: | ---: |
+| DmaCopy | 100.00% | 86.21% | 100.00% |
+| CopyEngine | 93.09% | 78.07% | 85.90% |
+| CopyMemoryEndpoint | 98.70% | 81.45% | 90.32% |
+
+Combined HTML/text report generation crashed in the installed coverage tool.
+The same complete input set succeeds with text output; the automated flow now
+uses text reports without filtering metrics or adding exclusions.
+
+The fixed profile has **33 successful Copy/Fence completions and 3,908 bytes**.
+Submission-to-observation latency is **1.710 us minimum, 36.021 us weighted mean
+and 103.160 us maximum**. This includes polling, injected delay and fault recovery;
+it is not a throughput benchmark. Independent test randomization and allocation
+placement differ from the earlier combined suite, so these cohorts do not form
+a controlled performance comparison.
+
+No DUT RTL changed in this cleanup. Native and synthesis evidence below remains
+the earlier hardware baseline; those runs were not repeated. This qualification
+is still limited to one-channel Linear Copy/Fence32/64, not other commands,
+multichannel scheduling or physical CDC/RDC signoff.
 
 ## Independent-test checkpoint (2026-11-06)
 
@@ -99,15 +192,9 @@ multichannel, other-opcode or analog CDC/RDC signoff. See
 [requirements](requirements.md) for scenario mapping and
 [dependencies](dependencies.md) for the platform/library boundaries.
 
-## Next review and qualification
+## Future scope
 
-- Run the full test-by-seed matrix and fixed-clock profile after the latest
-  ownership changes, then regenerate coverage and performance summaries.
-- Review remaining numeric error expectations and register masks against
-  generated symbols, and separate platform/test configuration from wire constants.
-- Add an explicit event-ring page-boundary scenario: independent natural ring
-  allocation no longer guarantees the old slab's boundary placement.
-- Review channel/ring lifetime and software/checker boundaries together before
-  expanding randomized concurrent scenarios or the DUT feature set.
-- Consider a generated UVM register model separately; the current record package
-  and RTL layout packages do not claim that capability.
+Concurrent task/result routing and additional DUT features need their own
+scenarios; the current software flow intentionally handles one task per channel
+at a time. Generalizing the SV record and UVM register generators into schema
+remains deferred until user review of their contract-local implementations.

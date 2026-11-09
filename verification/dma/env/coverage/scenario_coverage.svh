@@ -10,6 +10,7 @@ class pdma_scenario_coverage extends uvm_subscriber#(pdma_observation);
         source_alignment: coverpoint item.source_lane {bins aligned={0}; bins unaligned={[1:7]};}
         dest_alignment: coverpoint item.dest_lane {bins aligned={0}; bins unaligned={[1:7]};}
         page_boundary: coverpoint item.cross_page;
+        event_boundary: coverpoint item.event_cross_page iff(item.outcome==TASK_ERROR);
         fence_width: coverpoint item.fence_wide;
     endgroup
     function new(string name,uvm_component parent); super.new(name,parent); scenarios=new; endfunction

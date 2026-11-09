@@ -5,6 +5,9 @@ Proprietary sources are neither vendored nor redistributed. Configure
 `SVT_COMMON_HOME`, `SVT_AMBA_HOME` and `DESIGNWARE_HOME` in the deployment environment.
 The memory port currently uses AXI4 protocol checks because this RTL slice emits
 only ordinary AXI5 reads/writes; the bench separately requires AWATOP to remain zero.
+The register port uses the VIP's supplied `svt_axi_reg_adapter` with the same
+master configuration and sequencer as the bus agent. PDMA generates its RAL
+hierarchy from contract; it does not duplicate the vendor's protocol adapter.
 
 [jarvisuk](https://github.com/shady831213/jarvisuk) is an external Apache-2.0
 dependency, tested at `4b19c79959246e6c8d0ce9b023c931d6cff37914`.

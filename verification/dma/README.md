@@ -12,7 +12,7 @@ The reproducible simulator flows are in `flow/`. Deployment configuration and
 raw logs stay outside version control.
 
 The DMA bench is under `tb/`, with protocol VIP agents and jarvisuk memory,
-clock and IRQ components assembled under `env/`. Software channel, MMIO and IRQ
+clock and IRQ components assembled under `env/`. Software channel and IRQ
 handler objects under `env/software/` own software operations. Scenarios under
 `tests/dut/` orchestrate task flows under `env/flow/`. Each task flow explicitly
 invokes its checker under `env/checking/` before releasing buffers. Successful
@@ -45,23 +45,65 @@ bash verification/dma/flow/regression.sh "$PDMA_RUN_ROOT/build" "$PDMA_RUN_ROOT/
 bash verification/dma/flow/coverage.sh "$PDMA_RUN_ROOT/build" "$PDMA_RUN_ROOT/regression" "$PDMA_RUN_ROOT/coverage"
 ```
 
-Run one case with `flow/run.sh BUILD NEW_RUN TEST SEED`. The 17 independently
+Run one case with `flow/run.sh BUILD NEW_RUN TEST SEED`. The 19 independently
 selectable tests are listed in `flow/tests.list`. `PDMA_JOBS` bounds parallel runs
-(default 4); `PDMA_TESTS` optionally selects a space-separated subset. Regression
+(default 4); `PDMA_TESTS` optionally selects a space-separated subset.
+`PDMA_CLOCK_MODE=random|fixed` selects the clock profile for the entire batch.
+Regression
 output is separated by test and seed. Each output directory must be new; stale
 output is rejected. The regression also runs deliberately corrupted
 observations and requires the exact checker diagnostic: `data` / `TASK_DATA`,
 `identity` and `unknown_identity` / `TASK_IDENTITY`, `missing_completion` / `TASK_TIMEOUT`, and
-`duplicate_completion` / `TASK_DUPLICATE`. It does not count these negative tests
+`duplicate_completion` / `TASK_DUPLICATE`, early Fence publication during an IRQ
+error / `TASK_COMPLETION`, and understated error progress / `TASK_ERROR_INFO`.
+The latter two run against the directed error test. It does not count these negative tests
 as DUT failures or include them in coverage.
+Timeouts and signal exits remain failures even if a negative run printed its
+expected diagnostic. Coverage reports are emitted as text summaries with all
+collected metrics; only successful positive runs enter the merge. Raw databases
+remain available for detailed reporting. The installed report tool crashes in
+the detailed-report path for this suite, while summary reporting succeeds with
+the identical full input set; this is not a metric or bin exclusion.
 
 `tb/contract_records.sv` is generated directly from the contract's schema through
 the public export API. Typed byte images, field accessors, enum values, sizes and
 alignments replace handwritten descriptor offsets. Regenerate with
 `bash tools/rtl-flow/records.sh --write`; use `--check` for reproducibility.
-Register addresses use the generated RTL layout packages. This is not a UVM RAL
-generator. Rust codec fixtures independently check Copy/Fence images and Event
-decoding in SystemVerilog.
+Rust codec fixtures independently check Copy/Fence images and Event decoding in
+SystemVerilog.
+
+`tb/register_model.sv` is the generated UVM register model. Regenerate with
+`bash tools/rtl-flow/registers.sh --write` and verify with `--check`. Its generator
+lives in contract's `src/bin/uvm_regs`, alongside the separate SV record generator;
+neither backend has been moved into schema or published. It consumes the published
+schema analysis and expression-rendering API without parsing generated C/Veryl.
+
+The model preserves block hierarchy and parameterized banks, for example
+`registers.channels_block[i].command_block.base_reg`. Register fields have
+`_field` names; register and block handles use `_reg` and `_block` to avoid language
+keywords and inherited UVM methods. Build with `DmaRegisters.build(channel_count,
+bus_bytes)`, then configure the root base, lock the model and bind its map.
+The environment uses the VIP's native `svt_axi_reg_adapter`; native UVM maps
+split 64-bit registers into 32-bit bus accesses. The old address-based sequence
+and manual split-write helper are removed.
+
+Software uses explicit frontdoor reads/writes and checks their status. Hardware
+reset, Resume and IRQ side effects occur in the DUT, not through RAL mirror
+updates or `uvm_reg_block.reset()`. Schema metadata does not identify all hardware
+updates or W1C behavior: fields are conservatively volatile, mirror comparison
+is disabled, and no side-effect policy is inferred from descriptions. Zero and
+Constant resets are known; PostReset is not assigned a known HARD reset value.
+This initial backend supports the DMA's little-endian register graph. Big-endian
+registers, partial writable masks within a field and permission-only projected
+views without a reusable layout plan fail explicitly rather than being guessed.
+Application build parameters must still satisfy the schema's layout constraints.
+
+The configuration separates this DUT's fixed bus widths and AXI burst boundary
+from platform heap placement, ring capacities, optional explicit ring addresses
+and software polling limits. The event-boundary test places one entry across a
+4 KiB boundary and checks its decoded identity/code/progress and the neighboring
+slot. Coverage uses allocated addresses, rather than requested placement flags,
+to classify alignment and boundary crossings.
 
 The first decoder's bit slices are checked against the independently generated C
 contract, including endpoint selectors and error-event fields. From the root:

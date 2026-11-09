@@ -7,7 +7,7 @@ class pdma_aligned_copy_test extends pdma_base_test;
         for(int i=0;i<4;i++) begin
             pdma_task_flow flow_=env.task_flow();
             pdma_task job=settings((i+1)*64);
-            job.payload_alignment=8;
+            job.payload_alignment=pdma_configuration::MEMORY_BEAT_BYTES;
             flow_.open(job); flow_.submit(); flow_.expect_result(TASK_SUCCESS); flow_.close(); cases++;
         end
     endtask

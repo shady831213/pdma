@@ -7,22 +7,26 @@ VIP for both ports. Test software publishes descriptors through jarvisuk memory
 and software-owned MMIO sequences. Copy followed by Fence32/64 produces a real
 memory marker that software polls for successful completion. Destination equality
 never signals completion. Fault, error and fatal observations use registers and
-error events through the same software channel abstraction.
+error events through the same software channel abstraction. Register operations
+use generated UVM register handles and the protocol VIP's native RAL adapter;
+software never substitutes mirrored values for a real hardware read.
 
 | Obligation | Model reference under `crates/scenarios/tests` | RTL scenario/check |
 | --- | --- | --- |
 | Linear copy, independent endpoint selectors | `single_channel/cases/linear.rs` | Random bytes, lengths, alignments, nonzero endpoint offsets and selectors; completed-task data and guards; platform memory permissions enforce access ranges and contexts |
 | Byte tails and page boundaries | `single_channel/cases/linear.rs` | Byte/full-width transfers; no access crosses 4 KiB; no over-read/write |
 | Software-visible successful completion | `single_channel/software/mod.rs` | Copy followed by Fence32/64; poll the marker, then check data, guards and identity before task buffer release |
+| Generated register frontdoor | Contract register schemas and MMIO bus contract | Complete reset before changing frozen configuration, round-trip a 64-bit base through AXI4-Lite32, propagate an unmapped read error, restore configuration and complete Copy/Fence |
 | Recoverable read/write faults | `single_channel/recovery` | Park with no error event/IRQ; no retry before Resume; successful read scratch retained across failed writes |
 | Stopping errors | `single_channel/cases/faults.rs` | Error at the next payload page; event identity/code/confirmed prefix and prefix memory; successor Fence remains unpublished |
 | Ring progress and reuse | `single_channel/software` | Copy/Fence pairs reuse a four-slot ring without reset; consumer progression and correct descriptor slot |
 | Descriptor decode and zero-length Copy | `dma/tests/edges.rs`, `dma/src/channel/command.rs` (under `crates`) | Malformed encoding is CommandRead fatal, valid unsupported opcode is an Unsupported event, zero length succeeds without payload/event |
 | Reporting failures | `single_channel/cases/faults.rs` | Failed event writes retain fatal and do not publish producer |
+| Event publication across a page boundary | `single_channel/cases/faults.rs` | Explicit channel-owned event placement; decode identity, error code and exact progress after the split write; neighboring ring slot remains intact |
 | Reset while accepted memory access is outstanding | `single_channel/harness/lifecycle` | Channel and global reset with suspended VIP B response; reset busy stays set until response is released; no later chunk write; fresh copy after reset |
 | Notification acceptance versus software dispatch | `single_channel/hardware/tests.rs` | Backpressure at IRQ output; exactly one accepted notification dispatched through jarvisuk IRQ service to the channel's own handler; channel zero uses vector 17; ISR reads cause through VIP MMIO; stopping errors bypass routine masks; enable never replays |
 | Three asynchronous domains | RTL-specific | Independently randomized periods, phases and bounded jitter; cold reset released on each domain's own edge |
-| Checker sensitivity | TB selftest | Corrupt payload (`TASK_DATA`), wrong or unknown identity (`TASK_IDENTITY`), suppress completion (`TASK_TIMEOUT`), or duplicate completion (`TASK_DUPLICATE`); require the corresponding fatal diagnostic |
+| Checker sensitivity | TB selftest | Corrupt payload (`TASK_DATA`), wrong or unknown identity (`TASK_IDENTITY`), suppress completion (`TASK_TIMEOUT`), duplicate completion (`TASK_DUPLICATE`), publish an early Fence during IRQ error (`TASK_COMPLETION`), or understate progress (`TASK_ERROR_INFO`); require the corresponding fatal diagnostic |
 
 These are scenario translations, not assertions that RTL must follow the Rust
 model's tick sequence. Scenarios orchestrate task flows; software channel and IRQ
@@ -35,6 +39,9 @@ waits for drain, checks the reset result, then frees its resources. Each channel
 owns separate software, IRQ-handler and checker instances; the current DUT has
 only one channel, so this organization does not establish multichannel coverage.
 The checker derives expected bytes and identity from submitted software inputs.
+Directed error scenarios derive the expected committed prefix from the injected
+failure address, independently of the event's reported count. Fault/error checks
+read Fence storage even when the result arrived through the interrupt handler.
 Passive subscribers receive channel-tagged scenario outcomes for coverage and
 submission-to-observation latency. They neither inspect payload transactions nor
 own task resources. Polling rejects missing completion; the checker rejects

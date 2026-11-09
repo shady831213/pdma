@@ -1,4 +1,6 @@
 class pdma_buffer extends uvm_object;
+    localparam int unsigned PAGE_BYTES=pdma_configuration::AXI_BOUNDARY_BYTES;
+    localparam int unsigned BEAT_BYTES=pdma_configuration::MEMORY_BEAT_BYTES;
     jvs_memory_acc_block allocation;
     longint unsigned address;
     function new(string name="buffer"); super.new(name); endfunction
@@ -8,9 +10,9 @@ class pdma_buffer extends uvm_object;
         int unsigned extent=size+prefix+(guards ? 1 : 0);
         if(extent==0) extent=1;
         if(cross_page) begin
-            for(longint unsigned page=(allocator.range.get_s_addr()+4095)/4096*4096;
-                page<allocator.range.get_e_addr();page+=4096) begin
-                longint unsigned candidate=page-8+lane-prefix;
+            for(longint unsigned page=(allocator.range.get_s_addr()+PAGE_BYTES-1)/PAGE_BYTES*PAGE_BYTES;
+                page<allocator.range.get_e_addr();page+=PAGE_BYTES) begin
+                longint unsigned candidate=page-BEAT_BYTES+lane-prefix;
                 if(candidate<allocator.range.get_s_addr() || candidate+extent-1>allocator.range.get_e_addr()) continue;
                 allocator.malloc(allocation,extent,ALIGN_BYTE,{1'b0,candidate});
                 if(allocation!=null) break;

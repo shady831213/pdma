@@ -17,7 +17,8 @@ virtual class pdma_base_test extends uvm_test;
             default: `uvm_fatal("CLOCK_CONFIG","clock_mode must be fixed or random")
         endcase
         if($value$plusargs("checker_mutation=%s",mutation)) begin
-            if(!(mutation inside {"data","identity","unknown_identity","missing_completion","duplicate_completion"}))
+            if(!(mutation inside {"data","identity","unknown_identity","missing_completion","duplicate_completion",
+                "early_fence","underreported_prefix"}))
                 `uvm_fatal("MUTATION_CONFIG","Unknown mutation")
             pdma_task_checker::type_id::set_type_override(pdma_negative_checker::get_type());
             if(mutation=="missing_completion") pdma_task_flow::type_id::set_type_override(pdma_missing_fence::get_type());

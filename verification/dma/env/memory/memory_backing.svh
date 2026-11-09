@@ -1,4 +1,5 @@
 class pdma_memory extends jvs_memory_model;
+    localparam int unsigned BEAT_BYTES=pdma_configuration::MEMORY_BEAT_BYTES;
     svt_mem backing;
     typedef struct {
         bit[63:0] owner, address, size;
@@ -24,12 +25,12 @@ class pdma_memory extends jvs_memory_model;
     virtual function void write_byte(bit[63:0] addr, MEM_BYTE data);
         logic [`SVT_MEM_MAX_DATA_WIDTH-1:0] word='0;
         logic [`SVT_MEM_MAX_DATA_WIDTH/8-1:0] mask='0;
-        word[(addr%8)*8+:8]=data; mask[addr%8]=1;
-        if(!backing.write(addr & ~64'd7,word,mask))
+        word[(addr%BEAT_BYTES)*8+:8]=data; mask[addr%BEAT_BYTES]=1;
+        if(!backing.write(addr-addr%BEAT_BYTES,word,mask))
             `uvm_fatal("MEMORY_WRITE","VIP backing rejected a software write")
     endfunction
     virtual function MEM_BYTE read_byte(bit[63:0] addr);
-        logic [`SVT_MEM_MAX_DATA_WIDTH-1:0] word=backing.read(addr & ~64'd7);
-        return word[(addr%8)*8+:8];
+        logic [`SVT_MEM_MAX_DATA_WIDTH-1:0] word=backing.read(addr-addr%BEAT_BYTES);
+        return word[(addr%BEAT_BYTES)*8+:8];
     endfunction
 endclass

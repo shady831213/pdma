@@ -7,7 +7,8 @@ virtual class pdma_fatal_test extends pdma_base_test;
         flow_.open(job);
         if(event_failure) job.opcode=COMMANDHEADER_OPCODE_TRAP;
         inject(event_failure,0,event_failure ? flow_.channel.event_address : flow_.channel.next_command_address());
-        flow_.submit(); flow_.expect_result(TASK_FATAL,event_failure ? 2 : 1);
+        flow_.submit(); flow_.expect_result(TASK_FATAL,event_failure ?
+            pdma_rtl_ChannelRecoveryLayout::FATAL_CODE_EVENTWRITE : pdma_rtl_ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD);
         platform.fault_enabled=0; flow_.close(); cases++;
     endtask
 endclass

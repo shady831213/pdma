@@ -21,8 +21,16 @@ class pdma_task_flow extends uvm_object;
     function void publish_observation(pdma_outcome outcome);
         pdma_observation item=new;
         item.channel_id=job.channel_id; item.task_id=job.id; item.outcome=outcome;
-        item.length=job.length; item.source_lane=job.source_lane; item.dest_lane=job.dest_lane;
-        item.cross_page=job.cross_page; item.fence_wide=job.fence_wide;
+        item.length=job.length;
+        item.source_lane=job.source_address%pdma_configuration::MEMORY_BEAT_BYTES;
+        item.dest_lane=job.dest_address%pdma_configuration::MEMORY_BEAT_BYTES;
+        item.cross_page=(job.source_address%pdma_configuration::AXI_BOUNDARY_BYTES+job.length>pdma_configuration::AXI_BOUNDARY_BYTES) ||
+            (job.dest_address%pdma_configuration::AXI_BOUNDARY_BYTES+job.length>pdma_configuration::AXI_BOUNDARY_BYTES);
+        if(outcome==TASK_ERROR) begin
+            longint unsigned address=channel.event_address+((channel.event_consumer-1)%channel.cfg.event_capacity)*EVENT_SIZE;
+            item.event_cross_page=address%pdma_configuration::AXI_BOUNDARY_BYTES+EVENT_SIZE>pdma_configuration::AXI_BOUNDARY_BYTES;
+        end
+        item.fence_wide=job.fence_wide;
         item.latency=$realtime-job.submitted_at;
         observations.write(item);
     endfunction

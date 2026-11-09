@@ -25,26 +25,28 @@ class pdma_task extends uvm_object;
     byte unsigned expected[], initial_data[];
     bit terminal_checked;
     bit expect_payload_unchanged;
+    longint unsigned expected_error_prefix;
     realtime submitted_at;
     function new(string name="task"); super.new(name); fence_wide=1; endfunction
     function longint unsigned fence_value(); return id; endfunction
+    function int unsigned fence_bytes(); return fence_wide ? $bits(longint)/8 : $bits(int)/8; endfunction
     task allocate(jvs_memory_allocator allocator,pdma_memory memory);
         source_buffer=new; dest_buffer=new; fence_buffer=new;
         source_buffer.allocate(allocator,length,payload_alignment,cross_page,source_lane);
         dest_buffer.allocate(allocator,length,payload_alignment,cross_page,dest_lane,1);
-        fence_buffer.allocate(allocator,fence_wide ? 8 : 4,fence_wide ? 8 : 4);
+        fence_buffer.allocate(allocator,fence_bytes(),fence_bytes());
         source_address=source_buffer.address; dest_address=dest_buffer.address; fence_address=fence_buffer.address;
         source_base=source_address-source_offset;
         expected=new[length]; initial_data=new[length];
         memory.permit(source_buffer.allocation.get_s_addr(),source_address,length,source_context,0);
         memory.permit(dest_buffer.allocation.get_s_addr(),dest_address,length,dest_context,1);
-        memory.permit(fence_buffer.allocation.get_s_addr(),fence_address,fence_wide ? 8 : 4,fence_context,1);
+        memory.permit(fence_buffer.allocation.get_s_addr(),fence_address,fence_bytes(),fence_context,1);
         foreach(expected[i]) begin
             expected[i]=$urandom; initial_data[i]=~expected[i];
             memory.write_byte(source_address+i,expected[i]); memory.write_byte(dest_address+i,initial_data[i]);
         end
         memory.write_byte(dest_address-1,8'ha6); memory.write_byte(dest_address+length,8'h59);
-        for(int i=0;i<(fence_wide ? 8 : 4);i++) memory.write_byte(fence_address+i,0);
+        for(int i=0;i<fence_bytes();i++) memory.write_byte(fence_address+i,0);
     endtask
     task deallocate(jvs_memory_allocator allocator,pdma_memory memory);
         source_buffer.deallocate(allocator,memory); dest_buffer.deallocate(allocator,memory); fence_buffer.deallocate(allocator,memory);
@@ -82,6 +84,6 @@ class pdma_observation extends uvm_object;
     longint unsigned task_id;
     pdma_outcome outcome;
     realtime latency;
-    bit cross_page, fence_wide;
+    bit cross_page, event_cross_page, fence_wide;
     function new(string name="observation"); super.new(name); endfunction
 endclass

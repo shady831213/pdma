@@ -7,6 +7,8 @@ run=$(realpath -m "${2:?Usage: regression.sh BUILD NEW_RUN [SEEDS...]}")
 shift 2
 jobs=${PDMA_JOBS:-4}
 [[ $jobs =~ ^[1-9][0-9]{0,3}$ ]] || { printf 'PDMA_JOBS must be in 1..9999\n' >&2; exit 2; }
+clock_mode=${PDMA_CLOCK_MODE:-random}
+[[ $clock_mode == random || $clock_mode == fixed ]] || { printf 'PDMA_CLOCK_MODE must be random or fixed\n' >&2; exit 2; }
 if (($#==0)); then set -- 1 7 19 41 97 211 503 997; fi
 seeds=("$@")
 tests=()
@@ -27,6 +29,7 @@ pdma_new_run "$run"
 printf '%s\n' "${tests[@]}" > "$run/tests.list"
 printf '%s\n' "${seeds[@]}" > "$run/seeds.list"
 printf 'jobs=%s\n' "$jobs" > "$run/configuration.txt"
+printf 'clock_mode=%s\n' "$clock_mode" >> "$run/configuration.txt"
 : > "$run/results.txt"
 pids=() names=() case_seeds=() directories=() diagnostics=() mutations=()
 head=0 tail=0 failed=0
@@ -39,14 +42,19 @@ trap cleanup EXIT
 trap 'printf "PDMA_REGRESSION_INTERRUPTED\n" >> "$run/results.txt"; exit 130' INT
 trap 'printf "PDMA_REGRESSION_INTERRUPTED\n" >> "$run/results.txt"; exit 143' TERM
 collect() {
-    local index=$head status=0 verdict=FAIL log
+    local index=$head status=0 verdict=FAIL log simulation_status=
     wait "${pids[index]}" || status=$?
     log=${directories[index]}/simulation.log
     if [[ -z ${diagnostics[index]} ]]; then
         if ((status==0)); then verdict=PASS; fi
         printf '%s test=%s seed=%s\n' "$verdict" "${names[index]}" "${case_seeds[index]}" >> "$run/results.txt"
     else
-        if ((status!=0)) && [[ -f $log ]] &&
+        if [[ -f ${directories[index]}/status.txt ]]; then
+            simulation_status=$(<"${directories[index]}/status.txt")
+            simulation_status=${simulation_status#simulation_exit=}
+        fi
+        # Timeout/launcher errors and signal exits cannot qualify as expected rejections.
+        if ((status!=0)) && [[ $simulation_status =~ ^[0-9]+$ ]] && ((simulation_status<124)) && [[ -f $log ]] &&
             grep -Eq "^UVM_FATAL .*\[${diagnostics[index]}\]" "$log" &&
             ! grep -Eq '^PDMA_VIP_PASS([[:space:]]|$)' "$log"; then verdict=REJECTED; fi
         printf '%s mutation=%s diagnostic=%s\n' "$verdict" "${mutations[index]}" "${diagnostics[index]}" >> "$run/results.txt"
@@ -56,9 +64,9 @@ collect() {
 }
 launch() {
     local test_name=$1 seed=$2 directory=$3 diagnostic=$4 mutation=$5
-    set --
+    set -- "+clock_mode=$clock_mode"
     if ((tail-head >= jobs)); then collect; fi
-    if [[ -n $mutation ]]; then set -- "+checker_mutation=$mutation"; fi
+    if [[ -n $mutation ]]; then set -- "$@" "+checker_mutation=$mutation"; fi
     bash "$root/verification/dma/flow/run.sh" "$build" "$directory" "$test_name" "$seed" "$@" \
         > "$run/case-$tail.log" 2>&1 &
     pids[tail]=$! names[tail]=$test_name case_seeds[tail]=$seed directories[tail]=$directory
@@ -68,14 +76,17 @@ launch() {
 for test_name in "${tests[@]}"; do
     for seed in "${seeds[@]}"; do launch "$test_name" "$seed" "$run/$test_name/seed-$seed" '' ''; done
 done
-for mutation in data identity unknown_identity missing_completion duplicate_completion; do
+for mutation in data identity unknown_identity missing_completion duplicate_completion early_fence underreported_prefix; do
+    mutation_test=pdma_aligned_copy_test
     case "$mutation" in
         data) diagnostic=TASK_DATA ;;
         identity|unknown_identity) diagnostic=TASK_IDENTITY ;;
         missing_completion) diagnostic=TASK_TIMEOUT ;;
         duplicate_completion) diagnostic=TASK_DUPLICATE ;;
+        early_fence) diagnostic=TASK_COMPLETION; mutation_test=pdma_read_error_irq_test ;;
+        underreported_prefix) diagnostic=TASK_ERROR_INFO; mutation_test=pdma_read_error_irq_test ;;
     esac
-    launch pdma_aligned_copy_test 1 "$run/negative-$mutation" "$diagnostic" "$mutation"
+    launch "$mutation_test" 1 "$run/negative-$mutation" "$diagnostic" "$mutation"
 done
 while ((head<tail)); do collect; done
 if ((failed)); then printf 'PDMA_REGRESSION_FAILED\n'; exit 1; fi

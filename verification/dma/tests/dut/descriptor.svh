@@ -9,7 +9,7 @@ class pdma_unsupported_command_test extends pdma_base_test;
         job.expect_payload_unchanged=1;
         flow_.open(job);
         job.opcode=COMMANDHEADER_OPCODE_TRAP;
-        flow_.submit(); flow_.expect_result(TASK_ERROR,6); flow_.close(); cases++;
+        flow_.submit(); flow_.expect_result(TASK_ERROR,EVENT_CODE_UNSUPPORTED); flow_.close(); cases++;
     endtask
 endclass
 
@@ -24,7 +24,8 @@ class pdma_malformed_command_test extends pdma_base_test;
         job.expect_payload_unchanged=1;
         flow_.open(job);
         job.opcode='1;
-        flow_.submit(); flow_.expect_result(TASK_FATAL,1); flow_.close(); cases++;
+        flow_.submit(); flow_.expect_result(TASK_FATAL,pdma_rtl_ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD);
+        flow_.close(); cases++;
     endtask
 endclass
 
@@ -54,6 +55,6 @@ class pdma_overflowing_copy_test extends pdma_base_test;
         job.expect_payload_unchanged=1;
         flow_.open(job);
         job.source_base='1;
-        flow_.submit(); flow_.expect_result(TASK_ERROR,1); flow_.close(); cases++;
+        flow_.submit(); flow_.expect_result(TASK_ERROR,EVENT_CODE_INVALIDLENGTH); flow_.close(); cases++;
     endtask
 endclass

@@ -25,12 +25,18 @@ class pdma_task_checker extends uvm_object;
         if(result.outcome==TASK_ERROR) begin
             if($isunknown(result.prefix) || result.prefix>job.length)
                 `uvm_fatal("TASK_ERROR_INFO","Committed prefix is unknown or exceeds task length")
+            if(result.prefix!==job.expected_error_prefix)
+                `uvm_fatal("TASK_ERROR_INFO","Committed prefix differs from the scenario expectation")
             for(int i=0;i<result.prefix;i++)
                 if(memory.read_byte(job.dest_address+i)!==job.expected[i])
                     `uvm_fatal("TASK_DATA","Confirmed committed prefix does not match memory")
         end
         if(result.outcome inside {TASK_FAULT,TASK_ERROR} && result.value!==0)
             `uvm_fatal("TASK_COMPLETION","Incomplete task published its successor Fence")
+        if(result.outcome inside {TASK_FAULT,TASK_ERROR})
+            for(int i=0;i<job.fence_bytes();i++)
+                if(memory.read_byte(job.fence_address+i)!==8'b0)
+                    `uvm_fatal("TASK_COMPLETION","Incomplete task wrote its successor Fence memory")
         if(result.outcome inside {TASK_FAULT,TASK_FATAL} && result.event_producer!==0)
             `uvm_fatal("TASK_EVENT","Fault or failed report published an event")
         if(job.expect_payload_unchanged) foreach(job.initial_data[i])

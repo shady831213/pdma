@@ -20,6 +20,6 @@ done < "$regression/results.txt"
 ((${#databases[@]}>1)) || { printf 'No successful simulation coverage\n' >&2; exit 1; }
 printf '%s\n' "${databases[@]}" > "$report/databases.list"
 timeout "${PDMA_COVERAGE_TIMEOUT:-300}" "${PDMA_COVERAGE_TOOL:-urg}" \
-    -dir "${databases[@]}" -report "$report/report" -format both > "$report/coverage.log" 2>&1
+    -dir "${databases[@]}" -report "$report/report" -format text -show summary > "$report/coverage.log" 2>&1
 test -s "$report/report/dashboard.txt"
 printf 'PDMA_COVERAGE_COMPLETE\n'

@@ -9,6 +9,8 @@ class pdma_negative_checker extends pdma_task_checker;
         if(mutation=="data") memory.write_byte(job.dest_address,~job.expected[0]);
         if(mutation=="identity") result.channel_id++;
         if(mutation=="unknown_identity") result.task_id='x;
+        if(mutation=="early_fence") memory.write_byte(job.fence_address,1);
+        if(mutation=="underreported_prefix") result.prefix=0;
         super.check(job,result,expected_outcome,memory,expected_code);
         if(mutation=="duplicate_completion") super.check(job,result,expected_outcome,memory,expected_code);
     endfunction

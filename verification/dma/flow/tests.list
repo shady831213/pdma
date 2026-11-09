@@ -15,3 +15,5 @@ pdma_command_read_fatal_test
 pdma_event_write_fatal_test
 pdma_irq_enable_no_replay_test
 pdma_ring_wrap_test
+pdma_event_boundary_test
+pdma_register_model_test

@@ -1,0 +1,5 @@
+error[E0599]: no method named `ty` found for struct `hw_model_schema::export::view::Field<'a>` in the current scope
+ --> tests/render_ui/field_type.rs:3:19
+  |
+3 |     let _ = field.ty();
+  |                   ^^ method not found in `hw_model_schema::export::view::Field<'_>`

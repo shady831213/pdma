@@ -63,6 +63,20 @@ pub(super) fn node(value: Node<'_>) -> Result<(), AnalysisError> {
             }
         }
         Node::Record(crate::ast::record::Node::Union(union)) => shape::union(union)?,
+        Node::Record(crate::ast::record::Node::Reference(reference))
+        | Node::Register(crate::ast::register::Node::Reference(reference)) => {
+            if reference.selector_binding().is_some()
+                && !matches!(
+                    reference.target().body(),
+                    crate::ast::DefinitionBody::Union(_)
+                )
+            {
+                return Err(AnalysisError::SourceShape {
+                    path: reference.name(),
+                    source: ShapeError::SelectorBinding,
+                });
+            }
+        }
         Node::Value(crate::ast::value::Node::Bits(bits)) => shape::bits("bits", bits)?,
         Node::Record(
             crate::ast::record::Node::Field(_)

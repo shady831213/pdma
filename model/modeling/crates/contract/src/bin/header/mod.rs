@@ -2,7 +2,8 @@ use hw_model_schema::analysis::{AnalyzedSchema, Bindings, Pass};
 use hw_model_schema::{
     ast::{DefinitionBody, SchemaRegistry, SchemaSet},
     export::backends::c_header::{CRecordAnalysisPass, CRecordBackend, CRegisterBackend},
-    export::{prepare, value::Backend},
+    export::{OutputBackend, prepare},
+    transform::Inline,
 };
 use pdma_model_contract::dma::DmaRegisters;
 use pdma_model_contract::hw_components::context::ContextTableRegisters;
@@ -37,7 +38,8 @@ pub fn generate_with_contexts(count: usize, contexts: usize) -> Result<HeaderSet
             records.add_definition(definition.clone());
         }
     }
-    let schema = AnalyzedSchema::from_graph(&records.resolve()?, &Bindings::default())?;
+    let graph = Inline::new().run(records)?.resolve()?;
+    let schema = AnalyzedSchema::from_graph(&graph, &Bindings::default())?;
     let (_, analysis) = CRecordAnalysisPass.run((&schema, ()))?;
     render(&schema, CRecordBackend::new(&analysis), &mut common)?;
     let mut headers = vec![("pdma_common.h", wrap("PDMA_COMMON_H", &common, false))];
@@ -89,7 +91,7 @@ fn render_registers<I: Copy + Eq, F: Copy + Eq + core::fmt::Debug>(
     )
 }
 
-fn render<B: Backend>(
+fn render<B: OutputBackend>(
     schema: &AnalyzedSchema,
     mut backend: B,
     writer: &mut dyn Write,

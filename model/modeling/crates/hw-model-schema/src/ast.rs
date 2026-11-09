@@ -28,8 +28,8 @@ pub use definition::{Definition, DefinitionBody, DefinitionId, Reference, Refere
 pub use instance::MapInstance;
 pub use map::{
     ChildLayout, ExpressionOp, ExpressionVisitor, LayoutError, LayoutExpr, MapDefinition,
-    MapGeometry, MapLayoutPlan, MapPathSegment, MapPlacement, PlacementGeometry, PlacementPlan,
-    PlanValue, RegisterInstance,
+    MapGeometry, MapLayoutPlan, MapPathSegment, MapPlacement, PlacementBody, PlacementGeometry,
+    PlacementPlan, PlanValue, RegisterInstance,
 };
 pub use register::RegisterInfo;
 pub use set::{GraphError, SchemaGraph, SchemaSet};

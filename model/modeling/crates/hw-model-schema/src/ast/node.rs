@@ -21,6 +21,7 @@ impl<'a> Node<'a> {
                     | record::Node::Union(_)
                     | record::Node::Field(_)
                     | record::Node::Case(_)
+                    | record::Node::Reference(_)
                     | record::Node::Attribute(_)
                     | record::Node::Constant(_) => Self::Record(n),
                 })
@@ -32,6 +33,7 @@ impl<'a> Node<'a> {
                     register::Node::Register(_)
                     | register::Node::RegisterMap(_)
                     | register::Node::Placement(_)
+                    | register::Node::Reference(_)
                     | register::Node::RegisterField(_)
                     | register::Node::Parameter(_)
                     | register::Node::Argument(_)

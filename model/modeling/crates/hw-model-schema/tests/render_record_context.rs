@@ -1,13 +1,13 @@
-//! Cross-parent reordering keeps immutable field and bit ancestry attached to visits.
+//! Sibling reordering keeps immutable field and bit ancestry attached to visits.
 /// Caller-owned capture for generation tests.
 pub mod output_support;
-use hw_model_schema::traversal::record::Context as RecordContext;
+use hw_model_schema::export::record::Context as RecordContext;
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Bindings},
-    ast::{RecordDefinition, SchemaSet, record::Node},
+    ast::SchemaSet,
     export::{
         record::{self},
-        value::{self, Backend},
+        value::{self, Emit as _},
     },
     record_schema,
 };
@@ -21,17 +21,16 @@ struct Probe(Vec<String>);
 impl record::Backend for Probe {
     fn record<'a>(
         &mut self,
-        _: &'a RecordDefinition,
+        _: hw_model_schema::export::view::Record<'a>,
         ctx: RecordContext<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        let mut grandchildren: Vec<_> = ctx
+        let mut fields: Vec<_> = ctx
             .children()
-            .filter(|v| matches!(v.node(), Node::Field(_)))
-            .flat_map(|v| v.context().children())
+            .filter(|v| v.kind() == hw_model_schema::export::Kind::Field)
             .collect();
-        grandchildren.sort_by_key(|v| v.context().field().map(hw_model_schema::ast::Field::name));
-        self.emit_all(grandchildren, writer)
+        fields.sort_by(|a, b| a.name().cmp(&b.name()));
+        self.emit_all(fields, writer)
     }
 }
 impl value::Backend for Probe {
@@ -46,11 +45,7 @@ impl value::Backend for Probe {
     ) -> Result<(), Self::Error> {
         let field = ctx.field().ok_or("missing field")?.name();
         let bit = ctx.bit().ok_or("missing bit")?;
-        assert!(
-            ctx.ancestors()
-                .iter()
-                .any(|n| matches!(n, Node::Field(f) if f.name() == field))
-        );
+        assert_eq!(ctx.path(), field);
         {
             let event: String = format!("{field}:{bit}");
             if !self.0.is_empty() {
@@ -63,18 +58,21 @@ impl value::Backend for Probe {
         }
         Ok(())
     }
+}
+impl hw_model_schema::export::OutputBackend for Probe {
     fn metadata(
         &mut self,
         ctx: &Self::Context<'_>,
     ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
         Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.unit().name.clone(),
+            logical_name: ctx.root_name().to_owned(),
             media_type: "text/plain".into(),
         })
     }
 }
+
 #[test]
-fn grandchildren_sorted_across_siblings_keep_original_parent() {
+fn sorted_sibling_visits_keep_original_field_and_bit_scopes() {
     let mut set = SchemaSet::new();
     set.add_record::<Packet>();
     let schema = AnalyzedSchema::analyze(set, &Bindings::new()).unwrap();
@@ -97,11 +95,8 @@ fn root_visit_retains_owner_when_dispatched_as_an_ordinary_visit() {
     let schema = AnalyzedSchema::analyze(set, &Bindings::new()).unwrap();
     let mut probe = Probe(vec![]);
     for visit in <record::Domain as Domain<Probe>>::roots(&schema) {
-        assert!(core::ptr::eq(
-            visit.context().analysis(),
-            core::ptr::from_ref(&schema)
-        ));
-        assert!(visit.context().ancestors().is_empty());
+        assert!(schema.units().any(|unit| &unit.id == visit.id()));
+        assert!(visit.parent_id().is_none());
         probe.emit(visit, &mut std::io::sink()).unwrap();
     }
     assert_eq!(
@@ -112,14 +107,26 @@ fn root_visit_retains_owner_when_dispatched_as_an_ordinary_visit() {
 
 struct RootNames(Vec<String>);
 impl record::Backend for RootNames {
+    fn reference<'a>(
+        &mut self,
+        _: hw_model_schema::export::view::Reference<'a>,
+        target: hw_model_schema::export::Visit<RecordContext<'a>>,
+        ctx: RecordContext<'a>,
+        _: &mut dyn std::io::Write,
+    ) -> Result<(), Self::Error> {
+        let name = target.name().ok_or("missing reference target name")?;
+        assert!(self.0.iter().any(|root| root == name));
+        assert_eq!(target.parent_id().as_ref(), Some(ctx.id()));
+        Ok(())
+    }
     fn root(
         &mut self,
         ctx: RecordContext<'_>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        assert!(ctx.ancestors().is_empty());
+        assert!(ctx.parent_id().is_none());
         {
-            let event: String = ctx.unit().name.clone();
+            let event: String = ctx.root_name().to_owned();
             if !self.0.is_empty() {
                 writer.write_all(b"\n").map_err(|_| "writer rejected")?;
             }
@@ -132,11 +139,11 @@ impl record::Backend for RootNames {
     }
     fn field<'a>(
         &mut self,
-        _: &'a hw_model_schema::ast::Field,
+        _: hw_model_schema::export::view::Field<'a>,
         ctx: RecordContext<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        assert!(matches!(ctx.ancestors(), [Node::Record(_)]));
+        assert_eq!(ctx.parent_id().as_ref(), Some(ctx.root_id()));
         self.emit_all(ctx.children(), writer)
     }
 }
@@ -144,16 +151,19 @@ impl value::Backend for RootNames {
     type Domain = record::Domain;
     type Error = &'static str;
     type Context<'a> = RecordContext<'a>;
+}
+impl hw_model_schema::export::OutputBackend for RootNames {
     fn metadata(
         &mut self,
         ctx: &Self::Context<'_>,
     ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
         Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.unit().name.clone(),
+            logical_name: ctx.root_name().to_owned(),
             media_type: "text/plain".into(),
         })
     }
 }
+
 #[test]
 fn generation_dispatches_dependency_roots_without_extra_ancestors() {
     let mut set = SchemaSet::new();

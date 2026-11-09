@@ -168,8 +168,9 @@ changing their lexical context. Context and visit binding are
 generator-owned: a backend cannot combine an arbitrary node or unit with a context
 from another definition. There is no begin/end protocol or mutable traversal stack.
 
-Read-only analysis, dependency resolution, ancestor and structural path queries
-remain available to custom backends. Register context supplies normalized register
+Full AST and dependency resolution remain available to analysis passes. Renderers
+receive shallow metadata, ancestor kinds, structural paths and bound visits;
+reference callbacks receive the target explicitly. Register context supplies normalized register
 location/offset/path and active unbound parameters. Original declarations and root
 bindings remain separately queryable. These facts do not depend on visit order;
 backend parameter collection and semantic scope reconstruction have been removed.
@@ -196,7 +197,9 @@ Default-off builtin features provide `CRecordBackend`, `CRegisterBackend`,
 `VerylRecordBackend` and `VerylRegisterBackend`. C byte accessors use checked
 storage metadata. Veryl packages describe layout, not bus behavior or hardware
 register state. Custom documentation and dependency-graph outputs need neither
-builtin. Target-private symbol state concerns spelling, not another IR or text buffer.
+builtin. Target-private symbol state concerns spelling. Local syntax buffers may
+arrange declarations and initialization statements from one traversal; they are
+not another IR or additional generation passes.
 Each register backend owns its map formatting callbacks directly. There is no
 separate map renderer or forwarding entry point. Veryl formats parameter
 signatures from the current context, typed attributes and expression spelling;
@@ -212,18 +215,19 @@ needs child geometry calls or a cursor to resolve layout formulas.
 
 ## Leaf dispatch and documentation
 
-The common generator, rather than each target, dispatches source attribute and
-layout-property variants to typed callbacks. Register, map, placement, record and
-field ownership is explicit in callback names. Register handlers traverse the
-common children without rebuilding attribute arrays; referenced register fields
-are exposed by the same traversal as inline fields. Targets may reorder children
-for output format, but do not reinterpret their schema kind.
+The common generator dispatches register, map, placement, record and field nodes
+to their semantic callbacks. Each owner exposes complete shallow metadata; width,
+reset, access and other individual attributes do not need separate render methods.
+Referenced register bits pass through the reference callback before value/bit-field
+dispatch, retaining the containing register's access and encoding metadata.
+Targets may order or buffer syntax sections without reinterpreting source kinds.
 
-Default offset/count/stride/extent callbacks delegate to `layout_property`, which
-receives the completed expression and normalized relative owner/property. Both
-builtins implement this generic callback once. Veryl's register-name helper only
+One `layout_property` callback receives the completed property kind and normalized
+relative owner. Its expression is a bound child visit, formatted or evaluated by
+the shared fold at the expression callback. Both builtins implement this callback
+once. Veryl's register-name helper only
 spells structural path segments; template/instance output policy is decided at
-register entry rather than repeated by every attribute callback. Target symbol
+register entry. Target symbol
 collision checks remain target responsibilities; output storage belongs to the caller.
 
 Common documentation dispatch preserves summary/detail distinction, explicit
@@ -465,3 +469,38 @@ existing checked geometry resolver, collects each register once and uses the
 resulting ranges to populate banks. The separate register collection, string-prefix
 bank scans and redundant final root extent resolution were removed. This is not a
 claim that all recursive plan evaluation has been globally cached or eliminated.
+
+## Agreed next revision: canonical definitions and reference expansion
+
+This direction was agreed on 2026-11-09 for the next implementation session.
+It is not implemented by this checkpoint. The current optional Inline/Outline
+passes remain available until their replacements and consumer migration are verified.
+
+- Construct one canonical AST of definitions and references. Builtin types such
+  as u64 remain direct values; records, unions, bits and enums are defined types,
+  including an enum whose representation is a builtin integer.
+- Record whether each definition originated as a named or inline DSL declaration,
+  together with source provenance. Inline origin is metadata, not a second AST
+  representation or an instruction that every target must expand the definition.
+- Remove the two optional structural rewrite passes. A reference callback chooses
+  a named use or continues through the same backend and common traversal at a
+  framework-bound expansion visit. Mixed expansion and named uses are supported;
+  no copied all-inline tree or additional generation passes are needed.
+- Rename the independent output entry callback from root to entry. Explicitly
+  selected definitions remain valid entries even when referenced elsewhere.
+  Definitions without incoming references may supply default entries, but
+  containment parents and incoming definition references are distinct concepts.
+- Expansion changes the current subtree, not the output entry. Common traversal
+  retains the definition identity, occurrence identity, output owner, argument
+  bindings, local layout and external selector bindings. It must not duplicate
+  output wrappers or skip repeated occurrences through declaration deduplication.
+- Keep backend callbacks consolidated. Do not add separate inline/named node
+  callbacks, begin/end expansion hooks, output-phase backends, or backend-owned
+  scope stacks and layout calculations. Generator entry selection stays outside
+  node rendering; the revision must not add a backend dependency-planning protocol.
+
+Acceptance includes equivalent C/Veryl/SV/UVM output semantics, public rendering
+capability boundaries, parameterized and repeated references, builtin/defined type
+distinction, selector scope and writer errors. Audit intermediate APIs, modules,
+tests and documentation for leftovers before the next review. Publication remains
+subject to separate user approval.

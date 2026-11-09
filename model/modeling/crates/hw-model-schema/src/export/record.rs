@@ -1,18 +1,22 @@
 //! Independent record-domain export callbacks over completed semantics.
 mod backend;
+mod context;
 mod emit;
+mod storage;
 pub use backend::Backend;
+pub use context::{Context, roots};
 /// Record source domain for a target's shared value callbacks.
 #[derive(Debug)]
 pub struct Domain;
+impl<B: Backend> super::context::sealed::Domain<B> for Domain {}
 impl<B: Backend> super::Domain<B> for Domain {
     fn emit(
-        visit: crate::traversal::Visit<B::Context<'_>>,
+        visit: super::Visit<B::Context<'_>>,
         backend: &mut B,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), B::Error> {
         let ctx = visit.into_context();
-        emit::emit(ctx.node(), ctx, backend, writer)
+        emit::emit(ctx.0.node(), ctx, backend, writer)
     }
     fn validate(unit: &crate::analysis::Unit) -> Result<(), crate::analysis::AnalysisError> {
         if matches!(
@@ -33,11 +37,11 @@ impl<B: Backend> super::Domain<B> for Domain {
     }
     fn roots(
         schema: &crate::analysis::AnalyzedSchema,
-    ) -> impl Iterator<Item = crate::traversal::Visit<B::Context<'_>>> {
-        crate::traversal::record::roots(schema)
+    ) -> impl Iterator<Item = super::Visit<B::Context<'_>>> {
+        roots(schema)
     }
     fn root(
-        visit: crate::traversal::Visit<B::Context<'_>>,
+        visit: super::Visit<B::Context<'_>>,
         backend: &mut B,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), B::Error> {

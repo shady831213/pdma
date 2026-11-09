@@ -50,7 +50,7 @@ pub(super) fn placement<'a>(
     placement: &'a MapPlacement,
     plan: Option<&'a CompletePlacementLayout>,
 ) -> Vec<Node<'a>> {
-    let parameters = match placement.reference().target().body() {
+    let parameters = match placement.target().body() {
         DefinitionBody::RegisterMap(map) => map.parameters(),
         DefinitionBody::Bits(_)
         | DefinitionBody::Register(_)
@@ -71,6 +71,14 @@ pub(super) fn placement<'a>(
         })
         .collect();
     nodes.push(Node::Attribute(Attribute::Count(placement.count())));
+    match placement.body() {
+        crate::ast::PlacementBody::Reference(reference) => nodes.push(Node::Reference(reference)),
+        crate::ast::PlacementBody::Inline(child) => match child.node() {
+            crate::ast::Node::Register(node) => nodes.push(node),
+            crate::ast::Node::Value(node) => nodes.push(Node::Value(node)),
+            crate::ast::Node::Record(_) => {}
+        },
+    }
     nodes.push(Node::Attribute(Attribute::Bank(placement.is_bank())));
     nodes.extend(
         placement

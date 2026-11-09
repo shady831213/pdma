@@ -82,9 +82,18 @@ impl CompleteMapLayout {
                 })?
             };
             let complete = CompletePlacementLayout {
-                reference: placement.reference.clone(),
-                child_definition: crate::traversal::NodeId::definition(placement.child_definition),
-                child_name: placement.child_name,
+                source: placement.source.clone(),
+                inline_map: match (&placement.source.body(), &placement.child) {
+                    (crate::ast::PlacementBody::Inline(_), ChildLayout::Call { plan, .. }) => {
+                        Some(Box::new(Self::resolve(plan, None)?))
+                    }
+                    (crate::ast::PlacementBody::Reference(_), _)
+                    | (crate::ast::PlacementBody::Inline(_), ChildLayout::Fixed { .. }) => None,
+                },
+                child_definition: crate::traversal::NodeId::definition(
+                    placement.child_definition.clone(),
+                ),
+                child_name: placement.child_name.clone(),
                 bank: placement.bank,
                 documentation: placement.documentation,
                 arguments: child_arguments,

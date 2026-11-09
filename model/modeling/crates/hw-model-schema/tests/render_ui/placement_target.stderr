@@ -1,0 +1,29 @@
+error[E0599]: no method named `placement_target` found for struct `hw_model_schema::export::register::Context<'a>` in the current scope
+ --> tests/render_ui/placement_target.rs:3:17
+  |
+3 |     let _ = ctx.placement_target();
+  |                 ^^^^^^^^^^^^^^^^
+  |
+help: there is a method `placement` with a similar name
+  |
+3 -     let _ = ctx.placement_target();
+3 +     let _ = ctx.placement();
+  |
+
+error[E0599]: no method named `reference` found for struct `hw_model_schema::export::view::Placement<'a>` in the current scope
+ --> tests/render_ui/placement_target.rs:4:23
+  |
+4 |     let _ = placement.reference();
+  |                       ^^^^^^^^^ method not found in `hw_model_schema::export::view::Placement<'_>`
+
+error[E0599]: no method named `child_definition` found for struct `hw_model_schema::export::view::Placement<'a>` in the current scope
+ --> tests/render_ui/placement_target.rs:5:23
+  |
+5 |     let _ = placement.child_definition();
+  |                       ^^^^^^^^^^^^^^^^ method not found in `hw_model_schema::export::view::Placement<'_>`
+
+error[E0599]: no method named `child_name` found for struct `hw_model_schema::export::view::Placement<'a>` in the current scope
+ --> tests/render_ui/placement_target.rs:6:23
+  |
+6 |     let _ = placement.child_name();
+  |                       ^^^^^^^^^^ method not found in `hw_model_schema::export::view::Placement<'_>`

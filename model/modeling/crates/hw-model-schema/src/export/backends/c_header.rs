@@ -44,10 +44,10 @@ impl<'a> CRecordBackend<'a> {
 /// Formats register metadata and map geometry as portable C11.
 #[derive(Debug, Default)]
 pub struct CRegisterBackend {
+    geometry: register::geometry::Geometry,
     names: naming::Names,
     prefix: String,
     output: fragment::Fragment,
-    geometry: register::Geometry,
 }
 impl CRegisterBackend {
     /// Creates a register renderer using schema names for target symbols.

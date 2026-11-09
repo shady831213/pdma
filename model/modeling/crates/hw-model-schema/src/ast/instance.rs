@@ -14,8 +14,8 @@ impl MapInstance {
         &self.name
     }
     /// Reusable map definition identity.
-    pub const fn definition(&self) -> DefinitionId {
-        self.definition
+    pub fn definition(&self) -> DefinitionId {
+        self.definition.clone()
     }
     /// Arguments in the map's declared parameter order.
     pub fn arguments(&self) -> &[usize] {

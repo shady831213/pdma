@@ -1,0 +1,38 @@
+error[E0624]: method `context` is private
+ --> tests/render_ui/visit.rs:4:19
+  |
+4 |     let _ = visit.context();
+  |                   ^^^^^^^ private method
+  |
+ ::: src/export/context.rs
+  |
+  |     pub(crate) const fn context(&self) -> &C {
+  |     ---------------------------------------- private method defined here
+
+error[E0599]: no method named `node` found for struct `hw_model_schema::export::Visit<C>` in the current scope
+ --> tests/render_ui/visit.rs:5:19
+  |
+5 |     let _ = visit.node();
+  |                   ^^^^ method not found in `hw_model_schema::export::Visit<hw_model_schema::export::record::Context<'_>>`
+
+error[E0624]: method `into_context` is private
+ --> tests/render_ui/visit.rs:6:19
+  |
+6 |     let _ = visit.into_context();
+  |                   ^^^^^^^^^^^^ private method
+  |
+ ::: src/export/context.rs
+  |
+  |     pub(crate) fn into_context(self) -> C {
+  |     ------------------------------------- private method defined here
+
+error[E0624]: associated function `new` is private
+  --> tests/render_ui/visit.rs:10:20
+   |
+10 |     let _ = Visit::new(ctx);
+   |                    ^^^ private associated function
+   |
+  ::: src/export/context.rs
+   |
+   |     pub(crate) const fn new(ctx: C) -> Self {
+   |     --------------------------------------- private associated function defined here

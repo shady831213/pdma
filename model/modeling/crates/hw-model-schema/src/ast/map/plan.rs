@@ -5,7 +5,7 @@ mod values;
 use super::{LayoutExpr, MapDefinition, PlanValue};
 use crate::{
     Documentation,
-    ast::{DefinitionId, Reference},
+    ast::{DefinitionId, MapPlacement},
 };
 pub(super) use values::Values as EvaluationValues;
 
@@ -14,11 +14,11 @@ pub(super) use values::Values as EvaluationValues;
 pub struct PlacementPlan {
     pub(super) resolved_arguments: Vec<usize>,
     /// Placement edge and its declaration name.
-    pub reference: Reference,
+    pub source: MapPlacement,
     /// Resolved child identity without executing a definition callback.
     pub child_definition: DefinitionId,
     /// Resolved child schema name, before target naming.
-    pub child_name: &'static str,
+    pub child_name: String,
     /// Explicit bank identity, including banks of one.
     pub bank: bool,
     /// Placement documentation.

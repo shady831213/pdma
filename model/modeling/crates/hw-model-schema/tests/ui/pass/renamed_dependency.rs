@@ -1,5 +1,5 @@
-use hw_model_schema as his;
 use his::{bits_schema, record_schema, register_map, register_schema};
+use hw_model_schema as his;
 
 bits_schema! { pub bits AliasBits(u8) { enable: 0..1, } }
 record_schema! { pub record AliasRecord { alignment: 4, endian: Little, fields: {
@@ -32,5 +32,12 @@ fn main() {
     assert_eq!(RenamedMap::EXTENT, 1);
     assert_eq!(AliasRecord::SPEC.size(), 4);
     assert_eq!(AliasMap::EXTENT, 4);
-    assert_eq!(AliasBitsRecord { flags: AliasBitsValues { enable: true } }.to_bytes().unwrap(), [1]);
+    assert_eq!(
+        AliasBitsRecord {
+            flags: AliasBitsValues { enable: true }
+        }
+        .to_bytes()
+        .unwrap(),
+        [1]
+    );
 }

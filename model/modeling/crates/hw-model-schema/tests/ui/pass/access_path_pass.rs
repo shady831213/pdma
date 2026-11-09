@@ -1,8 +1,8 @@
-use hw_model_schema as his;
 use his::{RegisterAccessGroup, register_map, register_schema};
+use hw_model_schema as his;
 
 register_schema! { pub register Word { width: 4, endian: Little, access: ReadOnly,
-    reset: Zero(0), writable_mask: 0, fields: {}, } }
+reset: Zero(0), writable_mask: 0, fields: {}, } }
 register_map! { pub map Described { alignment: 4, placements: [
     magic: Word,
     expected_epoch: Word,

@@ -69,16 +69,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hw-model-schema"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b623635263a60dbbcefecf00b55fc114af9fc4864e19c5f7dc0ed497efea8c87"
-dependencies = [
- "hw-model-schema-macros 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "inventory",
-]
-
-[[package]]
 name = "hw-model-schema-macros"
 version = "0.2.0"
 dependencies = [
@@ -155,7 +145,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 name = "pdma-model-contract"
 version = "0.1.0"
 dependencies = [
- "hw-model-schema 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hw-model-schema",
 ]
 
 [[package]]
@@ -164,7 +154,7 @@ version = "0.1.0"
 dependencies = [
  "hw-model-io 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hw-model-pipeline 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "hw-model-schema 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hw-model-schema",
  "pdma-model-contract",
 ]
 
@@ -174,7 +164,7 @@ version = "0.1.0"
 dependencies = [
  "hw-model-io 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hw-model-irq 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "hw-model-schema 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hw-model-schema",
  "hw-model-swenv 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "pdma-model-contract",
  "pdma-model-software",
@@ -188,7 +178,7 @@ dependencies = [
  "hw-model-io 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hw-model-irq 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hw-model-pipeline 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "hw-model-schema 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hw-model-schema",
  "hw-model-swenv 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "pdma-model-contract",
  "pdma-model-dma",
@@ -202,7 +192,7 @@ version = "0.1.0"
 dependencies = [
  "hw-model-io 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hw-model-pipeline 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "hw-model-schema 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hw-model-schema",
  "pdma-model-contract",
  "pdma-model-dma",
 ]
@@ -214,7 +204,7 @@ dependencies = [
  "hw-model-io 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hw-model-irq 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hw-model-pipeline 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "hw-model-schema 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hw-model-schema",
  "hw-model-swenv 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "pdma-model-contract",
  "pdma-model-dma",
@@ -234,7 +224,7 @@ dependencies = [
  "hw-model-io 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hw-model-irq 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hw-model-pipeline 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "hw-model-schema 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hw-model-schema",
  "hw-model-swenv 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "pdma-model-contract",
  "pdma-model-dma",

@@ -2,7 +2,7 @@
 /// Caller-owned capture for generation tests.
 pub mod output_support;
 use hw_model_schema::analysis::{AnalyzedSchema, Bindings, Layout};
-use hw_model_schema::traversal::register::Context as RegisterContext;
+use hw_model_schema::export::register::Context as RegisterContext;
 use hw_model_schema::{
     export::{register::Backend, value},
     register_map, register_schema,
@@ -115,16 +115,19 @@ impl value::Backend for FailsAfterOne {
     type Domain = hw_model_schema::export::register::Domain;
     type Error = &'static str;
     type Context<'a> = RegisterContext<'a>;
+}
+impl hw_model_schema::export::OutputBackend for FailsAfterOne {
     fn metadata(
         &mut self,
         ctx: &Self::Context<'_>,
     ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
         Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.unit().name.clone(),
+            logical_name: ctx.root_name().to_owned(),
             media_type: "text/plain".into(),
         })
     }
 }
+
 #[test]
 fn rendering_failure_preserves_completed_root_output() -> Result<(), Box<dyn std::error::Error>> {
     // Given: multiple definitions and a renderer failing on the second definition.
@@ -167,16 +170,19 @@ impl value::Backend for CountCallbacks<'_> {
     type Domain = hw_model_schema::export::register::Domain;
     type Error = core::convert::Infallible;
     type Context<'a> = RegisterContext<'a>;
+}
+impl hw_model_schema::export::OutputBackend for CountCallbacks<'_> {
     fn metadata(
         &mut self,
         ctx: &Self::Context<'_>,
     ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
         Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.unit().name.clone(),
+            logical_name: ctx.root_name().to_owned(),
             media_type: "text/plain".into(),
         })
     }
 }
+
 hw_model_schema::record_schema! { pub record ZRecord { endian: Little, fields: { value: u32 } } }
 #[test]
 fn wrong_domain_is_rejected_before_any_renderer_callback() -> Result<(), Box<dyn std::error::Error>>

@@ -1,0 +1,11 @@
+error[E0599]: no method named `kind` found for struct `hw_model_schema::export::view::StorageMember<'a>` in the current scope
+ --> tests/render_ui/storage_value_kind.rs:3:20
+  |
+3 |     let _ = member.kind();
+  |                    ^^^^
+  |
+help: there is a method `id` with a similar name
+  |
+3 -     let _ = member.kind();
+3 +     let _ = member.id();
+  |

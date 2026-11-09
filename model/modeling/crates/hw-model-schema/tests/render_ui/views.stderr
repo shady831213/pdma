@@ -1,0 +1,46 @@
+error[E0599]: no method named `fields` found for struct `hw_model_schema::export::view::Record<'a>` in the current scope
+ --> tests/render_ui/views.rs:5:20
+  |
+5 |     let _ = record.fields();
+  |                    ^^^^^^ method not found in `hw_model_schema::export::view::Record<'_>`
+
+error[E0599]: no method named `cases` found for struct `hw_model_schema::export::view::Union<'a>` in the current scope
+ --> tests/render_ui/views.rs:6:19
+  |
+6 |     let _ = union.cases();
+  |                   ^^^^^ method not found in `hw_model_schema::export::view::Union<'_>`
+
+error[E0599]: no method named `fields` found for struct `hw_model_schema::export::view::Bits<'a>` in the current scope
+ --> tests/render_ui/views.rs:7:18
+  |
+7 |     let _ = bits.fields();
+  |                  ^^^^^^ method not found in `hw_model_schema::export::view::Bits<'_>`
+
+error[E0599]: no method named `variants` found for struct `hw_model_schema::export::view::Enumeration` in the current scope
+ --> tests/render_ui/views.rs:8:25
+  |
+8 |     let _ = enumeration.variants();
+  |                         ^^^^^^^^ method not found in `hw_model_schema::export::view::Enumeration`
+
+error[E0599]: no method named `fields` found for struct `hw_model_schema::export::view::Register<'a>` in the current scope
+ --> tests/render_ui/views.rs:9:22
+  |
+9 |     let _ = register.fields();
+  |                      ^^^^^^
+  |
+help: there is a method `has_fields` with a similar name
+  |
+9 |     let _ = register.has_fields();
+  |                      ++++
+
+error[E0599]: no method named `placements` found for struct `hw_model_schema::export::view::MapLayout<'a>` in the current scope
+  --> tests/render_ui/views.rs:10:17
+   |
+10 |     let _ = map.placements();
+   |                 ^^^^^^^^^^ method not found in `hw_model_schema::export::view::MapLayout<'_>`
+
+error[E0599]: no method named `target` found for struct `hw_model_schema::export::view::Reference<'a>` in the current scope
+  --> tests/render_ui/views.rs:14:23
+   |
+14 |     let _ = reference.target();
+   |                       ^^^^^^ method not found in `hw_model_schema::export::view::Reference<'_>`

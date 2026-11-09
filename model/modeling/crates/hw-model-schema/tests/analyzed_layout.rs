@@ -27,7 +27,7 @@ fn symbolic_layout_retains_child_bindings_and_math_dependencies() {
     assert_eq!(
         plan.placements()
             .iter()
-            .map(|p| p.reference.name())
+            .map(|p| p.source.name())
             .collect::<Vec<_>>(),
         ["head", "groups", "tail"]
     );

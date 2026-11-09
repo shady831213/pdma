@@ -1,8 +1,8 @@
 //! Targets consume normalized bank properties without resolving topology.
-use hw_model_schema::export::value::Backend as _;
+use hw_model_schema::export::value::Emit as _;
 /// Caller-owned capture for generation tests.
 pub mod output_support;
-use hw_model_schema::traversal::register::{BankProperty, Context};
+use hw_model_schema::export::register::{BankProperty, Context};
 use hw_model_schema::{
     analysis::AnalyzedSchema,
     export::{register, value},
@@ -16,6 +16,14 @@ register_map! { pub map Root { alignment:4, placements:[pub groups:Group[2]] } }
 #[derive(Default)]
 struct Banks(Vec<(usize, BankProperty)>, Vec<(usize, String, usize)>);
 impl register::Backend for Banks {
+    fn layout_property<'a>(
+        &mut self,
+        _: register::LayoutProperty<'a>,
+        ctx: Context<'a>,
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), Self::Error> {
+        self.emit_all(ctx.children(), writer)
+    }
     fn root(
         &mut self,
         ctx: Self::Context<'_>,
@@ -53,22 +61,6 @@ impl register::Backend for Banks {
         Ok(())
     }
 
-    fn layout_property(
-        &mut self,
-        property: hw_model_schema::traversal::register::LayoutProperty<'_>,
-        ctx: Context<'_>,
-        _writer: &mut dyn std::io::Write,
-    ) -> Result<(), Self::Error> {
-        self.1.push((
-            ctx.bank().ok_or("missing bank")?.index(),
-            property.name.into(),
-            property
-                .expression
-                .evaluate(&[], &[])
-                .map_err(|_| "invalid expression")?,
-        ));
-        Ok(())
-    }
     fn bank_property(
         &mut self,
         property: BankProperty,
@@ -84,16 +76,37 @@ impl value::Backend for Banks {
     type Domain = register::Domain;
     type Error = &'static str;
     type Context<'a> = Context<'a>;
+    fn expression<'a>(
+        &mut self,
+        expression: hw_model_schema::export::view::Expression<'a>,
+        ctx: Context<'a>,
+        _: &mut dyn std::io::Write,
+    ) -> Result<(), Self::Error> {
+        if let Some(bank) = ctx.bank() {
+            let property = ctx.layout_property().ok_or("missing bank property")?;
+            self.1.push((
+                bank.index(),
+                property.name().into(),
+                expression
+                    .evaluate(&[], &[])
+                    .map_err(|_| "invalid expression")?,
+            ));
+        }
+        Ok(())
+    }
+}
+impl hw_model_schema::export::OutputBackend for Banks {
     fn metadata(
         &mut self,
         ctx: &Self::Context<'_>,
     ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
         Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.unit().name.clone(),
+            logical_name: ctx.root_name().to_owned(),
             media_type: "text/plain".into(),
         })
     }
 }
+
 #[test]
 fn bank_properties_survive_empty_permission_projection() -> Result<(), Box<dyn std::error::Error>> {
     // Given nested banks whose register permissions hide every leaf.

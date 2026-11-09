@@ -1,7 +1,7 @@
 //! Explicit per-root staging used only by exporter tests.
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Pipeline},
-    export::{ExportError, OutputMetadata, prepare, value},
+    export::{ExportError, OutputBackend, OutputMetadata, prepare},
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -36,7 +36,7 @@ impl MemoryOutput {
 }
 impl MemoryOutput {
     /// Prepares all roots, then stages and publishes each successful root.
-    pub fn generate<B: value::Backend>(
+    pub fn generate<B: OutputBackend>(
         &mut self,
         schema: &AnalyzedSchema,
         mut backend: B,
@@ -54,7 +54,7 @@ impl MemoryOutput {
         Ok(())
     }
     /// Constructs a backend borrowing previously analyzed data.
-    pub fn generate_prepared<'b, D, B: value::Backend>(
+    pub fn generate_prepared<'b, D, B: OutputBackend>(
         &mut self,
         pipeline: &'b Pipeline<(&AnalyzedSchema, D)>,
         backend: impl FnOnce(&'b D) -> B,

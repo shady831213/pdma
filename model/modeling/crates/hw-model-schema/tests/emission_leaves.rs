@@ -24,35 +24,35 @@ impl Recorder {
     }
 }
 impl record::Backend for Recorder {
-    fn record_size(
+    fn record<'a>(
         &mut self,
-        size: usize,
-        _: hw_model_schema::traversal::record::Context<'_>,
+        record: hw_model_schema::export::view::Record<'a>,
+        ctx: record::Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        self.push(format!("size:record:{size}"), writer)?;
-        Ok(())
+        use hw_model_schema::export::value::Emit as _;
+        self.push(format!("size:record:{}", record.spec().size()), writer)?;
+        self.emit_all(ctx.children(), writer)
     }
-    fn field_size(
+    fn field<'a>(
         &mut self,
-        size: usize,
-        ctx: hw_model_schema::traversal::record::Context<'_>,
+        field: hw_model_schema::export::view::Field<'a>,
+        ctx: record::Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        self.push(
-            format!(
-                "size:{}:{size}",
-                ctx.field().ok_or("missing field owner")?.name()
-            ),
-            writer,
-        )?;
-        Ok(())
+        use hw_model_schema::export::value::Emit as _;
+        assert_eq!(
+            ctx.field().ok_or("missing field owner")?.name(),
+            field.name()
+        );
+        self.push(format!("size:{}:{}", field.name(), field.width()), writer)?;
+        self.emit_all(ctx.children(), writer)
     }
 }
 impl value::Backend for Recorder {
     type Domain = record::Domain;
     type Error = &'static str;
-    type Context<'a> = hw_model_schema::traversal::record::Context<'a>;
+    type Context<'a> = hw_model_schema::export::record::Context<'a>;
     fn short_description(
         &mut self,
         text: &str,
@@ -73,18 +73,21 @@ impl value::Backend for Recorder {
         self.push(format!("full:{}:{text}", owner.name), writer)?;
         Ok(())
     }
+}
+impl hw_model_schema::export::OutputBackend for Recorder {
     fn metadata(
         &mut self,
         ctx: &Self::Context<'_>,
     ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
         Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.unit().name.clone(),
+            logical_name: ctx.root_name().to_owned(),
             media_type: "text/plain".into(),
         })
     }
 }
+
 #[test]
-fn documentation_and_geometry_reach_leaf_callbacks() -> Result<(), Box<dyn std::error::Error>> {
+fn documentation_and_geometry_reach_owner_callbacks() -> Result<(), Box<dyn std::error::Error>> {
     // Given a documented record with one scalar field.
     let mut set = SchemaSet::new();
     set.add_record::<Documented>();

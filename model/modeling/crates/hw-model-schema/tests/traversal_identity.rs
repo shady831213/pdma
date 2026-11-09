@@ -35,7 +35,7 @@ fn occurrence_ids_and_parents_survive_reordering() {
         .collect();
     assert_eq!(fields.len(), 2);
     let attributes: Vec<_> = fields.first().unwrap().context().children().collect();
-    assert_eq!(attributes.len(), 3);
+    assert_eq!(attributes.len(), 4);
     assert!(
         attributes
             .iter()
@@ -48,7 +48,12 @@ fn occurrence_ids_and_parents_survive_reordering() {
     );
     let mut ids = Vec::new();
     for field in &fields {
-        let reference = field;
+        assert!(field.context().referent().is_none());
+        let reference = field
+            .context()
+            .children()
+            .find(|v| matches!(v.node(), Node::Reference(_)))
+            .unwrap();
         let target = reference.context().referent().unwrap();
         assert_eq!(
             target.context().parent_id().as_ref(),
@@ -58,14 +63,16 @@ fn occurrence_ids_and_parents_survive_reordering() {
         let parent = target.context().parent().unwrap();
         assert_eq!(parent.id(), reference.context().id());
         assert!(
-            matches!(parent.node(), Node::Field(f) if f.name() == reference.context().field().unwrap().name())
+            matches!(parent.node(), Node::Reference(r) if r.name() == field.context().field().unwrap().name())
         );
         assert!(core::ptr::eq(parent.schema(), core::ptr::from_ref(&schema)));
         assert_eq!(
             parent.referent().unwrap().context().id(),
             target.context().id()
         );
-        assert_eq!(parent.parent().unwrap().id(), root.context().id());
+        let field_parent = parent.parent().unwrap();
+        assert_eq!(field_parent.id(), field.context().id());
+        assert_eq!(field_parent.parent().unwrap().id(), root.context().id());
         let value = target
             .context()
             .children()
@@ -75,7 +82,11 @@ fn occurrence_ids_and_parents_survive_reordering() {
     }
     assert_ne!(ids.first().unwrap(), ids.get(1).unwrap());
     for (field, expected) in fields.iter().zip(&ids).rev() {
-        let reference = field;
+        let reference = field
+            .context()
+            .children()
+            .find(|v| matches!(v.node(), Node::Reference(_)))
+            .unwrap();
         let target = reference.context().referent().unwrap();
         let value = target
             .context()

@@ -102,8 +102,8 @@ impl MapLayoutPlan {
             values.cursor = values.evaluate(&planned.cursor, inputs)?;
             evaluated.push(values);
             placements.push(PlacementGeometry {
-                name: planned.reference.name(),
-                definition: planned.child_definition,
+                name: planned.source.name(),
+                definition: planned.child_definition.clone(),
                 arguments: bindings,
                 offset,
                 count,

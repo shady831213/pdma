@@ -106,7 +106,7 @@ impl<'a, N: DomainNode<'a>, S: Schema> BoundContext<'a, N, S> {
             .collect::<Vec<_>>()
             .into_iter()
     }
-    pub(super) fn descendant(&self, node: N, edge: Edge) -> Self {
+    pub(crate) fn descendant(&self, node: N, edge: Edge) -> Self {
         let mut ancestors = self.ancestors.as_ref().clone();
         ancestors.push(self.node);
         Self {

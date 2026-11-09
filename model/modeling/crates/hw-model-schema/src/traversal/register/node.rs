@@ -25,6 +25,8 @@ pub enum Node<'a> {
     RegisterField(&'a BitsFieldSpec<usize>),
     /// Completed placement layout.
     Placement(&'a CompletePlacementLayout),
+    /// Canonical map-placement reference occurrence.
+    Reference(&'a crate::ast::Reference),
     /// Effective register placement.
     RegisterPlacement {
         /// Permission-projected register.
@@ -74,11 +76,6 @@ impl<'a> Node<'a> {
             Self::Register(v) => crate::ast::register::Node::Register(v)
                 .children()
                 .filter_map(Self::source)
-                .chain(
-                    v.source()
-                        .into_iter()
-                        .flat_map(|_| v.fields().iter().map(Self::RegisterField)),
-                )
                 .collect(),
             Self::RegisterField(v) => crate::ast::register::Node::RegisterField(v)
                 .children()
@@ -88,7 +85,8 @@ impl<'a> Node<'a> {
             Self::LayoutProperty(v) => vec![Self::Value(value::Node::Expression(v.expression))],
             Self::Attribute(Attribute::Count(e)) => vec![Self::Value(value::Node::Expression(e))],
             Self::Value(v) => v.children().map(Self::Value).collect(),
-            Self::BankProperty(_)
+            Self::Reference(_)
+            | Self::BankProperty(_)
             | Self::Parameter(_)
             | Self::Attribute(
                 Attribute::Width(_)
@@ -130,6 +128,24 @@ impl<'a> Node<'a> {
                 .collect(),
         }
     }
+    fn placement_child(p: &'a CompletePlacementLayout) -> Vec<Self> {
+        match p.source.body() {
+            crate::ast::PlacementBody::Reference(reference) => vec![Self::Reference(reference)],
+            crate::ast::PlacementBody::Inline(child) => match child.body() {
+                crate::ast::DefinitionBody::Register(v) => vec![Self::Register(v)],
+                crate::ast::DefinitionBody::RegisterMap(_) => p
+                    .inline_map
+                    .as_deref()
+                    .map(Self::MapLayout)
+                    .into_iter()
+                    .collect(),
+                crate::ast::DefinitionBody::Opaque(v) => vec![Self::Value(value::Node::Opaque(v))],
+                crate::ast::DefinitionBody::Bits(_)
+                | crate::ast::DefinitionBody::Record(_)
+                | crate::ast::DefinitionBody::Union(_) => Vec::new(),
+            },
+        }
+    }
     fn layout_children(self) -> Vec<Self> {
         match self {
             Self::MapLayout(map) => map
@@ -164,6 +180,7 @@ impl<'a> Node<'a> {
                     })
                 })
                 .chain([Self::Attribute(Attribute::Bank(p.bank))])
+                .chain(Self::placement_child(p))
                 .chain(
                     [
                         (LayoutPropertyKind::Offset, &p.offset),
@@ -178,6 +195,7 @@ impl<'a> Node<'a> {
                 )
                 .collect(),
             Self::Root(_)
+            | Self::Reference(_)
             | Self::RegisterMap(_)
             | Self::Register(_)
             | Self::RegisterField(_)
@@ -195,6 +213,7 @@ impl<'a> Node<'a> {
         use crate::ast::register::Node as N;
         match node {
             N::RegisterField(v) => Some(Self::RegisterField(v)),
+            N::Reference(v) => Some(Self::Reference(v)),
             N::Attribute(v) => Some(Self::Attribute(v)),
             N::Value(v) => Some(Self::Value(v)),
             N::Register(_)

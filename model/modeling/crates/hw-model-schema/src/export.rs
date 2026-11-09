@@ -1,9 +1,12 @@
 //! Format-neutral streaming export vocabulary.
 
 use core::fmt;
+mod context;
 mod generate;
+pub use context::{Context, Kind, Visit};
 mod symbols;
-pub use generate::{Domain, PreparedOutput, generate, prepare, prepare_roots};
+pub mod view;
+pub use generate::{Domain, OutputBackend, PreparedOutput, generate, prepare, prepare_roots};
 pub use symbols::{SymbolCollision, SymbolScope};
 /// Shared mathematical expression folding with target-defined spelling.
 pub mod expression;

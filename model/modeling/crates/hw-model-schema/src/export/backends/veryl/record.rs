@@ -1,21 +1,20 @@
 use super::{VerylExportError, VerylRecordBackend};
-use crate::traversal::record::Context;
+use crate::export::record::Context;
 use crate::{
-    analysis::Layout,
-    ast::{RecordDefinition, UnionDefinition},
-    export::{record::Backend, value::Backend as _},
+    export::view::{Record, Union},
+    export::{record::Backend, value::Emit as _},
 };
 use std::io::Write;
 impl Backend for VerylRecordBackend {
     fn root(&mut self, ctx: Context<'_>, writer: &mut dyn Write) -> Result<(), Self::Error> {
-        self.output.begin(ctx.unit(), writer)?;
+        self.output.begin(ctx.root_id(), ctx.root_name(), writer)?;
         self.emit(ctx.current(), writer)?;
         writer.write_all(b"}\n")?;
         Ok(())
     }
     fn record<'a>(
         &mut self,
-        _: &'a RecordDefinition,
+        _: Record<'a>,
         ctx: Context<'a>,
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
@@ -24,7 +23,7 @@ impl Backend for VerylRecordBackend {
     }
     fn union<'a>(
         &mut self,
-        _: &'a UnionDefinition,
+        _: Union<'a>,
         ctx: Context<'a>,
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
@@ -38,12 +37,10 @@ impl VerylRecordBackend {
         ctx: &Context<'_>,
         writer: &mut dyn Write,
     ) -> Result<(), VerylExportError> {
-        if ctx.field().is_none()
-            && let Layout::Record(record) = &ctx.unit().body
+        if ctx.is_root()
+            && let Some((size, alignment)) = ctx.root_extent()
         {
-            self.output
-                .package
-                .extent(record.size(), record.alignment(), writer)?;
+            self.output.package.extent(size, alignment, writer)?;
         }
         Ok(())
     }

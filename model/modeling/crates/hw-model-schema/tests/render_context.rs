@@ -1,13 +1,13 @@
 //! Bound visits preserve lexical ancestry when a target reorders or omits children.
 /// Caller-owned capture for generation tests.
 pub mod output_support;
-use hw_model_schema::traversal::register::{Context as RegisterContext, LayoutProperty};
+use hw_model_schema::export::register::{Context as RegisterContext, LayoutProperty};
 use hw_model_schema::{
-    analysis::{AnalyzedSchema, Bindings, CompleteMapLayout},
+    analysis::{AnalyzedSchema, Bindings},
     ast::{SchemaSet, register::Parameter},
     export::{
         generate, register,
-        value::{self, Backend},
+        value::{self, Emit as _},
     },
     register_map, register_schema,
 };
@@ -116,12 +116,9 @@ fn roots_are_bound_visits_with_default_recursive_dispatch() {
         binding: None,
     };
     for visit in roots {
-        let ctx = visit.context();
-        assert!(ctx.ancestors().is_empty());
-        assert!(core::ptr::eq(ctx.analysis(), core::ptr::from_ref(&schema)));
-        assert!(
-            matches!(visit.node(), hw_model_schema::traversal::register::Node::Root(unit) if core::ptr::eq(unit, ctx.unit()))
-        );
+        assert!(visit.parent_id().is_none());
+        assert_eq!(visit.kind(), hw_model_schema::export::Kind::Root);
+        assert!(schema.units().any(|unit| &unit.id == visit.id()));
         <register::Domain as Domain<Probe>>::root(visit, &mut probe, &mut std::io::sink()).unwrap();
     }
     assert_eq!(

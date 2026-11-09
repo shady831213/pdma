@@ -17,42 +17,20 @@ pub struct CRecordAnalysisPass;
 #[derive(Debug)]
 pub struct CRecordAnalysis {
     offsets: HashMap<NodeId, usize>,
-    unions: HashMap<NodeId, Vec<UnionMember>>,
-    opaque: HashMap<NodeId, Vec<(String, usize)>>,
-}
-#[derive(Debug)]
-pub(super) struct UnionMember {
-    pub(super) path: String,
-    pub(super) field: crate::FieldSpec,
-    pub(super) offset: usize,
+    collisions: HashMap<NodeId, crate::export::SymbolCollision<(usize, String)>>,
 }
 impl CRecordAnalysis {
+    pub(super) fn check_names(&self, id: &NodeId) -> Result<(), CHeaderExportError> {
+        self.collisions.get(id).map_or(Ok(()), |collision| {
+            Err(super::naming::collision(collision.clone()))
+        })
+    }
     /// Absolute byte offset of one source field occurrence.
     pub fn offset(&self, id: &NodeId) -> Option<usize> {
         self.offsets.get(id).copied()
     }
-    pub(super) fn union_storage(
-        &self,
-        ctx: &Context<'_>,
-    ) -> Result<&[UnionMember], CHeaderExportError> {
-        self.unions
-            .get(ctx.id())
-            .map(Vec::as_slice)
-            .ok_or(CHeaderExportError::InvalidVisit("missing C union analysis"))
-    }
-    pub(super) fn opaque_storage(
-        &self,
-        ctx: &Context<'_>,
-    ) -> Result<&[(String, usize)], CHeaderExportError> {
-        self.opaque
-            .get(ctx.id())
-            .map(Vec::as_slice)
-            .ok_or(CHeaderExportError::InvalidVisit(
-                "missing C opaque analysis",
-            ))
-    }
-    pub(super) fn at(&self, ctx: &Context<'_>) -> Result<usize, CHeaderExportError> {
-        let mut id = Some(ctx.id().clone());
+    pub(super) fn at(&self, source: &NodeId) -> Result<usize, CHeaderExportError> {
+        let mut id = Some(source.clone());
         while let Some(current) = id {
             if let Some(offset) = self.offset(&current) {
                 return Ok(offset);
@@ -70,8 +48,7 @@ impl<'a> Pass<(&'a AnalyzedSchema, ())> for CRecordAnalysisPass {
     fn run(self, (schema, ()): (&'a AnalyzedSchema, ())) -> Result<Self::Output, Self::Error> {
         let mut output = CRecordAnalysis {
             offsets: HashMap::new(),
-            unions: HashMap::new(),
-            opaque: HashMap::new(),
+            collisions: HashMap::new(),
         };
         for root in record::roots(schema) {
             collect(root.context(), &mut output)?;
@@ -96,133 +73,43 @@ fn collect(ctx: &Context<'_>, output: &mut CRecordAnalysis) -> Result<(), CHeade
         output.offsets.insert(ctx.id().clone(), offset);
     }
     if matches!(ctx.node(), Node::Value(crate::ast::value::Node::Opaque(_))) {
-        let base = if ctx.field().is_some() {
-            output.at(ctx)?
-        } else {
-            0
-        };
         let schema = opaque_schema(ctx)?;
-        let mut members = Vec::new();
-        for member in schema.members() {
-            let offset = base
-                .checked_add(member.absolute_offset())
-                .ok_or(CHeaderExportError::InvalidVisit("C opaque offset overflow"))?;
-            members.push((opaque_path(ctx, schema, member.path()), offset));
+        if let Some(collision) = record_collision(schema) {
+            output.collisions.insert(ctx.id().clone(), collision);
         }
-        output.opaque.insert(ctx.id().clone(), members);
     }
     if matches!(ctx.node(), Node::Union(_)) {
-        let base = ctx
-            .ancestors()
-            .iter()
-            .filter_map(|node| match node {
-                Node::Field(f) => Some(f.offset()),
-                _ => None,
-            })
-            .try_fold(0_usize, usize::checked_add)
-            .ok_or(CHeaderExportError::InvalidVisit("C union offset overflow"))?;
-        let local = ctx.field().map_or(0, crate::ast::Field::offset);
-        let mut members = Vec::new();
-        for (path, field) in storage_words(ctx) {
-            let offset = base
-                .checked_sub(local)
-                .and_then(|base| base.checked_add(field.offset()))
-                .ok_or(CHeaderExportError::InvalidVisit("C union offset overflow"))?;
-            members.push(UnionMember {
-                path,
-                field,
-                offset,
-            });
-        }
-        output.unions.insert(ctx.id().clone(), members);
         return Ok(());
     }
     for child in ctx.children() {
         collect(child.context(), output)?;
     }
-    if let Some(referent) = ctx.referent() {
-        collect(referent.context(), output)?;
-    }
     Ok(())
 }
-pub(super) fn path(ctx: &Context<'_>) -> String {
-    ctx.ancestors()
-        .iter()
-        .copied()
-        .chain([ctx.node()])
-        .filter_map(|node| match node {
-            Node::Field(field) => Some(field.name()),
-            Node::Case(case) => Some(case.name()),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join(".")
+fn opaque_schema<'a>(ctx: &Context<'a>) -> Result<&'a crate::ResolvedRecord, CHeaderExportError> {
+    ctx.opaque_layout()
+        .ok_or(CHeaderExportError::InvalidVisit("opaque record layout"))
 }
 
-fn storage_words(ctx: &Context<'_>) -> Vec<(String, crate::FieldSpec)> {
-    let Node::Union(union) = ctx.node() else {
-        return Vec::new();
-    };
-    if union.selector().is_none() {
-        return Vec::new();
-    }
-    let Some(field) = ctx.field() else {
-        return Vec::new();
-    };
-    let Some(record) = ctx.ancestors().iter().rev().find_map(|node| match node {
-        Node::Record(r) => Some(r),
-        _ => None,
-    }) else {
-        return Vec::new();
-    };
-    let path = path(ctx);
-    let parent = path.rsplit_once('.').map_or("", |(parent, _)| parent);
-    record
-        .spec()
-        .fields()
-        .iter()
-        .filter(|member| {
-            member.offset() >= field.offset()
-                && member.offset().saturating_sub(field.offset()) < field.width()
-        })
-        .map(|member| {
-            (
-                if parent.is_empty() {
-                    member.name().into()
-                } else {
-                    format!("{parent}.{}", member.name())
-                },
-                *member,
-            )
-        })
-        .collect()
-}
-
-pub(super) fn opaque_schema<'a>(
-    ctx: &Context<'a>,
-) -> Result<&'a crate::ResolvedRecord, CHeaderExportError> {
-    let unit = ctx
-        .ancestors()
-        .iter()
-        .rev()
-        .find_map(|node| node.reference())
-        .and_then(|reference| ctx.resolve(reference))
-        .unwrap_or_else(|| ctx.unit());
-    match &unit.body {
-        crate::analysis::Layout::Record(schema) => Ok(schema),
-        _ => Err(CHeaderExportError::InvalidVisit("opaque record layout")),
-    }
-}
-pub(super) fn opaque_path(
-    ctx: &Context<'_>,
+fn record_collision(
     schema: &crate::ResolvedRecord,
-    member: &str,
-) -> String {
-    let relative = super::naming::relative_path(schema.root(), member);
-    let parent = path(ctx);
-    if parent.is_empty() {
-        relative.into()
-    } else {
-        format!("{parent}.{relative}")
-    }
+) -> Option<crate::export::SymbolCollision<(usize, String)>> {
+    let mut symbols = crate::export::SymbolScope::new();
+    schema
+        .scalar_members()
+        .enumerate()
+        .find_map(|(index, (member, _))| {
+            let path = member
+                .path()
+                .strip_prefix(schema.root())
+                .and_then(|relative| relative.strip_prefix('.'))
+                .unwrap_or_else(|| member.path());
+            let name = super::naming::c_identifier(path);
+            symbols
+                .insert(
+                    super::naming::significant_prefix(&name),
+                    (index, member.path().to_owned()),
+                )
+                .err()
+        })
 }

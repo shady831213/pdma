@@ -1,0 +1,69 @@
+error[E0599]: no method named `schema` found for struct `hw_model_schema::export::record::Context<'a>` in the current scope
+ --> tests/render_ui/context.rs:4:17
+  |
+4 |     let _ = ctx.schema();
+  |                 ^^^^^^ method not found in `hw_model_schema::export::record::Context<'_>`
+
+error[E0599]: no method named `analysis` found for struct `hw_model_schema::export::record::Context<'a>` in the current scope
+ --> tests/render_ui/context.rs:5:17
+  |
+5 |     let _ = ctx.analysis();
+  |                 ^^^^^^^^ method not found in `hw_model_schema::export::record::Context<'_>`
+
+error[E0599]: no method named `unit` found for struct `hw_model_schema::export::record::Context<'a>` in the current scope
+ --> tests/render_ui/context.rs:6:17
+  |
+6 |     let _ = ctx.unit();
+  |                 ^^^^ method not found in `hw_model_schema::export::record::Context<'_>`
+
+error[E0599]: no method named `node` found for struct `hw_model_schema::export::record::Context<'a>` in the current scope
+ --> tests/render_ui/context.rs:7:17
+  |
+7 |     let _ = ctx.node();
+  |                 ^^^^ method not found in `hw_model_schema::export::record::Context<'_>`
+
+error[E0599]: no method named `ancestors` found for struct `hw_model_schema::export::record::Context<'a>` in the current scope
+ --> tests/render_ui/context.rs:8:17
+  |
+8 |     let _ = ctx.ancestors();
+  |                 ^^^^^^^^^
+  |
+help: there is a method `ancestor_kinds` with a similar name
+  |
+8 |     let _ = ctx.ancestor_kinds();
+  |                         +++++
+
+error[E0599]: no method named `schema` found for struct `hw_model_schema::export::register::Context<'a>` in the current scope
+  --> tests/render_ui/context.rs:12:17
+   |
+12 |     let _ = ctx.schema();
+   |                 ^^^^^^ method not found in `hw_model_schema::export::register::Context<'_>`
+
+error[E0599]: no method named `analysis` found for struct `hw_model_schema::export::register::Context<'a>` in the current scope
+  --> tests/render_ui/context.rs:13:17
+   |
+13 |     let _ = ctx.analysis();
+   |                 ^^^^^^^^ method not found in `hw_model_schema::export::register::Context<'_>`
+
+error[E0599]: no method named `unit` found for struct `hw_model_schema::export::register::Context<'a>` in the current scope
+  --> tests/render_ui/context.rs:14:17
+   |
+14 |     let _ = ctx.unit();
+   |                 ^^^^ method not found in `hw_model_schema::export::register::Context<'_>`
+
+error[E0599]: no method named `node` found for struct `hw_model_schema::export::register::Context<'a>` in the current scope
+  --> tests/render_ui/context.rs:15:17
+   |
+15 |     let _ = ctx.node();
+   |                 ^^^^ method not found in `hw_model_schema::export::register::Context<'_>`
+
+error[E0599]: no method named `ancestors` found for struct `hw_model_schema::export::register::Context<'a>` in the current scope
+  --> tests/render_ui/context.rs:16:17
+   |
+16 |     let _ = ctx.ancestors();
+   |                 ^^^^^^^^^
+   |
+help: there is a method `ancestor_kinds` with a similar name
+   |
+16 |     let _ = ctx.ancestor_kinds();
+   |                         +++++

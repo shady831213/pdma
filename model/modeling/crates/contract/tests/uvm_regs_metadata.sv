@@ -40,6 +40,8 @@ module pdma_uvm_regs_metadata;
     $display("RAL_METADATA_PASS channels=%0d bus_bytes=%0d", channels, bus_bytes);
   endtask
   initial begin
+    if (DmaFatal::CODE_INTERNAL != 1 || DmaFatal::CODE_NONE != 0)
+      $fatal(1, "enum value metadata");
     check(1, 4);
     check(3, 4);
     check(1, 8);

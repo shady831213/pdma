@@ -1,12 +1,12 @@
 use hw_model_schema::{
-    BitsFieldSpec, Endian, EnumVariantSpec,
-    analysis::Layout,
-    ast::{Field, FieldType, UnionDefinition},
+    Endian, EnumVariantSpec,
     export::{
-        OutputMetadata, SymbolScope, record,
-        value::{self, Backend as _},
+        Kind, OutputMetadata, SymbolScope, Visit,
+        record::{self, Context},
+        value::{self, Emit},
+        view::{BitField, Bits, EnumEncoding, Enumeration, Field, Reference, Scalar, Union},
     },
-    traversal::{NodeId, record::Context},
+    traversal::NodeId,
 };
 use std::io::{Error, Write};
 
@@ -20,26 +20,48 @@ impl value::Backend for SystemVerilog {
     type Domain = record::Domain;
     type Context<'a> = Context<'a>;
 
-    fn metadata(&mut self, ctx: &Context<'_>) -> Result<OutputMetadata, Self::Error> {
-        self.names
-            .insert(&ctx.unit().name, ctx.unit().id.clone())
-            .map_err(Error::other)?;
-        Ok(OutputMetadata {
-            logical_name: ctx.unit().name.clone(),
-            media_type: "text/x-systemverilog".into(),
-        })
+    fn scalar(
+        &mut self,
+        value: Scalar,
+        ctx: Context<'_>,
+        writer: &mut dyn Write,
+    ) -> Result<(), Error> {
+        Self::accessor(&ctx, value.width(), value.endian(), writer)?;
+        self.emit_all(ctx.children(), writer)
     }
 
+    fn enumeration(
+        &mut self,
+        value: Enumeration,
+        ctx: Context<'_>,
+        writer: &mut dyn Write,
+    ) -> Result<(), Error> {
+        if let EnumEncoding::Scalar(encoding) = value.encoding() {
+            Self::accessor(&ctx, encoding.width(), encoding.endian(), writer)?;
+        }
+        self.emit_all(ctx.children(), writer)
+    }
+
+    fn bits(
+        &mut self,
+        value: Bits<'_>,
+        ctx: Context<'_>,
+        writer: &mut dyn Write,
+    ) -> Result<(), Error> {
+        let encoding = value.encoding();
+        Self::accessor(&ctx, encoding.width(), encoding.endian(), writer)?;
+        self.emit_all(ctx.children(), writer)
+    }
     fn variant(
         &mut self,
         value: &EnumVariantSpec,
         ctx: Context<'_>,
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
-        let field = ctx.field().map_or("", Field::name);
+        let field = ctx.path().replace('.', "_");
         let bit = ctx.bit().map_or(String::new(), |name| format!("_{name}"));
         let name =
-            format!("{}_{field}{bit}_{}", ctx.unit().name, value.name()).to_ascii_uppercase();
+            format!("{}_{field}{bit}_{}", ctx.root_name(), value.name()).to_ascii_uppercase();
         writeln!(
             writer,
             "  localparam logic [63:0] {name} = 64'd{};",
@@ -50,12 +72,12 @@ impl value::Backend for SystemVerilog {
 
     fn bit_field<'a>(
         &mut self,
-        value: &'a BitsFieldSpec,
+        value: BitField<'a>,
         ctx: Context<'a>,
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
-        let field = ctx.field().map_or("", Field::name);
-        let name = format!("{}_{field}_{}", ctx.unit().name, value.name()).to_ascii_uppercase();
+        let field = ctx.path().replace('.', "_");
+        let name = format!("{}_{field}_{}", ctx.root_name(), value.name()).to_ascii_uppercase();
         writeln!(
             writer,
             "  localparam int unsigned {name}_LSB = {};",
@@ -72,18 +94,13 @@ impl value::Backend for SystemVerilog {
 
 impl record::Backend for SystemVerilog {
     fn root(&mut self, ctx: Context<'_>, writer: &mut dyn Write) -> Result<(), Self::Error> {
-        let name = &ctx.unit().name;
+        let name = ctx.root_name();
         let upper = name.to_ascii_uppercase();
-        if let Layout::Record(layout) = &ctx.unit().body {
+        if let Some((size, alignment)) = ctx.root_extent() {
+            writeln!(writer, "\n  localparam int unsigned {upper}_SIZE = {size};")?;
             writeln!(
                 writer,
-                "\n  localparam int unsigned {upper}_SIZE = {};",
-                layout.size()
-            )?;
-            writeln!(
-                writer,
-                "  localparam int unsigned {upper}_ALIGNMENT = {};",
-                layout.alignment()
+                "  localparam int unsigned {upper}_ALIGNMENT = {alignment};"
             )?;
             writeln!(writer, "  typedef logic [{upper}_SIZE*8-1:0] {name}_t;")?;
         }
@@ -92,28 +109,44 @@ impl record::Backend for SystemVerilog {
 
     fn union<'a>(
         &mut self,
-        _: &'a UnionDefinition,
-        _: Context<'a>,
-        _: &mut dyn Write,
+        _: Union<'a>,
+        ctx: Context<'a>,
+        writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
-        // Union storage is a byte image; referenced alternatives are independent schema roots.
-        Ok(())
+        if let Some(field) = ctx.field() {
+            Self::accessor(&ctx, field.width(), Endian::Little, writer)?;
+        }
+        self.emit_all(ctx.children(), writer)
+    }
+
+    fn reference<'a>(
+        &mut self,
+        _: Reference<'a>,
+        target: Visit<Context<'a>>,
+        ctx: Context<'a>,
+        writer: &mut dyn Write,
+    ) -> Result<(), Error> {
+        if target.kind() == Kind::Bits {
+            self.emit(target, writer)
+        } else if let Some(field) = ctx.field() {
+            Self::accessor(&ctx, field.width(), Endian::Little, writer)
+        } else {
+            Ok(())
+        }
     }
 
     fn field<'a>(
         &mut self,
-        field: &'a Field,
+        field: Field<'a>,
         ctx: Context<'a>,
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
-        let record = &ctx.unit().name;
+        if ctx.ancestor_kinds().any(|kind| kind == Kind::Case) {
+            return self.emit_all(ctx.children(), writer);
+        }
+        let record = ctx.root_name();
         let name = field.name();
         let constant = format!("{record}_{name}").to_ascii_uppercase();
-        let width = field.width() * 8;
-        let scalar = match field.ty() {
-            FieldType::Scalar { .. } | FieldType::Enum(_) | FieldType::Bits(_) => true,
-            FieldType::Reference(_) | FieldType::Union(_) => false,
-        };
         writeln!(
             writer,
             "  localparam int unsigned {constant}_OFFSET = {};",
@@ -124,38 +157,38 @@ impl record::Backend for SystemVerilog {
             "  localparam int unsigned {constant}_SIZE = {};",
             field.width()
         )?;
-        writeln!(
-            writer,
-            "  function automatic logic [{}:0] {record}_get_{name}(input {record}_t record_value);",
-            width - 1
-        )?;
-        for index in 0..field.width() {
-            let target = match (scalar, field.endian()) {
-                (true, Endian::Big) => field.width() - index - 1,
-                (true | false, Endian::Little) | (false, Endian::Big) => index,
-            } * 8;
-            writeln!(
-                writer,
-                "    {record}_get_{name}[{target} +: 8] = record_value[({constant}_OFFSET+{index})*8 +: 8];"
-            )?;
-        }
-        writeln!(writer, "  endfunction")?;
-        writeln!(
-            writer,
-            "  function automatic void {record}_set_{name}(inout {record}_t record_value, input logic [{}:0] value);",
-            width - 1
-        )?;
-        for index in 0..field.width() {
-            let source = match (scalar, field.endian()) {
-                (true, Endian::Big) => field.width() - index - 1,
-                (true | false, Endian::Little) | (false, Endian::Big) => index,
-            } * 8;
-            writeln!(
-                writer,
-                "    record_value[({constant}_OFFSET+{index})*8 +: 8] = value[{source} +: 8];"
-            )?;
-        }
-        writeln!(writer, "  endfunction")?;
         self.emit_all(ctx.children(), writer)
+    }
+}
+
+impl SystemVerilog {
+    fn accessor(
+        ctx: &Context<'_>,
+        bytes: usize,
+        endian: Endian,
+        writer: &mut dyn Write,
+    ) -> Result<(), Error> {
+        if ctx
+            .ancestor_kinds()
+            .any(|kind| matches!(kind, Kind::Case | Kind::BitField))
+        {
+            return Ok(());
+        }
+        if let Some(field) = ctx.field() {
+            super::codec::accessors(ctx.root_name(), field.name(), bytes, endian, writer)?;
+        }
+        Ok(())
+    }
+}
+
+impl hw_model_schema::export::OutputBackend for SystemVerilog {
+    fn metadata(&mut self, ctx: &Context<'_>) -> Result<OutputMetadata, Self::Error> {
+        self.names
+            .insert(ctx.root_name(), ctx.root_id().clone())
+            .map_err(Error::other)?;
+        Ok(OutputMetadata {
+            logical_name: ctx.root_name().to_owned(),
+            media_type: "text/x-systemverilog".into(),
+        })
     }
 }

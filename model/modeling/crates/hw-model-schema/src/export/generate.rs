@@ -1,9 +1,15 @@
+use super::{Context, Visit};
 use super::{ExportError, OutputMetadata, value};
 use crate::analysis::{AnalysisError, AnalyzedSchema, Unit};
-use crate::traversal::{Context, NodeId, Visit};
+use crate::traversal::NodeId;
 use std::io::Write;
+/// Output identity for complete exporters; rendering fragments need only a backend.
+pub trait OutputBackend: value::Backend {
+    /// Identifies one root before its output writer is opened.
+    fn metadata(&mut self, ctx: &Self::Context<'_>) -> Result<OutputMetadata, Self::Error>;
+}
 /// A source domain owns preflight and root dispatch, independently of target syntax.
-pub trait Domain<B: value::Backend> {
+pub trait Domain<B: value::Backend>: super::context::sealed::Domain<B> {
     /// Dispatches an already bound visit without permitting raw-node rebinding.
     fn emit(
         visit: Visit<B::Context<'_>>,
@@ -53,7 +59,7 @@ impl<C: Context> PreparedOutput<C> {
 ///
 /// # Errors
 /// Returns incompatible-domain or backend metadata errors.
-pub fn prepare<'a, B: value::Backend>(
+pub fn prepare<'a, B: OutputBackend>(
     schema: &'a AnalyzedSchema,
     backend: &mut B,
 ) -> Result<Vec<PreparedOutput<B::Context<'a>>>, ExportError<B::Error>> {
@@ -69,7 +75,7 @@ pub fn prepare<'a, B: value::Backend>(
 ///
 /// # Errors
 /// Returns backend metadata errors before any prepared outputs are returned.
-pub fn prepare_roots<'a, B: value::Backend>(
+pub fn prepare_roots<'a, B: OutputBackend>(
     backend: &mut B,
     roots: impl IntoIterator<Item = Visit<B::Context<'a>>>,
 ) -> Result<Vec<PreparedOutput<B::Context<'a>>>, ExportError<B::Error>> {
@@ -90,7 +96,7 @@ pub fn prepare_roots<'a, B: value::Backend>(
 ///
 /// # Errors
 /// Returns domain-analysis or backend metadata/rendering errors.
-pub fn generate<B: value::Backend>(
+pub fn generate<B: OutputBackend>(
     schema: &AnalyzedSchema,
     mut backend: B,
     writer: &mut dyn Write,
@@ -108,7 +114,7 @@ impl<D> crate::analysis::Pipeline<(&AnalyzedSchema, D)> {
     ///
     /// # Errors
     /// Returns the analysis or backend error from generation.
-    pub fn generate<'b, B: value::Backend>(
+    pub fn generate<'b, B: OutputBackend>(
         &'b self,
         backend: impl FnOnce(&'b D) -> B,
         writer: &mut dyn Write,

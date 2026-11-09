@@ -1,84 +1,9 @@
-use std::any::{TypeId, type_name};
-
 use crate::{Documentation, RecordSpec};
-
-/// Process-local identity plus a deterministic diagnostic/display path.
-///
-/// Type identity distinguishes versions of the same crate. The Rust path alone
-/// is not identity; consumers must diagnose collisions in output names.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct DefinitionId {
-    identity: TypeId,
-    path: &'static str,
-}
-
-impl DefinitionId {
-    /// Identifies a Rust definition; reexports retain the same identity.
-    pub fn of<T: ?Sized + 'static>() -> Self {
-        Self {
-            identity: TypeId::of::<T>(),
-            path: type_name::<T>(),
-        }
-    }
-    /// Returns the defining Rust type path, not a generated target symbol.
-    pub const fn path(self) -> &'static str {
-        self.path
-    }
-}
-
-/// Why one schema definition refers to another.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReferenceKind {
-    /// A record member uses another definition.
-    Field,
-    /// A union alternative uses another definition.
-    Variant,
-    /// A register map places a child definition.
-    Placement,
-}
-
-/// One reference edge; duplicate targets do not discard distinct field edges.
-#[derive(Debug, Clone)]
-pub struct Reference {
-    name: &'static str,
-    kind: ReferenceKind,
-    target: fn() -> Definition,
-    discriminant: Option<u64>,
-}
-
-impl Reference {
-    /// Creates an edge whose target can be obtained without a global registry.
-    pub const fn new(name: &'static str, kind: ReferenceKind, target: fn() -> Definition) -> Self {
-        Self {
-            name,
-            kind,
-            target,
-            discriminant: None,
-        }
-    }
-    /// Attaches a tagged-union wire discriminant.
-    #[must_use]
-    pub const fn with_discriminant(mut self, value: u64) -> Self {
-        self.discriminant = Some(value);
-        self
-    }
-    /// Field, alternative or placement name in its owner.
-    pub const fn name(&self) -> &'static str {
-        self.name
-    }
-    /// Returns the relationship kind.
-    pub const fn kind(&self) -> ReferenceKind {
-        self.kind
-    }
-    /// Returns the selected alternative's wire value, when tagged.
-    pub const fn discriminant(&self) -> Option<u64> {
-        self.discriminant
-    }
-    /// Obtains the referenced definition, without following its own edges.
-    pub fn target(&self) -> Definition {
-        (self.target)()
-    }
-}
+use std::borrow::Cow;
+mod identity;
+mod reference;
+pub use identity::DefinitionId;
+pub use reference::{Reference, ReferenceKind};
 
 /// Structural metadata retained in addition to the definition's references.
 #[derive(Debug, Clone)]
@@ -101,18 +26,43 @@ pub enum DefinitionBody {
 #[derive(Debug, Clone)]
 pub struct Definition {
     id: DefinitionId,
-    name: &'static str,
+    name: Cow<'static, str>,
     documentation: Documentation,
     body: DefinitionBody,
     references: Vec<Reference>,
 }
 
 impl Definition {
+    /// Constructs an owned definition with independently selected identity and display name.
+    pub const fn from_body(
+        id: DefinitionId,
+        name: String,
+        documentation: Documentation,
+        body: DefinitionBody,
+    ) -> Self {
+        Self {
+            id,
+            name: Cow::Owned(name),
+            documentation,
+            body,
+            references: Vec::new(),
+        }
+    }
+    pub(crate) fn rewritten(&self, body: DefinitionBody, references: Vec<Reference>) -> Self {
+        Self {
+            body,
+            references,
+            ..self.clone()
+        }
+    }
+    pub(crate) fn extra_references(&self) -> &[Reference] {
+        &self.references
+    }
     /// Describes a reusable bit layout without imposing record encoding rules.
     pub fn bits<T: crate::BitsLayout + ?Sized + 'static>() -> Self {
         Self {
             id: DefinitionId::of::<T>(),
-            name: T::NAME,
+            name: Cow::Borrowed(T::NAME),
             documentation: T::DOCUMENTATION,
             body: DefinitionBody::Bits(super::BitsDefinition::of::<T>()),
             references: Vec::new(),
@@ -128,7 +78,7 @@ impl Definition {
     pub fn register<T: ?Sized + 'static, I: Copy>(spec: crate::RegisterDefinition<I>) -> Self {
         Self {
             id: DefinitionId::of::<T>(),
-            name: spec.name(),
+            name: Cow::Borrowed(spec.name()),
             documentation: spec.documentation(),
             body: DefinitionBody::Register(super::RegisterInfo::from_spec(spec)),
             references: Vec::new(),
@@ -150,7 +100,7 @@ impl Definition {
     ) -> Self {
         Self {
             id: DefinitionId::of::<T>(),
-            name,
+            name: Cow::Borrowed(name),
             documentation,
             body: DefinitionBody::RegisterMap(map),
             references: Vec::new(),
@@ -203,19 +153,19 @@ impl Definition {
     ) -> Self {
         Self {
             id: DefinitionId::of::<T>(),
-            name: spec.name(),
+            name: Cow::Borrowed(spec.name()),
             documentation: spec.documentation(),
             body,
             references,
         }
     }
     /// Returns identity independent of output naming.
-    pub const fn id(&self) -> DefinitionId {
-        self.id
+    pub fn id(&self) -> DefinitionId {
+        self.id.clone()
     }
     /// Returns the declared schema name.
-    pub const fn name(&self) -> &'static str {
-        self.name
+    pub fn name(&self) -> &str {
+        &self.name
     }
     /// Returns definition documentation.
     pub const fn documentation(&self) -> Documentation {

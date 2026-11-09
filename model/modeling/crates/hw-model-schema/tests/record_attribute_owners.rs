@@ -1,14 +1,13 @@
 //! Referenced records keep declaration attributes distinct from placement attributes.
 /// Caller-owned capture for generation tests.
 pub mod output_support;
-use hw_model_schema::export::value::Backend as _;
+use hw_model_schema::export::value::Emit as _;
 use hw_model_schema::{
-    Endian,
     analysis::{AnalyzedSchema, Bindings},
-    ast::{Field, SchemaSet, record::Node},
+    ast::SchemaSet,
+    export::record::Context,
     export::{record, value},
     record_schema,
-    traversal::record::Context,
 };
 use output_support::MemoryOutput;
 
@@ -30,83 +29,67 @@ impl Owners {
     }
 }
 impl record::Backend for Owners {
-    fn field<'a>(
+    fn reference<'a>(
         &mut self,
-        _: &'a Field,
+        _: hw_model_schema::export::view::Reference<'a>,
+        target: hw_model_schema::export::Visit<Context<'a>>,
+        _: Context<'a>,
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), Self::Error> {
+        self.emit(target, writer)
+    }
+    fn record<'a>(
+        &mut self,
+        record: hw_model_schema::export::view::Record<'a>,
         ctx: Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        self.emit_all(ctx.children(), writer)?;
-        if let Some(child) = ctx.referent() {
-            self.emit(child, writer)?;
-        }
-        Ok(())
-    }
-    fn record_size(
-        &mut self,
-        size: usize,
-        ctx: Context<'_>,
-        writer: &mut dyn std::io::Write,
-    ) -> Result<(), Self::Error> {
-        let Some(Node::Record(record)) = ctx.ancestors().last() else {
-            return Err("record attribute requires a record owner");
-        };
+        assert_eq!(ctx.current().kind(), hw_model_schema::export::Kind::Record);
+        let name = record.spec().name();
         self.push(
-            format!("{}:record:size:{size}", record.spec().name()),
+            format!("{name}:record:size:{}", record.spec().size()),
             writer,
         )?;
-        Ok(())
-    }
-    fn field_size(
-        &mut self,
-        size: usize,
-        ctx: Context<'_>,
-        writer: &mut dyn std::io::Write,
-    ) -> Result<(), Self::Error> {
-        let Some(Node::Field(field)) = ctx.ancestors().last() else {
-            return Err("field attribute requires a field owner");
-        };
-        self.push(format!("{}:field:size:{size}", field.name()), writer)?;
-        Ok(())
-    }
-    fn record_endian(
-        &mut self,
-        endian: Endian,
-        ctx: Context<'_>,
-        writer: &mut dyn std::io::Write,
-    ) -> Result<(), Self::Error> {
-        let Some(Node::Record(record)) = ctx.ancestors().last() else {
-            return Err("record endian requires a record owner");
-        };
         self.push(
-            format!("{}:record:endian:{endian:?}", record.spec().name()),
+            format!("{name}:record:endian:{:?}", record.endian()),
             writer,
         )?;
-        Ok(())
+        self.emit_all(ctx.children(), writer)
     }
-    fn field_endian(
+    fn field<'a>(
         &mut self,
-        endian: Endian,
-        ctx: Context<'_>,
+        field: hw_model_schema::export::view::Field<'a>,
+        ctx: Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        let Some(Node::Field(field)) = ctx.ancestors().last() else {
-            return Err("field endian requires a field owner");
-        };
-        self.push(format!("{}:field:endian:{endian:?}", field.name()), writer)?;
-        Ok(())
+        assert_eq!(ctx.current().kind(), hw_model_schema::export::Kind::Field);
+        assert_eq!(
+            ctx.field().ok_or("missing field owner")?.name(),
+            field.name()
+        );
+        self.push(
+            format!("{}:field:size:{}", field.name(), field.width()),
+            writer,
+        )?;
+        self.push(
+            format!("{}:field:endian:{:?}", field.name(), field.endian()),
+            writer,
+        )?;
+        self.emit_all(ctx.children(), writer)
     }
 }
 impl value::Backend for Owners {
     type Error = &'static str;
     type Context<'a> = Context<'a>;
     type Domain = record::Domain;
+}
+impl hw_model_schema::export::OutputBackend for Owners {
     fn metadata(
         &mut self,
         ctx: &Self::Context<'_>,
     ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
         Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.unit().name.clone(),
+            logical_name: ctx.root_name().to_owned(),
             media_type: "text/plain".into(),
         })
     }

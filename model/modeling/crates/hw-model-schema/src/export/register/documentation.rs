@@ -28,10 +28,10 @@ pub(super) fn emit<B: Backend>(
             _ => None,
         },
         Node::RegisterField(v) => Some((v.documentation(), v.name(), Kind::BitField)),
-        Node::Placement(v) => match &ctx.unit().body {
+        Node::Placement(v) => match &ctx.0.unit().body {
             Layout::Map(m) if m.instance.is_some() => None,
             Layout::Map(_) | Layout::None | Layout::Record(_) => {
-                Some((v.documentation, v.reference.name(), Kind::Placement))
+                Some((v.documentation, v.source.name(), Kind::Placement))
             }
         },
         Node::RegisterPlacement { view, .. } => {
@@ -54,6 +54,7 @@ pub(super) fn emit<B: Backend>(
             None
         }
         Node::BankProperty(_)
+        | Node::Reference(_)
         | Node::MapLayout(_)
         | Node::Parameter(_)
         | Node::Argument(_)

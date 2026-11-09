@@ -1,10 +1,10 @@
 //! Register leaf callbacks receive effective fields and owner-specific geometry.
 /// Caller-owned capture for generation tests.
 pub mod output_support;
-use hw_model_schema::export::value::Backend as _;
+use hw_model_schema::export::value::Emit as _;
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Bindings},
-    ast::{LayoutExpr, SchemaSet},
+    ast::SchemaSet,
     bits_schema,
     export::{self, register, value},
     register_map, register_schema,
@@ -33,6 +33,7 @@ register_map! {
 #[derive(Debug, PartialEq, Eq)]
 enum Failure {
     Description,
+    Expression,
     Write(std::io::ErrorKind),
 }
 #[derive(Default)]
@@ -55,71 +56,93 @@ impl Trace {
     }
 }
 impl register::Backend for Trace {
-    fn register_width(
+    fn reference<'a>(
         &mut self,
-        width: usize,
-        ctx: hw_model_schema::traversal::register::Context<'_>,
+        _: export::view::Reference<'a>,
+        metadata: export::view::Target<'a>,
+        target: export::Visit<register::Context<'a>>,
+        _: register::Context<'a>,
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), Failure> {
+        if metadata.kind == export::Kind::Bits {
+            self.emit(target, writer)?;
+        }
+        Ok(())
+    }
+    fn register<'a>(
+        &mut self,
+        value: export::view::Register<'a>,
+        ctx: register::Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Failure> {
         assert!(
             ctx.register()
                 .is_some_and(|register| register.source().is_some())
         );
-        self.push(format!("width:{width}"), writer)?;
-        Ok(())
+        self.push(format!("width:{}", value.width()), writer)?;
+        self.push(format!("register-alignment:{}", value.alignment()), writer)?;
+        self.emit_all(ctx.children(), writer)
     }
-    fn register_alignment(
+    fn map_layout<'a>(
         &mut self,
-        alignment: usize,
-        _: hw_model_schema::traversal::register::Context<'_>,
+        value: export::view::MapLayout<'a>,
+        ctx: register::Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Failure> {
-        self.push(format!("register-alignment:{alignment}"), writer)?;
-        Ok(())
-    }
-    fn map_alignment(
-        &mut self,
-        alignment: usize,
-        _: hw_model_schema::traversal::register::Context<'_>,
-        writer: &mut dyn std::io::Write,
-    ) -> Result<(), Failure> {
-        self.push(format!("map-alignment:{alignment}"), writer)?;
-        Ok(())
+        self.push(format!("map-alignment:{}", value.alignment()), writer)?;
+        self.emit_all(ctx.children(), writer)
     }
     fn register_field<'a>(
         &mut self,
-        field: &'a hw_model_schema::BitsFieldSpec<usize>,
-        ctx: hw_model_schema::traversal::register::Context<'a>,
+        field: hw_model_schema::export::view::BitField<'a, usize>,
+        ctx: hw_model_schema::export::register::Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Failure> {
         self.push(format!("field:{}", field.name()), writer)?;
         self.emit_all(ctx.children(), writer)
     }
-    fn layout_offset(
+    fn layout_property<'a>(
         &mut self,
-        expression: &LayoutExpr,
-        _: hw_model_schema::traversal::register::Context<'_>,
+        property: register::LayoutProperty<'a>,
+        ctx: register::Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Failure> {
-        assert_eq!(*expression, LayoutExpr::Constant(0));
-        self.push("offset:0".into(), writer)?;
-        Ok(())
-    }
-    fn layout_extent(
-        &mut self,
-        expression: &LayoutExpr,
-        _: hw_model_schema::traversal::register::Context<'_>,
-        writer: &mut dyn std::io::Write,
-    ) -> Result<(), Failure> {
-        assert_eq!(*expression, LayoutExpr::Constant(4));
-        self.push("extent:4".into(), writer)?;
-        Ok(())
+        use hw_model_schema::ast::register::LayoutPropertyKind;
+        if matches!(
+            property.kind(),
+            LayoutPropertyKind::Offset | LayoutPropertyKind::Extent
+        ) {
+            self.push(property.name().into(), writer)?;
+        }
+        self.emit_all(ctx.children(), writer)
     }
 }
 impl value::Backend for Trace {
     type Domain = register::Domain;
     type Error = Failure;
-    type Context<'a> = hw_model_schema::traversal::register::Context<'a>;
+    type Context<'a> = hw_model_schema::export::register::Context<'a>;
+    fn bit_field<'a>(
+        &mut self,
+        field: export::view::BitField<'a>,
+        ctx: register::Context<'a>,
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), Failure> {
+        if ctx.register().is_some() {
+            self.push(format!("field:{}", field.name()), writer)?;
+        }
+        self.emit_all(ctx.children(), writer)
+    }
+    fn expression<'a>(
+        &mut self,
+        expression: hw_model_schema::export::view::Expression<'a>,
+        _: Self::Context<'a>,
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), Failure> {
+        let value = expression
+            .evaluate(&[], &[])
+            .map_err(|_| Failure::Expression)?;
+        self.push(format!("value:{value}"), writer)
+    }
     fn short_description(
         &mut self,
         text: &str,
@@ -149,16 +172,19 @@ impl value::Backend for Trace {
         )?;
         Ok(())
     }
+}
+impl hw_model_schema::export::OutputBackend for Trace {
     fn metadata(
         &mut self,
         ctx: &Self::Context<'_>,
     ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
         Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.unit().name.clone(),
+            logical_name: ctx.root_name().to_owned(),
             media_type: "text/plain".into(),
         })
     }
 }
+
 fn schema() -> Result<AnalyzedSchema, Box<dyn std::error::Error>> {
     let mut set = SchemaSet::new();
     set.add::<Control>();
@@ -173,7 +199,7 @@ fn referenced_fields_are_visited_once_per_owner_with_both_doc_fragments()
     // Given a reusable bits definition embedded in a register.
     let schema = schema()?;
     let mut sink = MemoryOutput::new();
-    // When default shared recursion emits both selected definitions.
+    // When shared recursion explicitly follows the register's bits reference.
     sink.generate(&schema, Trace::default())
         .expect("generation");
     // Then reference metadata remains present, while the register owns one effective field visit.
@@ -233,7 +259,12 @@ fn map_and_register_geometry_dispatch_have_distinct_owners()
             .flat_map(|output| output.bytes.iter().copied())
             .collect::<Vec<_>>(),
     )?;
-    assert!(text.contains("map-alignment:4|offset:0|extent:4"));
+    assert!(
+        text.contains(
+            "map-alignment:4|offset|value:0|value:1|value:4|value:4|value:4|extent|value:4"
+        ),
+        "{text}"
+    );
     assert_eq!(text.matches("short:Placement:control:placement").count(), 1);
     assert_eq!(text.matches("short:Register:Control:register").count(), 1);
     Ok(())

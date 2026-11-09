@@ -30,7 +30,13 @@ fn shared_referents_preserve_distinct_occurrence_ancestry() {
                 .children()
                 .all(|v| !matches!(v.node(), Node::Record(_)))
         );
-        let referent = field.context().referent().unwrap();
+        assert!(field.context().referent().is_none());
+        let reference = field
+            .context()
+            .children()
+            .find(|v| matches!(v.node(), Node::Reference(_)))
+            .unwrap();
+        let referent = reference.context().referent().unwrap();
         assert_eq!(referent.context().unit().name, "Pair");
         let Node::Record(definition) = referent.node() else {
             panic!("record expected")
@@ -90,7 +96,13 @@ fn opaque_reference_stops_at_declared_storage_boundary() {
         .children()
         .find(|v| matches!(v.node(), Node::Field(_)))
         .unwrap();
-    let referent = field.context().referent().unwrap();
+    assert!(field.context().referent().is_none());
+    let reference = field
+        .context()
+        .children()
+        .find(|v| matches!(v.node(), Node::Reference(_)))
+        .unwrap();
+    let referent = reference.context().referent().unwrap();
     assert!(matches!(
         referent.node(),
         Node::Value(hw_model_schema::ast::value::Node::Opaque(_))

@@ -1,12 +1,11 @@
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Bindings},
-    ast::{DefinitionBody, SchemaSet},
+    ast::SchemaSet,
     export::{
-        SymbolScope,
+        Kind, SymbolScope,
         backends::veryl::{VerylRecordBackend, VerylRegisterBackend},
-        prepare_roots,
+        prepare_roots, record, register,
     },
-    traversal::{record, register},
 };
 use pdma_model_contract::dma::{Command, DmaRegisters, Event};
 use std::{error::Error, io::Write};
@@ -32,12 +31,8 @@ fn emit_schema(schema: &AnalyzedSchema, writer: &mut dyn Write) -> Result<(), Bo
     let record_outputs = prepare_roots(&mut records, record::roots(schema))?;
     let register_outputs = prepare_roots(
         &mut registers,
-        register::roots(schema).filter(|visit| {
-            matches!(
-                visit.context().unit().declaration,
-                Some(DefinitionBody::Register(_) | DefinitionBody::RegisterMap(_))
-            )
-        }),
+        register::roots(schema)
+            .filter(|visit| matches!(visit.root_kind(), Kind::Register | Kind::RegisterMap)),
     )?;
     let mut names = SymbolScope::new();
     for (metadata, id) in record_outputs

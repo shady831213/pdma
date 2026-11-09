@@ -14,6 +14,20 @@ register_schema! {
     }
 }
 
+register_schema! {
+    pub register Ambiguous {
+        width: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0,
+        fields: { code: 0..=1 => enum { variants: { MyValue = 0, Myvalue = 1 } } },
+    }
+}
+
+#[test]
+fn rejects_enum_names_that_collide_after_formatting() {
+    let mut definitions = SchemaSet::new();
+    definitions.add::<Ambiguous>();
+    assert!(render(definitions).is_err());
+}
+
 #[test]
 fn emits_hierarchical_register_model() {
     let text = generate().unwrap();
@@ -159,3 +173,35 @@ fn zero_actual_bank_counts_are_guarded() {
     assert!(text.contains("if (p_channel_count == 0) `uvm_fatal(\"RAL_BANK_COUNT\""));
     assert!(!text.contains("RAL_PARAMETER"));
 }
+
+#[test]
+fn enum_values_reach_the_generated_register_class() {
+    let text = generate().unwrap();
+    assert!(text.contains("localparam logic [63:0] CODE_INTERNAL = 64'd1;"));
+    assert_eq!(text.matches("CODE_INTERNAL = 64'd1;").count(), 1);
+}
+
+#[test]
+fn writer_failure_propagates_from_output_rendering() {
+    // Given an analyzed fixture and its complete output size.
+    let mut definitions = SchemaSet::new();
+    definitions.add::<DmaRegisters>();
+    let schema = AnalyzedSchema::analyze(definitions, &Bindings::new()).unwrap();
+    let mut backend = backend::Uvm::default();
+    let outputs = prepare_roots(&mut backend, register::roots(&schema)).unwrap();
+    for output in outputs {
+        let mut complete = Vec::new();
+        output.emit(&mut backend, &mut complete).unwrap();
+        for capacity in [0, complete.len() / 2, complete.len() - 1] {
+            let mut storage = vec![0; capacity];
+            // When the actual output writer runs out of capacity.
+            let error = output
+                .emit(&mut backend, &mut storage.as_mut_slice())
+                .unwrap_err();
+            // Then the writer error reaches the caller, including late writes.
+            assert_eq!(error.kind(), std::io::ErrorKind::WriteZero);
+        }
+    }
+}
+
+mod source_bits;

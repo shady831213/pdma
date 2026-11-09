@@ -8,6 +8,7 @@ pub use semantic::{Argument, Attribute, LayoutProperty, LayoutPropertyKind, Para
 #[derive(Debug, Clone)]
 pub struct RegisterInfo {
     source: Option<super::Reference>,
+    inline_bits: Option<super::BitsDefinition>,
     name: &'static str,
     documentation: Documentation,
     width: usize,
@@ -34,6 +35,7 @@ impl RegisterInfo {
             .collect();
         Self {
             source: None,
+            inline_bits: None,
             name: spec.name(),
             documentation: spec.documentation(),
             width: spec.width(),
@@ -48,9 +50,30 @@ impl RegisterInfo {
     }
     /// Attaches a reused bits definition instead of inline source fields.
     #[must_use]
-    pub const fn with_source(mut self, source: super::Reference) -> Self {
+    pub fn with_source(mut self, source: super::Reference) -> Self {
         self.source = Some(source);
+        self.inline_bits = None;
         self
+    }
+    pub(crate) fn rewritten_source(&self, source: Option<super::Reference>) -> Self {
+        Self {
+            source,
+            inline_bits: None,
+            ..self.clone()
+        }
+    }
+    /// Attaches an owned bits declaration without changing register access or encoding.
+    #[must_use]
+    pub fn with_inline_bits(&self, bits: super::BitsDefinition) -> Self {
+        Self {
+            source: None,
+            inline_bits: Some(bits),
+            ..self.clone()
+        }
+    }
+    /// Explicit owned bits source, when a reusable source has been expanded.
+    pub const fn inline_bits(&self) -> Option<&super::BitsDefinition> {
+        self.inline_bits.as_ref()
     }
     /// Source bits reference, absent when fields were declared inline.
     pub const fn source(&self) -> Option<&super::Reference> {

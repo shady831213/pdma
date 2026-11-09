@@ -33,8 +33,8 @@ impl RegisterInstance {
         self.offset
     }
     /// Identity of the register definition, shared by repeated instances.
-    pub const fn definition(&self) -> DefinitionId {
-        self.definition
+    pub fn definition(&self) -> DefinitionId {
+        self.definition.clone()
     }
     /// Register semantics and field metadata.
     pub const fn register(&self) -> &RegisterInfo {
@@ -71,7 +71,7 @@ impl RegisterWalk {
     ) -> Result<(), LayoutError> {
         let geometry = map.resolve(arguments)?;
         for (placement, resolved) in map.placements().iter().zip(&geometry.placements) {
-            let child = placement.reference().target();
+            let child = placement.target();
             for index in 0..resolved.count {
                 let offset = index
                     .checked_mul(resolved.stride)

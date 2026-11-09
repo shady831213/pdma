@@ -1,7 +1,19 @@
-use crate::ast::{Case, Field, RecordDefinition, UnionDefinition, record::Constant};
-use crate::traversal::record::Context;
+use super::Context;
+use crate::ast::record::Constant;
+use crate::export::{value::Emit as _, view};
 /// Target syntax restricted to record source constructs.
 pub trait Backend: for<'a> super::super::value::Backend<Context<'a> = Context<'a>> {
+    /// Handles a reference; only this callback receives its bound target visit.
+    /// Defaults to no output; explicitly emit the target to inline its definition.
+    fn reference<'a>(
+        &mut self,
+        _: view::Reference<'a>,
+        _: crate::export::Visit<Context<'a>>,
+        _: Context<'a>,
+        _: &mut dyn std::io::Write,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
     /// Handles one selected record/value root.
     fn root(
         &mut self,
@@ -13,7 +25,7 @@ pub trait Backend: for<'a> super::super::value::Backend<Context<'a> = Context<'a
     /// Handles a source record.
     fn record<'a>(
         &mut self,
-        _value: &'a RecordDefinition,
+        _value: view::Record<'a>,
         ctx: Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
@@ -22,7 +34,7 @@ pub trait Backend: for<'a> super::super::value::Backend<Context<'a> = Context<'a
     /// Handles a tagged or untagged union.
     fn union<'a>(
         &mut self,
-        _value: &'a UnionDefinition,
+        _value: view::Union<'a>,
         ctx: Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
@@ -31,7 +43,7 @@ pub trait Backend: for<'a> super::super::value::Backend<Context<'a> = Context<'a
     /// Handles a logical field.
     fn field<'a>(
         &mut self,
-        _value: &'a Field,
+        _value: view::Field<'a>,
         ctx: Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
@@ -40,65 +52,11 @@ pub trait Backend: for<'a> super::super::value::Backend<Context<'a> = Context<'a
     /// Handles a union alternative.
     fn case<'a>(
         &mut self,
-        _value: &'a Case,
+        _value: view::Case<'a>,
         ctx: Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
         self.emit_all(ctx.children(), writer)
-    }
-    /// Handles the record size source attribute.
-    fn record_size(
-        &mut self,
-        _: usize,
-        _: Context<'_>,
-        _: &mut dyn std::io::Write,
-    ) -> Result<(), Self::Error> {
-        Ok(())
-    }
-    /// Handles the record alignment source attribute.
-    fn record_alignment(
-        &mut self,
-        _: usize,
-        _: Context<'_>,
-        _: &mut dyn std::io::Write,
-    ) -> Result<(), Self::Error> {
-        Ok(())
-    }
-    /// Handles the record endian source attribute.
-    fn record_endian(
-        &mut self,
-        _: crate::Endian,
-        _: Context<'_>,
-        _: &mut dyn std::io::Write,
-    ) -> Result<(), Self::Error> {
-        Ok(())
-    }
-    /// Handles the field size source attribute.
-    fn field_size(
-        &mut self,
-        _: usize,
-        _: Context<'_>,
-        _: &mut dyn std::io::Write,
-    ) -> Result<(), Self::Error> {
-        Ok(())
-    }
-    /// Handles the field offset source attribute.
-    fn field_offset(
-        &mut self,
-        _: usize,
-        _: Context<'_>,
-        _: &mut dyn std::io::Write,
-    ) -> Result<(), Self::Error> {
-        Ok(())
-    }
-    /// Handles the field endian source attribute.
-    fn field_endian(
-        &mut self,
-        _: crate::Endian,
-        _: Context<'_>,
-        _: &mut dyn std::io::Write,
-    ) -> Result<(), Self::Error> {
-        Ok(())
     }
     /// Handles a scalar constant constraint with its original source symbol.
     fn constant(

@@ -24,9 +24,9 @@ impl MapDefinition {
                 let (target, child) = self.child(placement, ancestors)?;
                 Ok(PlacementPlan {
                     resolved_arguments: Vec::new(),
-                    reference: placement.reference.clone(),
+                    source: placement.clone(),
                     child_definition: target.id(),
-                    child_name: target.name(),
+                    child_name: target.name().to_owned(),
                     bank: placement.bank,
                     documentation: placement.documentation,
                     child,
@@ -72,7 +72,7 @@ impl MapDefinition {
         placement: &MapPlacement,
         ancestors: &mut Vec<DefinitionId>,
     ) -> Result<(Definition, ChildLayout), LayoutError> {
-        let target = placement.reference.target();
+        let target = placement.target();
         if ancestors.contains(&target.id()) {
             return Err(LayoutError::Cycle(target.id().path().to_owned()));
         }

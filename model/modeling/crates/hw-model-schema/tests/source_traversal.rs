@@ -1,7 +1,7 @@
 //! Source-stage passes and analyzed traversal share occurrence identities.
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Bindings, Pass},
-    ast::{SchemaGraph, SchemaSet, record::Node},
+    ast::{Reference, SchemaGraph, SchemaSet, record::Node},
     record_schema,
     traversal::{BoundContext, NodeId, Schema, record, source},
 };
@@ -115,8 +115,9 @@ fn register_source_identity_survives_derived_layout_without_aliasing() {
                 N::RegisterField(v) => format!("field:{}", v.name()),
                 N::Placement(_) => format!(
                     "placement:{:?}",
-                    node.reference().map(hw_model_schema::ast::Reference::name)
+                    node.children().find_map(N::reference).map(Reference::name)
                 ),
+                N::Reference(v) => format!("reference:{}", v.name()),
                 N::Parameter(v) => format!("parameter:{}", v.name),
                 N::Argument(v) => format!("argument:{:?}", v.parameter),
                 N::Attribute(v) => format!("attribute:{v:?}"),
@@ -132,7 +133,8 @@ fn register_source_identity_survives_derived_layout_without_aliasing() {
             N::Register(v) => format!("register:{}", v.name()),
             N::MapLayout(_) => "map".into(),
             N::RegisterField(v) => format!("field:{}", v.name()),
-            N::Placement(v) => format!("placement:{:?}", Some(v.reference.name())),
+            N::Placement(v) => format!("placement:{:?}", Some(v.source.name())),
+            N::Reference(v) => format!("reference:{}", v.name()),
             N::Parameter(v) => format!("parameter:{}", v.name),
             N::Argument(v) => format!("argument:{:?}", v.parameter),
             N::Attribute(v) => format!("attribute:{v:?}"),

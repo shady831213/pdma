@@ -97,13 +97,9 @@ impl VerylRegisterBackend {
     }
 }
 impl Output {
-    fn metadata(
-        &mut self,
-        unit: &crate::analysis::Unit,
-    ) -> Result<OutputMetadata, VerylExportError> {
-        let name = self.name(&unit.id, &unit.name);
-        if !identifier::is_identifier(&name) || self.symbols.insert(&name, unit.id.clone()).is_err()
-        {
+    fn metadata(&mut self, id: &NodeId, name: &str) -> Result<OutputMetadata, VerylExportError> {
+        let name = self.name(id, name);
+        if !identifier::is_identifier(&name) || self.symbols.insert(&name, id.clone()).is_err() {
             return Err(VerylExportError::Name(name));
         }
         Ok(OutputMetadata {
@@ -113,14 +109,15 @@ impl Output {
     }
     fn begin(
         &mut self,
-        unit: &crate::analysis::Unit,
+        id: &NodeId,
+        name: &str,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), VerylExportError> {
         self.package = package::Package::default();
         writeln!(
             writer,
             "// Generated schema layout; do not edit.\n#[fmt(skip)]\npub package {} {{",
-            self.name(&unit.id, &unit.name)
+            self.name(id, name)
         )?;
         Ok(())
     }

@@ -1,6 +1,6 @@
 mod scopes;
 use super::CHeaderExportError;
-use crate::{analysis::Unit, traversal::NodeId};
+use crate::traversal::NodeId;
 pub(super) use scopes::{GeometryNames, Scope};
 use std::collections::HashMap;
 
@@ -68,31 +68,6 @@ pub(super) fn collision<S: Into<String>>(
     }
 }
 
-pub(super) fn relative_path<'a>(root: &str, path: &'a str) -> &'a str {
-    if root.is_empty() {
-        path.strip_prefix('.').unwrap_or(path)
-    } else {
-        path.strip_prefix(root)
-            .and_then(|relative| relative.strip_prefix('.'))
-            .unwrap_or(path)
-    }
-}
-
-pub(super) fn check_record(
-    schema: &crate::ResolvedRecord,
-) -> Result<(), super::CHeaderExportError> {
-    let names: Vec<_> = schema
-        .scalar_members()
-        .map(|(member, _)| {
-            (
-                member.path(),
-                c_identifier(relative_path(schema.root(), member.path())),
-            )
-        })
-        .collect();
-    reject_collisions(names.iter().map(|(path, name)| (*path, name.as_str())))
-}
-
 #[derive(Debug, Default)]
 pub(super) struct Names {
     overrides: HashMap<NodeId, String>,
@@ -105,18 +80,22 @@ impl Names {
     pub(super) fn prefix(&self, source: &NodeId, fallback: &str) -> String {
         c_identifier(self.overrides.get(source).map_or(fallback, String::as_str))
     }
-    pub(super) fn unit_name(&self, definition: &Unit) -> (String, String) {
-        let logical_name = if definition.id.source_path().is_some() {
-            definition.name.to_ascii_lowercase()
+    pub(super) fn unit_name(&self, id: &NodeId, name: &str) -> (String, String) {
+        let logical_name = if id.source_path().is_some() {
+            name.to_ascii_lowercase()
         } else {
-            definition.name.clone()
+            name.to_owned()
         };
-        let prefix = self.prefix(&definition.id, &logical_name);
+        let prefix = self.prefix(id, &logical_name);
         (logical_name, prefix)
     }
-    pub(super) fn reserve_unit(&mut self, definition: &Unit) -> Result<String, CHeaderExportError> {
-        let (logical_name, prefix) = self.unit_name(definition);
-        let path = definition.id.source_path().unwrap_or(&definition.name);
+    pub(super) fn reserve_unit(
+        &mut self,
+        id: &NodeId,
+        name: &str,
+    ) -> Result<String, CHeaderExportError> {
+        let (logical_name, prefix) = self.unit_name(id, name);
+        let path = id.source_path().unwrap_or(name);
         self.symbols.insert(&prefix, path)?;
         Ok(logical_name)
     }

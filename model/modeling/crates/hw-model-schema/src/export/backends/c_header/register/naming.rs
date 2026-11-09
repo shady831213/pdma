@@ -2,7 +2,7 @@ use super::super::naming::c_identifier;
 use super::super::{CHeaderExportError, CRegisterBackend};
 use crate::analysis::ViewPathSegment;
 use crate::ast::RegisterLocation;
-use crate::traversal::register::Context;
+use crate::export::register::Context;
 
 type Result<T> = core::result::Result<T, CHeaderExportError>;
 

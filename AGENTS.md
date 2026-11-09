@@ -92,6 +92,12 @@ from crates.io. The library sources remain workspace members for maintenance;
 they do not override registry dependencies. Preserve this distinction and do not
 add local path dependencies or `[patch.crates-io]` overrides to the normal model build.
 
+Temporary exception authorized on 2026-11-09: while reviewing the unpublished schema
+render API, the model workspace patches `hw-model-schema` to its local member.
+Keep this override explicit and relative. Review the migrated generators in this
+workspace; do not publish until user approval. After the approved release, remove
+the override and verify registry identities and checksums again.
+
 Schema and schema-macros 0.2.0 are published on crates.io. Their reviewed source
 snapshot maps to `5a3a6f6cf13af855f3505968cfd21f601bfe83d7` in the sanitized history;
 the published package contents and checksums are unchanged. PDMA and downstream fixtures use

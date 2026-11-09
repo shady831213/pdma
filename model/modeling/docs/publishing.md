@@ -8,6 +8,15 @@ The six library manifests allow only
 the `crates-io` registry; the workspace default, PDMA packages and standalone test
 fixtures keep publication disabled.
 
+## Unpublished render API review
+
+The workspace currently has an explicitly authorized temporary relative-path
+override for `hw-model-schema`. It lets all four generators use the reviewed
+candidate with one schema type identity. No new schema version has been published.
+After user approval and publication, remove this override, update requirements
+and lockfiles to the approved registry version, and verify the resolved package
+source and checksum from every PDMA root. Do not publish from the preview setup.
+
 ## Schema 0.2.0 provenance
 
 Reviewed source snapshot in the sanitized history:

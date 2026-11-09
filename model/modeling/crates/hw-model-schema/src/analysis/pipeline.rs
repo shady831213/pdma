@@ -21,7 +21,12 @@ impl AnalyzedSchema {
     }
     pub(super) fn simplify_units(mut units: Vec<super::Unit>) -> Result<Self, AnalysisError> {
         super::simplify::run(&mut units)?;
-        Ok(Self { units })
+        let mut schema = Self {
+            units,
+            opaque_layouts: std::collections::HashMap::new(),
+        };
+        schema.prepare_opaque()?;
+        Ok(schema)
     }
 }
 pub(super) fn prepare_graph(

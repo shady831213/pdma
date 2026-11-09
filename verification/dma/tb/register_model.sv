@@ -5,6 +5,8 @@
 package pdma_uvm_regs;
   import uvm_pkg::*;
   `include "uvm_macros.svh"
+    // Hardware channel count
+    // Read-only count supplied by this hardware instance. Hardware initializes the value after construction and preserves it across device reset.
   class ChannelCount extends uvm_reg;
     `uvm_object_utils(ChannelCount)
     uvm_reg_field value_field;
@@ -18,9 +20,15 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Immutable hardware RMW capabilities, preserved across reset
+    // Immutable hardware RMW capabilities, preserved across reset. Wait and Fence do not require these bits.
   class Capabilities extends uvm_reg;
     `uvm_object_utils(Capabilities)
+    // 32-bit atomic and semaphore operations are supported
+    // 32-bit atomic and semaphore operations are supported.
     uvm_reg_field atomic32_field;
+    // 64-bit atomic and semaphore operations are supported
+    // 64-bit atomic and semaphore operations are supported.
     uvm_reg_field atomic64_field;
     function new(string name = "Capabilities");
       super.new(name, 32, UVM_NO_COVERAGE);
@@ -55,8 +63,12 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Enable control
+    // A 32-bit little-endian control register, initially disabled. Only bit zero is writable; bits 1 through 31 are reserved and remain zero.
   class Switch extends uvm_reg;
     `uvm_object_utils(Switch)
+    // Enabled
+    // Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
     uvm_reg_field enabled_field;
     function new(string name = "Switch");
       super.new(name, 32, UVM_NO_COVERAGE);
@@ -68,9 +80,15 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Dma fatal state
+    // A device-wide hardware fatal stops all channels. Only device reset clears it; channel reset does not. This is a hardware fatal input, not a software memory-management error.
   class DmaFatal extends uvm_reg;
     `uvm_object_utils(DmaFatal)
+    // Zero is healthy; Internal is a device-wide unrecoverable hardware fatal
+    // Zero is healthy; Internal is a device-wide unrecoverable hardware fatal.
     uvm_reg_field code_field;
+    localparam logic [63:0] CODE_NONE = 64'd0;
+    localparam logic [63:0] CODE_INTERNAL = 64'd1;
     function new(string name = "DmaFatal");
       super.new(name, 32, UVM_NO_COVERAGE);
     endfunction
@@ -81,8 +99,12 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Hardware reset request and busy state
+    // Writing one to bit zero requests reset of the owning hardware scope. Reading one means reset is busy; only hardware clears it to zero after draining all prior command-ring reads, SG-list reads, payload reads/writes and event-ring writes, invalidating retained work and clearing configuration, cursors, errors and device-owned notification state. Once zero is observed, no further memory access can belong to pre-reset work in that scope. Writing zero has no effect, and repeated requests while busy coalesce. Configuration writes are rejected while reset is busy. External memory is neither cleared nor rolled back; platform-pending notifications remain claimable. Software must keep affected memory valid until completion, even if it cancels or times out its wait. Other bits are reserved.
   class Reset extends uvm_reg;
     `uvm_object_utils(Reset)
+    // Write one to request reset; read one while busy and zero after hardware cleanup
+    // Write one to request reset; read one while busy and zero after hardware cleanup. Writing zero cannot clear a pending request.
     uvm_reg_field request_field;
     function new(string name = "Reset");
       super.new(name, 32, UVM_NO_COVERAGE);
@@ -136,7 +158,11 @@ package pdma_uvm_regs;
 
   class DmaAdmin extends uvm_reg_block;
     `uvm_object_utils(DmaAdmin)
+    // DMA-wide administration
+    // Global interrupt control, fatal state and whole-DMA reset.
     DmaControl control_block;
+    // Channel administration bank
+    // One privileged recovery block for each implemented channel.
     ChannelAdmin channels_block[];
     function new(string name = "DmaAdmin");
       super.new(name, UVM_NO_COVERAGE);
@@ -158,6 +184,8 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Memory address
+    // A 64-bit little-endian address in the device's attached memory backend. The backend determines address interpretation; the value need not be a host pointer.
   class Address extends uvm_reg;
     `uvm_object_utils(Address)
     uvm_reg_field value_field;
@@ -171,6 +199,8 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Read/write word
+    // A 32-bit little-endian register, initially zero. Software may read or write all bits; its placement defines their hardware meaning.
   class Word extends uvm_reg;
     `uvm_object_utils(Word)
     uvm_reg_field value_field;
@@ -184,6 +214,8 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Read-only word
+    // A 32-bit little-endian register, initially zero. Hardware updates the value; software may read it but cannot write it.
   class ReadWord extends uvm_reg;
     `uvm_object_utils(ReadWord)
     uvm_reg_field value_field;
@@ -277,9 +309,28 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Channel fatal state
+    // Hardware-owned sticky failure state. Software can observe the code; only channel or device reset clears it.
   class ChannelFatal extends uvm_reg;
     `uvm_object_utils(ChannelFatal)
+    // Fatal code
+    // Distinguishes normal operation from command-fetch and event-publication failures. Other encodings are invalid.
     uvm_reg_field code_field;
+    // No channel fatal
+    // Neither ring has latched a hardware access failure.
+    localparam logic [63:0] CODE_NONE = 64'd0;
+    // Command fetch failed
+    // Hardware could not fetch or decode a command ring entry; its consumer cursor was not advanced.
+    localparam logic [63:0] CODE_COMMANDREAD = 64'd1;
+    // Event publication failed
+    // Hardware could not publish an event ring entry; its producer cursor was not advanced. The payload copy may already have completed.
+    localparam logic [63:0] CODE_EVENTWRITE = 64'd2;
+    // Error publication encountered a full event ring
+    // Error publication encountered a full event ring.
+    localparam logic [63:0] CODE_EVENTFULL = 64'd3;
+    // Error publication encountered invalid event geometry or cursors
+    // Error publication encountered invalid event geometry or cursors.
+    localparam logic [63:0] CODE_EVENTCONFIGURATION = 64'd4;
     function new(string name = "ChannelFatal");
       super.new(name, 32, UVM_NO_COVERAGE);
     endfunction
@@ -290,8 +341,12 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Payload fault status
+    // Hardware sets faulted when a payload access returns a recoverable page fault. Resume clears it; a later fault sets it again. Zero is not command completion. Reset or matching Abort discards parked work and clears the bit.
   class FaultStatus extends uvm_reg;
     `uvm_object_utils(FaultStatus)
+    // A payload page fault awaits software repair and an explicit resume request
+    // A payload page fault awaits software repair and an explicit resume request.
     uvm_reg_field faulted_field;
     function new(string name = "FaultStatus");
       super.new(name, 32, UVM_NO_COVERAGE);
@@ -303,8 +358,12 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Payload resume request
+    // Write-one action for the current channel fault. Zero writes have no effect; requests made while not faulted are discarded, not saved for later faults. No request identity or duplicate suppression is provided.
   class Resume extends uvm_reg;
     `uvm_object_utils(Resume)
+    // Write one to clear faulted after mapping repair; reserved bits must be zero
+    // Write one to clear faulted after mapping repair; reserved bits must be zero.
     uvm_reg_field request_field;
     function new(string name = "Resume");
       super.new(name, 32, UVM_NO_COVERAGE);
@@ -341,11 +400,21 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Channel interrupt causes
+    // Hardware causes visible regardless of masks. Reading does not acknowledge notifications. Non-empty follows occupancy, Trap clears on write-one acknowledgment, and error/fatal require channel reset.
   class ChannelIrqCause extends uvm_reg;
     `uvm_object_utils(ChannelIrqCause)
+    // The event ring currently contains unread entries
+    // The event ring currently contains unread entries.
     uvm_reg_field event_non_empty_field;
+    // A Trap command executed since the last Trap acknowledgment
+    // A Trap command executed since the last Trap acknowledgment.
     uvm_reg_field trap_field;
+    // A stopping command error is latched before event publication; processing remains stopped until reset
+    // A stopping command error is latched before event publication; processing remains stopped until reset. Payload suspension does not set this cause.
     uvm_reg_field error_field;
+    // The channel fatal register contains a fatal error
+    // The channel fatal register contains a fatal error.
     uvm_reg_field channel_fatal_field;
     function new(string name = "ChannelIrqCause");
       super.new(name, 32, UVM_NO_COVERAGE);
@@ -366,9 +435,15 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Channel event notification masks
+    // One suppresses that source's future notifications without clearing causes. Unmask does not replay past events; software must check queue and error state before waiting. Error and fatal notifications bypass these two masks.
   class ChannelIrqMask extends uvm_reg;
     `uvm_object_utils(ChannelIrqMask)
+    // Mask notifications on event empty-to-non-empty transitions
+    // Mask notifications on event empty-to-non-empty transitions.
     uvm_reg_field event_non_empty_field;
+    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
+    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
     uvm_reg_field trap_field;
     function new(string name = "ChannelIrqMask");
       super.new(name, 32, UVM_NO_COVERAGE);
@@ -383,8 +458,12 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Write-one acknowledgment of sticky Trap cause; zero is ignored and pending platform notifications survive
+    // Write-one acknowledgment of sticky Trap cause; zero is ignored and pending platform notifications survive.
   class TrapAck extends uvm_reg;
     `uvm_object_utils(TrapAck)
+    // Write one to clear the sticky Trap cause
+    // Write one to clear the sticky Trap cause.
     uvm_reg_field request_field;
     function new(string name = "TrapAck");
       super.new(name, 32, UVM_NO_COVERAGE);
@@ -478,8 +557,14 @@ package pdma_uvm_regs;
 
   class DmaRegisters extends uvm_reg_block;
     `uvm_object_utils(DmaRegisters)
+    // Hardware discovery aperture
+    // Read-only DMA configuration visible independently of administrative permissions.
     DmaDiscovery discovery_block;
+    // Privileged DMA administration
+    // Complete global and per-channel administration aperture, hidden from managed Host software.
     DmaAdmin admin_block;
+    // Independent channel data interfaces
+    // Page-aligned complete channel blocks containing rings, configuration, fatal failures and notifications. Unused bytes are reserved to their owning block.
     ChannelBlock channels_block[];
     function new(string name = "DmaRegisters");
       super.new(name, UVM_NO_COVERAGE);

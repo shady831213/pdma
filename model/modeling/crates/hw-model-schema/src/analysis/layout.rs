@@ -23,6 +23,7 @@ pub(super) fn run(graph: &SchemaGraph, bindings: &Bindings) -> Result<Vec<Unit>,
                 kind: crate::ast::ReferenceKind::Placement,
                 target: crate::traversal::NodeId::definition(definition.id()),
                 discriminant: None,
+                selector_binding: None,
             }],
             body: Layout::Map(MapLayout {
                 plan: Some(Box::new(super::CompleteMapLayout::resolve(
@@ -48,9 +49,9 @@ fn prepare_definition(
 ) -> Result<Unit, AnalysisError> {
     let body = match definition.body() {
         DefinitionBody::Bits(_) | DefinitionBody::Register(_) => Layout::None,
-        DefinitionBody::Record(record) => resolve_record(record.spec(), definition.id())?,
-        DefinitionBody::Opaque(spec) => resolve_record(*spec, definition.id())?,
-        DefinitionBody::Union(union) => resolve_record(union.storage(), definition.id())?,
+        DefinitionBody::Record(record) => resolve_record(record.spec(), &definition.id())?,
+        DefinitionBody::Opaque(spec) => resolve_record(*spec, &definition.id())?,
+        DefinitionBody::Union(union) => resolve_record(union.storage(), &definition.id())?,
         DefinitionBody::RegisterMap(map) => {
             let plan = map.layout_plan()?;
             let args = bindings
@@ -90,7 +91,7 @@ fn prepare_definition(
     })
 }
 
-fn resolve_record(spec: crate::RecordSpec, id: DefinitionId) -> Result<Layout, AnalysisError> {
+fn resolve_record(spec: crate::RecordSpec, id: &DefinitionId) -> Result<Layout, AnalysisError> {
     spec.resolve()
         .map(Layout::Record)
         .map_err(|source| AnalysisError::Record {

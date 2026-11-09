@@ -4,18 +4,20 @@ mod substitute;
 mod substitution;
 use crate::{
     Documentation,
-    ast::{LayoutExpr, Reference},
+    ast::{LayoutExpr, MapPlacement},
 };
 
 /// Completed geometry for an ordered placement, expressed in its root parameter scope.
 #[derive(Debug, Clone)]
 pub struct CompletePlacementLayout {
     /// Original reference and member name.
-    pub reference: Reference,
+    pub source: MapPlacement,
+    /// Completed inline child map in its own formal parameter scope.
+    pub inline_map: Option<Box<CompleteMapLayout>>,
     /// Referenced definition identity.
     pub child_definition: crate::traversal::NodeId,
     /// Source child name.
-    pub child_name: &'static str,
+    pub child_name: String,
     /// Explicit bank identity.
     pub bank: bool,
     /// Placement documentation.

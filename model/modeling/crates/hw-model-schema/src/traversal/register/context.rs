@@ -69,25 +69,42 @@ pub struct RegisterSite<'a> {
 impl<'a> Context<'a> {
     /// Active unbound map parameter names, regardless of traversal order.
     pub fn parameters(&self) -> &'a [&'static str] {
-        match &self.unit().body {
-            Layout::Map(map) => map.plan.as_ref().map_or(&[], |p| p.parameters()),
-            Layout::None | Layout::Record(_) => &[],
-        }
+        self.lineage()
+            .find_map(|node| match node {
+                Node::MapLayout(map) => Some(map.parameters()),
+                _ => None,
+            })
+            .unwrap_or_else(|| match &self.unit().body {
+                Layout::Map(map) => map.plan.as_ref().map_or(&[], |p| p.parameters()),
+                Layout::None | Layout::Record(_) => &[],
+            })
     }
-    /// Original declared parameter names, including those bound by the root.
+    /// Original parameters in the nearest contained map's formal scope.
     pub fn declared_parameters(&self) -> &'a [&'static str] {
-        match &self.unit().body {
-            Layout::Map(map) => map.plan.as_ref().map_or(&[], |p| p.source_parameters()),
-            Layout::None | Layout::Record(_) => &[],
-        }
+        self.lineage()
+            .find_map(|node| match node {
+                Node::MapLayout(map) => Some(map.source_parameters()),
+                _ => None,
+            })
+            .unwrap_or_else(|| match &self.unit().body {
+                Layout::Map(map) => map.plan.as_ref().map_or(&[], |p| p.source_parameters()),
+                Layout::None | Layout::Record(_) => &[],
+            })
     }
-    /// Active concrete root argument bindings, if present.
+    /// Concrete bindings in the nearest contained map's formal scope.
     pub fn bindings(&self) -> Option<&'a [usize]> {
+        if let Some(map) = self.lineage().find_map(|node| match node {
+            Node::MapLayout(map) => Some(map),
+            _ => None,
+        }) {
+            return map.bindings();
+        }
         match &self.unit().body {
             Layout::Map(map) => map.plan.as_ref().and_then(|p| p.bindings()),
             Layout::None | Layout::Record(_) => None,
         }
     }
+
     /// Normalized position of the enclosing effective register.
     pub fn register_site(&self) -> Option<RegisterSite<'a>> {
         match self
@@ -122,16 +139,17 @@ impl<'a> Context<'a> {
         self.register_site()
             .map_or_else(|| self.unit().name.as_str(), |site| site.path)
     }
-    /// Current completed layout property, with map extent owned by the map itself.
+    /// Enclosing completed layout property, with map extent owned by the map itself.
     pub fn layout_property(&self) -> Option<LayoutProperty<'a>> {
-        let Node::LayoutProperty(property) = self.node() else {
-            return None;
-        };
+        let property = self.lineage().find_map(|node| match node {
+            Node::LayoutProperty(property) => Some(property),
+            _ => None,
+        })?;
         let owner = match self
             .lineage()
             .find(|node| matches!(node, Node::Placement(_) | Node::Bank(_)))
         {
-            Some(Node::Placement(p)) => Some(p.reference.name()),
+            Some(Node::Placement(p)) => Some(p.source.name()),
             Some(Node::Bank(bank)) => Some(bank.name()),
             _ => None,
         };
@@ -149,5 +167,19 @@ impl<'a> Context<'a> {
             expression: property.expression,
             kind: property.kind,
         })
+    }
+}
+
+impl<'a> Context<'a> {
+    /// Prepared local opaque geometry at this occurrence or its storage child.
+    pub fn opaque_layout(&self) -> Option<&'a crate::ResolvedRecord> {
+        let mut current = Some(self.clone());
+        while let Some(ctx) = current {
+            if matches!(ctx.node(), Node::Value(crate::ast::value::Node::Opaque(_))) {
+                return ctx.analysis().opaque_layout(ctx.id());
+            }
+            current = ctx.parent();
+        }
+        None
     }
 }

@@ -2,6 +2,7 @@
 mod complete;
 mod instance;
 mod math;
+mod opaque;
 mod simplify;
 pub use complete::{CompleteMapLayout, CompletePlacementLayout, Constraint};
 mod input;
@@ -35,6 +36,8 @@ pub struct Dependency {
     pub target: crate::traversal::NodeId,
     /// Union wire discriminant, when present.
     pub discriminant: Option<u64>,
+    /// External union selector interpreted in this edge's lexical owner scope.
+    pub selector_binding: Option<&'static str>,
 }
 impl From<&Reference> for Dependency {
     fn from(reference: &Reference) -> Self {
@@ -43,6 +46,7 @@ impl From<&Reference> for Dependency {
             kind: reference.kind(),
             target: crate::traversal::NodeId::definition(reference.target().id()),
             discriminant: reference.discriminant(),
+            selector_binding: reference.selector_binding(),
         }
     }
 }
@@ -96,6 +100,7 @@ pub struct Unit {
 #[derive(Debug, Clone)]
 pub struct AnalyzedSchema {
     units: Vec<Unit>,
+    opaque_layouts: std::collections::HashMap<crate::traversal::NodeId, crate::ResolvedRecord>,
 }
 impl AnalyzedSchema {
     /// Looks up a reusable root at the Rust frontend identity boundary.

@@ -4,8 +4,8 @@ pub mod output_support;
 use hw_model_schema::{
     RecordSpec,
     analysis::AnalyzedSchema,
+    export::record::Context as RecordContext,
     export::{ExportError, OutputMetadata, generate, record::Backend, value},
-    traversal::record::Context as RecordContext,
 };
 use output_support::{CapturedOutput, MemoryOutput};
 use std::io::Write;
@@ -36,7 +36,7 @@ impl value::Backend for LocalRenderer {
     type Context<'a> = RecordContext<'a>;
     fn opaque(
         &mut self,
-        record: &RecordSpec,
+        record: hw_model_schema::export::view::Storage,
         _: RecordContext<'_>,
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
@@ -45,13 +45,16 @@ impl value::Backend for LocalRenderer {
             .write_all(&[size, 255, 7])
             .map_err(|error| LocalExportError::Write(error.kind()))
     }
+}
+impl hw_model_schema::export::OutputBackend for LocalRenderer {
     fn metadata(&mut self, ctx: &RecordContext<'_>) -> Result<OutputMetadata, Self::Error> {
         Ok(OutputMetadata {
-            logical_name: format!("{}.bin", ctx.unit().name),
+            logical_name: format!("{}.bin", ctx.root_name()),
             media_type: "application/x-local-schema".into(),
         })
     }
 }
+
 struct RejectingRenderer;
 impl Backend for RejectingRenderer {
     fn root(&mut self, _: RecordContext<'_>, _: &mut dyn Write) -> Result<(), Self::Error> {
@@ -62,13 +65,16 @@ impl value::Backend for RejectingRenderer {
     type Domain = hw_model_schema::export::record::Domain;
     type Error = LocalExportError;
     type Context<'a> = RecordContext<'a>;
+}
+impl hw_model_schema::export::OutputBackend for RejectingRenderer {
     fn metadata(&mut self, ctx: &RecordContext<'_>) -> Result<OutputMetadata, Self::Error> {
         Ok(OutputMetadata {
-            logical_name: ctx.unit().name.clone(),
+            logical_name: ctx.root_name().to_owned(),
             media_type: "text/plain".into(),
         })
     }
 }
+
 const fn record_schema() -> RecordSpec {
     RecordSpec::new(0, 1, &[])
 }

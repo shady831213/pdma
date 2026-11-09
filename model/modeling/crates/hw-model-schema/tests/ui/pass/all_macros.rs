@@ -52,8 +52,6 @@ fn main() {
     assert_eq!(PassInferredRecord { flags }.to_bytes().unwrap(), [1]);
     assert!(matches!(
         PassMap::locate(16),
-        Some(
-            hw_model_schema::register_map::RegisterLocation::Repeated { instance: 1, .. }
-        )
+        Some(hw_model_schema::register_map::RegisterLocation::Repeated { instance: 1, .. })
     ));
 }

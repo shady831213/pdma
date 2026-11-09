@@ -1,11 +1,7 @@
 //! Recursive value callbacks shared by independent domain emitters.
 mod documentation;
-use super::OutputMetadata;
-use crate::traversal::{Context, Visit};
-use crate::{
-    BitsFieldSpec, EnumDefinition, EnumVariantSpec, RecordSpec,
-    ast::{BitsDefinition, LayoutExpr, value::Node},
-};
+use super::{Context, Visit, view};
+use crate::{EnumVariantSpec, ast::value::Node};
 pub use documentation::{
     DocumentationFragment, DocumentationKind, DocumentationOwner, documentation_fragments,
     emit_documentation,
@@ -18,34 +14,37 @@ pub trait Backend: Sized {
     type Error;
     /// Domain-specific immutable recursion context.
     type Context<'a>: Context;
-    /// Identifies one root before its output writer is opened.
-    fn metadata(&mut self, ctx: &Self::Context<'_>) -> Result<OutputMetadata, Self::Error>;
-    /// Dispatches one framework-bound visit.
-    fn emit(
+    /// Handles a scalar value and any packed field declarations.
+    fn scalar(
         &mut self,
-        visit: Visit<Self::Context<'_>>,
+        _: view::Scalar,
+        ctx: Self::Context<'_>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        <Self::Domain as super::Domain<Self>>::emit(visit, self, writer)
+        self.emit_all(ctx.children(), writer)
     }
-    /// Dispatches bound visits in target-selected order, stopping at the first error.
-    fn emit_all<'a, I>(
+    /// Handles a canonical physical field selected by a domain projection.
+    fn storage_field<'a>(
         &mut self,
-        visits: I,
+        _: view::StorageField<'a>,
+        ctx: Self::Context<'a>,
         writer: &mut dyn std::io::Write,
-    ) -> Result<(), Self::Error>
-    where
-        I: IntoIterator<Item = Visit<Self::Context<'a>>>,
-    {
-        for visit in visits {
-            self.emit(visit, writer)?;
-        }
-        Ok(())
+    ) -> Result<(), Self::Error> {
+        self.emit_all(ctx.children(), writer)
+    }
+    /// Handles a completed opaque member and its enum or bit children.
+    fn storage_member<'a>(
+        &mut self,
+        _value: view::StorageMember<'a>,
+        ctx: Self::Context<'a>,
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), Self::Error> {
+        self.emit_all(ctx.children(), writer)
     }
     /// Handles reusable or inline bits.
     fn bits<'a>(
         &mut self,
-        _value: &'a BitsDefinition,
+        _value: view::Bits<'a>,
         ctx: Self::Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
@@ -54,7 +53,7 @@ pub trait Backend: Sized {
     /// Handles an enumeration and its variants.
     fn enumeration(
         &mut self,
-        _value: EnumDefinition,
+        _value: view::Enumeration,
         ctx: Self::Context<'_>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
@@ -63,7 +62,7 @@ pub trait Backend: Sized {
     /// Handles one bit field.
     fn bit_field<'a>(
         &mut self,
-        _value: &'a BitsFieldSpec,
+        _value: view::BitField<'a>,
         ctx: Self::Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
@@ -78,23 +77,23 @@ pub trait Backend: Sized {
     ) -> Result<(), Self::Error> {
         Ok(())
     }
-    /// Handles a mathematical expression and recursively visits operands by default.
+    /// Handles a complete mathematical expression; defaults to no output.
     fn expression<'a>(
         &mut self,
-        _value: &'a LayoutExpr,
-        ctx: Self::Context<'a>,
-        writer: &mut dyn std::io::Write,
+        _value: view::Expression<'a>,
+        _: Self::Context<'a>,
+        _: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        self.emit_all(ctx.children(), writer)
+        Ok(())
     }
     /// Handles an opaque byte envelope shared by both source domains.
     fn opaque(
         &mut self,
-        _: &RecordSpec,
-        _: Self::Context<'_>,
-        _: &mut dyn std::io::Write,
+        _: view::Storage,
+        ctx: Self::Context<'_>,
+        writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        Ok(())
+        self.emit_all(ctx.children(), writer)
     }
     /// Handles a complete short description before its semantic owner callback.
     fn short_description(
@@ -117,12 +116,40 @@ pub trait Backend: Sized {
         Ok(())
     }
 }
+/// Shared dispatch cannot be replaced by a target implementation.
+pub trait Emit: Backend {
+    /// Dispatches one framework-bound visit.
+    fn emit(
+        &mut self,
+        visit: Visit<Self::Context<'_>>,
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), Self::Error> {
+        <Self::Domain as super::Domain<Self>>::emit(visit, self, writer)
+    }
+    /// Dispatches bound visits in target-selected order, stopping at the first error.
+    fn emit_all<'a, I>(
+        &mut self,
+        visits: I,
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = Visit<Self::Context<'a>>>,
+    {
+        for visit in visits {
+            self.emit(visit, writer)?;
+        }
+        Ok(())
+    }
+}
+impl<B: Backend> Emit for B {}
+
 /// Dispatches a shared semantic value node.
 ///
 /// # Errors
 /// Propagates the target error.
 pub(super) fn emit<'a, B: Backend>(
     node: Node<'a>,
+    endian: crate::Endian,
     ctx: B::Context<'a>,
     backend: &mut B,
     writer: &mut dyn std::io::Write,
@@ -131,7 +158,9 @@ pub(super) fn emit<'a, B: Backend>(
         Node::Opaque(v) => Some((v.documentation(), v.name(), DocumentationKind::Opaque)),
         Node::BitField(v) => Some((v.documentation(), v.name(), DocumentationKind::BitField)),
         Node::Variant(v) => Some((v.documentation(), v.name(), DocumentationKind::Variant)),
-        Node::Bits(_) | Node::Enum(_) | Node::Expression(_) => None,
+        Node::StorageMember(v) => Some((v.documentation(), v.path(), DocumentationKind::Field)),
+        Node::StorageField(v) => Some((v.documentation(), v.name(), DocumentationKind::Field)),
+        Node::Scalar(_) | Node::Bits(_) | Node::Enum(_) | Node::Expression(_) => None,
     };
     if let Some((text, name, kind)) = documentation {
         emit_documentation(
@@ -143,11 +172,16 @@ pub(super) fn emit<'a, B: Backend>(
         )?;
     }
     match node {
-        Node::Opaque(value) => backend.opaque(value, ctx, writer),
-        Node::Bits(value) => backend.bits(value, ctx, writer),
-        Node::Enum(value) => backend.enumeration(value, ctx, writer),
-        Node::BitField(value) => backend.bit_field(value, ctx, writer),
+        Node::Scalar(value) => backend.scalar(view::Scalar(value), ctx, writer),
+        Node::StorageField(value) => backend.storage_field(view::StorageField(value), ctx, writer),
+        Node::StorageMember(value) => {
+            backend.storage_member(view::StorageMember(value), ctx, writer)
+        }
+        Node::Opaque(value) => backend.opaque(view::Storage(*value), ctx, writer),
+        Node::Bits(value) => backend.bits(view::Bits(value, endian), ctx, writer),
+        Node::Enum(value) => backend.enumeration(view::Enumeration(value), ctx, writer),
+        Node::BitField(value) => backend.bit_field(view::BitField(value), ctx, writer),
         Node::Variant(value) => backend.variant(value, ctx, writer),
-        Node::Expression(value) => backend.expression(value, ctx, writer),
+        Node::Expression(value) => backend.expression(view::Expression(value), ctx, writer),
     }
 }

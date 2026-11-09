@@ -186,17 +186,20 @@ fn transformed_source_must_revalidate_before_generation() {
     impl value::Backend for Backend {
         type Domain = record::Domain;
         type Error = Infallible;
-        type Context<'a> = hw_model_schema::traversal::record::Context<'a>;
+        type Context<'a> = hw_model_schema::export::record::Context<'a>;
+    }
+    impl hw_model_schema::export::OutputBackend for Backend {
         fn metadata(
             &mut self,
             ctx: &Self::Context<'_>,
         ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
             Ok(hw_model_schema::export::OutputMetadata {
-                logical_name: ctx.unit().name.clone(),
+                logical_name: ctx.root_name().to_owned(),
                 media_type: "text/plain".into(),
             })
         }
     }
+
     let bindings = Bindings::new();
     let original = Resolve.run(source(4)).unwrap();
     let graph = InvalidSource

@@ -2,10 +2,10 @@
 /// Caller-owned capture for generation tests.
 pub mod output_support;
 use hw_model_schema::analysis::{AnalyzedSchema, Bindings};
-use hw_model_schema::export::value::Backend as _;
-use hw_model_schema::traversal::record::Context;
+use hw_model_schema::export::record::Context;
+use hw_model_schema::export::value::Emit as _;
 use hw_model_schema::{
-    ast::{self, Field, LayoutExpr, RecordDefinition, RegisterInfo, SchemaSet, record::Node},
+    ast::{self, LayoutExpr, SchemaSet, record::Node},
     export::{
         expression::{ExpressionSyntax, format_expression},
         record::Backend,
@@ -36,27 +36,27 @@ impl Recording {
 impl Backend for Recording {
     fn record<'a>(
         &mut self,
-        _: &'a RecordDefinition,
+        _: hw_model_schema::export::view::Record<'a>,
         ctx: Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
         self.push("record:start");
         let mut children: Vec<_> = ctx.children().collect();
-        children.sort_by_key(|visit| match visit.node() {
-            Node::Field(field) => field.name(),
-            _ => "",
-        });
+        children.sort_by(|a, b| a.name().cmp(&b.name()));
         self.emit_all(children, writer)?;
         self.push("record:end");
         Ok(())
     }
     fn field<'a>(
         &mut self,
-        field: &'a Field,
+        field: hw_model_schema::export::view::Field<'a>,
         ctx: Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        assert_eq!(ctx.field().map(Field::name), Some(field.name()));
+        assert_eq!(
+            ctx.field().map(hw_model_schema::export::view::Field::name),
+            Some(field.name())
+        );
         assert!(ctx.bit().is_none());
         self.push(format!("field:{}:start", field.name()));
         if self.fail == Some(field.name()) {
@@ -77,17 +77,22 @@ impl value::Backend for Recording {
         ctx: Context<'_>,
         _writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        assert_eq!(ctx.field().map(Field::name), Some("alpha"));
+        assert_eq!(
+            ctx.field().map(hw_model_schema::export::view::Field::name),
+            Some("alpha")
+        );
         assert_eq!(ctx.bit(), Some("mode"));
         self.push(format!("variant:{}", variant.name()));
         Ok(())
     }
+}
+impl hw_model_schema::export::OutputBackend for Recording {
     fn metadata(
         &mut self,
         ctx: &Self::Context<'_>,
     ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
         Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.unit().name.clone(),
+            logical_name: ctx.root_name().to_owned(),
             media_type: "text/plain".into(),
         })
     }
@@ -198,22 +203,23 @@ impl register::Backend for PlacementScopes {
 
     fn register_placement<'a>(
         &mut self,
-        view: &'a hw_model_schema::analysis::RegisterView,
-        ctx: hw_model_schema::traversal::register::Context<'a>,
+        view: hw_model_schema::export::view::RegisterPlacement<'a>,
+        ctx: hw_model_schema::export::register::Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
         assert!(ctx.register().is_none());
-        self.0.push(view.offset);
+        self.0.push(view.offset());
         self.emit_all(ctx.children(), writer)
     }
     fn register<'a>(
         &mut self,
-        register: &'a RegisterInfo,
-        ctx: hw_model_schema::traversal::register::Context<'a>,
+        register: hw_model_schema::export::view::Register<'a>,
+        ctx: hw_model_schema::export::register::Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
         assert_eq!(
-            ctx.register().map(RegisterInfo::name),
+            ctx.register()
+                .map(hw_model_schema::export::view::Register::name),
             Some(register.name())
         );
         assert!(ctx.bit().is_none());
@@ -223,17 +229,20 @@ impl register::Backend for PlacementScopes {
 impl value::Backend for PlacementScopes {
     type Domain = register::Domain;
     type Error = &'static str;
-    type Context<'a> = hw_model_schema::traversal::register::Context<'a>;
+    type Context<'a> = hw_model_schema::export::register::Context<'a>;
+}
+impl hw_model_schema::export::OutputBackend for PlacementScopes {
     fn metadata(
         &mut self,
         ctx: &Self::Context<'_>,
     ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
         Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.unit().name.clone(),
+            logical_name: ctx.root_name().to_owned(),
             media_type: "text/plain".into(),
         })
     }
 }
+
 #[test]
 fn sibling_placements_keep_independent_register_and_bit_scopes() -> TestResult {
     // Given a checked map with two adjacent register placements.

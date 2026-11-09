@@ -1,20 +1,27 @@
 use super::*;
 use crate::output_support::MemoryOutput;
-use hw_model_schema::export::value::Backend as _;
+use hw_model_schema::export::value::Emit as _;
+struct SemanticSyntax;
+impl hw_model_schema::export::expression::ExpressionSyntax for SemanticSyntax {}
 #[derive(Default)]
 struct Documentation(Vec<String>);
 impl hw_model_schema::export::value::Backend for Documentation {
     type Error = std::io::Error;
-    type Context<'a> = hw_model_schema::traversal::register::Context<'a>;
+    type Context<'a> = hw_model_schema::export::register::Context<'a>;
     type Domain = hw_model_schema::export::register::Domain;
     fn expression<'a>(
         &mut self,
-        value: &'a LayoutExpr,
+        value: hw_model_schema::export::view::Expression<'a>,
         ctx: Self::Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
         {
-            let event: String = format!("expression:{value:?}");
+            let event: String = format!(
+                "expression:{}",
+                value
+                    .format(&mut SemanticSyntax)
+                    .map_err(std::io::Error::other)?
+            );
             if !self.0.is_empty() {
                 writer.write_all(b"\n")?;
             }
@@ -23,21 +30,24 @@ impl hw_model_schema::export::value::Backend for Documentation {
         }
         self.emit_all(ctx.children(), writer)
     }
+}
+impl hw_model_schema::export::OutputBackend for Documentation {
     fn metadata(
         &mut self,
         ctx: &Self::Context<'_>,
     ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
         Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.unit().name.clone(),
+            logical_name: ctx.root_name().to_owned(),
             media_type: "text/plain".into(),
         })
     }
 }
+
 impl hw_model_schema::export::register::Backend for Documentation {
     fn parameter(
         &mut self,
         value: ast::register::Parameter,
-        _: hw_model_schema::traversal::register::Context<'_>,
+        _: hw_model_schema::export::register::Context<'_>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
         {
@@ -52,12 +62,12 @@ impl hw_model_schema::export::register::Backend for Documentation {
     }
     fn argument<'a>(
         &mut self,
-        value: ast::register::Argument<'a>,
-        ctx: hw_model_schema::traversal::register::Context<'a>,
+        value: hw_model_schema::export::view::Argument<'a>,
+        ctx: hw_model_schema::export::register::Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
         {
-            let event: String = format!("binding:{:?}", value.parameter);
+            let event: String = format!("binding:{:?}", value.parameter());
             if !self.0.is_empty() {
                 writer.write_all(b"\n")?;
             }
@@ -66,79 +76,38 @@ impl hw_model_schema::export::register::Backend for Documentation {
         }
         self.emit_all(ctx.children(), writer)
     }
-    fn register_width(
+    fn register<'a>(
         &mut self,
-        value: usize,
-        _: Self::Context<'_>,
+        value: hw_model_schema::export::view::Register<'a>,
+        ctx: Self::Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        {
-            let event: String = format!("attribute:Width({value})");
+        for event in [
+            format!("attribute:Width({})", value.width()),
+            format!("attribute:Access({:?})", value.access()),
+            format!(
+                "attribute:Reset({:?}, {})",
+                value.reset_kind(),
+                value.reset_value()
+            ),
+            format!("attribute:WritableMask({})", value.writable_mask()),
+        ] {
             if !self.0.is_empty() {
                 writer.write_all(b"\n")?;
             }
             writer.write_all(event.as_bytes())?;
             self.0.push(event);
         }
-        Ok(())
+        self.emit_all(ctx.children(), writer)
     }
-    fn register_access(
+    fn layout_property<'a>(
         &mut self,
-        value: hw_model_schema::Access,
-        _: Self::Context<'_>,
+        property: hw_model_schema::export::register::LayoutProperty<'a>,
+        ctx: Self::Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        {
-            let event: String = format!("attribute:Access({value:?})");
-            if !self.0.is_empty() {
-                writer.write_all(b"\n")?;
-            }
-            writer.write_all(event.as_bytes())?;
-            self.0.push(event);
-        }
-        Ok(())
-    }
-    fn register_reset(
-        &mut self,
-        kind: hw_model_schema::ResetKind,
-        value: u64,
-        _: Self::Context<'_>,
-        writer: &mut dyn std::io::Write,
-    ) -> Result<(), Self::Error> {
-        {
-            let event: String = format!("attribute:Reset({kind:?}, {value})");
-            if !self.0.is_empty() {
-                writer.write_all(b"\n")?;
-            }
-            writer.write_all(event.as_bytes())?;
-            self.0.push(event);
-        }
-        Ok(())
-    }
-    fn register_writable_mask(
-        &mut self,
-        value: u64,
-        _: Self::Context<'_>,
-        writer: &mut dyn std::io::Write,
-    ) -> Result<(), Self::Error> {
-        {
-            let event: String = format!("attribute:WritableMask({value})");
-            if !self.0.is_empty() {
-                writer.write_all(b"\n")?;
-            }
-            writer.write_all(event.as_bytes())?;
-            self.0.push(event);
-        }
-        Ok(())
-    }
-    fn layout_stride<'a>(
-        &mut self,
-        _value: &'a LayoutExpr,
-        ctx: hw_model_schema::traversal::register::Context<'a>,
-        writer: &mut dyn std::io::Write,
-    ) -> Result<(), Self::Error> {
-        {
-            let event: String = "layout:stride".into();
+        if property.kind() == ast::register::LayoutPropertyKind::Stride {
+            let event = "layout:stride".to_owned();
             if !self.0.is_empty() {
                 writer.write_all(b"\n")?;
             }
@@ -165,7 +134,7 @@ fn documentation_backend_sees_semantics_without_target_code_types()
     for required in [
         "parameter:count",
         "binding:Some(\"words\")",
-        "expression:Parameter(\"count\")",
+        "expression:count",
         "layout:stride",
         "attribute:Width(4)",
         "attribute:Access(ReadWrite)",

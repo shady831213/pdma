@@ -21,6 +21,8 @@ pub enum SourceRole {
     Parameter,
     /// Source placement.
     Placement,
+    /// Reusable definition reference.
+    Reference,
     /// Constructor argument.
     Argument,
     /// Register field.
@@ -71,6 +73,17 @@ impl NodeId {
         let mut id = self.clone();
         id.path.push(edge);
         id
+    }
+    pub(crate) fn within_referent(&self, root: DefinitionId) -> Self {
+        let start = self
+            .path
+            .iter()
+            .rposition(|edge| *edge == Edge::Referent)
+            .map_or(0, |index| index + 1);
+        Self {
+            root: Root::Definition(root),
+            path: self.path.iter().skip(start).copied().collect(),
+        }
     }
     /// Imported root's Rust diagnostic path, absent for explicitly named views.
     pub const fn source_path(&self) -> Option<&'static str> {

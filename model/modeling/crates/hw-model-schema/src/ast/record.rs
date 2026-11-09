@@ -28,6 +28,10 @@ pub enum FieldType {
     Enum(FieldDefinition),
     /// Inline bit fields with scalar encoding attributes.
     Bits(super::BitsDefinition),
+    /// Owned record containment.
+    Record(Box<RecordDefinition>),
+    /// Owned opaque storage containment.
+    Opaque(RecordSpec),
     /// Reusable record, union or bits definition.
     Reference(Reference),
     /// Inline union retaining its original selector and cases.
@@ -87,6 +91,9 @@ impl Field {
     /// Byte order at this embedding.
     pub const fn endian(&self) -> Endian {
         self.endian
+    }
+    pub(crate) fn with_type(&self, ty: FieldType) -> Self {
+        Self { ty, ..self.clone() }
     }
     /// Source field type without storage flattening.
     pub const fn ty(&self) -> &FieldType {
@@ -161,7 +168,7 @@ impl UnionDefinition {
     pub const fn storage(&self) -> RecordSpec {
         self.storage
     }
-    /// Original selector path, absent for an untagged union.
+    /// Selector supplied here; an external selection can instead be bound on its reference.
     pub const fn selector(&self) -> Option<&'static str> {
         self.selector
     }
@@ -176,6 +183,12 @@ impl UnionDefinition {
 pub enum CaseBody {
     /// Fields declared directly inside this alternative.
     Inline(RecordDefinition),
+    /// Owned bits alternative.
+    Bits(super::BitsDefinition),
+    /// Owned nested union.
+    Union(Box<UnionDefinition>),
+    /// Owned opaque payload.
+    Opaque(RecordSpec),
     /// An external codec type named by the alternative.
     Reference(Reference),
 }
@@ -215,6 +228,12 @@ impl Case {
     /// Declared wire selector value, absent in an untagged union.
     pub const fn discriminant(&self) -> Option<u64> {
         self.discriminant
+    }
+    pub(crate) fn with_body(&self, body: CaseBody) -> Self {
+        Self {
+            body,
+            ..self.clone()
+        }
     }
     /// Original inline fields or external codec reference.
     pub const fn body(&self) -> &CaseBody {

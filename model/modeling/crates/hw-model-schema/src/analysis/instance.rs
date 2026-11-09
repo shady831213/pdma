@@ -57,7 +57,7 @@ impl InstanceWalk {
     ) -> Result<usize, LayoutError> {
         let geometry = map.resolve(args)?;
         for (placement, shape) in map.placements().iter().zip(geometry.placements) {
-            let path = format!("{}.{}", scope.path, placement.reference().name());
+            let path = format!("{}.{}", scope.path, placement.name());
             let base = scope
                 .base
                 .checked_add(shape.offset)
@@ -109,7 +109,7 @@ impl InstanceWalk {
                     parent: bank_index.map(|bank| (bank, i)).or(scope.parent),
                 };
                 let first_register = self.registers.len();
-                match placement.reference().target().body() {
+                match placement.target().body() {
                     DefinitionBody::Register(register) => self.registers.push(RegisterView {
                         path: child_scope.path,
                         segments: child_scope.segments,

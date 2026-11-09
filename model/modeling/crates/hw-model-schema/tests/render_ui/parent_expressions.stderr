@@ -1,0 +1,50 @@
+error[E0599]: no method named `offset` found for struct `hw_model_schema::export::view::Placement<'a>` in the current scope
+ --> tests/render_ui/parent_expressions.rs:8:23
+  |
+8 |     let _ = placement.offset();
+  |                       ^^^^^^ method not found in `hw_model_schema::export::view::Placement<'_>`
+
+error[E0599]: `hw_model_schema::export::view::Placement<'_>` is not an iterator
+ --> tests/render_ui/parent_expressions.rs:9:23
+  |
+9 |     let _ = placement.count();
+  |                       ^^^^^ `hw_model_schema::export::view::Placement<'_>` is not an iterator
+  |
+ ::: src/export/view/register.rs
+  |
+  | pub struct Placement<'a>(pub(crate) &'a analysis::CompletePlacementLayout);
+  | ------------------------ doesn't satisfy `_: Iterator`
+  |
+  = note: the following trait bounds were not satisfied:
+          `hw_model_schema::export::view::Placement<'_>: Iterator`
+          which is required by `&mut hw_model_schema::export::view::Placement<'_>: Iterator`
+
+error[E0599]: no method named `stride` found for struct `hw_model_schema::export::view::Placement<'a>` in the current scope
+  --> tests/render_ui/parent_expressions.rs:10:23
+   |
+10 |     let _ = placement.stride();
+   |                       ^^^^^^ method not found in `hw_model_schema::export::view::Placement<'_>`
+
+error[E0599]: no method named `child_extent` found for struct `hw_model_schema::export::view::Placement<'a>` in the current scope
+  --> tests/render_ui/parent_expressions.rs:11:23
+   |
+11 |     let _ = placement.child_extent();
+   |                       ^^^^^^^^^^^^ method not found in `hw_model_schema::export::view::Placement<'_>`
+
+error[E0599]: no method named `expression` found for struct `hw_model_schema::export::view::Argument<'a>` in the current scope
+  --> tests/render_ui/parent_expressions.rs:12:22
+   |
+12 |     let _ = argument.expression();
+   |                      ^^^^^^^^^^ method not found in `hw_model_schema::export::view::Argument<'_>`
+
+error[E0599]: no method named `expression` found for struct `hw_model_schema::export::view::LayoutProperty<'a>` in the current scope
+  --> tests/render_ui/parent_expressions.rs:13:22
+   |
+13 |     let _ = property.expression();
+   |                      ^^^^^^^^^^ method not found in `hw_model_schema::export::view::LayoutProperty<'_>`
+
+error[E0599]: no method named `extent` found for struct `hw_model_schema::export::view::MapLayout<'a>` in the current scope
+  --> tests/render_ui/parent_expressions.rs:14:17
+   |
+14 |     let _ = map.extent();
+   |                 ^^^^^^ method not found in `hw_model_schema::export::view::MapLayout<'_>`

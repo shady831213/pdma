@@ -77,6 +77,10 @@ tested host configuration, not a qualification of every inventory target.
 
 ## AST, analysis and emit
 
+The render capability API in this checkout is an unpublished candidate. The
+workspace temporarily uses its local schema member for generator review; the
+published 0.2.0 export API does not yet include these restricted views.
+
 The existing DSL parser feeds two macro expansion branches: ordinary Rust types,
 accessors and codecs, and canonical schema AST construction. No generated Rust
 source is parsed. The Rust behavior and wire layouts remain independent of emit.
@@ -176,9 +180,10 @@ and generation. IDs are structural within an immutable schema, not persistent
 handles across arbitrary source edits.
 
 Shared bits/enums use `export::value::Backend`, implemented independently by each
-domain renderer. A handler formats one complete original node. It chooses where to
-recurse through `self.emit(ctx.current())` and `self.emit_all(ctx.children())`.
-Shared traversal supplies a read-only `Context` bound to the current node. Its
+domain renderer. A handler receives a shallow borrowed `export::view` of its node.
+Import `export::value::Emit` to recurse through `self.emit(ctx.current(), writer)`
+and `self.emit_all(ctx.children(), writer)`. The blanket implementation owns dispatch;
+backends cannot replace it. The render-only `Context` is bound to the current node. Its
 `value::Backend::Domain` selects the record or register dispatcher
 for the unified generation entry. Recursion supplies the call stack. No begin/end
 events, per-type Render forwarding traits or mutable render stack are involved.
@@ -189,32 +194,51 @@ the same visit type; `root(ctx)` is the entry callback for each selected unit, n
 a separate node-access protocol. An analyzed `Unit` can represent a source definition
 or a projected view; `AnalyzedSchema::units()` iterates both in dependency order.
 Filtering or sorting visits preserves their lexical context; backends cannot rebind
-a raw node to another context. Read-only `node()`, `unit()`, `analysis()`, `ancestors()`
-and `resolve()` queries retain structural and dependency information. Register contexts also expose
-normalized register paths and locations. Target-specific naming and selection of
+a raw node to another context. Render contexts expose root identity, names,
+documentation, parent identity and scalar layout facts. They do not expose the
+AST, analyzed schema, raw ancestors or child collections. `Visit` exposes only
+shallow metadata for filtering and sorting; dispatch retains its lexical binding.
+Analysis passes continue to use the complete `traversal` API. Register contexts also
+expose normalized register paths and locations. Target-specific naming and selection of
 template or concrete output remain backend choices.
 
+Field views describe placement only: they expose no value type. Scalar, enum and
+bits occurrences dispatch to their own value callbacks with complete encoding
+facts. Packed enums carry bit width; byte enums carry scalar width and byte order.
+References are explicit occurrences with a single dependency edge. Only the
+`reference` callback receives the bound target visit; it may emit a target symbol
+or invoke shared dispatch to expand it. Ordinary render contexts cannot resolve
+or follow references. Analysis traversal still exposes the complete source graph.
+Register reference callbacks also receive target access and identity metadata.
+Their target visit is definition-scoped: its formal parameters belong to the
+target, while the callback's use-site context provides constructor argument visits.
+This keeps child and parent parameter scopes distinct when names differ.
+
 Register-context `parameters()` returns the active unbound parameters, independently of
-which children have been visited. `declared_parameters()` and `bindings()` retain
+which children have been visited. `lexical_parameters()` supplies bound parameter
+visits for rendering function signatures through the same callbacks.
+`declared_parameters()` and `bindings()` retain
 the original declaration and concrete arguments. Backends need no parameter cache
 or mutable semantic scope stack.
 
-Common dispatch expands attribute and layout-property variants into typed leaf
-callbacks such as `register_width`, `register_reset`, `map_alignment`,
-`field_size`, `layout_offset` and `layout_stride`. Backends do not reconstruct
-attribute lists or match those semantic enums. Default register traversal exposes
-effective fields for both inline and referenced field definitions.
-The default `layout_offset/count/stride/extent` callbacks delegate to one
-`layout_property` method, with a completed expression, property kind/name and optional
-relative placement owner. Backends can format layout members uniformly without
-recovering their ownership from raw placement nodes.
+Record, register and field callbacks receive their complete shallow metadata;
+individual size, access and reset attributes do not require separate callbacks.
+Completed layout properties use one `layout_property` callback with a kind, name
+and optional relative placement owner. The formula is a bound child visit; only
+the `expression` callback receives format/evaluate access. `ctx.layout(kind)`
+selects a bound property when target syntax needs it elsewhere. Backends do not
+recover ownership from raw nodes. Structural callbacks traverse children by default;
+references and optional layout properties emit nothing unless explicitly handled.
 
 Documentation participates in the same dispatch: `short_description` and
 `description` receive present source text with a `DocumentationOwner` and the
 current domain scope. Summary precedes detail, explicit empty text is retained,
 and placement fallback is preserved. Targets own comment syntax, line splitting
 and escaping. `value::emit_documentation` and `documentation_fragments` also serve
-physical-storage renderers that consume resolved members instead of source nodes.
+physical-storage renderers. Opaque record members use shared `storage_member`
+callbacks; their bit fields and enum values use the same bound child dispatch.
+Tagged union wire fields are available as bound `union_storage()` visits when a
+target chooses physical storage accessors instead of semantic case expansion.
 Documentation lines are not separate IR nodes.
 
 - `export-c-header` enables `CRecordBackend` and `CRegisterBackend`. Byte accessors use checked
@@ -580,6 +604,61 @@ interior byte or an unmapped offset. It does not validate transaction width, ali
 access permission, or reserved ranges, and it has no bus transaction or storage effect.
 Those checks belong to the application runtime.
 
+## Optional source normalization
+
+Source declarations distinguish inline containment from references. Applications
+may select `transform::Outline` to lift inline composite definitions, or
+`transform::Inline` to expand references. Neither runs implicitly during analysis
+or generation. Both implement the ordinary `analysis::Pass` interface and return
+a `SchemaSet`, which must be resolved and analyzed again before rendering.
+
+```rust
+use hw_model_schema::{
+    analysis::{AnalyzedSchema, Bindings, Pass, Pipeline, Resolve},
+    ast::SchemaSet,
+    record_schema,
+    transform::{Inline, Outline},
+};
+record_schema! { pub record Payload { endian: Little, fields: { value: u32 } } }
+record_schema! { pub record Packet { endian: Little, fields: { payload: Payload } } }
+let mut source = SchemaSet::new();
+source.add::<Packet>();
+let graph = source.resolve()?;
+let expanded = Inline::new()
+    .select(|site| site.path() == ["payload"])
+    .run(&graph)?;
+let outlined = Pipeline::new(expanded)
+    .run(Outline::new().name_with(|site| format!("Packet_{}", site.path().join("_"))))?
+    .run(Resolve)?
+    .into_inner();
+let prepared = AnalyzedSchema::from_graph(&outlined, &Bindings::new())?;
+assert!(prepared.units().any(|unit| unit.name == "Packet_payload"));
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Selection identifies an occurrence in its declaring definition, not one expanded
+use of that definition. Rewriting a shared definition affects all its users. The
+passes support the existing reusable composite kinds: bits, records, unions,
+opaque layouts and register/map children. Scalar and enum value metadata remain
+leaves. Map child parameters, arguments, bank identity and alignment boundaries
+remain intact; expansion does not splice child placements into the parent map.
+Permission-only projections have no source declaration and are not transform inputs.
+
+Generated names are separate from identities derived from source owner and
+containment path. Empty or conflicting generated names fail explicitly. Source
+Rust identity still identifies root bindings. These transformations do not change
+Rust codecs or the wire layout.
+
+When an outlined tagged union selects a field in its containing record, that
+selector remains a binding on the reference occurrence. The standalone payload
+definition does not claim that the containing field exists in its own scope.
+Inlining restores the selector to the contained union.
+
+The C record exporter preserves references by default. To obtain flattened
+occurrence-specific accessors, select `Inline` before C occurrence analysis. UVM
+and Veryl may retain references to independently generated definitions. Separating
+these choices avoids hiding structural normalization inside rendering callbacks.
+
 ## Export without a storage policy
 
 `generate` takes a caller-owned `std::io::Write`. It preflights the dependency
@@ -593,25 +672,34 @@ For separate destinations, `prepare` returns bound generation units with
 Inspect the metadata, choose a writer and call `unit.emit(&mut backend, &mut writer)`.
 No storage trait or callback implementation is required.
 
+Exporters implement `OutputBackend` to supply output identity independently of
+their value and source-domain rendering callbacks. Generation runs once over the
+prepared roots. A renderer may buffer local syntax sections, such as UVM member
+initializers, while visiting a declaration; this does not require separate
+generation passes or a backend for each output section. Expressions are render
+leaves evaluated or formatted by the shared semantic fold.
+
 ```rust
 use std::io::{self, Write};
 use hw_model_schema::{
     RecordSpec,
     analysis::AnalyzedSchema,
-    export::{OutputMetadata, generate, record, value},
-    traversal::record::Context,
+    export::{OutputBackend, OutputMetadata, generate, record, value},
+    export::record::Context,
 };
 #[derive(Default)]
 struct NameListing;
 impl record::Backend for NameListing {
     fn root(&mut self, ctx: Context<'_>, writer: &mut dyn Write) -> Result<(), Self::Error> {
-        writeln!(writer, "{}", ctx.unit().name)
+        writeln!(writer, "{}", ctx.root_name())
     }
 }
 impl value::Backend for NameListing {
     type Error = io::Error;
     type Context<'a> = Context<'a>;
     type Domain = record::Domain;
+}
+impl OutputBackend for NameListing {
     fn metadata(&mut self, _: &Context<'_>) -> Result<OutputMetadata, Self::Error> {
         Ok(OutputMetadata {
             logical_name: "names.txt".into(),

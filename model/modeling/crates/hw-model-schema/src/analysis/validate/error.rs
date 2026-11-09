@@ -12,6 +12,8 @@ pub enum ShapeError {
     Endian,
     /// A record member refers to a non-value definition.
     NonValueReference,
+    /// A selector binding must target a union payload.
+    SelectorBinding,
     /// Invalid bit members, using the shared runtime validation contract.
     Bits(crate::RegisterDefinitionError<u16>),
     /// Cached bit extent or mask disagrees with the declared members.
@@ -34,6 +36,7 @@ impl std::fmt::Display for ShapeError {
             Self::Bits(source) => source.fmt(f),
             Self::Endian => f.write_str("scalar and embedding byte orders differ"),
             Self::NonValueReference => f.write_str("record value refers to a non-value definition"),
+            Self::SelectorBinding => f.write_str("selector binding targets a non-union definition"),
             Self::BitsMetadata => f.write_str("bit extent or mask disagrees with members"),
             Self::MissingEnumeration => f.write_str("enum field lacks enumeration metadata"),
             Self::EmptyEnumeration => f.write_str("enumeration has no alternatives"),
@@ -49,6 +52,7 @@ impl std::error::Error for ShapeError {
             Self::Width { .. }
             | Self::Endian
             | Self::NonValueReference
+            | Self::SelectorBinding
             | Self::BitsMetadata
             | Self::MissingEnumeration
             | Self::EmptyEnumeration

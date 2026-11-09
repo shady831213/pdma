@@ -9,16 +9,16 @@ pub(super) fn bindings(graph: &SchemaGraph, bindings: &Bindings) -> Result<(), A
     for id in bindings.values.keys() {
         if !graph.roots().contains(id)
             || !graph
-                .get(*id)
+                .get(id.clone())
                 .is_some_and(|d| matches!(d.body(), DefinitionBody::RegisterMap(_)))
         {
-            return Err(AnalysisError::Binding(*id));
+            return Err(AnalysisError::Binding(id.clone()));
         }
         if graph
             .definitions()
             .any(|d| d.references().iter().any(|r| r.target().id() == *id))
         {
-            return Err(AnalysisError::ReferencedBinding(*id));
+            return Err(AnalysisError::ReferencedBinding(id.clone()));
         }
     }
     Ok(())

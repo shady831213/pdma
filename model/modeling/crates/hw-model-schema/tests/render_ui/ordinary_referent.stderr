@@ -1,0 +1,5 @@
+error[E0599]: no method named `referent` found for struct `hw_model_schema::export::record::Context<'a>` in the current scope
+ --> tests/render_ui/ordinary_referent.rs:3:17
+  |
+3 |     let _ = ctx.referent();
+  |                 ^^^^^^^^ method not found in `hw_model_schema::export::record::Context<'_>`

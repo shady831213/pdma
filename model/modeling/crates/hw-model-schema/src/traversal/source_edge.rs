@@ -19,6 +19,7 @@ pub(super) const fn register(node: Node<'_>, index: usize) -> Edge {
         Node::Register(_) | Node::RegisterMap(_) => SourceRole::Declaration,
         Node::RegisterField(_) => SourceRole::Field,
         Node::Placement(_) => SourceRole::Placement,
+        Node::Reference(_) => SourceRole::Reference,
         Node::Parameter(_) => SourceRole::Parameter,
         Node::Argument(_) => SourceRole::Argument,
         Node::Attribute(value) => attribute(value),

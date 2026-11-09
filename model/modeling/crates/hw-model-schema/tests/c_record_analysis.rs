@@ -2,7 +2,7 @@
 #![cfg(feature = "export-c-header")]
 pub mod output_support;
 use hw_model_schema::{
-    analysis::{AnalyzedSchema, Bindings, Pipeline},
+    analysis::{AnalyzedSchema, Bindings, Pass, Pipeline},
     ast::SchemaSet,
     export::backends::c_header::{CRecordAnalysisPass, CRecordBackend},
     record_schema,
@@ -11,10 +11,12 @@ use output_support::MemoryOutput;
 record_schema! { pub record Leaf { endian: Little, fields: { value: u16 } } }
 record_schema! { pub record Pair { endian: Little, fields: { first: Leaf, gap: u32, second: Leaf } } }
 #[test]
-fn prepared_occurrences_keep_reference_site_offsets() -> Result<(), Box<dyn std::error::Error>> {
+fn prepared_occurrences_keep_inlined_site_offsets() -> Result<(), Box<dyn std::error::Error>> {
     let mut set = SchemaSet::new();
     set.add_record::<Pair>();
-    let graph = set.resolve()?;
+    let graph = hw_model_schema::transform::Inline::new()
+        .run(set)?
+        .resolve()?;
     let schema = AnalyzedSchema::from_graph(&graph, &Bindings::new())?;
     let prepared = Pipeline::new((&schema, ())).run(CRecordAnalysisPass)?;
     let id = &schema
@@ -29,8 +31,12 @@ fn prepared_occurrences_keep_reference_site_offsets() -> Result<(), Box<dyn std:
         let hw_model_schema::ast::record::Node::Field(field) = child.node() else {
             continue;
         };
-        if let Some(referent) = child.context().referent() {
-            for leaf in referent.context().children() {
+        for record in child
+            .context()
+            .children()
+            .filter(|visit| matches!(visit.node(), hw_model_schema::ast::record::Node::Record(_)))
+        {
+            for leaf in record.context().children() {
                 if matches!(leaf.node(), hw_model_schema::ast::record::Node::Field(_)) {
                     offsets.push((field.name(), prepared.input().1.offset(leaf.context().id())));
                 }

@@ -1,0 +1,58 @@
+error[E0407]: method `emit` is not a member of trait `value::Backend`
+  --> tests/render_ui/dispatch.rs:9:5
+   |
+ 9 | /     fn emit(&mut self, _: Visit<Self::Context<'_>>, _: &mut dyn std::io::Write) -> Result<(), Self::Error> {
+10 | |         Ok(())
+11 | |     }
+   | |_____^ not a member of trait `value::Backend`
+
+error[E0407]: method `emit_all` is not a member of trait `value::Backend`
+  --> tests/render_ui/dispatch.rs:12:5
+   |
+12 | /     fn emit_all<'a, I>(&mut self, _: I, _: &mut dyn std::io::Write) -> Result<(), Self::Error>
+13 | |     where I: IntoIterator<Item = Visit<Self::Context<'a>>> {
+14 | |         Ok(())
+15 | |     }
+   | |_____^ not a member of trait `value::Backend`
+
+error[E0119]: conflicting implementations of trait `Emit` for type `Target`
+  --> tests/render_ui/dispatch.rs:23:1
+   |
+23 | impl value::Emit for Target {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: conflicting implementation in crate `hw_model_schema`:
+           - impl<B> Emit for B
+             where B: hw_model_schema::export::value::Backend;
+
+error[E0277]: the trait bound `CustomDomain: export::context::sealed::Domain<Target>` is not satisfied
+  --> tests/render_ui/dispatch.rs:25:33
+   |
+25 | impl export::Domain<Target> for CustomDomain {
+   |                                 ^^^^^^^^^^^^ unsatisfied trait bound
+   |
+help: the trait `export::context::sealed::Domain<Target>` is not implemented for `CustomDomain`
+  --> tests/render_ui/dispatch.rs:24:1
+   |
+24 | struct CustomDomain;
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: `CustomDomain` implements similarly named trait `hw_model_schema::export::Domain`, but not `export::context::sealed::Domain<Target>`
+help: the following other types implement trait `export::context::sealed::Domain<B>`
+  --> src/export/record.rs
+   |
+   | impl<B: Backend> super::context::sealed::Domain<B> for Domain {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `hw_model_schema::export::record::Domain`
+   |
+  ::: src/export/register.rs
+   |
+   | impl<B: Backend> super::context::sealed::Domain<B> for Domain {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `hw_model_schema::export::register::Domain`
+note: required by a bound in `hw_model_schema::export::Domain`
+  --> src/export/generate.rs
+   |
+   | pub trait Domain<B: value::Backend>: super::context::sealed::Domain<B> {
+   |                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Domain`
+   = note: `Domain` is a "sealed trait", because to implement it you also need to implement `hw_model_schema::export::context::sealed::Domain`, which is not accessible; this is usually done to force you to use one of the provided types that already implement it
+   = help: the following types implement the trait:
+             hw_model_schema::export::record::Domain
+             hw_model_schema::export::register::Domain

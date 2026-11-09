@@ -77,6 +77,8 @@ fn source_tree_retains_union_constant_order_and_repeated_references() -> TestRes
         .ok_or("missing Data case")?;
     let case_names: Vec<_> = case
         .children()
+        .inspect(|node| assert!(matches!(node, Node::Record(record::Node::Record(_)))))
+        .flat_map(Node::children)
         .filter_map(|node| match node {
             Node::Record(record::Node::Field(field)) => Some(field.name()),
             _ => None,
@@ -112,10 +114,6 @@ fn source_tree_retains_union_constant_order_and_repeated_references() -> TestRes
             .map(hw_model_schema::ast::Field::name)
             .collect::<Vec<_>>(),
         names
-    );
-    println!(
-        "source fields={names:?}; selector={:?}; cases=Empty:0,Data:3; references=3; inline Data fields=number,flags; unique Leaf=1",
-        union.selector()
     );
     Ok(())
 }
@@ -240,8 +238,22 @@ fn register_bits_reference_is_an_edge_not_duplicated_containment() -> TestResult
     // When examining its original source, the reference remains explicit.
     assert!(definition.node().children().all(|node| matches!(
         node,
-        Node::Register(hw_model_schema::ast::register::Node::Attribute(_))
+        Node::Register(
+            hw_model_schema::ast::register::Node::Attribute(_)
+                | hw_model_schema::ast::register::Node::Reference(_)
+        )
     )));
+    assert_eq!(
+        definition
+            .node()
+            .children()
+            .filter(|node| matches!(
+                node,
+                Node::Register(hw_model_schema::ast::register::Node::Reference(_))
+            ))
+            .count(),
+        1
+    );
     let references: Vec<_> = definition.node().references().collect();
     assert_eq!(references.len(), 1);
     assert_eq!(

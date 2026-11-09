@@ -1,12 +1,12 @@
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Bindings},
     ast::SchemaSet,
-    export::prepare_roots,
-    traversal::record,
+    export::{prepare_roots, record},
 };
 use pdma_model_contract::dma::{Command, Event};
 use std::{error::Error, io::Write};
 mod backend;
+mod codec;
 #[cfg(test)]
 mod tests;
 

@@ -97,6 +97,20 @@ This initial backend supports the DMA's little-endian register graph. Big-endian
 registers, partial writable masks within a field and permission-only projected
 views without a reusable layout plan fail explicitly rather than being guessed.
 Application build parameters must still satisfy the schema's layout constraints.
+Register descriptions and field enum constants now use shared value callbacks.
+Enums appear as field-qualified class constants; collisions after name formatting
+are rejected. Registers without declared fields use a whole-width RAL field as a
+target representation choice. SV record unions retain byte-image accessors while
+inline alternatives contribute case-qualified enum and bit metadata.
+
+`flow/schema.sh NEW_RUN TOP PASS_MARKER SOURCE...` compiles and runs a standalone
+generated-package oracle using the same deployment configuration. For the RAL
+oracle, select top `pdma_uvm_regs_metadata`, marker `RAL_METADATA_PASS`, and sources
+`tb/register_model.sv` and the contract's `tests/uvm_regs_metadata.sv`. It checks
+enum constants, relocated maps, 32/64-bit buses and parameterized banks. The SV
+generator's inline-union test can retain its standalone oracle with
+`PDMA_SV_INLINE_FIXTURE`; its top and marker are `inline_union_metadata` and
+`INLINE_UNION_PASS`. Keep run directories outside the repository.
 
 The configuration separates this DUT's fixed bus widths and AXI burst boundary
 from platform heap placement, ring capacities, optional explicit ring addresses

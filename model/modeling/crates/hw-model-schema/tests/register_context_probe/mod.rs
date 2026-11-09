@@ -19,9 +19,21 @@ impl Probe {
     }
 }
 impl register::Backend for Probe {
+    fn reference<'a>(
+        &mut self,
+        _: hw_model_schema::export::view::Reference<'a>,
+        target: hw_model_schema::export::view::Target<'a>,
+        _: hw_model_schema::export::Visit<RegisterContext<'a>>,
+        ctx: RegisterContext<'a>,
+        _: &mut dyn std::io::Write,
+    ) -> Result<(), Self::Error> {
+        assert_eq!(target.name, "Word");
+        assert!(ctx.placement().is_some());
+        Ok(())
+    }
     fn map_layout<'a>(
         &mut self,
-        _: &'a CompleteMapLayout,
+        _: hw_model_schema::export::view::MapLayout<'a>,
         ctx: RegisterContext<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
@@ -75,39 +87,34 @@ impl register::Backend for Probe {
             ctx.bindings().and_then(|b| b.first().copied()),
             self.binding
         );
-        match ctx.ancestors().last().ok_or("missing parent")? {
-            hw_model_schema::traversal::register::Node::MapLayout(_) => {
-                assert_eq!(property.owner, None);
+        match ctx.parent_kind().ok_or("missing parent")? {
+            hw_model_schema::export::Kind::MapLayout => {
+                assert_eq!(property.owner(), None);
             }
-            hw_model_schema::traversal::register::Node::Placement(p) => {
-                assert_eq!(property.owner, Some(p.reference.name()));
-                assert_eq!(
-                    ctx.resolve(&p.reference).ok_or("missing reference")?.name,
-                    "Word"
-                );
+            hw_model_schema::export::Kind::Placement => {
+                assert_eq!(property.owner(), ctx.parent_name().as_deref());
             }
-            hw_model_schema::traversal::register::Node::Bank(bank) => {
-                use hw_model_schema::ast::{LayoutExpr, register::LayoutPropertyKind as K};
+            hw_model_schema::export::Kind::Bank => {
+                use hw_model_schema::ast::register::LayoutPropertyKind as K;
+                let bank = ctx.bank().ok_or("missing bank")?;
                 assert_eq!(
                     (bank.index(), bank.name(), bank.path()),
                     (0, "zeta", "Pair.zeta")
                 );
-                assert_eq!(ctx.bank().ok_or("missing bank")?.index(), bank.index());
-                assert_eq!(property.owner, Some(bank.name()));
-                let (name, expected) = match property.kind {
+                assert_eq!(property.owner(), Some(bank.name()));
+                let (name, expected) = match property.kind() {
                     K::Offset => ("offset", 0),
                     K::Count => ("count", self.binding.ok_or("bound bank count")?),
                     K::Stride => ("stride", 4),
                     K::End | K::OccupiedEnd | K::Extent => return Err("unexpected bank property"),
                 };
-                assert_eq!(property.name, name);
-                assert_eq!(property.expression, &LayoutExpr::Constant(expected));
+                assert_eq!(property.name(), name);
                 self.push(format!("bank:{}:{name}={expected}", bank.name()), writer)?;
             }
             _ => return Err("wrong parent"),
         }
         self.push(
-            format!("{}:{}", property.owner.unwrap_or("root"), property.name),
+            format!("{}:{}", property.owner().unwrap_or("root"), property.name()),
             writer,
         )?;
         if self.fail {
@@ -120,12 +127,33 @@ impl value::Backend for Probe {
     type Domain = register::Domain;
     type Error = &'static str;
     type Context<'a> = RegisterContext<'a>;
+    fn expression<'a>(
+        &mut self,
+        expression: hw_model_schema::export::view::Expression<'a>,
+        ctx: Self::Context<'a>,
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), Self::Error> {
+        if ctx.bank().is_some() {
+            use hw_model_schema::ast::register::LayoutPropertyKind as K;
+            let property = ctx.layout_property().ok_or("bank expression property")?;
+            let expected = match property.kind() {
+                K::Offset => 0,
+                K::Count => self.binding.ok_or("bound bank count")?,
+                K::Stride => 4,
+                K::End | K::OccupiedEnd | K::Extent => return Err("unexpected bank property"),
+            };
+            assert_eq!(expression.evaluate(&[], &[]), Ok(expected));
+        }
+        self.emit_all(ctx.children(), writer)
+    }
+}
+impl hw_model_schema::export::OutputBackend for Probe {
     fn metadata(
         &mut self,
         ctx: &Self::Context<'_>,
     ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
         Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.unit().name.clone(),
+            logical_name: ctx.root_name().to_owned(),
             media_type: "text/plain".into(),
         })
     }

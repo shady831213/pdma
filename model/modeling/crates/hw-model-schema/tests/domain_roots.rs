@@ -48,7 +48,7 @@ struct Probe<'a>(&'a std::cell::Cell<usize>);
 impl register::Backend for Probe<'_> {
     fn root(
         &mut self,
-        _: hw_model_schema::traversal::register::Context<'_>,
+        _: hw_model_schema::export::register::Context<'_>,
         _writer: &mut dyn std::io::Write,
     ) -> Result<(), Infallible> {
         self.0.set(self.0.get() + 1);
@@ -58,17 +58,20 @@ impl register::Backend for Probe<'_> {
 impl value::Backend for Probe<'_> {
     type Domain = register::Domain;
     type Error = Infallible;
-    type Context<'a> = hw_model_schema::traversal::register::Context<'a>;
+    type Context<'a> = hw_model_schema::export::register::Context<'a>;
+}
+impl hw_model_schema::export::OutputBackend for Probe<'_> {
     fn metadata(
         &mut self,
         ctx: &Self::Context<'_>,
     ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
         Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.unit().name.clone(),
+            logical_name: ctx.root_name().to_owned(),
             media_type: "text/plain".into(),
         })
     }
 }
+
 #[test]
 fn generation_rejects_mixed_schema_before_filtered_root_callbacks() {
     let schema = mixed().unwrap();

@@ -1,11 +1,16 @@
 //! A custom register backend using no builtin backend feature.
-use hw_model_schema::analysis::{AnalyzedSchema, Bindings, RegisterMapView};
+use hw_model_schema::analysis::{AnalyzedSchema, Bindings};
 use hw_model_schema::export::generate;
-use hw_model_schema::export::value::Backend as _;
-use hw_model_schema::traversal::register::Context as RegisterContext;
+use hw_model_schema::export::register::Context as RegisterContext;
+use hw_model_schema::export::value::Emit as _;
 use hw_model_schema::{
-    ast::{DefinitionId, RegisterInfo, RegisterLocation, SchemaSet},
-    export::{OutputMetadata, register::Backend, value},
+    ast::{DefinitionId, RegisterLocation, SchemaSet},
+    export::{
+        OutputMetadata,
+        register::Backend,
+        value,
+        view::{Map, Register},
+    },
     register_map, register_schema,
 };
 use std::{
@@ -29,14 +34,14 @@ impl Backend for RegisterListing {
         ctx: RegisterContext<'_>,
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
-        if ctx.unit().id == self.selected {
+        if ctx.root_id() == &self.selected {
             self.emit(ctx.current(), writer)?;
         }
         Ok(())
     }
     fn register_map<'a>(
         &mut self,
-        _: &'a RegisterMapView,
+        _: Map<'a>,
         ctx: RegisterContext<'a>,
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
@@ -45,7 +50,7 @@ impl Backend for RegisterListing {
     }
     fn register(
         &mut self,
-        register: &RegisterInfo,
+        register: Register<'_>,
         ctx: RegisterContext<'_>,
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
@@ -75,6 +80,8 @@ impl value::Backend for RegisterListing {
     type Domain = hw_model_schema::export::register::Domain;
     type Error = io::Error;
     type Context<'a> = RegisterContext<'a>;
+}
+impl hw_model_schema::export::OutputBackend for RegisterListing {
     fn metadata(&mut self, _: &Self::Context<'_>) -> Result<OutputMetadata, Self::Error> {
         Ok(OutputMetadata {
             logical_name: "registers.tsv".into(),

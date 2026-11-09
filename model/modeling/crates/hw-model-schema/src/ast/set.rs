@@ -107,9 +107,28 @@ impl SchemaSet {
         }
         Ok(())
     }
+    /// Retains named instances when a source rewrite preserves root identities.
+    pub(crate) fn with_instances(mut self, instances: &[MapInstance]) -> Self {
+        self.instances = instances.to_vec();
+        self
+    }
     /// Collects dependencies and checks cycles and identity/path ambiguity.
     pub fn resolve(mut self) -> Result<SchemaGraph, GraphError> {
-        self.roots.sort_by_key(|node| node.id().path());
+        for instance in &mut self.instances {
+            let definition = self
+                .roots
+                .iter()
+                .find(|root| root.id() == instance.definition)
+                .ok_or_else(|| GraphError::NotMap(instance.definition.path()))?;
+            let DefinitionBody::RegisterMap(map) = definition.body() else {
+                return Err(GraphError::NotMap(instance.definition.path()));
+            };
+            instance.geometry = map
+                .resolve(&instance.arguments)
+                .map_err(GraphError::InstanceLayout)?;
+        }
+        self.roots
+            .sort_by_key(|node| (node.id().path(), node.id().structural_path().to_vec()));
         self.instances
             .sort_by(|left, right| left.name.cmp(&right.name));
         let roots = self.roots.iter().map(Definition::id).collect();
@@ -118,7 +137,7 @@ impl SchemaSet {
             collector.visit(root, &mut Vec::new())?;
         }
         let mut definitions: Vec<_> = collector.complete.into_values().collect();
-        definitions.sort_by_key(|node| node.id().path());
+        definitions.sort_by_key(|node| (node.id().path(), node.id().structural_path().to_vec()));
         Ok(SchemaGraph {
             definitions,
             roots,
@@ -143,7 +162,7 @@ impl SchemaGraph {
     }
     /// Iterates the validated graph with each dependency before its users.
     pub fn dependency_order(&self) -> impl Iterator<Item = &Definition> {
-        self.order.iter().filter_map(|id| self.get(*id))
+        self.order.iter().filter_map(|id| self.get(id.clone()))
     }
     /// Iterates unique definitions in canonical Rust-path order.
     pub fn definitions(&self) -> impl Iterator<Item = &Definition> {
@@ -154,8 +173,10 @@ impl SchemaGraph {
         &self.roots
     }
     /// Finds a definition using identity rather than its short name.
-    pub fn get(&self, id: DefinitionId) -> Option<&Definition> {
-        self.definitions.iter().find(|node| node.id() == id)
+    pub fn get(&self, id: impl std::borrow::Borrow<DefinitionId>) -> Option<&Definition> {
+        self.definitions
+            .iter()
+            .find(|node| &node.id() == id.borrow())
     }
 }
 
@@ -164,7 +185,7 @@ struct Collector {
     order: Vec<DefinitionId>,
     complete: HashMap<DefinitionId, Definition>,
     active: HashSet<DefinitionId>,
-    paths: HashMap<&'static str, DefinitionId>,
+    paths: HashMap<(&'static str, Vec<String>), DefinitionId>,
 }
 impl Collector {
     fn visit(&mut self, definition: Definition, path: &mut Vec<String>) -> Result<(), GraphError> {
@@ -172,14 +193,14 @@ impl Collector {
         if self.complete.contains_key(&id) {
             return Ok(());
         }
-        if !self.active.insert(id) {
+        if !self.active.insert(id.clone()) {
             let mut cycle = path.clone();
             cycle.push(id.path().to_owned());
             return Err(GraphError::Cycle(cycle));
         }
         if self
             .paths
-            .insert(id.path(), id)
+            .insert((id.path(), id.structural_path().to_vec()), id.clone())
             .is_some_and(|previous| previous != id)
         {
             return Err(GraphError::AmbiguousPath(id.path().to_owned()));
@@ -190,7 +211,7 @@ impl Collector {
             path.pop();
         }
         self.active.remove(&id);
-        self.complete.insert(id, definition);
+        self.complete.insert(id.clone(), definition);
         self.order.push(id);
         Ok(())
     }

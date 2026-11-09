@@ -51,3 +51,26 @@ pub(crate) fn bind_roots<'a, S: Schema>(
         Some(BoundContext::root(schema, root, node).current())
     })
 }
+
+impl<'a> Context<'a> {
+    /// Prepared local opaque geometry at the current occurrence or its storage child.
+    pub fn opaque_layout(&self) -> Option<&'a crate::ResolvedRecord> {
+        let mut current = Some(self.clone());
+        while let Some(ctx) = current {
+            if matches!(ctx.node(), Node::Value(crate::ast::value::Node::Opaque(_))) {
+                let id = ctx
+                    .ancestors()
+                    .iter()
+                    .rev()
+                    .find_map(|node| node.reference())
+                    .map_or_else(
+                        || ctx.id().clone(),
+                        |reference| ctx.id().within_referent(reference.target().id()),
+                    );
+                return ctx.analysis().opaque_layout(&id);
+            }
+            current = ctx.parent();
+        }
+        None
+    }
+}

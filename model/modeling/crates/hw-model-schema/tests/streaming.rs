@@ -17,14 +17,17 @@ struct TextBackend;
 impl value::Backend for TextBackend {
     type Domain = record::Domain;
     type Error = io::Error;
-    type Context<'a> = hw_model_schema::traversal::record::Context<'a>;
+    type Context<'a> = hw_model_schema::export::record::Context<'a>;
+}
+impl hw_model_schema::export::OutputBackend for TextBackend {
     fn metadata(&mut self, ctx: &Self::Context<'_>) -> Result<OutputMetadata, Self::Error> {
         Ok(OutputMetadata {
-            logical_name: ctx.unit().name.clone(),
+            logical_name: ctx.root_name().to_owned(),
             media_type: "text/plain".into(),
         })
     }
 }
+
 impl record::Backend for TextBackend {
     fn root(&mut self, _: Self::Context<'_>, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_all(b"first:")?;
@@ -161,7 +164,9 @@ struct RejectSecondMetadata(usize);
 impl value::Backend for RejectSecondMetadata {
     type Domain = record::Domain;
     type Error = io::Error;
-    type Context<'a> = hw_model_schema::traversal::record::Context<'a>;
+    type Context<'a> = hw_model_schema::export::record::Context<'a>;
+}
+impl hw_model_schema::export::OutputBackend for RejectSecondMetadata {
     fn metadata(&mut self, _: &Self::Context<'_>) -> io::Result<OutputMetadata> {
         self.0 += 1;
         if self.0 == 2 {
@@ -174,6 +179,7 @@ impl value::Backend for RejectSecondMetadata {
         }
     }
 }
+
 impl record::Backend for RejectSecondMetadata {
     fn root(&mut self, _: Self::Context<'_>, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_all(b"unexpected")
@@ -198,11 +204,14 @@ struct FailRender;
 impl value::Backend for FailRender {
     type Domain = record::Domain;
     type Error = io::Error;
-    type Context<'a> = hw_model_schema::traversal::record::Context<'a>;
+    type Context<'a> = hw_model_schema::export::record::Context<'a>;
+}
+impl hw_model_schema::export::OutputBackend for FailRender {
     fn metadata(&mut self, ctx: &Self::Context<'_>) -> io::Result<OutputMetadata> {
         TextBackend.metadata(ctx)
     }
 }
+
 impl record::Backend for FailRender {
     fn root(&mut self, _: Self::Context<'_>, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_all(b"partial")?;
@@ -245,14 +254,14 @@ fn staging_publishes_nothing_when_first_root_fails() {
 }
 #[test]
 fn selected_mixed_graph_roots_keep_metadata_identity_and_separate_bytes() {
-    use hw_model_schema::{export::prepare_roots, traversal::record::roots};
+    use hw_model_schema::export::{prepare_roots, record::roots};
     // Given explicitly selected record roots in a mixed graph.
     let mut set = SchemaSet::new();
     set.add::<Packet>();
     set.add::<SecondPacket>();
     set.add::<Register>();
     let schema = AnalyzedSchema::analyze(set, &Bindings::new()).unwrap();
-    let ids: Vec<_> = roots(&schema).map(|v| v.context().id().clone()).collect();
+    let ids: Vec<_> = roots(&schema).map(|v| v.id().clone()).collect();
     let mut backend = TextBackend;
     // When the application prepares and routes each unit into its own staging buffer.
     let prepared = prepare_roots(&mut backend, roots(&schema)).unwrap();

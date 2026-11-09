@@ -1,6 +1,7 @@
 use super::Backend;
-use crate::ast::record::{Attribute, Node};
-use crate::traversal::record::Context;
+use super::Context;
+use crate::ast::record::Node;
+use crate::export::view;
 /// Dispatches a record node with recursion-local context.
 ///
 /// # Errors
@@ -27,20 +28,16 @@ pub(super) fn emit<'a, B: Backend>(
             v.name(),
             super::super::value::DocumentationKind::Field,
         )),
-        Node::Case(v) => match v.body() {
-            crate::ast::CaseBody::Inline(r) => Some((
-                r.spec().documentation(),
-                v.name(),
-                super::super::value::DocumentationKind::Case,
-            )),
-            crate::ast::CaseBody::Reference(_) => None,
-        },
-        Node::Value(crate::ast::value::Node::Bits(_)) if ctx.field().is_none() => Some((
-            ctx.unit().documentation,
-            ctx.unit().name.as_str(),
+        Node::Value(crate::ast::value::Node::Bits(_)) if ctx.is_root() => Some((
+            ctx.0.unit().documentation,
+            ctx.0.unit().name.as_str(),
             super::super::value::DocumentationKind::Definition,
         )),
-        Node::Attribute(_) | Node::Constant(_) | Node::Value(_) => None,
+        Node::Case(_)
+        | Node::Reference(_)
+        | Node::Attribute(_)
+        | Node::Constant(_)
+        | Node::Value(_) => None,
     };
     if let Some((text, name, kind)) = documentation {
         super::super::value::emit_documentation(
@@ -52,19 +49,28 @@ pub(super) fn emit<'a, B: Backend>(
         )?;
     }
     match node {
-        Node::Record(v) => backend.record(v, ctx, writer),
-        Node::Union(v) => backend.union(v, ctx, writer),
-        Node::Field(v) => backend.field(v, ctx, writer),
-        Node::Case(v) => backend.case(v, ctx, writer),
-        Node::Attribute(v) => match (v, matches!(ctx.ancestors().last(), Some(Node::Field(_)))) {
-            (Attribute::Size(v), false) => backend.record_size(v, ctx, writer),
-            (Attribute::Size(v), true) => backend.field_size(v, ctx, writer),
-            (Attribute::Alignment(v), _) => backend.record_alignment(v, ctx, writer),
-            (Attribute::Offset(v), _) => backend.field_offset(v, ctx, writer),
-            (Attribute::Endian(v), false) => backend.record_endian(v, ctx, writer),
-            (Attribute::Endian(v), true) => backend.field_endian(v, ctx, writer),
-        },
+        Node::Record(v) => backend.record(view::Record(v), ctx, writer),
+        Node::Union(v) => backend.union(view::Union(v), ctx, writer),
+        Node::Field(v) => backend.field(view::Field(v), ctx, writer),
+        Node::Case(v) => backend.case(view::Case(v), ctx, writer),
+        Node::Reference(v) => ctx.0.referent().map_or_else(
+            || Ok(()),
+            |target| {
+                backend.reference(
+                    view::Reference(v),
+                    crate::export::Visit::new(Context(target.into_context())),
+                    ctx,
+                    writer,
+                )
+            },
+        ),
+        Node::Attribute(_) => Ok(()),
         Node::Constant(v) => backend.constant(v, ctx, writer),
-        Node::Value(v) => super::super::value::emit(v, ctx, backend, writer),
+        Node::Value(v) => {
+            let endian = ctx
+                .field()
+                .map_or(crate::Endian::Little, view::Field::endian);
+            super::super::value::emit(v, endian, ctx, backend, writer)
+        }
     }
 }

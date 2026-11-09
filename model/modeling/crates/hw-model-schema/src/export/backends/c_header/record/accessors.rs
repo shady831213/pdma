@@ -1,11 +1,12 @@
 use super::super::{CHeaderExportError, fragment::Fragment};
-use crate::{Endian, FieldDefinition, ScalarKind};
+use crate::export::view::Scalar;
+use crate::{Endian, ScalarKind};
 use std::io::Write;
 
 pub(super) fn scalar_accessors(
     output: &mut Fragment,
     names: FieldNames<'_>,
-    field: FieldDefinition,
+    field: Scalar,
     writer: &mut dyn Write,
 ) -> Result<(), CHeaderExportError> {
     output.constants::<64>(names.metadata, &[("WIDTH", field.width())], writer)?;
@@ -25,7 +26,7 @@ pub(super) fn scalar_accessors(
 fn push_load(
     output: &mut Fragment,
     names: FieldNames<'_>,
-    field: FieldDefinition,
+    field: Scalar,
     writer: &mut dyn Write,
 ) -> Result<(), CHeaderExportError> {
     let c_type = c_type(field.scalar());
@@ -72,7 +73,7 @@ fn push_load(
 fn push_store(
     output: &mut Fragment,
     names: FieldNames<'_>,
-    field: FieldDefinition,
+    field: Scalar,
     writer: &mut dyn Write,
 ) -> Result<(), CHeaderExportError> {
     let c_type = c_type(field.scalar());
@@ -114,7 +115,7 @@ pub(super) struct FieldNames<'a> {
     pub(super) metadata: &'a str,
 }
 
-const fn shift(field: FieldDefinition, byte_index: usize) -> usize {
+const fn shift(field: Scalar, byte_index: usize) -> usize {
     match field.endian() {
         Endian::Little => byte_index * 8,
         Endian::Big => (field.width() - byte_index - 1) * 8,

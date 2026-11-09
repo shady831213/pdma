@@ -14,6 +14,8 @@ pub enum Node<'a> {
     RegisterField(&'a BitsFieldSpec<usize>),
     /// Source or concrete placement.
     Placement(PlacementView<'a>),
+    /// Reusable definition edge owned by a map placement.
+    Reference(&'a Reference),
     /// Map constructor parameter.
     Parameter(Parameter),
     /// Child constructor argument binding.
@@ -41,7 +43,11 @@ impl<'a> Node<'a> {
                     }),
                     Self::Attribute(Attribute::WritableMask(register.writable_mask())),
                 ];
-                if register.source().is_none() {
+                if let Some(source) = register.source() {
+                    nodes.push(Self::Reference(source));
+                } else if let Some(bits) = register.inline_bits() {
+                    nodes.push(Self::Value(value::Node::Bits(bits)));
+                } else {
                     nodes.extend(register.fields().iter().map(Self::RegisterField));
                 }
                 nodes
@@ -50,7 +56,7 @@ impl<'a> Node<'a> {
             Self::RegisterField(field) => field
                 .definition()
                 .enum_definition()
-                .map(value::Node::Enum)
+                .map(|_| value::Node::Enum(value::Enumeration::Bits(field.definition())))
                 .map(Self::Value)
                 .into_iter()
                 .collect(),
@@ -63,7 +69,8 @@ impl<'a> Node<'a> {
                 vec![Self::Value(value::Node::Expression(expression))]
             }
             Self::Value(value) => value.children().map(Self::Value).collect(),
-            Self::Parameter(_)
+            Self::Reference(_)
+            | Self::Parameter(_)
             | Self::Attribute(
                 Attribute::Width(_)
                 | Attribute::Endian(_)
@@ -81,13 +88,11 @@ impl<'a> Node<'a> {
     /// Reusable definition referenced directly by this node.
     pub const fn reference(self) -> Option<&'a Reference> {
         match self {
-            Self::Register(register) => register.source(),
-            Self::Placement(
-                PlacementView::Declared(p) | PlacementView::Analyzed { declaration: p, .. },
-            ) => Some(p.reference()),
-            Self::RegisterMap(_)
+            Self::Reference(reference) => Some(reference),
+            Self::Register(_)
+            | Self::RegisterMap(_)
             | Self::RegisterField(_)
-            | Self::Placement(PlacementView::Register { .. } | PlacementView::Bank { .. })
+            | Self::Placement(_)
             | Self::Parameter(_)
             | Self::Argument(_)
             | Self::Attribute(_)

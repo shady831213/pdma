@@ -28,6 +28,8 @@ pub(super) fn field(field: &Field) -> Result<(), AnalysisError> {
         FieldType::Bits(bits) => bits.scalar().width(),
         FieldType::Reference(reference) => extent(reference.target().body())
             .ok_or_else(|| failure(path, ShapeError::NonValueReference))?,
+        FieldType::Record(record) => record.spec().size(),
+        FieldType::Opaque(spec) => spec.size(),
         FieldType::Union(union) => union.storage().size(),
     };
     if field.width() != expected {
@@ -127,6 +129,9 @@ pub(super) fn union(union: &UnionDefinition) -> Result<(), AnalysisError> {
         })?;
     for case in union.cases() {
         let width = match case.body() {
+            CaseBody::Bits(bits) => bits.scalar().width(),
+            CaseBody::Union(union) => union.storage().size(),
+            CaseBody::Opaque(spec) => spec.size(),
             CaseBody::Inline(record) => record.spec().size(),
             CaseBody::Reference(reference) => extent(reference.target().body())
                 .ok_or_else(|| failure(case.name(), ShapeError::NonValueReference))?,

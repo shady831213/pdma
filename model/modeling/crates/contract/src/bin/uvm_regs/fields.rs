@@ -1,4 +1,8 @@
-use hw_model_schema::{Access, Endian, ResetKind, ast::RegisterInfo};
+use super::backend::Uvm;
+use hw_model_schema::{
+    Access, ResetKind,
+    export::{Kind, register::Context, value::Emit, view::Register},
+};
 use std::io::{Error, Write};
 
 pub(super) const fn access(value: Access) -> &'static str {
@@ -18,7 +22,7 @@ struct Field<'a> {
     known_reset: bool,
 }
 
-fn describe<'a>(reg: &RegisterInfo, shape: (&'a str, usize, usize)) -> Result<Field<'a>, Error> {
+fn describe<'a>(reg: Register<'_>, shape: (&'a str, usize, usize)) -> Result<Field<'a>, Error> {
     let (name, lsb, width) = shape;
     let mask = u64::MAX >> (64 - width);
     let writable = (reg.writable_mask() >> lsb) & mask;
@@ -49,49 +53,51 @@ fn describe<'a>(reg: &RegisterInfo, shape: (&'a str, usize, usize)) -> Result<Fi
     })
 }
 
-pub(super) fn emit(reg: &RegisterInfo, writer: &mut dyn Write) -> Result<(), Error> {
-    if reg.endian() != Endian::Little {
-        return Err(Error::other(
-            "UVM backend currently requires little-endian registers",
-        ));
-    }
-    let fields = if reg.fields().is_empty() {
-        vec![describe(reg, ("value", 0, reg.width() * 8))?]
-    } else {
-        reg.fields()
-            .iter()
-            .map(|f| describe(reg, (f.name(), f.lsb(), f.bit_width())))
-            .collect::<Result<Vec<_>, _>>()?
+pub(super) fn member(name: &str, kind: Kind) -> Result<String, Error> {
+    let suffix = match kind {
+        Kind::Register => "reg",
+        Kind::RegisterMap => "block",
+        _ => return Err(Error::other("unsupported placement")),
     };
-    let name = reg.name();
-    writeln!(writer, "  class {name} extends uvm_reg;")?;
-    writeln!(writer, "    `uvm_object_utils({name})")?;
-    for field in &fields {
-        writeln!(writer, "    uvm_reg_field {}_field;", field.name)?;
-    }
+    Ok(format!("{name}_{suffix}"))
+}
+
+pub(super) fn ral_field(
+    reg: Register<'_>,
+    shape: (&str, usize, usize),
+    writer: &mut dyn Write,
+) -> Result<(), Error> {
+    let f = describe(reg, shape)?;
     writeln!(
         writer,
-        "    function new(string name = \"{name}\");\n      super.new(name, {}, UVM_NO_COVERAGE);\n    endfunction",
-        reg.width() * 8
+        "      {0}_field = uvm_reg_field::type_id::create(\"{0}\");",
+        f.name
     )?;
-    writeln!(writer, "    virtual function void build();")?;
-    for f in fields {
-        writeln!(
-            writer,
-            "      {0}_field = uvm_reg_field::type_id::create(\"{0}\");",
-            f.name
-        )?;
-        writeln!(
-            writer,
-            "      {}_field.configure(this, {}, {}, \"{}\", 1, 64'h{:x}, {}, 0, 0);",
-            f.name,
-            f.width,
-            f.lsb,
-            f.access,
-            f.reset,
-            u8::from(f.known_reset)
-        )?;
-        writeln!(writer, "      {}_field.set_compare(UVM_NO_CHECK);", f.name)?;
+    writeln!(
+        writer,
+        "      {}_field.configure(this, {}, {}, \"{}\", 1, 64'h{:x}, {}, 0, 0);",
+        f.name,
+        f.width,
+        f.lsb,
+        f.access,
+        f.reset,
+        u8::from(f.known_reset)
+    )?;
+    writeln!(writer, "      {}_field.set_compare(UVM_NO_CHECK);", f.name)
+}
+
+impl Uvm {
+    pub(super) fn field(
+        &mut self,
+        shape: (&str, usize, usize),
+        ctx: &Context<'_>,
+        writer: &mut dyn Write,
+    ) -> Result<(), Error> {
+        writeln!(writer, "    uvm_reg_field {}_field;", shape.0)?;
+        let reg = ctx
+            .register()
+            .ok_or_else(|| Error::other("missing register owner"))?;
+        ral_field(reg, shape, &mut self.initialization)?;
+        self.emit_all(ctx.children(), writer)
     }
-    writeln!(writer, "    endfunction\n  endclass\n")
 }

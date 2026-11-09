@@ -15,6 +15,7 @@ pub(super) const fn edge(parent: Node<'_>, index: usize, child: Node<'_>) -> Edg
         Node::Value(_) if matches!(parent, Node::Root(_)) => SourceRole::Declaration,
         Node::Parameter(_) => SourceRole::Parameter,
         Node::Placement(_) => SourceRole::Placement,
+        Node::Reference(_) => SourceRole::Reference,
         Node::Argument(_) => SourceRole::Argument,
         Node::RegisterField(_) => SourceRole::Field,
         Node::Attribute(value) => source_edge::attribute(value),

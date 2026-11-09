@@ -48,17 +48,20 @@ impl record::Backend for Text<'_> {
 impl value::Backend for Text<'_> {
     type Domain = record::Domain;
     type Error = std::io::Error;
-    type Context<'a> = hw_model_schema::traversal::record::Context<'a>;
+    type Context<'a> = hw_model_schema::export::record::Context<'a>;
+}
+impl hw_model_schema::export::OutputBackend for Text<'_> {
     fn metadata(
         &mut self,
         ctx: &Self::Context<'_>,
     ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
         Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.unit().name.clone(),
+            logical_name: ctx.root_name().to_owned(),
             media_type: "text/plain".into(),
         })
     }
 }
+
 #[test]
 fn chained_pass_data_is_borrowed_by_custom_backend() {
     let schema = schema().unwrap();

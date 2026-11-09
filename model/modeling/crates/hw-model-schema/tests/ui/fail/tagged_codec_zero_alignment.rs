@@ -1,4 +1,4 @@
-use hw_model_schema::{record_schema, SchemaCodec, SchemaCodecError, SchemaLayout};
+use hw_model_schema::{SchemaCodec, SchemaCodecError, SchemaLayout, record_schema};
 record_schema! { record Wide { endian: Little, fields: { value: u64 } } }
 struct Bad;
 impl SchemaLayout for Bad {

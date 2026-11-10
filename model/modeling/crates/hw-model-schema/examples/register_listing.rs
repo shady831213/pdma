@@ -45,7 +45,7 @@ impl Backend for RegisterListing {
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
         writer.write_all(b"path\toffset\tbytes\n")?;
-        self.emit_all(ctx.children(), writer)
+        self.emit_all(ctx.projected_children(), writer)
     }
     fn register(
         &mut self,
@@ -81,11 +81,11 @@ impl value::Backend for RegisterListing {
     type Context<'a> = RegisterContext<'a>;
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn write_listing(count: usize, output: &mut dyn Write) -> Result<(), Box<dyn Error>> {
     let mut selected = SchemaSet::new();
     selected.add::<Device>();
     let mut bindings = Bindings::new();
-    bindings.bind::<Device>(&[2]);
+    bindings.bind::<Device>(&[count]);
     let schema = AnalyzedSchema::from_graph(&selected.resolve()?, &bindings)?;
     let backend = RegisterListing {
         selected: schema
@@ -94,8 +94,22 @@ fn main() -> Result<(), Box<dyn Error>> {
             .id
             .clone(),
     };
+    generate(&schema, backend, output)?;
+    Ok(())
+}
+fn main() -> Result<(), Box<dyn Error>> {
     let mut output = io::stdout().lock();
-    generate(&schema, backend, &mut output)?;
+    write_listing(2, &mut output)?;
     output.flush()?;
+    Ok(())
+}
+#[test]
+fn listing_includes_the_selected_banked_registers() -> Result<(), Box<dyn Error>> {
+    let mut bytes = Vec::new();
+    write_listing(2, &mut bytes)?;
+    assert_eq!(
+        String::from_utf8(bytes)?,
+        "path\toffset\tbytes\nchannels[0].status\t0\t4\nchannels[1].status\t16\t4\n"
+    );
     Ok(())
 }

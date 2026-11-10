@@ -1,5 +1,6 @@
-use super::Uvm;
-use hw_model_schema::{
+use super::UvmRegisterBackend;
+use crate::export::Context as _;
+use crate::{
     EnumVariantSpec,
     export::{
         expression::ExpressionSyntax,
@@ -10,7 +11,7 @@ use hw_model_schema::{
 };
 use std::io::{Error, Write};
 
-impl value::Backend for Uvm {
+impl value::Backend for UvmRegisterBackend {
     type Error = Error;
     type Domain = register::Domain;
     type Context<'a> = Context<'a>;
@@ -18,16 +19,23 @@ impl value::Backend for Uvm {
     fn check_entry(
         &mut self,
         ctx: &Context<'_>,
-        symbols: &mut hw_model_schema::export::EntrySymbols,
+        symbols: &mut crate::export::EntrySymbols,
     ) -> Result<(), Error> {
-        symbols
-            .declare(
-                ctx.entry_name(),
-                ctx.entry_id()
-                    .source_path()
-                    .unwrap_or_else(|| ctx.entry_name()),
-            )
-            .map_err(Error::other)
+        if matches!(
+            ctx.entry_kind(),
+            crate::export::Kind::Register | crate::export::Kind::RegisterMap
+        ) {
+            let name = self.names.get(ctx.entry_id(), ctx.entry_name());
+            if name.starts_with("uvm_") || name == "type_id" {
+                return Err(Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "class name conflicts with the UVM macro namespace; select an alias",
+                ));
+            }
+            self.names.check(ctx.entry_id(), ctx.entry_name(), symbols)
+        } else {
+            Ok(())
+        }
     }
 
     fn bit_field(
@@ -36,14 +44,18 @@ impl value::Backend for Uvm {
         ctx: Context<'_>,
         writer: &mut dyn Write,
     ) -> Result<(), Error> {
-        writeln!(writer, "    uvm_reg_field {}_field;", field.name())?;
+        self.symbols
+            .declare(&format!("{}_field", field.name()), ctx.entry_id())?;
+        writeln!(writer, "    uvm_pkg::uvm_reg_field {}_field;", field.name())?;
         let reg = ctx
             .register()
             .ok_or_else(|| Error::other("missing register owner"))?;
         super::fields::ral_field(
             reg,
             (field.name(), field.lsb(), field.bit_width()),
-            &mut self.initialization,
+            self.volatile,
+            self.compare,
+            &mut self.build_body,
         )?;
         self.emit_all(ctx.children(), writer)
     }
@@ -58,9 +70,7 @@ impl value::Backend for Uvm {
             .bit()
             .ok_or_else(|| Error::other("enum without field owner"))?;
         let name = format!("{field}_{}", value.name()).to_ascii_uppercase();
-        self.variants
-            .insert(&name, ctx.id().clone())
-            .map_err(Error::other)?;
+        self.symbols.declare(&name, ctx.entry_id())?;
         writeln!(
             writer,
             "    localparam logic [63:0] {name} = 64'd{};",
@@ -75,20 +85,7 @@ impl value::Backend for Uvm {
         _: Context<'_>,
         writer: &mut dyn Write,
     ) -> Result<(), Error> {
-        for line in text.lines() {
-            writeln!(writer, "    // {line}")?;
-        }
-        Ok(())
-    }
-
-    fn description(
-        &mut self,
-        text: &str,
-        owner: DocumentationOwner<'_>,
-        ctx: Context<'_>,
-        writer: &mut dyn Write,
-    ) -> Result<(), Error> {
-        self.short_description(text, owner, ctx, writer)
+        super::super::sv::comment(text, writer)
     }
 
     fn expression(
@@ -101,7 +98,7 @@ impl value::Backend for Uvm {
     }
 }
 
-impl ExpressionSyntax for Uvm {
+impl ExpressionSyntax for UvmRegisterBackend {
     fn parameter(&mut self, name: &str) -> String {
         format!("p_{name}")
     }

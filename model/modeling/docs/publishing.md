@@ -8,14 +8,19 @@ The six library manifests allow only
 the `crates-io` registry; the workspace default, PDMA packages and standalone test
 fixtures keep publication disabled.
 
-## Unpublished render API review
+## Schema 0.3.0 release candidate
 
-The workspace currently has an explicitly authorized temporary relative-path
-override for `hw-model-schema`. It lets all four generators use the reviewed
-candidate with one schema type identity. No new schema version has been published.
-After user approval and publication, remove this override, update requirements
-and lockfiles to the approved registry version, and verify the resolved package
-source and checksum from every PDMA root. Do not publish from the preview setup.
+The user authorized final review and publication of the new schema API. Version
+0.3.0 is required because the restricted renderer contexts and entry callbacks
+replace the 0.2 export API. The macro implementation is byte-identical to the 0.2.0
+release source and remains pinned at `=0.2.0`; no duplicate macro release is needed.
+
+The temporary relative workspace override remains only for pre-upload model
+verification. Publication must use a clean reviewed commit and an independently
+verified package manifest without this override. After upload, remove the override,
+update workspace and standalone consumer locks to registry checksums, and verify
+that every PDMA root consumes the published schema. Independent exporters and
+cross-crate discovery are release gates, not merely workspace compile checks.
 
 ## Schema 0.2.0 provenance
 
@@ -50,10 +55,11 @@ checksums; local maintenance members remain distinct from those dependencies.
 | `hw-model-irq` | Interrupt source/handler traits; optional Tokio interrupt wire | None |
 | `hw-model-pipeline` | Continuation stages, composition, routing and executors | None |
 | `hw-model-schema-macros` | Procedural implementation of schema declarations | None |
-| `hw-model-schema` | Layouts, codecs, registers, definition graphs, passes and optional C/Veryl exporters | Exact matching `hw-model-schema-macros` version |
+| `hw-model-schema` | Layouts, codecs, registers, definition graphs, passes and optional C/Veryl/SV/UVM backends | Exact compatible `hw-model-schema-macros` version |
 | `hw-model-swenv` | SoftwareEnv, scoped main/ISR execution, notifications and tracing | `hw-model-io`, `hw-model-irq` |
 
-The macro crate must precede its facade. IO and IRQ must precede the software
+If the macro implementation changes, publish it before its dependent facade.
+An unchanged macro implementation stays at its already published compatible version. IO and IRQ must precede the software
 environment. The first four entries are otherwise independent. The macro crate
 is published for dependency resolution; applications use the schema facade.
 
@@ -109,8 +115,9 @@ Only after explicit release authorization, publish a schema release from the
 reviewed commit in order:
 
 ```sh
-cargo publish --registry crates-io -p hw-model-schema-macros
-# Wait for prerequisites to become available in the registry before dependents.
+# Only when the pinned macro implementation has changed:
+# cargo publish --registry crates-io -p hw-model-schema-macros
+# Wait for any new prerequisites to become available before dependents.
 cargo publish --registry crates-io -p hw-model-schema
 ```
 

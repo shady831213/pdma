@@ -42,24 +42,8 @@ impl Backend for VerylRecordBackend {
         }
         self.emit_all(ctx.children(), writer)
     }
-    fn opaque(
-        &mut self,
-        _: Storage,
-        ctx: Self::Context<'_>,
-        writer: &mut dyn Write,
-    ) -> Result<(), Self::Error> {
-        self.extent(&ctx, writer)
-    }
+
     fn short_description(
-        &mut self,
-        text: &str,
-        _: value::DocumentationOwner<'_>,
-        _: Self::Context<'_>,
-        writer: &mut dyn Write,
-    ) -> Result<(), Self::Error> {
-        super::package::Package::comment(text, writer)
-    }
-    fn description(
         &mut self,
         text: &str,
         _: value::DocumentationOwner<'_>,
@@ -168,15 +152,6 @@ impl Backend for VerylRegisterBackend {
         Ok(())
     }
     fn short_description(
-        &mut self,
-        text: &str,
-        _: value::DocumentationOwner<'_>,
-        _: Self::Context<'_>,
-        writer: &mut dyn Write,
-    ) -> Result<(), Self::Error> {
-        super::package::Package::comment(text, writer)
-    }
-    fn description(
         &mut self,
         text: &str,
         _: value::DocumentationOwner<'_>,

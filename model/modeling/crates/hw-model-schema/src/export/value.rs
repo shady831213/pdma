@@ -114,15 +114,16 @@ pub trait Backend: Sized {
     ) -> Result<(), Self::Error> {
         Ok(())
     }
-    /// Handles a complete detailed description before its semantic owner callback.
+    /// Handles detailed documentation; defaults to the short-description formatter.
+    /// Override independently when summaries and detailed text need different output.
     fn description(
         &mut self,
-        _: &str,
-        _: DocumentationOwner<'_>,
-        _: Self::Context<'_>,
-        _: &mut dyn std::io::Write,
+        text: &str,
+        owner: DocumentationOwner<'_>,
+        ctx: Self::Context<'_>,
+        writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        Ok(())
+        self.short_description(text, owner, ctx, writer)
     }
 }
 /// Shared dispatch cannot be replaced by a target implementation.

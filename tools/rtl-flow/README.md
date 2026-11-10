@@ -80,6 +80,12 @@ that candidate or alter the other framework dependencies.
 Generated packages use `#[fmt(skip)]` so formatter alignment does not change the
 generator's deterministic output. Handwritten RTL uses normal Veryl formatting.
 
+`bash tools/rtl-flow/sv-layout.sh --write|--check` handles the plain-SV counterpart
+at `verification/dma/tb/register_layout.sv`. Its generator uses schema's optional
+`export-sv` backend and preserves 64-bit layout parameters. `records.sh` also uses
+that feature for byte-record types; `registers.sh` uses `export-uvm-regs` for RAL.
+The three outputs serve independent consumers and do not require each other.
+
 ## Maintenance boundary
 
 An upgrade must update source/patch identity together and rerun relevant compiler

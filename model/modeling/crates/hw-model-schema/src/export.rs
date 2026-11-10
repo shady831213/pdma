@@ -21,7 +21,12 @@ pub mod value;
 use crate::analysis::AnalysisError;
 
 /// Built-in artifact renderers enabled by format-specific crate features.
-#[cfg(any(feature = "export-c-header", feature = "export-veryl-layout"))]
+#[cfg(any(
+    feature = "export-c-header",
+    feature = "export-veryl-layout",
+    feature = "export-sv",
+    feature = "export-uvm-regs"
+))]
 pub mod backends;
 
 /// Analysis or rendering failure retaining the error owned by its origin.

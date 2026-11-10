@@ -1,3 +1,4 @@
+use hw_model_schema::export::backends::system_verilog::SvRecordBackend;
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Bindings},
     ast::SchemaSet,
@@ -5,10 +6,6 @@ use hw_model_schema::{
 };
 use pdma_model_contract::dma::{Command, Event};
 use std::{error::Error, io::Write};
-mod backend;
-mod codec;
-#[cfg(test)]
-mod tests;
 
 /// Exports the DMA record roots and their recursively discovered dependencies.
 pub fn generate() -> Result<String, Box<dyn Error>> {
@@ -20,7 +17,7 @@ pub fn generate() -> Result<String, Box<dyn Error>> {
 
 fn render(definitions: SchemaSet) -> Result<String, Box<dyn Error>> {
     let schema = AnalyzedSchema::analyze(definitions, &Bindings::new())?;
-    let mut backend = backend::SystemVerilog;
+    let mut backend = SvRecordBackend::new();
     let outputs = prepare_entries(
         &mut backend,
         record::entries(&schema)

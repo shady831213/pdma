@@ -74,12 +74,17 @@ SystemVerilog.
 
 `tb/register_model.sv` is the generated UVM register model. Regenerate with
 `bash tools/rtl-flow/registers.sh --write` and verify with `--check`. Its generator
-lives in contract's `src/bin/uvm_regs`, alongside the separate SV record generator;
-neither backend has been moved into schema or published. During the authorized
-unpublished render-API review, these generators use the explicit local schema
-workspace override. They consume schema analysis and expression-rendering APIs
-without parsing generated C/Veryl; see the model
-[schema review record](../../model/modeling/docs/schema-export-review.md).
+selects the DMA roots in contract's `src/bin/uvm_regs`; its renderer is the optional
+schema `UvmRegisterBackend`. SV record rendering likewise uses schema's builtin
+`SvRecordBackend`. The contract wrappers own package/import/file assembly only.
+The unpublished backends currently use the authorized relative schema override;
+see the model [schema review record](../../model/modeling/docs/schema-export-review.md).
+
+`tb/register_layout.sv` is the separate plain-SV register metadata package set,
+with no UVM dependency. Generate/check it with `bash tools/rtl-flow/sv-layout.sh
+--write` / `--check`. It exposes the same symbolic layouts and fixed register facts
+as the Veryl packages for consumers that use SV directly. It contains no register
+storage or bus implementation.
 
 The model preserves block hierarchy and parameterized banks, for example
 `registers.channels_block[i].command_block.base_reg`. Register fields have
@@ -111,9 +116,12 @@ generated-package oracle using the same deployment configuration. For the RAL
 oracle, select top `pdma_uvm_regs_metadata`, marker `RAL_METADATA_PASS`, and sources
 `tb/register_model.sv` and the contract's `tests/uvm_regs_metadata.sv`. It checks
 enum constants, relocated maps, 32/64-bit buses and parameterized banks. The SV
-generator's inline-union test can retain its standalone oracle with
-`PDMA_SV_INLINE_FIXTURE`; its top and marker are `inline_union_metadata` and
-`INLINE_UNION_PASS`. Keep run directories outside the repository.
+schema's `sv_records` test can retain its standalone oracle with
+`SCHEMA_SV_INLINE_FIXTURE`; its top and marker are `inline_union_metadata` and
+`INLINE_UNION_PASS`. The `sv_register_layout` and `uvm_exports` tests provide
+independent parameter/width oracles through `SCHEMA_SV_REGISTER_FIXTURE`,
+`SCHEMA_UVM_ADDRESS_FIXTURE` and `SCHEMA_UVM_PARAMETER_FIXTURE`.
+Keep generated fixtures and native run artifacts untracked.
 
 The configuration separates this DUT's fixed bus widths and AXI burst boundary
 from platform heap placement, ring capacities, optional explicit ring addresses

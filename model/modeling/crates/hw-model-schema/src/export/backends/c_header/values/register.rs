@@ -49,15 +49,7 @@ impl Backend for CRegisterBackend {
         }
         Fragment::comment(owner.name, text, writer)
     }
-    fn description(
-        &mut self,
-        text: &str,
-        owner: DocumentationOwner<'_>,
-        ctx: Self::Context<'_>,
-        writer: &mut dyn Write,
-    ) -> CResult {
-        self.short_description(text, owner, ctx, writer)
-    }
+
     fn bits(&mut self, bits: Bits<'_>, ctx: Self::Context<'_>, writer: &mut dyn Write) -> CResult {
         if ctx.register().is_none() {
             bits_metadata(&mut self.output, &self.prefix, bits, writer)?;

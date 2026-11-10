@@ -1,4 +1,4 @@
-use super::super::*;
+use super::*;
 use hw_model_schema::{ast::Definition, bits_schema, register_schema};
 bits_schema! {
     pub bits Flags(u32) {

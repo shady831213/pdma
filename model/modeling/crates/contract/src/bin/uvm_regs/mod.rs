@@ -1,3 +1,4 @@
+use hw_model_schema::export::backends::uvm::UvmRegisterBackend;
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Bindings},
     ast::SchemaSet,
@@ -5,15 +6,6 @@ use hw_model_schema::{
 };
 use pdma_model_contract::dma::DmaRegisters;
 use std::{error::Error, io::Write};
-mod values;
-#[derive(Default)]
-struct Uvm {
-    variants: hw_model_schema::export::SymbolScope<hw_model_schema::traversal::NodeId>,
-    initialization: Vec<u8>,
-}
-mod fields;
-mod initialization;
-mod registers;
 
 /// Generates the DMA register package from the analyzed schema.
 pub fn generate() -> Result<String, Box<dyn Error>> {
@@ -24,7 +16,7 @@ pub fn generate() -> Result<String, Box<dyn Error>> {
 
 fn render(definitions: SchemaSet) -> Result<String, Box<dyn Error>> {
     let schema = AnalyzedSchema::analyze(definitions, &Bindings::new())?;
-    let mut backend = Uvm::default();
+    let mut backend = UvmRegisterBackend::new();
     let outputs = prepare_entries(
         &mut backend,
         register::entries(&schema)

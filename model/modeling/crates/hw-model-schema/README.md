@@ -19,9 +19,26 @@ chooses separate destinations. The caller owns flushing and publication.
 Manual register-map builders must handle the result of `with_placements(...)`;
 attachment validates the supplied topology instead of accepting unchecked metadata.
 Nested manual storage crosses the same validation boundary as root storage.
-The facade pins the matching 0.2.0 macro crate; applications normally depend only
+The facade pins the compatible 0.2.0 macro crate; applications normally depend only
 on the facade. Rust raw identifiers are supported in declarations; descriptive
 metadata retains source spelling while generated helper symbols omit `r#`.
+
+## Upgrading from 0.2
+
+Version 0.3 replaces raw-AST renderer contexts with restricted `export::record::Context`
+and `export::register::Context` capabilities and shallow `export::view` inputs.
+Analysis passes retain full semantic traversal; renderers recurse through bound
+visits using `value::Emit`, including explicit reference expansion. Rename backend
+`root` callbacks to `entry`; output names and MIME types now belong to the caller,
+so `OutputMetadata` and its callback are removed. `PreparedEntry::name()` exposes
+source identity for application-owned output routing.
+
+Structural callback defaults recurse through their children; detailed documentation
+uses the short-description formatter unless overridden. Add custom analysis before
+generation when a target needs extra derived facts. Optional `export-sv` and
+`export-uvm-regs` backends join C and Veryl. The declaration DSL, codecs, register
+access and wire layouts retain their existing behavior. The unchanged macro
+implementation remains pinned to 0.2.0; it does not require a duplicate release.
 
 ## Definition graphs and optional discovery
 
@@ -77,9 +94,8 @@ tested host configuration, not a qualification of every inventory target.
 
 ## AST, analysis and emit
 
-The render capability API in this checkout is an unpublished candidate. The
-workspace temporarily uses its local schema member for generator review; the
-published 0.2.0 export API does not yet include these restricted views.
+Version 0.3 separates unrestricted semantic analysis from restricted render
+capabilities. See the migration notes above for changes from the 0.2 API.
 
 The existing DSL parser feeds two macro expansion branches: ordinary Rust types,
 accessors and codecs, and canonical schema AST construction. No generated Rust
@@ -234,7 +250,10 @@ and optional relative placement owner. The formula is a bound child visit; only
 the `expression` callback receives format/evaluate access. `ctx.layout(kind)`
 selects a bound property when target syntax needs it elsewhere. Backends do not
 recover ownership from raw nodes. Structural callbacks traverse children by default;
-references and optional layout properties emit nothing unless explicitly handled.
+layout properties and constructor arguments recurse into their expression leaves.
+Named references remain references unless the backend expands them. Leaf callbacks
+produce no output by default. Detailed documentation defaults to the short-description
+formatter; either callback can still be overridden independently.
 
 Documentation participates in the same dispatch: `short_description` and
 `description` receive present source text with a `DocumentationOwner` and the
@@ -333,7 +352,7 @@ Requires Rust 1.96 or later. Add the facade crate to use its types and macros:
 
 ```toml
 [dependencies]
-hw-model-schema = "0.2.0"
+hw-model-schema = "0.3.0"
 ```
 
 Enable `export-c-header` for the C header exporter. The default feature set is empty.
@@ -341,7 +360,7 @@ An application may rename the dependency without changing macro expansion:
 
 ```toml
 [dependencies]
-his = { package = "hw-model-schema", version = "0.2.0", default-features = false }
+his = { package = "hw-model-schema", version = "0.3.0", default-features = false }
 ```
 
 It can use the same renamed-dependency form from a Git revision when the repository is
@@ -763,6 +782,71 @@ domain backends to share one analyzed graph. Select each shared definition once
 and check the combined target namespace before emitting. Do not deduplicate by
 rendered bytes: distinct definitions with the same target name are a naming error.
 
+## Optional `SystemVerilog` and UVM backends
+
+These backends are available starting with 0.3. They require no simulator, UVM
+library, application contract or runtime dependency
+in Rust. Compilation of the generated SV/UVM remains an integration responsibility.
+
+| Feature | Public backend | Output |
+| --- | --- | --- |
+| `export-sv` | `export::backends::system_verilog::SvRecordBackend` | Byte-image types, field accessors and enum/bit metadata; caller owns the package |
+| `export-sv` | `export::backends::system_verilog::SvRegisterBackend` | Register/map layout packages and 64-bit unsigned parameterized layout functions |
+| `export-uvm-regs` | `export::backends::uvm::UvmRegisterBackend` | Register and map classes; caller owns the UVM package/imports and runtime wiring |
+
+All features are default-off. Each backend uses the same `prepare`, `prepare_entries`,
+`generate` and `io::Write` interfaces as C/Veryl. `new()` selects source-derived names;
+`with_name(NodeId, name)` overrides an entry name consistently, including UVM references.
+Root names are preflighted. Nested generated symbols are checked before declarations;
+a render failure can leave partial bytes, so use caller-owned buffering when atomic
+file publication is required. A record-backend instance owns one package namespace;
+use a new backend for another package. Retrying an entry clears only that entry's
+previous symbol claims.
+
+SV records represent encoded bytes (`byte n` occupies `[8*n +: 8]`), not a packed
+struct mirroring Rust's native layout. Scalar accessors honor field endianness.
+Named child records and unions have raw byte-envelope accessors; selection of an
+untagged union is still a protocol decision. Logical case metadata is case-qualified.
+Zero-sized images/accessors and images exceeding the signed 32-bit packed-index
+range are explicitly rejected. Record sizes/offsets are emitted as 64-bit constants;
+there is no silently truncated 32-bit size interface.
+
+SV register packages contain metadata only, with no bus logic, storage or side
+effects. They consume the same completed layout formulas, structural path names
+and expression fold as Veryl. Fully bound inputs retain constant layouts; symbolic
+inputs retain parameter functions. Permission-only views retain holes, original
+indices and effective masks. Calls to generated layout functions must satisfy the
+source layout constraints.
+
+UVM target class names reserve the `uvm_` prefix and `type_id` for framework macros;
+source names can be mapped to legal aliases. Framework types/constants are qualified
+with `uvm_pkg::` and class-member references use `this.` to prevent name shadowing.
+Class references also cannot share names with generated members or `build()`
+arguments (such as `bus_bytes` or `p_count`). These conflicts are reported while
+rendering; use `with_name` to select an unambiguous class alias. Repeated references
+to the same class are supported.
+
+UVM supports little-endian source registers/maps and uniform access within each
+field. Partial writable fields, big-endian registers and authoritative permission-only
+views are rejected. Value definitions are expanded at their register use sites;
+they do not generate separate RAL classes. Constructors use `longint unsigned` for
+schema parameters, and dynamic bank counts are checked before allocation. Shared
+analysis permits binding standalone map entries, but rejects binding a definition
+that is still referenced elsewhere; the backend reuses those rules.
+
+Defaults are volatile fields with `UVM_NO_CHECK`; `PostReset` has no known hard
+reset. `with_volatile(bool)` and `with_mirror_comparison(bool)` select target policies.
+Enabling comparison does not create a predictor. The SV caller still configures the
+base, calls `build(parameters..., bus_bytes)`, locks the model and attaches its adapter,
+sequencer and prediction mechanism. Register write side effects are not inferred.
+
+The annotated examples show package ownership and explicit flushing:
+
+```sh
+cargo run -p hw-model-schema --features export-sv --example sv_packages
+cargo run -p hw-model-schema --features export-uvm-regs --example uvm_model
+```
+
 ## Optional C11 fragments
 
 The built-in C renderer is additive and default-off. Enable it only when the consumer
@@ -770,7 +854,7 @@ needs generic C11 record or register-map fragments:
 
 ```toml
 [dependencies]
-hw-model-schema = { version = "0.2.0", features = ["export-c-header"] }
+hw-model-schema = { version = "0.3.0", features = ["export-c-header"] }
 ```
 
 With that feature enabled, the backend lives at

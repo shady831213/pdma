@@ -99,22 +99,22 @@ pub trait Backend: for<'a> super::super::value::Backend<Context<'a> = Context<'a
     ) -> Result<(), Self::Error> {
         Ok(())
     }
-    /// Handles a child constructor binding; defaults to no output.
+    /// Handles a child constructor binding; defaults to its expression subtree.
     fn argument<'a>(
         &mut self,
         _: view::Argument<'a>,
-        _: Context<'a>,
-        _: &mut dyn std::io::Write,
+        ctx: Context<'a>,
+        writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        Ok(())
+        self.emit_all(ctx.children(), writer)
     }
-    /// Handles one completed layout property; defaults to no output.
+    /// Handles one completed layout property; defaults to its expression subtree.
     fn layout_property<'a>(
         &mut self,
         _: super::LayoutProperty<'a>,
-        _: Context<'a>,
-        _: &mut dyn std::io::Write,
+        ctx: Context<'a>,
+        writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        Ok(())
+        self.emit_all(ctx.children(), writer)
     }
 }

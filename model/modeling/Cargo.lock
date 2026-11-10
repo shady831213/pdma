@@ -61,7 +61,7 @@ checksum = "aa64462578adb723e5064ae53b21d946c965a000619ba3ff7035ae5a01e5d8d0"
 
 [[package]]
 name = "hw-model-schema"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "hw-model-schema-macros 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "inventory",

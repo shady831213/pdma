@@ -15,7 +15,7 @@ pdma-model-software = { path = "../software" }
 pdma-model-contract = { path = "../contract" }
 pdma-model-dma = { path = "../dma" }
 hw-model-pipeline = "0.1.0"
-hw-model-schema = "0.2.0"
+hw-model-schema = "0.3.0"
 tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync", "time"] }
 
 [lints]

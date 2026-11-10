@@ -60,7 +60,7 @@ fn root_union_references_do_not_reemit_record_package_metadata()
         .ok_or("missing union")?;
     assert_eq!(
         union,
-        "\n    // Complete command union\n    const EXTENT: u64 = 8;\n    const ALIGNMENT: u64 = 8;\n}\n"
+        "\n    const EXTENT: u64 = 8;\n    const ALIGNMENT: u64 = 8;\n    // Complete command union\n}\n"
     );
     assert_eq!(text.matches("const EXTENT:").count(), 3);
     assert_eq!(text.matches("// Small record").count(), 1);

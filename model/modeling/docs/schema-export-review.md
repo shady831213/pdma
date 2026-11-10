@@ -562,7 +562,10 @@ and 19 DMA VIP scenarios with seven deliberately invalid checker cases were
 exercised. This is review evidence for the unpublished candidate, not approval
 for a new crate release or full DMA RTL qualification.
 
-## Register defaults cleanup and builtin-backend assessment
+## Register defaults cleanup and builtin-backend assessment (historical)
+
+The following assessment describes the checkpoint before the builtin migration below.
+Its proposed features and traversal defaults are superseded by that migration.
 
 `register_field` now delegates to the shared value `bit_field` callback by default.
 The render view normalizes the frontend's `u16`/`usize` IDs without narrowing; it
@@ -639,3 +642,118 @@ workspace Clippy, rustdoc and formatting passed. C headers, Veryl layouts, SV
 records and the UVM model passed their check modes without changing generated
 bytes. This validates the cleanup; it does not close the generic builtin-readiness
 findings above.
+
+
+## Builtin SV/UVM backends and recursive defaults (unpublished candidate)
+
+The application-independent renderers now live in schema, enabled by default-off
+`export-sv` and `export-uvm-regs` features. `SvRecordBackend` emits byte-image records,
+`SvRegisterBackend` emits ordinary SystemVerilog register layout packages, and
+`UvmRegisterBackend` emits RAL classes. The Rust library acquires no simulator, VIP,
+PDMA or software-runtime dependency. Existing C and Veryl backends remain separate
+renderers over the same analyzed schema graph; SV register packages use the same
+completed layouts and expression folding as Veryl.
+
+Contract's SV-record/UVM entrypoints now select PDMA roots, bind configuration and
+assemble package/file output. The new `pdma-sv-layout` entrypoint emits ordinary
+register packages for users who consume SV directly. Native tool flows, PDMA ABI
+oracles and bus/predictor wiring remain application responsibilities. This change
+does not publish a release or remove the explicit local review override.
+
+### Default callbacks
+
+`register_field` still delegates to the value `bit_field` callback. The structural
+`argument` and `layout_property` callbacks now recurse through their children,
+matching `placement` and the other structural defaults. A renderer supplies leaf
+syntax only when it wants output. `description` delegates to `short_description`
+by default, while both remain independently overridable. Identical C, Veryl and
+UVM callbacks have been removed; the register-listing example now explicitly walks
+projected instances and has a checked output test.
+
+Target syntax remains target-specific: Veryl/SV wrap layout expressions in functions;
+UVM adds argument separators and emits layout expressions at class-construction
+sites. UVM's placement callback selects references so those expressions do not leak
+into class declarations. This is ordinary rendering over existing visits, not a new
+AST, generation pass, recursive interpreter or output protocol.
+
+### Public backend boundaries
+
+- Aliases use stable source NodeIds and apply to declarations and UVM references.
+  Invalid emitted identifiers and collisions fail instead of producing ambiguous
+  code. SV-record instances track their caller-owned package namespace; register
+  layouts use independent packages. Streaming errors may leave partial bytes, so
+  callers choose buffering/atomic file publication when needed.
+- SV record types describe encoded bytes, not native Rust struct layout. Scalars
+  preserve little/big endian byte order; named records/unions expose byte envelopes.
+  Union selection stays outside the backend. Zero-sized images/accessors and images
+  outside the signed packed-index range are rejected. Sizes/offsets are 64-bit.
+- SV register packages preserve symbolic 64-bit layout arithmetic as functions and
+  concrete permission projections as metadata, including holes and effective masks.
+  They do not implement storage, bus effects or runtime access control.
+- UVM supports little-endian source maps with uniform access within fields. It
+  rejects big-endian registers, partial writable fields and permission-only views.
+  Source constructor parameters retain 64 bits; dynamic arrays check their target
+  range before allocation. Standalone bound maps work; shared analysis rejects
+  binding definitions still referenced by another map.
+- UVM volatility and mirror comparison are explicit backend options with conservative
+  defaults; PostReset stays unknown. The consumer owns prediction and bus width.
+  Generated member accesses use `this.`; UVM types/constants use `uvm_pkg::`.
+  Target class names reserve the framework's `uvm_` prefix and `type_id` macro alias.
+  These rules prevent constructor and enum shadowing from changing behavior.
+
+Generic tests accompany the backends in schema; only PDMA integration checks remain
+in contract. The release gate includes feature isolation, strict lint/docs, generated
+artifact checks and native consumers for byte-order roundtrips, parameterized SV
+layouts, UVM address/array construction and PDMA register metadata. Publication
+requires the user's later review and approval.
+
+### Migration qualification
+
+The final all-feature workspace run passed 1542 tests; the default-feature run
+passed 1407, both with zero failures and zero ignored tests. Strict workspace
+Clippy, rustdoc and formatting passed. The SV and UVM features each build on their
+own, and both annotated examples run. Packaging verification passed; 28 focused
+backend/default tests also passed from the extracted package outside the workspace.
+No package was published.
+
+Native consumers passed SV byte-order/union checks, symbolic SV register layouts
+including addresses above 32 bits, UVM parameter/bank construction and framework
+name-shadowing regressions. The PDMA RAL oracle passed 1/3-channel configurations
+with 32/64-bit buses and a 1020-channel case. The Veryl RTL snapshot built, and
+fresh DMA/VIP aligned-copy, read-error/IRQ and register-model scenarios passed.
+This is targeted integration qualification, not a new full RTL feature or PPA claim.
+All generated C, Veryl, SV record/register and UVM artifacts pass their check modes.
+
+The final responsibility review found no PDMA/runtime imports in the new builtins,
+no remaining application copies of the migrated renderers, and no added target IR
+or application-specific layout pass. Target-specific reference/layout callbacks
+remain only where they select declarations, expand value references or add syntax;
+shared structural recursion and documentation fallback use the trait defaults.
+
+### Final backend detail review
+
+The UVM helper is now `uvm/build.rs`: it renders member construction statements
+for the generated `build()` method. Its deferred text is named `build_body`, and
+its layout helper is named `layout_expression` to distinguish expression rendering
+from schema analysis. Member names are chosen once by the reference callback and
+passed to the build renderer. Register-field policy stays in `fields.rs`.
+
+SV constant emission now receives explicitly formatted typed literals. It no longer
+converts values to strings and then infers boolean/numeric types from that text.
+These cleanups preserve the generated PDMA files byte for byte.
+
+An additional native UVM probe found that class aliases matching `build()` arguments
+or generated member names produced scope-resolution compiler errors. The backend
+now rejects those target-name conflicts, using source identities to distinguish
+repeated references to one class from conflicting declarations. Parameter/member
+shadowing remains supported through `this.member`; only type-name conflicts are
+rejected. The regression covers conflicts in both declaration orders and successful
+reuse of an explicitly aliased type by multiple members and a bank. The corrected
+native fixture compiles, constructs the RAL model and checks its resulting addresses.
+This remains unpublished source for review.
+
+The final detail-review qualification passed 1545 all-feature workspace tests and
+31 focused tests from the extracted package, with no failures or ignored tests.
+Strict workspace Clippy, schema rustdoc, formatting, independent SV/UVM feature
+builds and package verification passed. The native namespace regression passed;
+the package contains `uvm/build.rs` and no obsolete `uvm/initialization.rs`.

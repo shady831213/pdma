@@ -39,7 +39,7 @@ fn downstream_export_when_schema_is_declared_through_renamed_facade()
         })
     ));
     let [artifact] = sink.artifacts() else {
-        panic!("expected one application artifact");
+        return Err("expected one application artifact".into());
     };
     assert_eq!(artifact.logical_name, "acme-telemetry-layout.txt");
     assert_eq!(artifact.media_type, "text/vnd.acme.telemetry-layout");
@@ -71,14 +71,18 @@ fn record_renderer_exports_without_a_register_backend() -> Result<(), Box<dyn st
         &his::analysis::Bindings::new(),
     )?;
     // When: only record-domain generation is invoked.
-    let reports = capture(&schema, downstream_exporter::TelemetryRecordRenderer)?;
+    let reports = capture(
+        &schema,
+        downstream_exporter::TelemetryRecordRenderer::new(&schema)?,
+        "records.txt",
+    )?;
     // Then: the artifact contains the independently expected record report alone.
     let reports: Vec<_> = reports
         .iter()
         .filter(|report| !report.contents.is_empty())
         .collect();
     let [artifact] = reports.as_slice() else {
-        panic!("one nonempty report expected");
+        return Err("one nonempty report expected".into());
     };
     assert_eq!(artifact.logical_name, "records.txt");
     assert_eq!(artifact.contents, b"record_size=16;record=DownPair.left@0+8,DownPair.left.sequence@0+4,DownPair.left.flags@4+2,DownPair.right@8+8,DownPair.right.sequence@8+4,DownPair.right.flags@12+2;");
@@ -95,14 +99,18 @@ fn register_renderer_exports_without_a_record_backend() -> Result<(), Box<dyn st
         &his::analysis::Bindings::new(),
     )?;
     // When: only register-domain generation is invoked.
-    let reports = capture(&schema, downstream_exporter::TelemetryRegisterRenderer)?;
+    let reports = capture(
+        &schema,
+        downstream_exporter::TelemetryRegisterRenderer::new(&schema)?,
+        "registers.txt",
+    )?;
     // Then: the artifact contains the independently expected register report alone.
     let reports: Vec<_> = reports
         .iter()
         .filter(|report| !report.contents.is_empty())
         .collect();
     let [artifact] = reports.as_slice() else {
-        panic!("one nonempty report expected");
+        return Err("one nonempty report expected".into());
     };
     assert_eq!(artifact.logical_name, "registers.txt");
     assert_eq!(artifact.contents, b"map_size=128;registers=controller@4,status@12,lane[0].publish@32,lane[0].fault@40,lane[1].publish@64,lane[1].fault@72");
@@ -112,6 +120,7 @@ fn register_renderer_exports_without_a_record_backend() -> Result<(), Box<dyn st
 fn capture<B: his::export::value::Backend>(
     schema: &his::analysis::AnalyzedSchema,
     mut backend: B,
+    logical_name: &str,
 ) -> Result<Vec<downstream_exporter::TelemetryReport>, his::export::ExportError<B::Error>> {
     let mut reports = Vec::new();
     for unit in his::export::prepare(schema, &mut backend)? {
@@ -119,8 +128,8 @@ fn capture<B: his::export::value::Backend>(
         unit.emit(&mut backend, &mut contents)
             .map_err(his::export::ExportError::Render)?;
         reports.push(downstream_exporter::TelemetryReport {
-            logical_name: unit.metadata().logical_name.clone(),
-            media_type: unit.metadata().media_type.clone(),
+            logical_name: logical_name.into(),
+            media_type: "text/plain".into(),
             contents,
         });
     }

@@ -1,4 +1,4 @@
-use hw_model_schema::Endian;
+use crate::Endian;
 use std::io::{Error, Write};
 
 pub(super) fn accessors(

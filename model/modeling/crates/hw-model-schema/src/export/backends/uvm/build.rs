@@ -1,12 +1,14 @@
-use super::Uvm;
-use hw_model_schema::{
+//! Renders child construction statements inside the generated UVM `build()` method.
+use super::UvmRegisterBackend;
+use crate::{
     ast::register::LayoutPropertyKind as Layout,
     export::{Kind, register::Context, value::Emit, view},
 };
 use std::io::{Error, Write};
-impl Uvm {
-    pub(super) fn initialize_reference(
+impl UvmRegisterBackend {
+    pub(super) fn emit_member_build(
         &mut self,
+        member: &str,
         target: view::Target<'_>,
         ctx: &Context<'_>,
         writer: &mut dyn Write,
@@ -14,31 +16,34 @@ impl Uvm {
         let p = ctx
             .placement()
             .ok_or_else(|| Error::other("reference without placement"))?;
-        let member = super::fields::member(p.name(), target.kind)?;
-        let offset = self.layout(ctx, Layout::Offset)?;
+        let offset = self.layout_expression(ctx, Layout::Offset)?;
         let (handle, offset, instance) = if p.is_bank() {
-            let count = self.layout(ctx, Layout::Count)?;
-            let stride = self.layout(ctx, Layout::Stride)?;
+            let count = self.layout_expression(ctx, Layout::Count)?;
+            let stride = self.layout_expression(ctx, Layout::Stride)?;
             writeln!(
                 writer,
                 "      if ({count} == 0) `uvm_fatal(\"RAL_BANK_COUNT\", \"{member} count must be positive\")"
             )?;
             writeln!(
                 writer,
-                "      {member} = new[{count}];\n      foreach ({member}[i]) begin"
+                "      if ({count} > 64'd2147483647) `uvm_fatal(\"RAL_BANK_COUNT\", \"bank count exceeds target array range\")"
+            )?;
+            writeln!(
+                writer,
+                "      this.{member} = new[{count}];\n      foreach (this.{member}[i]) begin"
             )?;
             (
-                format!("{member}[i]"),
+                format!("this.{member}[i]"),
                 format!("({offset} + i * {stride})"),
                 format!("$sformatf(\"{member}[%0d]\", i)"),
             )
         } else {
-            (member.clone(), offset, format!("\"{member}\""))
+            (format!("this.{member}"), offset, format!("\"{member}\""))
         };
         writeln!(
             writer,
             "      {handle} = {}::type_id::create({instance});\n      {handle}.configure(this);",
-            target.name
+            self.names.get(target.id, target.name)
         )?;
         if target.kind == Kind::Register {
             let access = super::fields::access(
@@ -64,7 +69,7 @@ impl Uvm {
         Ok(())
     }
 
-    fn layout(&mut self, ctx: &Context<'_>, kind: Layout) -> Result<String, Error> {
+    fn layout_expression(&mut self, ctx: &Context<'_>, kind: Layout) -> Result<String, Error> {
         let visit = ctx
             .layout(kind)
             .ok_or_else(|| Error::other("missing layout property"))?;

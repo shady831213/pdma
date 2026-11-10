@@ -5,7 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
-schema = { package = "hw-model-schema", version = "0.2.0", default-features = false }
+schema = { package = "hw-model-schema", version = "0.3.0", default-features = false }
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -7,45 +7,45 @@ package pdma_uvm_regs;
   `include "uvm_macros.svh"
     // Hardware channel count
     // Read-only count supplied by this hardware instance. Hardware initializes the value after construction and preserves it across device reset.
-  class ChannelCount extends uvm_reg;
+  class ChannelCount extends uvm_pkg::uvm_reg;
     `uvm_object_utils(ChannelCount)
-    uvm_reg_field value_field;
+    uvm_pkg::uvm_reg_field value_field;
     function new(string name = "ChannelCount");
-      super.new(name, 32, UVM_NO_COVERAGE);
+      super.new(name, 32, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build();
-      value_field = uvm_reg_field::type_id::create("value");
+      value_field = uvm_pkg::uvm_reg_field::type_id::create("value");
       value_field.configure(this, 32, 0, "RO", 1, 64'h0, 0, 0, 0);
-      value_field.set_compare(UVM_NO_CHECK);
+      value_field.set_compare(uvm_pkg::UVM_NO_CHECK);
     endfunction
   endclass
 
     // Immutable hardware RMW capabilities, preserved across reset
     // Immutable hardware RMW capabilities, preserved across reset. Wait and Fence do not require these bits.
-  class Capabilities extends uvm_reg;
+  class Capabilities extends uvm_pkg::uvm_reg;
     `uvm_object_utils(Capabilities)
     // 32-bit atomic and semaphore operations are supported
     // 32-bit atomic and semaphore operations are supported.
-    uvm_reg_field atomic32_field;
+    uvm_pkg::uvm_reg_field atomic32_field;
     // 64-bit atomic and semaphore operations are supported
     // 64-bit atomic and semaphore operations are supported.
-    uvm_reg_field atomic64_field;
+    uvm_pkg::uvm_reg_field atomic64_field;
     function new(string name = "Capabilities");
-      super.new(name, 32, UVM_NO_COVERAGE);
+      super.new(name, 32, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build();
-      atomic32_field = uvm_reg_field::type_id::create("atomic32");
+      atomic32_field = uvm_pkg::uvm_reg_field::type_id::create("atomic32");
       atomic32_field.configure(this, 1, 0, "RO", 1, 64'h0, 0, 0, 0);
-      atomic32_field.set_compare(UVM_NO_CHECK);
-      atomic64_field = uvm_reg_field::type_id::create("atomic64");
+      atomic32_field.set_compare(uvm_pkg::UVM_NO_CHECK);
+      atomic64_field = uvm_pkg::uvm_reg_field::type_id::create("atomic64");
       atomic64_field.configure(this, 1, 1, "RO", 1, 64'h0, 0, 0, 0);
-      atomic64_field.set_compare(UVM_NO_CHECK);
+      atomic64_field.set_compare(uvm_pkg::UVM_NO_CHECK);
     endfunction
   endclass
 
     // DMA discovery
     // Read-only hardware instance configuration, independent of privileged DMA controls.
-  class DmaDiscovery extends uvm_reg_block;
+  class DmaDiscovery extends uvm_pkg::uvm_reg_block;
     `uvm_object_utils(DmaDiscovery)
     // Implemented channel count
     // Number of implemented channels, preserved across DMA reset.
@@ -54,77 +54,77 @@ package pdma_uvm_regs;
     // Immutable native or exclusive atomic operation support by word width.
     Capabilities capabilities_reg;
     function new(string name = "DmaDiscovery");
-      super.new(name, UVM_NO_COVERAGE);
+      super.new(name, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build(input int unsigned bus_bytes = 4);
-      default_map = create_map("default_map", 0, bus_bytes, UVM_LITTLE_ENDIAN, 1);
-      channel_num_reg = ChannelCount::type_id::create("channel_num_reg");
-      channel_num_reg.configure(this);
-      channel_num_reg.build();
-      default_map.add_reg(channel_num_reg, 64'd0, "RO");
-      capabilities_reg = Capabilities::type_id::create("capabilities_reg");
-      capabilities_reg.configure(this);
-      capabilities_reg.build();
-      default_map.add_reg(capabilities_reg, 64'd4, "RO");
+      default_map = create_map("default_map", 0, bus_bytes, uvm_pkg::UVM_LITTLE_ENDIAN, 1);
+      this.channel_num_reg = ChannelCount::type_id::create("channel_num_reg");
+      this.channel_num_reg.configure(this);
+      this.channel_num_reg.build();
+      default_map.add_reg(this.channel_num_reg, 64'd0, "RO");
+      this.capabilities_reg = Capabilities::type_id::create("capabilities_reg");
+      this.capabilities_reg.configure(this);
+      this.capabilities_reg.build();
+      default_map.add_reg(this.capabilities_reg, 64'd4, "RO");
     endfunction
   endclass
 
     // Enable control
     // A 32-bit little-endian control register, initially disabled. Only bit zero is writable; bits 1 through 31 are reserved and remain zero.
-  class Switch extends uvm_reg;
+  class Switch extends uvm_pkg::uvm_reg;
     `uvm_object_utils(Switch)
     // Enabled
     // Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
-    uvm_reg_field enabled_field;
+    uvm_pkg::uvm_reg_field enabled_field;
     function new(string name = "Switch");
-      super.new(name, 32, UVM_NO_COVERAGE);
+      super.new(name, 32, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build();
-      enabled_field = uvm_reg_field::type_id::create("enabled");
+      enabled_field = uvm_pkg::uvm_reg_field::type_id::create("enabled");
       enabled_field.configure(this, 1, 0, "RW", 1, 64'h0, 1, 0, 0);
-      enabled_field.set_compare(UVM_NO_CHECK);
+      enabled_field.set_compare(uvm_pkg::UVM_NO_CHECK);
     endfunction
   endclass
 
     // Dma fatal state
     // A device-wide hardware fatal stops all channels. Only device reset clears it; channel reset does not. This is a hardware fatal input, not a software memory-management error.
-  class DmaFatal extends uvm_reg;
+  class DmaFatal extends uvm_pkg::uvm_reg;
     `uvm_object_utils(DmaFatal)
     // Zero is healthy; Internal is a device-wide unrecoverable hardware fatal
     // Zero is healthy; Internal is a device-wide unrecoverable hardware fatal.
-    uvm_reg_field code_field;
+    uvm_pkg::uvm_reg_field code_field;
     localparam logic [63:0] CODE_NONE = 64'd0;
     localparam logic [63:0] CODE_INTERNAL = 64'd1;
     function new(string name = "DmaFatal");
-      super.new(name, 32, UVM_NO_COVERAGE);
+      super.new(name, 32, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build();
-      code_field = uvm_reg_field::type_id::create("code");
+      code_field = uvm_pkg::uvm_reg_field::type_id::create("code");
       code_field.configure(this, 32, 0, "RO", 1, 64'h0, 1, 0, 0);
-      code_field.set_compare(UVM_NO_CHECK);
+      code_field.set_compare(uvm_pkg::UVM_NO_CHECK);
     endfunction
   endclass
 
     // Hardware reset request and busy state
     // Writing one to bit zero requests reset of the owning hardware scope. Reading one means reset is busy; only hardware clears it to zero after draining all prior command-ring reads, SG-list reads, payload reads/writes and event-ring writes, invalidating retained work and clearing configuration, cursors, errors and device-owned notification state. Once zero is observed, no further memory access can belong to pre-reset work in that scope. Writing zero has no effect, and repeated requests while busy coalesce. Configuration writes are rejected while reset is busy. External memory is neither cleared nor rolled back; platform-pending notifications remain claimable. Software must keep affected memory valid until completion, even if it cancels or times out its wait. Other bits are reserved.
-  class Reset extends uvm_reg;
+  class Reset extends uvm_pkg::uvm_reg;
     `uvm_object_utils(Reset)
     // Write one to request reset; read one while busy and zero after hardware cleanup
     // Write one to request reset; read one while busy and zero after hardware cleanup. Writing zero cannot clear a pending request.
-    uvm_reg_field request_field;
+    uvm_pkg::uvm_reg_field request_field;
     function new(string name = "Reset");
-      super.new(name, 32, UVM_NO_COVERAGE);
+      super.new(name, 32, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build();
-      request_field = uvm_reg_field::type_id::create("request");
+      request_field = uvm_pkg::uvm_reg_field::type_id::create("request");
       request_field.configure(this, 1, 0, "RW", 1, 64'h0, 1, 0, 0);
-      request_field.set_compare(UVM_NO_CHECK);
+      request_field.set_compare(uvm_pkg::UVM_NO_CHECK);
     endfunction
   endclass
 
     // Dma-wide controls
     // Owns the device fatal input, its interrupt enable and whole-device reset. Channel causes and enables remain channel-owned.
-  class DmaControl extends uvm_reg_block;
+  class DmaControl extends uvm_pkg::uvm_reg_block;
     `uvm_object_utils(DmaControl)
     // Enables notification of device fatal independently of channel IRQ enable
     // Enables notification of device fatal independently of channel IRQ enable.
@@ -136,47 +136,47 @@ package pdma_uvm_regs;
     // Requests reset of device controls and every channel, including retained execution. Reads busy until all affected memory accesses drain and cleanup completes. Hardware channel count is preserved.
     Reset reset_reg;
     function new(string name = "DmaControl");
-      super.new(name, UVM_NO_COVERAGE);
+      super.new(name, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build(input int unsigned bus_bytes = 4);
-      default_map = create_map("default_map", 0, bus_bytes, UVM_LITTLE_ENDIAN, 1);
-      irq_enable_reg = Switch::type_id::create("irq_enable_reg");
-      irq_enable_reg.configure(this);
-      irq_enable_reg.build();
-      default_map.add_reg(irq_enable_reg, 64'd0, "RW");
-      fatal_reg = DmaFatal::type_id::create("fatal_reg");
-      fatal_reg.configure(this);
-      fatal_reg.build();
-      default_map.add_reg(fatal_reg, 64'd4, "RO");
-      reset_reg = Reset::type_id::create("reset_reg");
-      reset_reg.configure(this);
-      reset_reg.build();
-      default_map.add_reg(reset_reg, 64'd8, "RW");
+      default_map = create_map("default_map", 0, bus_bytes, uvm_pkg::UVM_LITTLE_ENDIAN, 1);
+      this.irq_enable_reg = Switch::type_id::create("irq_enable_reg");
+      this.irq_enable_reg.configure(this);
+      this.irq_enable_reg.build();
+      default_map.add_reg(this.irq_enable_reg, 64'd0, "RW");
+      this.fatal_reg = DmaFatal::type_id::create("fatal_reg");
+      this.fatal_reg.configure(this);
+      this.fatal_reg.build();
+      default_map.add_reg(this.fatal_reg, 64'd4, "RO");
+      this.reset_reg = Reset::type_id::create("reset_reg");
+      this.reset_reg.configure(this);
+      this.reset_reg.build();
+      default_map.add_reg(this.reset_reg, 64'd8, "RW");
     endfunction
   endclass
 
     // Channel administration
     // Privileged recovery aperture, separate from channel data registers.
-  class ChannelAdmin extends uvm_reg_block;
+  class ChannelAdmin extends uvm_pkg::uvm_reg_block;
     `uvm_object_utils(ChannelAdmin)
     // Channel reset request and busy state
     // Requests channel cleanup; reads busy until accepted work retires. Other channels and DMA fatal state are unaffected.
     Reset reset_reg;
     function new(string name = "ChannelAdmin");
-      super.new(name, UVM_NO_COVERAGE);
+      super.new(name, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build(input int unsigned bus_bytes = 4);
-      default_map = create_map("default_map", 0, bus_bytes, UVM_LITTLE_ENDIAN, 1);
-      reset_reg = Reset::type_id::create("reset_reg");
-      reset_reg.configure(this);
-      reset_reg.build();
-      default_map.add_reg(reset_reg, 64'd0, "RW");
+      default_map = create_map("default_map", 0, bus_bytes, uvm_pkg::UVM_LITTLE_ENDIAN, 1);
+      this.reset_reg = Reset::type_id::create("reset_reg");
+      this.reset_reg.configure(this);
+      this.reset_reg.build();
+      default_map.add_reg(this.reset_reg, 64'd0, "RW");
     endfunction
   endclass
 
     // DMA administration aperture
     // Contiguous privileged DMA controls and per-channel reset registers, separate from discovery and data apertures.
-  class DmaAdmin extends uvm_reg_block;
+  class DmaAdmin extends uvm_pkg::uvm_reg_block;
     `uvm_object_utils(DmaAdmin)
     // DMA-wide administration
     // Global interrupt control, fatal state and whole-DMA reset.
@@ -185,73 +185,74 @@ package pdma_uvm_regs;
     // One privileged recovery block for each implemented channel.
     ChannelAdmin channels_block[];
     function new(string name = "DmaAdmin");
-      super.new(name, UVM_NO_COVERAGE);
+      super.new(name, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
-    virtual function void build(input int unsigned p_channel_count, input int unsigned bus_bytes = 4);
-      default_map = create_map("default_map", 0, bus_bytes, UVM_LITTLE_ENDIAN, 1);
-      control_block = DmaControl::type_id::create("control_block");
-      control_block.configure(this);
-      control_block.build(bus_bytes);
-      default_map.add_submap(control_block.default_map, 64'd0);
+    virtual function void build(input longint unsigned p_channel_count, input int unsigned bus_bytes = 4);
+      default_map = create_map("default_map", 0, bus_bytes, uvm_pkg::UVM_LITTLE_ENDIAN, 1);
+      this.control_block = DmaControl::type_id::create("control_block");
+      this.control_block.configure(this);
+      this.control_block.build(bus_bytes);
+      default_map.add_submap(this.control_block.default_map, 64'd0);
       if (p_channel_count == 0) `uvm_fatal("RAL_BANK_COUNT", "channels_block count must be positive")
-      channels_block = new[p_channel_count];
-      foreach (channels_block[i]) begin
-      channels_block[i] = ChannelAdmin::type_id::create($sformatf("channels_block[%0d]", i));
-      channels_block[i].configure(this);
-      channels_block[i].build(bus_bytes);
-      default_map.add_submap(channels_block[i].default_map, (64'd12 + i * 64'd4));
+      if (p_channel_count > 64'd2147483647) `uvm_fatal("RAL_BANK_COUNT", "bank count exceeds target array range")
+      this.channels_block = new[p_channel_count];
+      foreach (this.channels_block[i]) begin
+      this.channels_block[i] = ChannelAdmin::type_id::create($sformatf("channels_block[%0d]", i));
+      this.channels_block[i].configure(this);
+      this.channels_block[i].build(bus_bytes);
+      default_map.add_submap(this.channels_block[i].default_map, (64'd12 + i * 64'd4));
       end
     endfunction
   endclass
 
     // Memory address
     // A 64-bit little-endian address in the device's attached memory backend. The backend determines address interpretation; the value need not be a host pointer.
-  class Address extends uvm_reg;
+  class Address extends uvm_pkg::uvm_reg;
     `uvm_object_utils(Address)
-    uvm_reg_field value_field;
+    uvm_pkg::uvm_reg_field value_field;
     function new(string name = "Address");
-      super.new(name, 64, UVM_NO_COVERAGE);
+      super.new(name, 64, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build();
-      value_field = uvm_reg_field::type_id::create("value");
+      value_field = uvm_pkg::uvm_reg_field::type_id::create("value");
       value_field.configure(this, 64, 0, "RW", 1, 64'h0, 1, 0, 0);
-      value_field.set_compare(UVM_NO_CHECK);
+      value_field.set_compare(uvm_pkg::UVM_NO_CHECK);
     endfunction
   endclass
 
     // Read/write word
     // A 32-bit little-endian register, initially zero. Software may read or write all bits; its placement defines their hardware meaning.
-  class Word extends uvm_reg;
+  class Word extends uvm_pkg::uvm_reg;
     `uvm_object_utils(Word)
-    uvm_reg_field value_field;
+    uvm_pkg::uvm_reg_field value_field;
     function new(string name = "Word");
-      super.new(name, 32, UVM_NO_COVERAGE);
+      super.new(name, 32, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build();
-      value_field = uvm_reg_field::type_id::create("value");
+      value_field = uvm_pkg::uvm_reg_field::type_id::create("value");
       value_field.configure(this, 32, 0, "RW", 1, 64'h0, 1, 0, 0);
-      value_field.set_compare(UVM_NO_CHECK);
+      value_field.set_compare(uvm_pkg::UVM_NO_CHECK);
     endfunction
   endclass
 
     // Read-only word
     // A 32-bit little-endian register, initially zero. Hardware updates the value; software may read it but cannot write it.
-  class ReadWord extends uvm_reg;
+  class ReadWord extends uvm_pkg::uvm_reg;
     `uvm_object_utils(ReadWord)
-    uvm_reg_field value_field;
+    uvm_pkg::uvm_reg_field value_field;
     function new(string name = "ReadWord");
-      super.new(name, 32, UVM_NO_COVERAGE);
+      super.new(name, 32, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build();
-      value_field = uvm_reg_field::type_id::create("value");
+      value_field = uvm_pkg::uvm_reg_field::type_id::create("value");
       value_field.configure(this, 32, 0, "RO", 1, 64'h0, 1, 0, 0);
-      value_field.set_compare(UVM_NO_CHECK);
+      value_field.set_compare(uvm_pkg::UVM_NO_CHECK);
     endfunction
   endclass
 
     // Command ring registers
     // Software writes command records and publishes the producer cursor; hardware fetches records and advances the consumer cursor. Cursors are wrapping 32-bit entry counts, not byte offsets.
-  class CommandRegisters extends uvm_reg_block;
+  class CommandRegisters extends uvm_pkg::uvm_reg_block;
     `uvm_object_utils(CommandRegisters)
     // Command ring base address
     // Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset.
@@ -266,32 +267,32 @@ package pdma_uvm_regs;
     // Hardware advances this wrapping cursor after successfully reading and decoding a command. It releases the command slot; it does not indicate that the copy has completed.
     ReadWord consumer_reg;
     function new(string name = "CommandRegisters");
-      super.new(name, UVM_NO_COVERAGE);
+      super.new(name, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build(input int unsigned bus_bytes = 4);
-      default_map = create_map("default_map", 0, bus_bytes, UVM_LITTLE_ENDIAN, 1);
-      base_reg = Address::type_id::create("base_reg");
-      base_reg.configure(this);
-      base_reg.build();
-      default_map.add_reg(base_reg, 64'd0, "RW");
-      capacity_reg = Word::type_id::create("capacity_reg");
-      capacity_reg.configure(this);
-      capacity_reg.build();
-      default_map.add_reg(capacity_reg, 64'd8, "RW");
-      producer_reg = Word::type_id::create("producer_reg");
-      producer_reg.configure(this);
-      producer_reg.build();
-      default_map.add_reg(producer_reg, 64'd12, "RW");
-      consumer_reg = ReadWord::type_id::create("consumer_reg");
-      consumer_reg.configure(this);
-      consumer_reg.build();
-      default_map.add_reg(consumer_reg, 64'd16, "RO");
+      default_map = create_map("default_map", 0, bus_bytes, uvm_pkg::UVM_LITTLE_ENDIAN, 1);
+      this.base_reg = Address::type_id::create("base_reg");
+      this.base_reg.configure(this);
+      this.base_reg.build();
+      default_map.add_reg(this.base_reg, 64'd0, "RW");
+      this.capacity_reg = Word::type_id::create("capacity_reg");
+      this.capacity_reg.configure(this);
+      this.capacity_reg.build();
+      default_map.add_reg(this.capacity_reg, 64'd8, "RW");
+      this.producer_reg = Word::type_id::create("producer_reg");
+      this.producer_reg.configure(this);
+      this.producer_reg.build();
+      default_map.add_reg(this.producer_reg, 64'd12, "RW");
+      this.consumer_reg = ReadWord::type_id::create("consumer_reg");
+      this.consumer_reg.configure(this);
+      this.consumer_reg.build();
+      default_map.add_reg(this.consumer_reg, 64'd16, "RO");
     endfunction
   endclass
 
     // Event ring registers
     // Hardware writes event records and publishes the producer cursor; software consumes records and advances the consumer cursor. A full ring is fatal only when an error event must be published; successful work needs no event capacity.
-  class EventRegisters extends uvm_reg_block;
+  class EventRegisters extends uvm_pkg::uvm_reg_block;
     `uvm_object_utils(EventRegisters)
     // Event ring base address
     // Start of event storage in the attached memory backend, aligned to eight bytes. Event slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
@@ -306,32 +307,32 @@ package pdma_uvm_regs;
     // Software advances this wrapping cursor after reading and decoding events. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
     Word consumer_reg;
     function new(string name = "EventRegisters");
-      super.new(name, UVM_NO_COVERAGE);
+      super.new(name, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build(input int unsigned bus_bytes = 4);
-      default_map = create_map("default_map", 0, bus_bytes, UVM_LITTLE_ENDIAN, 1);
-      base_reg = Address::type_id::create("base_reg");
-      base_reg.configure(this);
-      base_reg.build();
-      default_map.add_reg(base_reg, 64'd0, "RW");
-      capacity_reg = Word::type_id::create("capacity_reg");
-      capacity_reg.configure(this);
-      capacity_reg.build();
-      default_map.add_reg(capacity_reg, 64'd8, "RW");
-      producer_reg = ReadWord::type_id::create("producer_reg");
-      producer_reg.configure(this);
-      producer_reg.build();
-      default_map.add_reg(producer_reg, 64'd12, "RO");
-      consumer_reg = Word::type_id::create("consumer_reg");
-      consumer_reg.configure(this);
-      consumer_reg.build();
-      default_map.add_reg(consumer_reg, 64'd16, "RW");
+      default_map = create_map("default_map", 0, bus_bytes, uvm_pkg::UVM_LITTLE_ENDIAN, 1);
+      this.base_reg = Address::type_id::create("base_reg");
+      this.base_reg.configure(this);
+      this.base_reg.build();
+      default_map.add_reg(this.base_reg, 64'd0, "RW");
+      this.capacity_reg = Word::type_id::create("capacity_reg");
+      this.capacity_reg.configure(this);
+      this.capacity_reg.build();
+      default_map.add_reg(this.capacity_reg, 64'd8, "RW");
+      this.producer_reg = ReadWord::type_id::create("producer_reg");
+      this.producer_reg.configure(this);
+      this.producer_reg.build();
+      default_map.add_reg(this.producer_reg, 64'd12, "RO");
+      this.consumer_reg = Word::type_id::create("consumer_reg");
+      this.consumer_reg.configure(this);
+      this.consumer_reg.build();
+      default_map.add_reg(this.consumer_reg, 64'd16, "RW");
     endfunction
   endclass
 
     // Channel configuration
     // Processing enable remains writable; ring context freezes after the first successful enable.
-  class ChannelConfiguration extends uvm_reg_block;
+  class ChannelConfiguration extends uvm_pkg::uvm_reg_block;
     `uvm_object_utils(ChannelConfiguration)
     // Channel processing enable
     // One permits pipeline progress and validates command ring geometry; the first successful enable locks both rings' base addresses and capacities. Event geometry is checked when publishing an error event. Zero pauses processing without clearing cursors, retained work or errors.
@@ -340,28 +341,28 @@ package pdma_uvm_regs;
     // Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
     Word ring_context_reg;
     function new(string name = "ChannelConfiguration");
-      super.new(name, UVM_NO_COVERAGE);
+      super.new(name, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build(input int unsigned bus_bytes = 4);
-      default_map = create_map("default_map", 0, bus_bytes, UVM_LITTLE_ENDIAN, 1);
-      enable_reg = Switch::type_id::create("enable_reg");
-      enable_reg.configure(this);
-      enable_reg.build();
-      default_map.add_reg(enable_reg, 64'd0, "RW");
-      ring_context_reg = Word::type_id::create("ring_context_reg");
-      ring_context_reg.configure(this);
-      ring_context_reg.build();
-      default_map.add_reg(ring_context_reg, 64'd4, "RW");
+      default_map = create_map("default_map", 0, bus_bytes, uvm_pkg::UVM_LITTLE_ENDIAN, 1);
+      this.enable_reg = Switch::type_id::create("enable_reg");
+      this.enable_reg.configure(this);
+      this.enable_reg.build();
+      default_map.add_reg(this.enable_reg, 64'd0, "RW");
+      this.ring_context_reg = Word::type_id::create("ring_context_reg");
+      this.ring_context_reg.configure(this);
+      this.ring_context_reg.build();
+      default_map.add_reg(this.ring_context_reg, 64'd4, "RW");
     endfunction
   endclass
 
     // Channel fatal state
     // Hardware-owned sticky failure state. Software can observe the code; only channel or device reset clears it.
-  class ChannelFatal extends uvm_reg;
+  class ChannelFatal extends uvm_pkg::uvm_reg;
     `uvm_object_utils(ChannelFatal)
     // Fatal code
     // Distinguishes normal operation from command-fetch and event-publication failures. Other encodings are invalid.
-    uvm_reg_field code_field;
+    uvm_pkg::uvm_reg_field code_field;
     // No channel fatal
     // Neither ring has latched a hardware access failure.
     localparam logic [63:0] CODE_NONE = 64'd0;
@@ -378,52 +379,52 @@ package pdma_uvm_regs;
     // Error publication encountered invalid event geometry or cursors.
     localparam logic [63:0] CODE_EVENTCONFIGURATION = 64'd4;
     function new(string name = "ChannelFatal");
-      super.new(name, 32, UVM_NO_COVERAGE);
+      super.new(name, 32, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build();
-      code_field = uvm_reg_field::type_id::create("code");
+      code_field = uvm_pkg::uvm_reg_field::type_id::create("code");
       code_field.configure(this, 32, 0, "RO", 1, 64'h0, 1, 0, 0);
-      code_field.set_compare(UVM_NO_CHECK);
+      code_field.set_compare(uvm_pkg::UVM_NO_CHECK);
     endfunction
   endclass
 
     // Payload fault status
     // Hardware sets faulted when a payload access returns a recoverable page fault. Resume clears it; a later fault sets it again. Zero is not command completion. Reset or matching Abort discards parked work and clears the bit.
-  class FaultStatus extends uvm_reg;
+  class FaultStatus extends uvm_pkg::uvm_reg;
     `uvm_object_utils(FaultStatus)
     // A payload page fault awaits software repair and an explicit resume request
     // A payload page fault awaits software repair and an explicit resume request.
-    uvm_reg_field faulted_field;
+    uvm_pkg::uvm_reg_field faulted_field;
     function new(string name = "FaultStatus");
-      super.new(name, 32, UVM_NO_COVERAGE);
+      super.new(name, 32, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build();
-      faulted_field = uvm_reg_field::type_id::create("faulted");
+      faulted_field = uvm_pkg::uvm_reg_field::type_id::create("faulted");
       faulted_field.configure(this, 1, 0, "RO", 1, 64'h0, 1, 0, 0);
-      faulted_field.set_compare(UVM_NO_CHECK);
+      faulted_field.set_compare(uvm_pkg::UVM_NO_CHECK);
     endfunction
   endclass
 
     // Payload resume request
     // Write-one action for the current channel fault. Zero writes have no effect; requests made while not faulted are discarded, not saved for later faults. No request identity or duplicate suppression is provided.
-  class Resume extends uvm_reg;
+  class Resume extends uvm_pkg::uvm_reg;
     `uvm_object_utils(Resume)
     // Write one to clear faulted after mapping repair; reserved bits must be zero
     // Write one to clear faulted after mapping repair; reserved bits must be zero.
-    uvm_reg_field request_field;
+    uvm_pkg::uvm_reg_field request_field;
     function new(string name = "Resume");
-      super.new(name, 32, UVM_NO_COVERAGE);
+      super.new(name, 32, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build();
-      request_field = uvm_reg_field::type_id::create("request");
+      request_field = uvm_pkg::uvm_reg_field::type_id::create("request");
       request_field.configure(this, 1, 0, "WO", 1, 64'h0, 1, 0, 0);
-      request_field.set_compare(UVM_NO_CHECK);
+      request_field.set_compare(uvm_pkg::UVM_NO_CHECK);
     endfunction
   endclass
 
     // Channel failure and resume
     // Channel-owned fatal status and recoverable payload suspension. Privileged reset remains in ChannelAdmin.
-  class ChannelRecovery extends uvm_reg_block;
+  class ChannelRecovery extends uvm_pkg::uvm_reg_block;
     `uvm_object_utils(ChannelRecovery)
     // Sticky channel fatal
     // A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
@@ -435,103 +436,103 @@ package pdma_uvm_regs;
     // Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
     Resume resume_reg;
     function new(string name = "ChannelRecovery");
-      super.new(name, UVM_NO_COVERAGE);
+      super.new(name, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build(input int unsigned bus_bytes = 4);
-      default_map = create_map("default_map", 0, bus_bytes, UVM_LITTLE_ENDIAN, 1);
-      fatal_reg = ChannelFatal::type_id::create("fatal_reg");
-      fatal_reg.configure(this);
-      fatal_reg.build();
-      default_map.add_reg(fatal_reg, 64'd0, "RO");
-      fault_status_reg = FaultStatus::type_id::create("fault_status_reg");
-      fault_status_reg.configure(this);
-      fault_status_reg.build();
-      default_map.add_reg(fault_status_reg, 64'd4, "RO");
-      resume_reg = Resume::type_id::create("resume_reg");
-      resume_reg.configure(this);
-      resume_reg.build();
-      default_map.add_reg(resume_reg, 64'd8, "WO");
+      default_map = create_map("default_map", 0, bus_bytes, uvm_pkg::UVM_LITTLE_ENDIAN, 1);
+      this.fatal_reg = ChannelFatal::type_id::create("fatal_reg");
+      this.fatal_reg.configure(this);
+      this.fatal_reg.build();
+      default_map.add_reg(this.fatal_reg, 64'd0, "RO");
+      this.fault_status_reg = FaultStatus::type_id::create("fault_status_reg");
+      this.fault_status_reg.configure(this);
+      this.fault_status_reg.build();
+      default_map.add_reg(this.fault_status_reg, 64'd4, "RO");
+      this.resume_reg = Resume::type_id::create("resume_reg");
+      this.resume_reg.configure(this);
+      this.resume_reg.build();
+      default_map.add_reg(this.resume_reg, 64'd8, "WO");
     endfunction
   endclass
 
     // Channel interrupt causes
     // Hardware causes visible regardless of masks. Reading does not acknowledge notifications. Non-empty follows occupancy, Trap clears on write-one acknowledgment, and error/fatal require channel reset.
-  class ChannelIrqCause extends uvm_reg;
+  class ChannelIrqCause extends uvm_pkg::uvm_reg;
     `uvm_object_utils(ChannelIrqCause)
     // The event ring currently contains unread entries
     // The event ring currently contains unread entries.
-    uvm_reg_field event_non_empty_field;
+    uvm_pkg::uvm_reg_field event_non_empty_field;
     // A Trap command executed since the last Trap acknowledgment
     // A Trap command executed since the last Trap acknowledgment.
-    uvm_reg_field trap_field;
+    uvm_pkg::uvm_reg_field trap_field;
     // A stopping command error is latched before event publication; processing remains stopped until reset
     // A stopping command error is latched before event publication; processing remains stopped until reset. Payload suspension does not set this cause.
-    uvm_reg_field error_field;
+    uvm_pkg::uvm_reg_field error_field;
     // The channel fatal register contains a fatal error
     // The channel fatal register contains a fatal error.
-    uvm_reg_field channel_fatal_field;
+    uvm_pkg::uvm_reg_field channel_fatal_field;
     function new(string name = "ChannelIrqCause");
-      super.new(name, 32, UVM_NO_COVERAGE);
+      super.new(name, 32, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build();
-      event_non_empty_field = uvm_reg_field::type_id::create("event_non_empty");
+      event_non_empty_field = uvm_pkg::uvm_reg_field::type_id::create("event_non_empty");
       event_non_empty_field.configure(this, 1, 0, "RO", 1, 64'h0, 1, 0, 0);
-      event_non_empty_field.set_compare(UVM_NO_CHECK);
-      trap_field = uvm_reg_field::type_id::create("trap");
+      event_non_empty_field.set_compare(uvm_pkg::UVM_NO_CHECK);
+      trap_field = uvm_pkg::uvm_reg_field::type_id::create("trap");
       trap_field.configure(this, 1, 1, "RO", 1, 64'h0, 1, 0, 0);
-      trap_field.set_compare(UVM_NO_CHECK);
-      error_field = uvm_reg_field::type_id::create("error");
+      trap_field.set_compare(uvm_pkg::UVM_NO_CHECK);
+      error_field = uvm_pkg::uvm_reg_field::type_id::create("error");
       error_field.configure(this, 1, 2, "RO", 1, 64'h0, 1, 0, 0);
-      error_field.set_compare(UVM_NO_CHECK);
-      channel_fatal_field = uvm_reg_field::type_id::create("channel_fatal");
+      error_field.set_compare(uvm_pkg::UVM_NO_CHECK);
+      channel_fatal_field = uvm_pkg::uvm_reg_field::type_id::create("channel_fatal");
       channel_fatal_field.configure(this, 1, 3, "RO", 1, 64'h0, 1, 0, 0);
-      channel_fatal_field.set_compare(UVM_NO_CHECK);
+      channel_fatal_field.set_compare(uvm_pkg::UVM_NO_CHECK);
     endfunction
   endclass
 
     // Channel event notification masks
     // One suppresses that source's future notifications without clearing causes. Unmask does not replay past events; software must check queue and error state before waiting. Error and fatal notifications bypass these two masks.
-  class ChannelIrqMask extends uvm_reg;
+  class ChannelIrqMask extends uvm_pkg::uvm_reg;
     `uvm_object_utils(ChannelIrqMask)
     // Mask notifications on event empty-to-non-empty transitions
     // Mask notifications on event empty-to-non-empty transitions.
-    uvm_reg_field event_non_empty_field;
+    uvm_pkg::uvm_reg_field event_non_empty_field;
     // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
     // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
-    uvm_reg_field trap_field;
+    uvm_pkg::uvm_reg_field trap_field;
     function new(string name = "ChannelIrqMask");
-      super.new(name, 32, UVM_NO_COVERAGE);
+      super.new(name, 32, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build();
-      event_non_empty_field = uvm_reg_field::type_id::create("event_non_empty");
+      event_non_empty_field = uvm_pkg::uvm_reg_field::type_id::create("event_non_empty");
       event_non_empty_field.configure(this, 1, 0, "RW", 1, 64'h0, 1, 0, 0);
-      event_non_empty_field.set_compare(UVM_NO_CHECK);
-      trap_field = uvm_reg_field::type_id::create("trap");
+      event_non_empty_field.set_compare(uvm_pkg::UVM_NO_CHECK);
+      trap_field = uvm_pkg::uvm_reg_field::type_id::create("trap");
       trap_field.configure(this, 1, 1, "RW", 1, 64'h0, 1, 0, 0);
-      trap_field.set_compare(UVM_NO_CHECK);
+      trap_field.set_compare(uvm_pkg::UVM_NO_CHECK);
     endfunction
   endclass
 
     // Write-one acknowledgment of sticky Trap cause; zero is ignored and pending platform notifications survive
     // Write-one acknowledgment of sticky Trap cause; zero is ignored and pending platform notifications survive.
-  class TrapAck extends uvm_reg;
+  class TrapAck extends uvm_pkg::uvm_reg;
     `uvm_object_utils(TrapAck)
     // Write one to clear the sticky Trap cause
     // Write one to clear the sticky Trap cause.
-    uvm_reg_field request_field;
+    uvm_pkg::uvm_reg_field request_field;
     function new(string name = "TrapAck");
-      super.new(name, 32, UVM_NO_COVERAGE);
+      super.new(name, 32, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build();
-      request_field = uvm_reg_field::type_id::create("request");
+      request_field = uvm_pkg::uvm_reg_field::type_id::create("request");
       request_field.configure(this, 1, 0, "WO", 1, 64'h0, 1, 0, 0);
-      request_field.set_compare(UVM_NO_CHECK);
+      request_field.set_compare(uvm_pkg::UVM_NO_CHECK);
     endfunction
   endclass
 
     // Channel interrupt controls
     // Independent channel notification enable, causes, masks and Trap acknowledgment.
-  class ChannelInterrupts extends uvm_reg_block;
+  class ChannelInterrupts extends uvm_pkg::uvm_reg_block;
     `uvm_object_utils(ChannelInterrupts)
     // Channel interrupt enable
     // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
@@ -546,32 +547,32 @@ package pdma_uvm_regs;
     // Write one to clear sticky Trap cause without retracting platform notifications.
     TrapAck trap_ack_reg;
     function new(string name = "ChannelInterrupts");
-      super.new(name, UVM_NO_COVERAGE);
+      super.new(name, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build(input int unsigned bus_bytes = 4);
-      default_map = create_map("default_map", 0, bus_bytes, UVM_LITTLE_ENDIAN, 1);
-      enable_reg = Switch::type_id::create("enable_reg");
-      enable_reg.configure(this);
-      enable_reg.build();
-      default_map.add_reg(enable_reg, 64'd0, "RW");
-      cause_reg = ChannelIrqCause::type_id::create("cause_reg");
-      cause_reg.configure(this);
-      cause_reg.build();
-      default_map.add_reg(cause_reg, 64'd4, "RO");
-      mask_reg = ChannelIrqMask::type_id::create("mask_reg");
-      mask_reg.configure(this);
-      mask_reg.build();
-      default_map.add_reg(mask_reg, 64'd8, "RW");
-      trap_ack_reg = TrapAck::type_id::create("trap_ack_reg");
-      trap_ack_reg.configure(this);
-      trap_ack_reg.build();
-      default_map.add_reg(trap_ack_reg, 64'd12, "WO");
+      default_map = create_map("default_map", 0, bus_bytes, uvm_pkg::UVM_LITTLE_ENDIAN, 1);
+      this.enable_reg = Switch::type_id::create("enable_reg");
+      this.enable_reg.configure(this);
+      this.enable_reg.build();
+      default_map.add_reg(this.enable_reg, 64'd0, "RW");
+      this.cause_reg = ChannelIrqCause::type_id::create("cause_reg");
+      this.cause_reg.configure(this);
+      this.cause_reg.build();
+      default_map.add_reg(this.cause_reg, 64'd4, "RO");
+      this.mask_reg = ChannelIrqMask::type_id::create("mask_reg");
+      this.mask_reg.configure(this);
+      this.mask_reg.build();
+      default_map.add_reg(this.mask_reg, 64'd8, "RW");
+      this.trap_ack_reg = TrapAck::type_id::create("trap_ack_reg");
+      this.trap_ack_reg.configure(this);
+      this.trap_ack_reg.build();
+      default_map.add_reg(this.trap_ack_reg, 64'd12, "WO");
     endfunction
   endclass
 
     // Channel controls and fatal state
     // Channel-owned configuration, recovery and interrupt groups. Stopping errors require reset; recoverable payload faults retain the command until explicit resume.
-  class ChannelRegisters extends uvm_reg_block;
+  class ChannelRegisters extends uvm_pkg::uvm_reg_block;
     `uvm_object_utils(ChannelRegisters)
     // Processing enable and locked ring context.
     ChannelConfiguration config_block;
@@ -580,28 +581,28 @@ package pdma_uvm_regs;
     // Notification enable, causes, masks and Trap acknowledgment.
     ChannelInterrupts irq_block;
     function new(string name = "ChannelRegisters");
-      super.new(name, UVM_NO_COVERAGE);
+      super.new(name, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build(input int unsigned bus_bytes = 4);
-      default_map = create_map("default_map", 0, bus_bytes, UVM_LITTLE_ENDIAN, 1);
-      config_block = ChannelConfiguration::type_id::create("config_block");
-      config_block.configure(this);
-      config_block.build(bus_bytes);
-      default_map.add_submap(config_block.default_map, 64'd0);
-      recovery_block = ChannelRecovery::type_id::create("recovery_block");
-      recovery_block.configure(this);
-      recovery_block.build(bus_bytes);
-      default_map.add_submap(recovery_block.default_map, 64'd8);
-      irq_block = ChannelInterrupts::type_id::create("irq_block");
-      irq_block.configure(this);
-      irq_block.build(bus_bytes);
-      default_map.add_submap(irq_block.default_map, 64'd20);
+      default_map = create_map("default_map", 0, bus_bytes, uvm_pkg::UVM_LITTLE_ENDIAN, 1);
+      this.config_block = ChannelConfiguration::type_id::create("config_block");
+      this.config_block.configure(this);
+      this.config_block.build(bus_bytes);
+      default_map.add_submap(this.config_block.default_map, 64'd0);
+      this.recovery_block = ChannelRecovery::type_id::create("recovery_block");
+      this.recovery_block.configure(this);
+      this.recovery_block.build(bus_bytes);
+      default_map.add_submap(this.recovery_block.default_map, 64'd8);
+      this.irq_block = ChannelInterrupts::type_id::create("irq_block");
+      this.irq_block.configure(this);
+      this.irq_block.build(bus_bytes);
+      default_map.add_submap(this.irq_block.default_map, 64'd20);
     endfunction
   endclass
 
     // PDMA channel register block
     // One independent channel's command/event rings, notification controls and sticky fatal. DmaRegisters repeats this data block for every implemented channel; privileged reset lives in ChannelAdmin.
-  class ChannelBlock extends uvm_reg_block;
+  class ChannelBlock extends uvm_pkg::uvm_reg_block;
     `uvm_object_utils(ChannelBlock)
     // Command queue interface
     // Registers owned by the software-produced, hardware-consumed command ring. Software programs storage before enabling the channel and publishes descriptors through its producer cursor.
@@ -613,28 +614,28 @@ package pdma_uvm_regs;
     // Processing enable, interrupt causes and sticky channel fatal. Trap notifications do not use event storage.
     ChannelRegisters control_block;
     function new(string name = "ChannelBlock");
-      super.new(name, UVM_NO_COVERAGE);
+      super.new(name, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
     virtual function void build(input int unsigned bus_bytes = 4);
-      default_map = create_map("default_map", 0, bus_bytes, UVM_LITTLE_ENDIAN, 1);
-      command_block = CommandRegisters::type_id::create("command_block");
-      command_block.configure(this);
-      command_block.build(bus_bytes);
-      default_map.add_submap(command_block.default_map, 64'd0);
-      event_block = EventRegisters::type_id::create("event_block");
-      event_block.configure(this);
-      event_block.build(bus_bytes);
-      default_map.add_submap(event_block.default_map, 64'd24);
-      control_block = ChannelRegisters::type_id::create("control_block");
-      control_block.configure(this);
-      control_block.build(bus_bytes);
-      default_map.add_submap(control_block.default_map, 64'd44);
+      default_map = create_map("default_map", 0, bus_bytes, uvm_pkg::UVM_LITTLE_ENDIAN, 1);
+      this.command_block = CommandRegisters::type_id::create("command_block");
+      this.command_block.configure(this);
+      this.command_block.build(bus_bytes);
+      default_map.add_submap(this.command_block.default_map, 64'd0);
+      this.event_block = EventRegisters::type_id::create("event_block");
+      this.event_block.configure(this);
+      this.event_block.build(bus_bytes);
+      default_map.add_submap(this.event_block.default_map, 64'd24);
+      this.control_block = ChannelRegisters::type_id::create("control_block");
+      this.control_block.configure(this);
+      this.control_block.build(bus_bytes);
+      default_map.add_submap(this.control_block.default_map, 64'd44);
     endfunction
   endclass
 
     // PDMA register apertures
     // Read-only discovery followed by contiguous administration and page-aligned channel data apertures. Layout gaps are reserved, not registers.
-  class DmaRegisters extends uvm_reg_block;
+  class DmaRegisters extends uvm_pkg::uvm_reg_block;
     `uvm_object_utils(DmaRegisters)
     // Hardware discovery aperture
     // Read-only DMA configuration visible independently of administrative permissions.
@@ -646,25 +647,26 @@ package pdma_uvm_regs;
     // Page-aligned complete channel blocks containing rings, configuration, fatal failures and notifications. Unused bytes are reserved to their owning block.
     ChannelBlock channels_block[];
     function new(string name = "DmaRegisters");
-      super.new(name, UVM_NO_COVERAGE);
+      super.new(name, uvm_pkg::UVM_NO_COVERAGE);
     endfunction
-    virtual function void build(input int unsigned p_channel_count, input int unsigned bus_bytes = 4);
-      default_map = create_map("default_map", 0, bus_bytes, UVM_LITTLE_ENDIAN, 1);
-      discovery_block = DmaDiscovery::type_id::create("discovery_block");
-      discovery_block.configure(this);
-      discovery_block.build(bus_bytes);
-      default_map.add_submap(discovery_block.default_map, 64'd0);
-      admin_block = DmaAdmin::type_id::create("admin_block");
-      admin_block.configure(this);
-      admin_block.build(p_channel_count, bus_bytes);
-      default_map.add_submap(admin_block.default_map, 64'd8);
+    virtual function void build(input longint unsigned p_channel_count, input int unsigned bus_bytes = 4);
+      default_map = create_map("default_map", 0, bus_bytes, uvm_pkg::UVM_LITTLE_ENDIAN, 1);
+      this.discovery_block = DmaDiscovery::type_id::create("discovery_block");
+      this.discovery_block.configure(this);
+      this.discovery_block.build(bus_bytes);
+      default_map.add_submap(this.discovery_block.default_map, 64'd0);
+      this.admin_block = DmaAdmin::type_id::create("admin_block");
+      this.admin_block.configure(this);
+      this.admin_block.build(p_channel_count, bus_bytes);
+      default_map.add_submap(this.admin_block.default_map, 64'd8);
       if (p_channel_count == 0) `uvm_fatal("RAL_BANK_COUNT", "channels_block count must be positive")
-      channels_block = new[p_channel_count];
-      foreach (channels_block[i]) begin
-      channels_block[i] = ChannelBlock::type_id::create($sformatf("channels_block[%0d]", i));
-      channels_block[i].configure(this);
-      channels_block[i].build(bus_bytes);
-      default_map.add_submap(channels_block[i].default_map, (((((64'd8 + (64'd0 * ((((64'd12 + ((p_channel_count - 64'd1) * 64'd4)) + 64'd4) + 64'd4 - 64'd1) & ~(64'd4 - 64'd1)))) + ((64'd12 + ((p_channel_count - 64'd1) * 64'd4)) + 64'd4)) + 64'd4096 - 64'd1) & ~(64'd4096 - 64'd1)) + i * 64'd4096));
+      if (p_channel_count > 64'd2147483647) `uvm_fatal("RAL_BANK_COUNT", "bank count exceeds target array range")
+      this.channels_block = new[p_channel_count];
+      foreach (this.channels_block[i]) begin
+      this.channels_block[i] = ChannelBlock::type_id::create($sformatf("channels_block[%0d]", i));
+      this.channels_block[i].configure(this);
+      this.channels_block[i].build(bus_bytes);
+      default_map.add_submap(this.channels_block[i].default_map, (((((64'd8 + (64'd0 * ((((64'd12 + ((p_channel_count - 64'd1) * 64'd4)) + 64'd4) + 64'd4 - 64'd1) & ~(64'd4 - 64'd1)))) + ((64'd12 + ((p_channel_count - 64'd1) * 64'd4)) + 64'd4)) + 64'd4096 - 64'd1) & ~(64'd4096 - 64'd1)) + i * 64'd4096));
       end
     endfunction
   endclass

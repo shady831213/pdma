@@ -120,7 +120,6 @@ register_map! {
 }
 
 /// Returns the stable terminal report derived from the custom artifact and schema locations.
-#[must_use]
 pub fn output_line() -> Result<String, Box<dyn std::error::Error>> {
     let mut sink = TelemetrySink::default();
     export_resolved(&mut sink)?;

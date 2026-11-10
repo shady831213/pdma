@@ -1,5 +1,5 @@
 //! `SystemVerilog` export CLI and codec-oracle fixtures.
-#![cfg(feature = "export-rtl-layout")]
+#![cfg(feature = "export-sv")]
 use std::process::Command;
 
 #[test]

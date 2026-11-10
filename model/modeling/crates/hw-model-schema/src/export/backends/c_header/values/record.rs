@@ -79,16 +79,6 @@ impl Backend for CRecordBackend<'_> {
         Fragment::comment(owner.name, text, writer)
     }
 
-    fn description(
-        &mut self,
-        text: &str,
-        owner: DocumentationOwner<'_>,
-        ctx: Self::Context<'_>,
-        writer: &mut dyn Write,
-    ) -> CResult {
-        self.short_description(text, owner, ctx, writer)
-    }
-
     fn bits(&mut self, bits: Bits<'_>, ctx: Self::Context<'_>, writer: &mut dyn Write) -> CResult {
         if ctx.field().is_some() {
             Self::value_intro(&ctx, writer)?;

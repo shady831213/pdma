@@ -2,11 +2,15 @@
 // Byte n occupies bits [8*n +: 8]; scalar codecs honor schema endianness.
 package pdma_contract_records;
 
-  localparam int unsigned COMMANDHEADER_SIZE = 1;
-  localparam int unsigned COMMANDHEADER_ALIGNMENT = 1;
+  localparam logic [63:0] COMMANDHEADER_SIZE = 64'd1;
+  localparam logic [63:0] COMMANDHEADER_ALIGNMENT = 64'd1;
   typedef logic [COMMANDHEADER_SIZE*8-1:0] CommandHeader_t;
-  localparam int unsigned COMMANDHEADER_OPCODE_OFFSET = 0;
-  localparam int unsigned COMMANDHEADER_OPCODE_SIZE = 1;
+    // Shared command discriminator
+    // One byte at the start of every complete command record. The protocol selects the complete union member using this opcode.
+    // Command opcode
+    // Assigned opcodes 0 through 8; all other values are invalid.
+  localparam logic [63:0] COMMANDHEADER_OPCODE_OFFSET = 0;
+  localparam logic [63:0] COMMANDHEADER_OPCODE_SIZE = 1;
   function automatic logic [7:0] CommandHeader_get_opcode(input CommandHeader_t record_value);
     CommandHeader_get_opcode[0 +: 8] = record_value[(COMMANDHEADER_OPCODE_OFFSET+0)*8 +: 8];
   endfunction
@@ -23,11 +27,15 @@ package pdma_contract_records;
   localparam logic [63:0] COMMANDHEADER_OPCODE_TRAP = 64'd7;
   localparam logic [63:0] COMMANDHEADER_OPCODE_TIMESTAMP = 64'd8;
 
-  localparam int unsigned LINEARENDPOINT_SIZE = 16;
-  localparam int unsigned LINEARENDPOINT_ALIGNMENT = 8;
+  localparam logic [63:0] LINEARENDPOINT_SIZE = 64'd16;
+  localparam logic [63:0] LINEARENDPOINT_ALIGNMENT = 64'd8;
   typedef logic [LINEARENDPOINT_SIZE*8-1:0] LinearEndpoint_t;
-  localparam int unsigned LINEARENDPOINT_ADDRESS_OFFSET = 0;
-  localparam int unsigned LINEARENDPOINT_ADDRESS_SIZE = 8;
+    // Linear copy endpoint
+    // Base address and full-width byte offset in the selected payload context.
+    // Payload base
+    // Payload base address.
+  localparam logic [63:0] LINEARENDPOINT_ADDRESS_OFFSET = 0;
+  localparam logic [63:0] LINEARENDPOINT_ADDRESS_SIZE = 8;
   function automatic logic [63:0] LinearEndpoint_get_address(input LinearEndpoint_t record_value);
     LinearEndpoint_get_address[0 +: 8] = record_value[(LINEARENDPOINT_ADDRESS_OFFSET+0)*8 +: 8];
     LinearEndpoint_get_address[8 +: 8] = record_value[(LINEARENDPOINT_ADDRESS_OFFSET+1)*8 +: 8];
@@ -48,8 +56,10 @@ package pdma_contract_records;
     record_value[(LINEARENDPOINT_ADDRESS_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(LINEARENDPOINT_ADDRESS_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned LINEARENDPOINT_OFFSET_OFFSET = 8;
-  localparam int unsigned LINEARENDPOINT_OFFSET_SIZE = 8;
+    // Byte offset
+    // Full-width base-relative byte offset.
+  localparam logic [63:0] LINEARENDPOINT_OFFSET_OFFSET = 8;
+  localparam logic [63:0] LINEARENDPOINT_OFFSET_SIZE = 8;
   function automatic logic [63:0] LinearEndpoint_get_offset(input LinearEndpoint_t record_value);
     LinearEndpoint_get_offset[0 +: 8] = record_value[(LINEARENDPOINT_OFFSET_OFFSET+0)*8 +: 8];
     LinearEndpoint_get_offset[8 +: 8] = record_value[(LINEARENDPOINT_OFFSET_OFFSET+1)*8 +: 8];
@@ -71,11 +81,15 @@ package pdma_contract_records;
     record_value[(LINEARENDPOINT_OFFSET_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
 
-  localparam int unsigned SCATTERGATHERENDPOINT_SIZE = 32;
-  localparam int unsigned SCATTERGATHERENDPOINT_ALIGNMENT = 8;
+  localparam logic [63:0] SCATTERGATHERENDPOINT_SIZE = 64'd32;
+  localparam logic [63:0] SCATTERGATHERENDPOINT_ALIGNMENT = 64'd8;
   typedef logic [SCATTERGATHERENDPOINT_SIZE*8-1:0] ScatterGatherEndpoint_t;
-  localparam int unsigned SCATTERGATHERENDPOINT_LIST_ADDRESS_OFFSET = 0;
-  localparam int unsigned SCATTERGATHERENDPOINT_LIST_ADDRESS_SIZE = 8;
+    // Scatter/gather copy endpoint
+    // Original list geometry and full-width starting position. Lists remain stable until retirement.
+    // Original table address
+    // Original table address in the SG context.
+  localparam logic [63:0] SCATTERGATHERENDPOINT_LIST_ADDRESS_OFFSET = 0;
+  localparam logic [63:0] SCATTERGATHERENDPOINT_LIST_ADDRESS_SIZE = 8;
   function automatic logic [63:0] ScatterGatherEndpoint_get_list_address(input ScatterGatherEndpoint_t record_value);
     ScatterGatherEndpoint_get_list_address[0 +: 8] = record_value[(SCATTERGATHERENDPOINT_LIST_ADDRESS_OFFSET+0)*8 +: 8];
     ScatterGatherEndpoint_get_list_address[8 +: 8] = record_value[(SCATTERGATHERENDPOINT_LIST_ADDRESS_OFFSET+1)*8 +: 8];
@@ -96,8 +110,10 @@ package pdma_contract_records;
     record_value[(SCATTERGATHERENDPOINT_LIST_ADDRESS_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(SCATTERGATHERENDPOINT_LIST_ADDRESS_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned SCATTERGATHERENDPOINT_COUNT_OFFSET = 8;
-  localparam int unsigned SCATTERGATHERENDPOINT_COUNT_SIZE = 8;
+    // Total entry count
+    // Full-width total entry count.
+  localparam logic [63:0] SCATTERGATHERENDPOINT_COUNT_OFFSET = 8;
+  localparam logic [63:0] SCATTERGATHERENDPOINT_COUNT_SIZE = 8;
   function automatic logic [63:0] ScatterGatherEndpoint_get_count(input ScatterGatherEndpoint_t record_value);
     ScatterGatherEndpoint_get_count[0 +: 8] = record_value[(SCATTERGATHERENDPOINT_COUNT_OFFSET+0)*8 +: 8];
     ScatterGatherEndpoint_get_count[8 +: 8] = record_value[(SCATTERGATHERENDPOINT_COUNT_OFFSET+1)*8 +: 8];
@@ -118,8 +134,10 @@ package pdma_contract_records;
     record_value[(SCATTERGATHERENDPOINT_COUNT_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(SCATTERGATHERENDPOINT_COUNT_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned SCATTERGATHERENDPOINT_INDEX_OFFSET = 16;
-  localparam int unsigned SCATTERGATHERENDPOINT_INDEX_SIZE = 8;
+    // Starting entry
+    // Full-width original table entry index.
+  localparam logic [63:0] SCATTERGATHERENDPOINT_INDEX_OFFSET = 16;
+  localparam logic [63:0] SCATTERGATHERENDPOINT_INDEX_SIZE = 8;
   function automatic logic [63:0] ScatterGatherEndpoint_get_index(input ScatterGatherEndpoint_t record_value);
     ScatterGatherEndpoint_get_index[0 +: 8] = record_value[(SCATTERGATHERENDPOINT_INDEX_OFFSET+0)*8 +: 8];
     ScatterGatherEndpoint_get_index[8 +: 8] = record_value[(SCATTERGATHERENDPOINT_INDEX_OFFSET+1)*8 +: 8];
@@ -140,8 +158,10 @@ package pdma_contract_records;
     record_value[(SCATTERGATHERENDPOINT_INDEX_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(SCATTERGATHERENDPOINT_INDEX_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned SCATTERGATHERENDPOINT_OFFSET_OFFSET = 24;
-  localparam int unsigned SCATTERGATHERENDPOINT_OFFSET_SIZE = 8;
+    // Entry offset
+    // Full-width entry-local byte offset.
+  localparam logic [63:0] SCATTERGATHERENDPOINT_OFFSET_OFFSET = 24;
+  localparam logic [63:0] SCATTERGATHERENDPOINT_OFFSET_SIZE = 8;
   function automatic logic [63:0] ScatterGatherEndpoint_get_offset(input ScatterGatherEndpoint_t record_value);
     ScatterGatherEndpoint_get_offset[0 +: 8] = record_value[(SCATTERGATHERENDPOINT_OFFSET_OFFSET+0)*8 +: 8];
     ScatterGatherEndpoint_get_offset[8 +: 8] = record_value[(SCATTERGATHERENDPOINT_OFFSET_OFFSET+1)*8 +: 8];
@@ -163,35 +183,47 @@ package pdma_contract_records;
     record_value[(SCATTERGATHERENDPOINT_OFFSET_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
 
-  localparam int unsigned COPYCOMMAND_SIZE = 96;
-  localparam int unsigned COPYCOMMAND_ALIGNMENT = 8;
+  localparam logic [63:0] COPYCOMMAND_SIZE = 64'd96;
+  localparam logic [63:0] COPYCOMMAND_ALIGNMENT = 64'd8;
   typedef logic [COPYCOMMAND_SIZE*8-1:0] CopyCommand_t;
-  localparam int unsigned COPYCOMMAND_HEADER_OFFSET = 0;
-  localparam int unsigned COPYCOMMAND_HEADER_SIZE = 1;
+    // Complete independent-endpoint copy command
+    // A 96-byte command with independently selected linear or scatter/gather endpoints; both ranges are validated before writes.
+    // Shared command header
+    // Copy opcode in the shared header.
+  localparam logic [63:0] COPYCOMMAND_HEADER_OFFSET = 0;
+  localparam logic [63:0] COPYCOMMAND_HEADER_SIZE = 1;
   function automatic logic [7:0] CopyCommand_get_header(input CopyCommand_t record_value);
     CopyCommand_get_header[0 +: 8] = record_value[(COPYCOMMAND_HEADER_OFFSET+0)*8 +: 8];
   endfunction
   function automatic void CopyCommand_set_header(inout CopyCommand_t record_value, input logic [7:0] value);
     record_value[(COPYCOMMAND_HEADER_OFFSET+0)*8 +: 8] = value[0 +: 8];
   endfunction
-  localparam int unsigned COPYCOMMAND_OPTIONS_OFFSET = 1;
-  localparam int unsigned COPYCOMMAND_OPTIONS_SIZE = 1;
+    // Independent endpoint selectors
+    // Source and destination selectors; other bits are reserved zero.
+  localparam logic [63:0] COPYCOMMAND_OPTIONS_OFFSET = 1;
+  localparam logic [63:0] COPYCOMMAND_OPTIONS_SIZE = 1;
   function automatic logic [7:0] CopyCommand_get_options(input CopyCommand_t record_value);
     CopyCommand_get_options[0 +: 8] = record_value[(COPYCOMMAND_OPTIONS_OFFSET+0)*8 +: 8];
   endfunction
   function automatic void CopyCommand_set_options(inout CopyCommand_t record_value, input logic [7:0] value);
     record_value[(COPYCOMMAND_OPTIONS_OFFSET+0)*8 +: 8] = value[0 +: 8];
   endfunction
+    // Source representation
+    // Linear zero or scatter/gather one.
   localparam int unsigned COPYCOMMAND_OPTIONS_SOURCE_MODE_LSB = 0;
   localparam int unsigned COPYCOMMAND_OPTIONS_SOURCE_MODE_WIDTH = 1;
   localparam logic [63:0] COPYCOMMAND_OPTIONS_SOURCE_MODE_LINEAR = 64'd0;
   localparam logic [63:0] COPYCOMMAND_OPTIONS_SOURCE_MODE_SCATTERGATHER = 64'd1;
+    // Destination representation
+    // Linear zero or scatter/gather one.
   localparam int unsigned COPYCOMMAND_OPTIONS_DESTINATION_MODE_LSB = 1;
   localparam int unsigned COPYCOMMAND_OPTIONS_DESTINATION_MODE_WIDTH = 1;
   localparam logic [63:0] COPYCOMMAND_OPTIONS_DESTINATION_MODE_LINEAR = 64'd0;
   localparam logic [63:0] COPYCOMMAND_OPTIONS_DESTINATION_MODE_SCATTERGATHER = 64'd1;
-  localparam int unsigned COPYCOMMAND_SG_CONTEXT_OFFSET = 4;
-  localparam int unsigned COPYCOMMAND_SG_CONTEXT_SIZE = 4;
+    // List address space
+    // Context shared by source and destination scatter/gather tables.
+  localparam logic [63:0] COPYCOMMAND_SG_CONTEXT_OFFSET = 4;
+  localparam logic [63:0] COPYCOMMAND_SG_CONTEXT_SIZE = 4;
   function automatic logic [31:0] CopyCommand_get_sg_context(input CopyCommand_t record_value);
     CopyCommand_get_sg_context[0 +: 8] = record_value[(COPYCOMMAND_SG_CONTEXT_OFFSET+0)*8 +: 8];
     CopyCommand_get_sg_context[8 +: 8] = record_value[(COPYCOMMAND_SG_CONTEXT_OFFSET+1)*8 +: 8];
@@ -204,8 +236,10 @@ package pdma_contract_records;
     record_value[(COPYCOMMAND_SG_CONTEXT_OFFSET+2)*8 +: 8] = value[16 +: 8];
     record_value[(COPYCOMMAND_SG_CONTEXT_OFFSET+3)*8 +: 8] = value[24 +: 8];
   endfunction
-  localparam int unsigned COPYCOMMAND_ID_OFFSET = 8;
-  localparam int unsigned COPYCOMMAND_ID_SIZE = 8;
+    // Software identifier
+    // Identifier retained in error events.
+  localparam logic [63:0] COPYCOMMAND_ID_OFFSET = 8;
+  localparam logic [63:0] COPYCOMMAND_ID_SIZE = 8;
   function automatic logic [63:0] CopyCommand_get_id(input CopyCommand_t record_value);
     CopyCommand_get_id[0 +: 8] = record_value[(COPYCOMMAND_ID_OFFSET+0)*8 +: 8];
     CopyCommand_get_id[8 +: 8] = record_value[(COPYCOMMAND_ID_OFFSET+1)*8 +: 8];
@@ -226,8 +260,10 @@ package pdma_contract_records;
     record_value[(COPYCOMMAND_ID_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(COPYCOMMAND_ID_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned COPYCOMMAND_COPY_LENGTH_OFFSET = 16;
-  localparam int unsigned COPYCOMMAND_COPY_LENGTH_SIZE = 8;
+    // Copy byte count
+    // Selected full-width byte count.
+  localparam logic [63:0] COPYCOMMAND_COPY_LENGTH_OFFSET = 16;
+  localparam logic [63:0] COPYCOMMAND_COPY_LENGTH_SIZE = 8;
   function automatic logic [63:0] CopyCommand_get_copy_length(input CopyCommand_t record_value);
     CopyCommand_get_copy_length[0 +: 8] = record_value[(COPYCOMMAND_COPY_LENGTH_OFFSET+0)*8 +: 8];
     CopyCommand_get_copy_length[8 +: 8] = record_value[(COPYCOMMAND_COPY_LENGTH_OFFSET+1)*8 +: 8];
@@ -248,8 +284,10 @@ package pdma_contract_records;
     record_value[(COPYCOMMAND_COPY_LENGTH_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(COPYCOMMAND_COPY_LENGTH_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned COPYCOMMAND_SOURCE_CONTEXT_OFFSET = 24;
-  localparam int unsigned COPYCOMMAND_SOURCE_CONTEXT_SIZE = 4;
+    // Source payload context
+    // Source payload address-space selector.
+  localparam logic [63:0] COPYCOMMAND_SOURCE_CONTEXT_OFFSET = 24;
+  localparam logic [63:0] COPYCOMMAND_SOURCE_CONTEXT_SIZE = 4;
   function automatic logic [31:0] CopyCommand_get_source_context(input CopyCommand_t record_value);
     CopyCommand_get_source_context[0 +: 8] = record_value[(COPYCOMMAND_SOURCE_CONTEXT_OFFSET+0)*8 +: 8];
     CopyCommand_get_source_context[8 +: 8] = record_value[(COPYCOMMAND_SOURCE_CONTEXT_OFFSET+1)*8 +: 8];
@@ -262,8 +300,10 @@ package pdma_contract_records;
     record_value[(COPYCOMMAND_SOURCE_CONTEXT_OFFSET+2)*8 +: 8] = value[16 +: 8];
     record_value[(COPYCOMMAND_SOURCE_CONTEXT_OFFSET+3)*8 +: 8] = value[24 +: 8];
   endfunction
-  localparam int unsigned COPYCOMMAND_DESTINATION_CONTEXT_OFFSET = 28;
-  localparam int unsigned COPYCOMMAND_DESTINATION_CONTEXT_SIZE = 4;
+    // Destination payload context
+    // Destination payload address-space selector.
+  localparam logic [63:0] COPYCOMMAND_DESTINATION_CONTEXT_OFFSET = 28;
+  localparam logic [63:0] COPYCOMMAND_DESTINATION_CONTEXT_SIZE = 4;
   function automatic logic [31:0] CopyCommand_get_destination_context(input CopyCommand_t record_value);
     CopyCommand_get_destination_context[0 +: 8] = record_value[(COPYCOMMAND_DESTINATION_CONTEXT_OFFSET+0)*8 +: 8];
     CopyCommand_get_destination_context[8 +: 8] = record_value[(COPYCOMMAND_DESTINATION_CONTEXT_OFFSET+1)*8 +: 8];
@@ -276,8 +316,10 @@ package pdma_contract_records;
     record_value[(COPYCOMMAND_DESTINATION_CONTEXT_OFFSET+2)*8 +: 8] = value[16 +: 8];
     record_value[(COPYCOMMAND_DESTINATION_CONTEXT_OFFSET+3)*8 +: 8] = value[24 +: 8];
   endfunction
-  localparam int unsigned COPYCOMMAND_SOURCE_OFFSET = 32;
-  localparam int unsigned COPYCOMMAND_SOURCE_SIZE = 32;
+    // Source stream
+    // Source geometry and start; inactive bytes are zero.
+  localparam logic [63:0] COPYCOMMAND_SOURCE_OFFSET = 32;
+  localparam logic [63:0] COPYCOMMAND_SOURCE_SIZE = 32;
   function automatic logic [255:0] CopyCommand_get_source(input CopyCommand_t record_value);
     CopyCommand_get_source[0 +: 8] = record_value[(COPYCOMMAND_SOURCE_OFFSET+0)*8 +: 8];
     CopyCommand_get_source[8 +: 8] = record_value[(COPYCOMMAND_SOURCE_OFFSET+1)*8 +: 8];
@@ -346,8 +388,10 @@ package pdma_contract_records;
     record_value[(COPYCOMMAND_SOURCE_OFFSET+30)*8 +: 8] = value[240 +: 8];
     record_value[(COPYCOMMAND_SOURCE_OFFSET+31)*8 +: 8] = value[248 +: 8];
   endfunction
-  localparam int unsigned COPYCOMMAND_DESTINATION_OFFSET = 64;
-  localparam int unsigned COPYCOMMAND_DESTINATION_SIZE = 32;
+    // Destination stream
+    // Destination geometry and start; inactive bytes are zero.
+  localparam logic [63:0] COPYCOMMAND_DESTINATION_OFFSET = 64;
+  localparam logic [63:0] COPYCOMMAND_DESTINATION_SIZE = 32;
   function automatic logic [255:0] CopyCommand_get_destination(input CopyCommand_t record_value);
     CopyCommand_get_destination[0 +: 8] = record_value[(COPYCOMMAND_DESTINATION_OFFSET+0)*8 +: 8];
     CopyCommand_get_destination[8 +: 8] = record_value[(COPYCOMMAND_DESTINATION_OFFSET+1)*8 +: 8];
@@ -417,11 +461,15 @@ package pdma_contract_records;
     record_value[(COPYCOMMAND_DESTINATION_OFFSET+31)*8 +: 8] = value[248 +: 8];
   endfunction
 
-  localparam int unsigned WORDTARGET_SIZE = 16;
-  localparam int unsigned WORDTARGET_ALIGNMENT = 8;
+  localparam logic [63:0] WORDTARGET_SIZE = 64'd16;
+  localparam logic [63:0] WORDTARGET_ALIGNMENT = 64'd8;
   typedef logic [WORDTARGET_SIZE*8-1:0] WordTarget_t;
-  localparam int unsigned WORDTARGET_ADDRESS_OFFSET = 0;
-  localparam int unsigned WORDTARGET_ADDRESS_SIZE = 8;
+    // Shared scalar target
+    // Shared scalar target.
+    // Naturally aligned little-endian word address
+    // Naturally aligned little-endian word address.
+  localparam logic [63:0] WORDTARGET_ADDRESS_OFFSET = 0;
+  localparam logic [63:0] WORDTARGET_ADDRESS_SIZE = 8;
   function automatic logic [63:0] WordTarget_get_address(input WordTarget_t record_value);
     WordTarget_get_address[0 +: 8] = record_value[(WORDTARGET_ADDRESS_OFFSET+0)*8 +: 8];
     WordTarget_get_address[8 +: 8] = record_value[(WORDTARGET_ADDRESS_OFFSET+1)*8 +: 8];
@@ -442,8 +490,10 @@ package pdma_contract_records;
     record_value[(WORDTARGET_ADDRESS_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(WORDTARGET_ADDRESS_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned WORDTARGET_CONTEXT_OFFSET = 8;
-  localparam int unsigned WORDTARGET_CONTEXT_SIZE = 4;
+    // Target address-space selector
+    // Target address-space selector.
+  localparam logic [63:0] WORDTARGET_CONTEXT_OFFSET = 8;
+  localparam logic [63:0] WORDTARGET_CONTEXT_SIZE = 4;
   function automatic logic [31:0] WordTarget_get_context(input WordTarget_t record_value);
     WordTarget_get_context[0 +: 8] = record_value[(WORDTARGET_CONTEXT_OFFSET+0)*8 +: 8];
     WordTarget_get_context[8 +: 8] = record_value[(WORDTARGET_CONTEXT_OFFSET+1)*8 +: 8];
@@ -456,8 +506,10 @@ package pdma_contract_records;
     record_value[(WORDTARGET_CONTEXT_OFFSET+2)*8 +: 8] = value[16 +: 8];
     record_value[(WORDTARGET_CONTEXT_OFFSET+3)*8 +: 8] = value[24 +: 8];
   endfunction
-  localparam int unsigned WORDTARGET_WIDTH_OFFSET = 12;
-  localparam int unsigned WORDTARGET_WIDTH_SIZE = 4;
+    // Word width; values and operands truncate to that width
+    // Word width; values and operands truncate to that width.
+  localparam logic [63:0] WORDTARGET_WIDTH_OFFSET = 12;
+  localparam logic [63:0] WORDTARGET_WIDTH_SIZE = 4;
   function automatic logic [31:0] WordTarget_get_width(input WordTarget_t record_value);
     WordTarget_get_width[0 +: 8] = record_value[(WORDTARGET_WIDTH_OFFSET+0)*8 +: 8];
     WordTarget_get_width[8 +: 8] = record_value[(WORDTARGET_WIDTH_OFFSET+1)*8 +: 8];
@@ -473,11 +525,15 @@ package pdma_contract_records;
   localparam logic [63:0] WORDTARGET_WIDTH_BITS32 = 64'd0;
   localparam logic [63:0] WORDTARGET_WIDTH_BITS64 = 64'd1;
 
-  localparam int unsigned WORDWRITE_SIZE = 24;
-  localparam int unsigned WORDWRITE_ALIGNMENT = 8;
+  localparam logic [63:0] WORDWRITE_SIZE = 64'd24;
+  localparam logic [63:0] WORDWRITE_ALIGNMENT = 64'd8;
   typedef logic [WORDWRITE_SIZE*8-1:0] WordWrite_t;
-  localparam int unsigned WORDWRITE_TARGET_OFFSET = 0;
-  localparam int unsigned WORDWRITE_TARGET_SIZE = 16;
+    // Write payload; Fence additionally publishes prior channel access completion with release semantics
+    // Write payload; Fence additionally publishes prior channel access completion with release semantics.
+    // Destination word
+    // Destination word.
+  localparam logic [63:0] WORDWRITE_TARGET_OFFSET = 0;
+  localparam logic [63:0] WORDWRITE_TARGET_SIZE = 16;
   function automatic logic [127:0] WordWrite_get_target(input WordWrite_t record_value);
     WordWrite_get_target[0 +: 8] = record_value[(WORDWRITE_TARGET_OFFSET+0)*8 +: 8];
     WordWrite_get_target[8 +: 8] = record_value[(WORDWRITE_TARGET_OFFSET+1)*8 +: 8];
@@ -514,8 +570,10 @@ package pdma_contract_records;
     record_value[(WORDWRITE_TARGET_OFFSET+14)*8 +: 8] = value[112 +: 8];
     record_value[(WORDWRITE_TARGET_OFFSET+15)*8 +: 8] = value[120 +: 8];
   endfunction
-  localparam int unsigned WORDWRITE_VALUE_OFFSET = 16;
-  localparam int unsigned WORDWRITE_VALUE_SIZE = 8;
+    // Low selected-width bits to store
+    // Low selected-width bits to store.
+  localparam logic [63:0] WORDWRITE_VALUE_OFFSET = 16;
+  localparam logic [63:0] WORDWRITE_VALUE_SIZE = 8;
   function automatic logic [63:0] WordWrite_get_value(input WordWrite_t record_value);
     WordWrite_get_value[0 +: 8] = record_value[(WORDWRITE_VALUE_OFFSET+0)*8 +: 8];
     WordWrite_get_value[8 +: 8] = record_value[(WORDWRITE_VALUE_OFFSET+1)*8 +: 8];
@@ -537,19 +595,25 @@ package pdma_contract_records;
     record_value[(WORDWRITE_VALUE_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
 
-  localparam int unsigned WRITECOMMAND_SIZE = 40;
-  localparam int unsigned WRITECOMMAND_ALIGNMENT = 8;
+  localparam logic [63:0] WRITECOMMAND_SIZE = 64'd40;
+  localparam logic [63:0] WRITECOMMAND_ALIGNMENT = 64'd8;
   typedef logic [WRITECOMMAND_SIZE*8-1:0] WriteCommand_t;
-  localparam int unsigned WRITECOMMAND_HEADER_OFFSET = 0;
-  localparam int unsigned WRITECOMMAND_HEADER_SIZE = 1;
+    // Complete Write command
+    // Complete Write command including shared header and software identifier.
+    // Shared command header
+    // Opcode selecting this complete command.
+  localparam logic [63:0] WRITECOMMAND_HEADER_OFFSET = 0;
+  localparam logic [63:0] WRITECOMMAND_HEADER_SIZE = 1;
   function automatic logic [7:0] WriteCommand_get_header(input WriteCommand_t record_value);
     WriteCommand_get_header[0 +: 8] = record_value[(WRITECOMMAND_HEADER_OFFSET+0)*8 +: 8];
   endfunction
   function automatic void WriteCommand_set_header(inout WriteCommand_t record_value, input logic [7:0] value);
     record_value[(WRITECOMMAND_HEADER_OFFSET+0)*8 +: 8] = value[0 +: 8];
   endfunction
-  localparam int unsigned WRITECOMMAND_ID_OFFSET = 8;
-  localparam int unsigned WRITECOMMAND_ID_SIZE = 8;
+    // Software identifier
+    // Software identifier retained in error events.
+  localparam logic [63:0] WRITECOMMAND_ID_OFFSET = 8;
+  localparam logic [63:0] WRITECOMMAND_ID_SIZE = 8;
   function automatic logic [63:0] WriteCommand_get_id(input WriteCommand_t record_value);
     WriteCommand_get_id[0 +: 8] = record_value[(WRITECOMMAND_ID_OFFSET+0)*8 +: 8];
     WriteCommand_get_id[8 +: 8] = record_value[(WRITECOMMAND_ID_OFFSET+1)*8 +: 8];
@@ -570,8 +634,10 @@ package pdma_contract_records;
     record_value[(WRITECOMMAND_ID_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(WRITECOMMAND_ID_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned WRITECOMMAND_WORD_OFFSET = 16;
-  localparam int unsigned WRITECOMMAND_WORD_SIZE = 24;
+    // Word store
+    // Target and value of the word store.
+  localparam logic [63:0] WRITECOMMAND_WORD_OFFSET = 16;
+  localparam logic [63:0] WRITECOMMAND_WORD_SIZE = 24;
   function automatic logic [191:0] WriteCommand_get_word(input WriteCommand_t record_value);
     WriteCommand_get_word[0 +: 8] = record_value[(WRITECOMMAND_WORD_OFFSET+0)*8 +: 8];
     WriteCommand_get_word[8 +: 8] = record_value[(WRITECOMMAND_WORD_OFFSET+1)*8 +: 8];
@@ -625,19 +691,25 @@ package pdma_contract_records;
     record_value[(WRITECOMMAND_WORD_OFFSET+23)*8 +: 8] = value[184 +: 8];
   endfunction
 
-  localparam int unsigned FILLCOMMAND_SIZE = 48;
-  localparam int unsigned FILLCOMMAND_ALIGNMENT = 8;
+  localparam logic [63:0] FILLCOMMAND_SIZE = 64'd48;
+  localparam logic [63:0] FILLCOMMAND_ALIGNMENT = 64'd8;
   typedef logic [FILLCOMMAND_SIZE*8-1:0] FillCommand_t;
-  localparam int unsigned FILLCOMMAND_HEADER_OFFSET = 0;
-  localparam int unsigned FILLCOMMAND_HEADER_SIZE = 1;
+    // Repeated pattern fill with arbitrary byte length
+    // Repeated pattern fill with arbitrary byte length.
+    // Shared command header
+    // Opcode selecting this complete command.
+  localparam logic [63:0] FILLCOMMAND_HEADER_OFFSET = 0;
+  localparam logic [63:0] FILLCOMMAND_HEADER_SIZE = 1;
   function automatic logic [7:0] FillCommand_get_header(input FillCommand_t record_value);
     FillCommand_get_header[0 +: 8] = record_value[(FILLCOMMAND_HEADER_OFFSET+0)*8 +: 8];
   endfunction
   function automatic void FillCommand_set_header(inout FillCommand_t record_value, input logic [7:0] value);
     record_value[(FILLCOMMAND_HEADER_OFFSET+0)*8 +: 8] = value[0 +: 8];
   endfunction
-  localparam int unsigned FILLCOMMAND_ID_OFFSET = 8;
-  localparam int unsigned FILLCOMMAND_ID_SIZE = 8;
+    // Software identifier
+    // Software identifier retained in error events.
+  localparam logic [63:0] FILLCOMMAND_ID_OFFSET = 8;
+  localparam logic [63:0] FILLCOMMAND_ID_SIZE = 8;
   function automatic logic [63:0] FillCommand_get_id(input FillCommand_t record_value);
     FillCommand_get_id[0 +: 8] = record_value[(FILLCOMMAND_ID_OFFSET+0)*8 +: 8];
     FillCommand_get_id[8 +: 8] = record_value[(FILLCOMMAND_ID_OFFSET+1)*8 +: 8];
@@ -658,8 +730,10 @@ package pdma_contract_records;
     record_value[(FILLCOMMAND_ID_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(FILLCOMMAND_ID_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned FILLCOMMAND_ADDRESS_OFFSET = 16;
-  localparam int unsigned FILLCOMMAND_ADDRESS_SIZE = 8;
+    // Byte-aligned destination address
+    // Byte-aligned destination address.
+  localparam logic [63:0] FILLCOMMAND_ADDRESS_OFFSET = 16;
+  localparam logic [63:0] FILLCOMMAND_ADDRESS_SIZE = 8;
   function automatic logic [63:0] FillCommand_get_address(input FillCommand_t record_value);
     FillCommand_get_address[0 +: 8] = record_value[(FILLCOMMAND_ADDRESS_OFFSET+0)*8 +: 8];
     FillCommand_get_address[8 +: 8] = record_value[(FILLCOMMAND_ADDRESS_OFFSET+1)*8 +: 8];
@@ -680,8 +754,10 @@ package pdma_contract_records;
     record_value[(FILLCOMMAND_ADDRESS_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(FILLCOMMAND_ADDRESS_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned FILLCOMMAND_LENGTH_OFFSET = 24;
-  localparam int unsigned FILLCOMMAND_LENGTH_SIZE = 8;
+    // Byte count including any partial final pattern
+    // Byte count including any partial final pattern.
+  localparam logic [63:0] FILLCOMMAND_LENGTH_OFFSET = 24;
+  localparam logic [63:0] FILLCOMMAND_LENGTH_SIZE = 8;
   function automatic logic [63:0] FillCommand_get_length(input FillCommand_t record_value);
     FillCommand_get_length[0 +: 8] = record_value[(FILLCOMMAND_LENGTH_OFFSET+0)*8 +: 8];
     FillCommand_get_length[8 +: 8] = record_value[(FILLCOMMAND_LENGTH_OFFSET+1)*8 +: 8];
@@ -702,8 +778,10 @@ package pdma_contract_records;
     record_value[(FILLCOMMAND_LENGTH_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(FILLCOMMAND_LENGTH_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned FILLCOMMAND_PATTERN_OFFSET = 32;
-  localparam int unsigned FILLCOMMAND_PATTERN_SIZE = 8;
+    // Repeated low little-endian pattern bytes
+    // Repeated low little-endian pattern bytes.
+  localparam logic [63:0] FILLCOMMAND_PATTERN_OFFSET = 32;
+  localparam logic [63:0] FILLCOMMAND_PATTERN_SIZE = 8;
   function automatic logic [63:0] FillCommand_get_pattern(input FillCommand_t record_value);
     FillCommand_get_pattern[0 +: 8] = record_value[(FILLCOMMAND_PATTERN_OFFSET+0)*8 +: 8];
     FillCommand_get_pattern[8 +: 8] = record_value[(FILLCOMMAND_PATTERN_OFFSET+1)*8 +: 8];
@@ -724,8 +802,10 @@ package pdma_contract_records;
     record_value[(FILLCOMMAND_PATTERN_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(FILLCOMMAND_PATTERN_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned FILLCOMMAND_CONTEXT_OFFSET = 40;
-  localparam int unsigned FILLCOMMAND_CONTEXT_SIZE = 4;
+    // Destination address-space selector
+    // Destination address-space selector.
+  localparam logic [63:0] FILLCOMMAND_CONTEXT_OFFSET = 40;
+  localparam logic [63:0] FILLCOMMAND_CONTEXT_SIZE = 4;
   function automatic logic [31:0] FillCommand_get_context(input FillCommand_t record_value);
     FillCommand_get_context[0 +: 8] = record_value[(FILLCOMMAND_CONTEXT_OFFSET+0)*8 +: 8];
     FillCommand_get_context[8 +: 8] = record_value[(FILLCOMMAND_CONTEXT_OFFSET+1)*8 +: 8];
@@ -738,8 +818,10 @@ package pdma_contract_records;
     record_value[(FILLCOMMAND_CONTEXT_OFFSET+2)*8 +: 8] = value[16 +: 8];
     record_value[(FILLCOMMAND_CONTEXT_OFFSET+3)*8 +: 8] = value[24 +: 8];
   endfunction
-  localparam int unsigned FILLCOMMAND_WIDTH_OFFSET = 44;
-  localparam int unsigned FILLCOMMAND_WIDTH_SIZE = 4;
+    // Pattern width
+    // Pattern width.
+  localparam logic [63:0] FILLCOMMAND_WIDTH_OFFSET = 44;
+  localparam logic [63:0] FILLCOMMAND_WIDTH_SIZE = 4;
   function automatic logic [31:0] FillCommand_get_width(input FillCommand_t record_value);
     FillCommand_get_width[0 +: 8] = record_value[(FILLCOMMAND_WIDTH_OFFSET+0)*8 +: 8];
     FillCommand_get_width[8 +: 8] = record_value[(FILLCOMMAND_WIDTH_OFFSET+1)*8 +: 8];
@@ -756,19 +838,25 @@ package pdma_contract_records;
   localparam logic [63:0] FILLCOMMAND_WIDTH_BITS32 = 64'd1;
   localparam logic [63:0] FILLCOMMAND_WIDTH_BITS64 = 64'd2;
 
-  localparam int unsigned WAITCOMMAND_SIZE = 48;
-  localparam int unsigned WAITCOMMAND_ALIGNMENT = 8;
+  localparam logic [63:0] WAITCOMMAND_SIZE = 64'd48;
+  localparam logic [63:0] WAITCOMMAND_ALIGNMENT = 64'd8;
   typedef logic [WAITCOMMAND_SIZE*8-1:0] WaitCommand_t;
-  localparam int unsigned WAITCOMMAND_HEADER_OFFSET = 0;
-  localparam int unsigned WAITCOMMAND_HEADER_SIZE = 1;
+    // Retained polling dependency; successful observation has acquire semantics
+    // Retained polling dependency; successful observation has acquire semantics.
+    // Shared command header
+    // Opcode selecting this complete command.
+  localparam logic [63:0] WAITCOMMAND_HEADER_OFFSET = 0;
+  localparam logic [63:0] WAITCOMMAND_HEADER_SIZE = 1;
   function automatic logic [7:0] WaitCommand_get_header(input WaitCommand_t record_value);
     WaitCommand_get_header[0 +: 8] = record_value[(WAITCOMMAND_HEADER_OFFSET+0)*8 +: 8];
   endfunction
   function automatic void WaitCommand_set_header(inout WaitCommand_t record_value, input logic [7:0] value);
     record_value[(WAITCOMMAND_HEADER_OFFSET+0)*8 +: 8] = value[0 +: 8];
   endfunction
-  localparam int unsigned WAITCOMMAND_ID_OFFSET = 8;
-  localparam int unsigned WAITCOMMAND_ID_SIZE = 8;
+    // Software identifier
+    // Software identifier retained in error events.
+  localparam logic [63:0] WAITCOMMAND_ID_OFFSET = 8;
+  localparam logic [63:0] WAITCOMMAND_ID_SIZE = 8;
   function automatic logic [63:0] WaitCommand_get_id(input WaitCommand_t record_value);
     WaitCommand_get_id[0 +: 8] = record_value[(WAITCOMMAND_ID_OFFSET+0)*8 +: 8];
     WaitCommand_get_id[8 +: 8] = record_value[(WAITCOMMAND_ID_OFFSET+1)*8 +: 8];
@@ -789,8 +877,10 @@ package pdma_contract_records;
     record_value[(WAITCOMMAND_ID_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(WAITCOMMAND_ID_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned WAITCOMMAND_TARGET_OFFSET = 16;
-  localparam int unsigned WAITCOMMAND_TARGET_SIZE = 16;
+    // Word loaded for the comparison
+    // Word loaded for the comparison.
+  localparam logic [63:0] WAITCOMMAND_TARGET_OFFSET = 16;
+  localparam logic [63:0] WAITCOMMAND_TARGET_SIZE = 16;
   function automatic logic [127:0] WaitCommand_get_target(input WaitCommand_t record_value);
     WaitCommand_get_target[0 +: 8] = record_value[(WAITCOMMAND_TARGET_OFFSET+0)*8 +: 8];
     WaitCommand_get_target[8 +: 8] = record_value[(WAITCOMMAND_TARGET_OFFSET+1)*8 +: 8];
@@ -827,8 +917,10 @@ package pdma_contract_records;
     record_value[(WAITCOMMAND_TARGET_OFFSET+14)*8 +: 8] = value[112 +: 8];
     record_value[(WAITCOMMAND_TARGET_OFFSET+15)*8 +: 8] = value[120 +: 8];
   endfunction
-  localparam int unsigned WAITCOMMAND_VALUE_OFFSET = 32;
-  localparam int unsigned WAITCOMMAND_VALUE_SIZE = 8;
+    // Comparison value truncated to selected width
+    // Comparison value truncated to selected width.
+  localparam logic [63:0] WAITCOMMAND_VALUE_OFFSET = 32;
+  localparam logic [63:0] WAITCOMMAND_VALUE_SIZE = 8;
   function automatic logic [63:0] WaitCommand_get_value(input WaitCommand_t record_value);
     WaitCommand_get_value[0 +: 8] = record_value[(WAITCOMMAND_VALUE_OFFSET+0)*8 +: 8];
     WaitCommand_get_value[8 +: 8] = record_value[(WAITCOMMAND_VALUE_OFFSET+1)*8 +: 8];
@@ -849,8 +941,10 @@ package pdma_contract_records;
     record_value[(WAITCOMMAND_VALUE_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(WAITCOMMAND_VALUE_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned WAITCOMMAND_COMPARISON_OFFSET = 40;
-  localparam int unsigned WAITCOMMAND_COMPARISON_SIZE = 4;
+    // Reached uses signed-width modular observed minus value; software distance must remain below half range
+    // Reached uses signed-width modular observed minus value; software distance must remain below half range.
+  localparam logic [63:0] WAITCOMMAND_COMPARISON_OFFSET = 40;
+  localparam logic [63:0] WAITCOMMAND_COMPARISON_SIZE = 4;
   function automatic logic [31:0] WaitCommand_get_comparison(input WaitCommand_t record_value);
     WaitCommand_get_comparison[0 +: 8] = record_value[(WAITCOMMAND_COMPARISON_OFFSET+0)*8 +: 8];
     WaitCommand_get_comparison[8 +: 8] = record_value[(WAITCOMMAND_COMPARISON_OFFSET+1)*8 +: 8];
@@ -875,19 +969,25 @@ package pdma_contract_records;
   localparam logic [63:0] WAITCOMMAND_COMPARISON_SIGNEDGREATEREQUAL = 64'd9;
   localparam logic [63:0] WAITCOMMAND_COMPARISON_REACHED = 64'd10;
 
-  localparam int unsigned ATOMICCOMMAND_SIZE = 56;
-  localparam int unsigned ATOMICCOMMAND_ALIGNMENT = 8;
+  localparam logic [63:0] ATOMICCOMMAND_SIZE = 64'd56;
+  localparam logic [63:0] ATOMICCOMMAND_ALIGNMENT = 64'd8;
   typedef logic [ATOMICCOMMAND_SIZE*8-1:0] AtomicCommand_t;
-  localparam int unsigned ATOMICCOMMAND_HEADER_OFFSET = 0;
-  localparam int unsigned ATOMICCOMMAND_HEADER_SIZE = 1;
+    // One atomic effect with no returned-result storage
+    // One atomic effect with no returned-result storage.
+    // Shared command header
+    // Opcode selecting this complete command.
+  localparam logic [63:0] ATOMICCOMMAND_HEADER_OFFSET = 0;
+  localparam logic [63:0] ATOMICCOMMAND_HEADER_SIZE = 1;
   function automatic logic [7:0] AtomicCommand_get_header(input AtomicCommand_t record_value);
     AtomicCommand_get_header[0 +: 8] = record_value[(ATOMICCOMMAND_HEADER_OFFSET+0)*8 +: 8];
   endfunction
   function automatic void AtomicCommand_set_header(inout AtomicCommand_t record_value, input logic [7:0] value);
     record_value[(ATOMICCOMMAND_HEADER_OFFSET+0)*8 +: 8] = value[0 +: 8];
   endfunction
-  localparam int unsigned ATOMICCOMMAND_ID_OFFSET = 8;
-  localparam int unsigned ATOMICCOMMAND_ID_SIZE = 8;
+    // Software identifier
+    // Software identifier retained in error events.
+  localparam logic [63:0] ATOMICCOMMAND_ID_OFFSET = 8;
+  localparam logic [63:0] ATOMICCOMMAND_ID_SIZE = 8;
   function automatic logic [63:0] AtomicCommand_get_id(input AtomicCommand_t record_value);
     AtomicCommand_get_id[0 +: 8] = record_value[(ATOMICCOMMAND_ID_OFFSET+0)*8 +: 8];
     AtomicCommand_get_id[8 +: 8] = record_value[(ATOMICCOMMAND_ID_OFFSET+1)*8 +: 8];
@@ -908,8 +1008,10 @@ package pdma_contract_records;
     record_value[(ATOMICCOMMAND_ID_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(ATOMICCOMMAND_ID_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned ATOMICCOMMAND_TARGET_OFFSET = 16;
-  localparam int unsigned ATOMICCOMMAND_TARGET_SIZE = 16;
+    // RMW target; requires discovered width capability
+    // RMW target; requires discovered width capability.
+  localparam logic [63:0] ATOMICCOMMAND_TARGET_OFFSET = 16;
+  localparam logic [63:0] ATOMICCOMMAND_TARGET_SIZE = 16;
   function automatic logic [127:0] AtomicCommand_get_target(input AtomicCommand_t record_value);
     AtomicCommand_get_target[0 +: 8] = record_value[(ATOMICCOMMAND_TARGET_OFFSET+0)*8 +: 8];
     AtomicCommand_get_target[8 +: 8] = record_value[(ATOMICCOMMAND_TARGET_OFFSET+1)*8 +: 8];
@@ -946,8 +1048,10 @@ package pdma_contract_records;
     record_value[(ATOMICCOMMAND_TARGET_OFFSET+14)*8 +: 8] = value[112 +: 8];
     record_value[(ATOMICCOMMAND_TARGET_OFFSET+15)*8 +: 8] = value[120 +: 8];
   endfunction
-  localparam int unsigned ATOMICCOMMAND_ORDER_OFFSET = 32;
-  localparam int unsigned ATOMICCOMMAND_ORDER_SIZE = 4;
+    // Memory ordering for the atomic operation
+    // Memory ordering for the atomic operation.
+  localparam logic [63:0] ATOMICCOMMAND_ORDER_OFFSET = 32;
+  localparam logic [63:0] ATOMICCOMMAND_ORDER_SIZE = 4;
   function automatic logic [31:0] AtomicCommand_get_order(input AtomicCommand_t record_value);
     AtomicCommand_get_order[0 +: 8] = record_value[(ATOMICCOMMAND_ORDER_OFFSET+0)*8 +: 8];
     AtomicCommand_get_order[8 +: 8] = record_value[(ATOMICCOMMAND_ORDER_OFFSET+1)*8 +: 8];
@@ -964,8 +1068,10 @@ package pdma_contract_records;
   localparam logic [63:0] ATOMICCOMMAND_ORDER_ACQUIRE = 64'd1;
   localparam logic [63:0] ATOMICCOMMAND_ORDER_RELEASE = 64'd2;
   localparam logic [63:0] ATOMICCOMMAND_ORDER_ACQUIRERELEASE = 64'd3;
-  localparam int unsigned ATOMICCOMMAND_OPERATION_OFFSET = 36;
-  localparam int unsigned ATOMICCOMMAND_OPERATION_SIZE = 4;
+    // Selected atomic read-modify-write operation
+    // Selected atomic read-modify-write operation.
+  localparam logic [63:0] ATOMICCOMMAND_OPERATION_OFFSET = 36;
+  localparam logic [63:0] ATOMICCOMMAND_OPERATION_SIZE = 4;
   function automatic logic [31:0] AtomicCommand_get_operation(input AtomicCommand_t record_value);
     AtomicCommand_get_operation[0 +: 8] = record_value[(ATOMICCOMMAND_OPERATION_OFFSET+0)*8 +: 8];
     AtomicCommand_get_operation[8 +: 8] = record_value[(ATOMICCOMMAND_OPERATION_OFFSET+1)*8 +: 8];
@@ -985,8 +1091,10 @@ package pdma_contract_records;
   localparam logic [63:0] ATOMICCOMMAND_OPERATION_XOR = 64'd4;
   localparam logic [63:0] ATOMICCOMMAND_OPERATION_EXCHANGE = 64'd5;
   localparam logic [63:0] ATOMICCOMMAND_OPERATION_COMPAREEXCHANGE = 64'd6;
-  localparam int unsigned ATOMICCOMMAND_OPERANDS_OFFSET = 40;
-  localparam int unsigned ATOMICCOMMAND_OPERANDS_SIZE = 16;
+    // Width-truncated bit patterns
+    // Width-truncated bit patterns. Arithmetic wraps. CAS mismatch succeeds unchanged; no software old-value destination.
+  localparam logic [63:0] ATOMICCOMMAND_OPERANDS_OFFSET = 40;
+  localparam logic [63:0] ATOMICCOMMAND_OPERANDS_SIZE = 16;
   function automatic logic [127:0] AtomicCommand_get_operands(input AtomicCommand_t record_value);
     AtomicCommand_get_operands[0 +: 8] = record_value[(ATOMICCOMMAND_OPERANDS_OFFSET+0)*8 +: 8];
     AtomicCommand_get_operands[8 +: 8] = record_value[(ATOMICCOMMAND_OPERANDS_OFFSET+1)*8 +: 8];
@@ -1024,19 +1132,25 @@ package pdma_contract_records;
     record_value[(ATOMICCOMMAND_OPERANDS_OFFSET+15)*8 +: 8] = value[120 +: 8];
   endfunction
 
-  localparam int unsigned SEMAPHORECOMMAND_SIZE = 40;
-  localparam int unsigned SEMAPHORECOMMAND_ALIGNMENT = 8;
+  localparam logic [63:0] SEMAPHORECOMMAND_SIZE = 64'd40;
+  localparam logic [63:0] SEMAPHORECOMMAND_ALIGNMENT = 64'd8;
   typedef logic [SEMAPHORECOMMAND_SIZE*8-1:0] SemaphoreCommand_t;
-  localparam int unsigned SEMAPHORECOMMAND_HEADER_OFFSET = 0;
-  localparam int unsigned SEMAPHORECOMMAND_HEADER_SIZE = 1;
+    // Atomic semaphore; requires selected-width RMW capability
+    // Atomic semaphore; requires selected-width RMW capability.
+    // Shared command header
+    // Opcode selecting this complete command.
+  localparam logic [63:0] SEMAPHORECOMMAND_HEADER_OFFSET = 0;
+  localparam logic [63:0] SEMAPHORECOMMAND_HEADER_SIZE = 1;
   function automatic logic [7:0] SemaphoreCommand_get_header(input SemaphoreCommand_t record_value);
     SemaphoreCommand_get_header[0 +: 8] = record_value[(SEMAPHORECOMMAND_HEADER_OFFSET+0)*8 +: 8];
   endfunction
   function automatic void SemaphoreCommand_set_header(inout SemaphoreCommand_t record_value, input logic [7:0] value);
     record_value[(SEMAPHORECOMMAND_HEADER_OFFSET+0)*8 +: 8] = value[0 +: 8];
   endfunction
-  localparam int unsigned SEMAPHORECOMMAND_ID_OFFSET = 8;
-  localparam int unsigned SEMAPHORECOMMAND_ID_SIZE = 8;
+    // Software identifier
+    // Software identifier retained in error events.
+  localparam logic [63:0] SEMAPHORECOMMAND_ID_OFFSET = 8;
+  localparam logic [63:0] SEMAPHORECOMMAND_ID_SIZE = 8;
   function automatic logic [63:0] SemaphoreCommand_get_id(input SemaphoreCommand_t record_value);
     SemaphoreCommand_get_id[0 +: 8] = record_value[(SEMAPHORECOMMAND_ID_OFFSET+0)*8 +: 8];
     SemaphoreCommand_get_id[8 +: 8] = record_value[(SEMAPHORECOMMAND_ID_OFFSET+1)*8 +: 8];
@@ -1057,8 +1171,10 @@ package pdma_contract_records;
     record_value[(SEMAPHORECOMMAND_ID_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(SEMAPHORECOMMAND_ID_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned SEMAPHORECOMMAND_TARGET_OFFSET = 16;
-  localparam int unsigned SEMAPHORECOMMAND_TARGET_SIZE = 16;
+    // Unsigned permit counter
+    // Unsigned permit counter.
+  localparam logic [63:0] SEMAPHORECOMMAND_TARGET_OFFSET = 16;
+  localparam logic [63:0] SEMAPHORECOMMAND_TARGET_SIZE = 16;
   function automatic logic [127:0] SemaphoreCommand_get_target(input SemaphoreCommand_t record_value);
     SemaphoreCommand_get_target[0 +: 8] = record_value[(SEMAPHORECOMMAND_TARGET_OFFSET+0)*8 +: 8];
     SemaphoreCommand_get_target[8 +: 8] = record_value[(SEMAPHORECOMMAND_TARGET_OFFSET+1)*8 +: 8];
@@ -1095,8 +1211,10 @@ package pdma_contract_records;
     record_value[(SEMAPHORECOMMAND_TARGET_OFFSET+14)*8 +: 8] = value[112 +: 8];
     record_value[(SEMAPHORECOMMAND_TARGET_OFFSET+15)*8 +: 8] = value[120 +: 8];
   endfunction
-  localparam int unsigned SEMAPHORECOMMAND_OPERATION_OFFSET = 32;
-  localparam int unsigned SEMAPHORECOMMAND_OPERATION_SIZE = 4;
+    // Signal increments with release and rejects overflow before mutation; Wait atomically consumes one positive permit with acquire
+    // Signal increments with release and rejects overflow before mutation; Wait atomically consumes one positive permit with acquire.
+  localparam logic [63:0] SEMAPHORECOMMAND_OPERATION_OFFSET = 32;
+  localparam logic [63:0] SEMAPHORECOMMAND_OPERATION_SIZE = 4;
   function automatic logic [31:0] SemaphoreCommand_get_operation(input SemaphoreCommand_t record_value);
     SemaphoreCommand_get_operation[0 +: 8] = record_value[(SEMAPHORECOMMAND_OPERATION_OFFSET+0)*8 +: 8];
     SemaphoreCommand_get_operation[8 +: 8] = record_value[(SEMAPHORECOMMAND_OPERATION_OFFSET+1)*8 +: 8];
@@ -1112,19 +1230,25 @@ package pdma_contract_records;
   localparam logic [63:0] SEMAPHORECOMMAND_OPERATION_SIGNAL = 64'd0;
   localparam logic [63:0] SEMAPHORECOMMAND_OPERATION_WAIT = 64'd1;
 
-  localparam int unsigned FENCECOMMAND_SIZE = 40;
-  localparam int unsigned FENCECOMMAND_ALIGNMENT = 8;
+  localparam logic [63:0] FENCECOMMAND_SIZE = 64'd40;
+  localparam logic [63:0] FENCECOMMAND_ALIGNMENT = 64'd8;
   typedef logic [FENCECOMMAND_SIZE*8-1:0] FenceCommand_t;
-  localparam int unsigned FENCECOMMAND_HEADER_OFFSET = 0;
-  localparam int unsigned FENCECOMMAND_HEADER_SIZE = 1;
+    // Complete Fence command
+    // Complete Fence command including shared header and software identifier.
+    // Shared command header
+    // Opcode selecting this complete command.
+  localparam logic [63:0] FENCECOMMAND_HEADER_OFFSET = 0;
+  localparam logic [63:0] FENCECOMMAND_HEADER_SIZE = 1;
   function automatic logic [7:0] FenceCommand_get_header(input FenceCommand_t record_value);
     FenceCommand_get_header[0 +: 8] = record_value[(FENCECOMMAND_HEADER_OFFSET+0)*8 +: 8];
   endfunction
   function automatic void FenceCommand_set_header(inout FenceCommand_t record_value, input logic [7:0] value);
     record_value[(FENCECOMMAND_HEADER_OFFSET+0)*8 +: 8] = value[0 +: 8];
   endfunction
-  localparam int unsigned FENCECOMMAND_ID_OFFSET = 8;
-  localparam int unsigned FENCECOMMAND_ID_SIZE = 8;
+    // Software identifier
+    // Software identifier retained in error events.
+  localparam logic [63:0] FENCECOMMAND_ID_OFFSET = 8;
+  localparam logic [63:0] FENCECOMMAND_ID_SIZE = 8;
   function automatic logic [63:0] FenceCommand_get_id(input FenceCommand_t record_value);
     FenceCommand_get_id[0 +: 8] = record_value[(FENCECOMMAND_ID_OFFSET+0)*8 +: 8];
     FenceCommand_get_id[8 +: 8] = record_value[(FENCECOMMAND_ID_OFFSET+1)*8 +: 8];
@@ -1145,8 +1269,10 @@ package pdma_contract_records;
     record_value[(FENCECOMMAND_ID_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(FENCECOMMAND_ID_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned FENCECOMMAND_WORD_OFFSET = 16;
-  localparam int unsigned FENCECOMMAND_WORD_SIZE = 24;
+    // Word store
+    // Target and value of the word store.
+  localparam logic [63:0] FENCECOMMAND_WORD_OFFSET = 16;
+  localparam logic [63:0] FENCECOMMAND_WORD_SIZE = 24;
   function automatic logic [191:0] FenceCommand_get_word(input FenceCommand_t record_value);
     FenceCommand_get_word[0 +: 8] = record_value[(FENCECOMMAND_WORD_OFFSET+0)*8 +: 8];
     FenceCommand_get_word[8 +: 8] = record_value[(FENCECOMMAND_WORD_OFFSET+1)*8 +: 8];
@@ -1200,19 +1326,25 @@ package pdma_contract_records;
     record_value[(FENCECOMMAND_WORD_OFFSET+23)*8 +: 8] = value[184 +: 8];
   endfunction
 
-  localparam int unsigned TRAPCOMMAND_SIZE = 16;
-  localparam int unsigned TRAPCOMMAND_ALIGNMENT = 8;
+  localparam logic [63:0] TRAPCOMMAND_SIZE = 64'd16;
+  localparam logic [63:0] TRAPCOMMAND_ALIGNMENT = 64'd8;
   typedef logic [TRAPCOMMAND_SIZE*8-1:0] TrapCommand_t;
-  localparam int unsigned TRAPCOMMAND_HEADER_OFFSET = 0;
-  localparam int unsigned TRAPCOMMAND_HEADER_SIZE = 1;
+    // Complete Trap command
+    // Complete Trap command including shared header and software identifier.
+    // Shared command header
+    // Opcode selecting this complete command.
+  localparam logic [63:0] TRAPCOMMAND_HEADER_OFFSET = 0;
+  localparam logic [63:0] TRAPCOMMAND_HEADER_SIZE = 1;
   function automatic logic [7:0] TrapCommand_get_header(input TrapCommand_t record_value);
     TrapCommand_get_header[0 +: 8] = record_value[(TRAPCOMMAND_HEADER_OFFSET+0)*8 +: 8];
   endfunction
   function automatic void TrapCommand_set_header(inout TrapCommand_t record_value, input logic [7:0] value);
     record_value[(TRAPCOMMAND_HEADER_OFFSET+0)*8 +: 8] = value[0 +: 8];
   endfunction
-  localparam int unsigned TRAPCOMMAND_ID_OFFSET = 8;
-  localparam int unsigned TRAPCOMMAND_ID_SIZE = 8;
+    // Software identifier
+    // Software identifier retained in error events.
+  localparam logic [63:0] TRAPCOMMAND_ID_OFFSET = 8;
+  localparam logic [63:0] TRAPCOMMAND_ID_SIZE = 8;
   function automatic logic [63:0] TrapCommand_get_id(input TrapCommand_t record_value);
     TrapCommand_get_id[0 +: 8] = record_value[(TRAPCOMMAND_ID_OFFSET+0)*8 +: 8];
     TrapCommand_get_id[8 +: 8] = record_value[(TRAPCOMMAND_ID_OFFSET+1)*8 +: 8];
@@ -1234,19 +1366,25 @@ package pdma_contract_records;
     record_value[(TRAPCOMMAND_ID_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
 
-  localparam int unsigned TIMESTAMPCOMMAND_SIZE = 32;
-  localparam int unsigned TIMESTAMPCOMMAND_ALIGNMENT = 8;
+  localparam logic [63:0] TIMESTAMPCOMMAND_SIZE = 64'd32;
+  localparam logic [63:0] TIMESTAMPCOMMAND_ALIGNMENT = 64'd8;
   typedef logic [TIMESTAMPCOMMAND_SIZE*8-1:0] TimestampCommand_t;
-  localparam int unsigned TIMESTAMPCOMMAND_HEADER_OFFSET = 0;
-  localparam int unsigned TIMESTAMPCOMMAND_HEADER_SIZE = 1;
+    // External timer sample destination
+    // Writes one little-endian 64-bit external timer sample. A target PageFault retains the original sample until resume or cancellation; units and timer progression belong to the platform.
+    // Shared command header
+    // Opcode selecting this complete command.
+  localparam logic [63:0] TIMESTAMPCOMMAND_HEADER_OFFSET = 0;
+  localparam logic [63:0] TIMESTAMPCOMMAND_HEADER_SIZE = 1;
   function automatic logic [7:0] TimestampCommand_get_header(input TimestampCommand_t record_value);
     TimestampCommand_get_header[0 +: 8] = record_value[(TIMESTAMPCOMMAND_HEADER_OFFSET+0)*8 +: 8];
   endfunction
   function automatic void TimestampCommand_set_header(inout TimestampCommand_t record_value, input logic [7:0] value);
     record_value[(TIMESTAMPCOMMAND_HEADER_OFFSET+0)*8 +: 8] = value[0 +: 8];
   endfunction
-  localparam int unsigned TIMESTAMPCOMMAND_ID_OFFSET = 8;
-  localparam int unsigned TIMESTAMPCOMMAND_ID_SIZE = 8;
+    // Software identifier
+    // Software identifier retained in error events.
+  localparam logic [63:0] TIMESTAMPCOMMAND_ID_OFFSET = 8;
+  localparam logic [63:0] TIMESTAMPCOMMAND_ID_SIZE = 8;
   function automatic logic [63:0] TimestampCommand_get_id(input TimestampCommand_t record_value);
     TimestampCommand_get_id[0 +: 8] = record_value[(TIMESTAMPCOMMAND_ID_OFFSET+0)*8 +: 8];
     TimestampCommand_get_id[8 +: 8] = record_value[(TIMESTAMPCOMMAND_ID_OFFSET+1)*8 +: 8];
@@ -1267,8 +1405,10 @@ package pdma_contract_records;
     record_value[(TIMESTAMPCOMMAND_ID_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(TIMESTAMPCOMMAND_ID_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned TIMESTAMPCOMMAND_ADDRESS_OFFSET = 16;
-  localparam int unsigned TIMESTAMPCOMMAND_ADDRESS_SIZE = 8;
+    // Eight-byte-aligned destination address
+    // Eight-byte-aligned destination address for one 64-bit timer sample.
+  localparam logic [63:0] TIMESTAMPCOMMAND_ADDRESS_OFFSET = 16;
+  localparam logic [63:0] TIMESTAMPCOMMAND_ADDRESS_SIZE = 8;
   function automatic logic [63:0] TimestampCommand_get_address(input TimestampCommand_t record_value);
     TimestampCommand_get_address[0 +: 8] = record_value[(TIMESTAMPCOMMAND_ADDRESS_OFFSET+0)*8 +: 8];
     TimestampCommand_get_address[8 +: 8] = record_value[(TIMESTAMPCOMMAND_ADDRESS_OFFSET+1)*8 +: 8];
@@ -1289,8 +1429,10 @@ package pdma_contract_records;
     record_value[(TIMESTAMPCOMMAND_ADDRESS_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(TIMESTAMPCOMMAND_ADDRESS_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned TIMESTAMPCOMMAND_CONTEXT_OFFSET = 24;
-  localparam int unsigned TIMESTAMPCOMMAND_CONTEXT_SIZE = 4;
+    // Destination address-space selector
+    // Destination context, authorized through the ordinary DMA memory path and retained through command retirement.
+  localparam logic [63:0] TIMESTAMPCOMMAND_CONTEXT_OFFSET = 24;
+  localparam logic [63:0] TIMESTAMPCOMMAND_CONTEXT_SIZE = 4;
   function automatic logic [31:0] TimestampCommand_get_context(input TimestampCommand_t record_value);
     TimestampCommand_get_context[0 +: 8] = record_value[(TIMESTAMPCOMMAND_CONTEXT_OFFSET+0)*8 +: 8];
     TimestampCommand_get_context[8 +: 8] = record_value[(TIMESTAMPCOMMAND_CONTEXT_OFFSET+1)*8 +: 8];
@@ -1304,15 +1446,21 @@ package pdma_contract_records;
     record_value[(TIMESTAMPCOMMAND_CONTEXT_OFFSET+3)*8 +: 8] = value[24 +: 8];
   endfunction
 
-  localparam int unsigned COMMAND_SIZE = 96;
-  localparam int unsigned COMMAND_ALIGNMENT = 8;
+  localparam logic [63:0] COMMAND_SIZE = 64'd96;
+  localparam logic [63:0] COMMAND_ALIGNMENT = 64'd8;
   typedef logic [COMMAND_SIZE*8-1:0] Command_t;
+    // Complete copy-engine command union
+    // Untagged 96-byte union of complete command records. PDMA selects a member using the shared header opcode at byte zero.
 
-  localparam int unsigned ERRORINFO_SIZE = 8;
-  localparam int unsigned ERRORINFO_ALIGNMENT = 8;
+  localparam logic [63:0] ERRORINFO_SIZE = 64'd8;
+  localparam logic [63:0] ERRORINFO_ALIGNMENT = 64'd8;
   typedef logic [ERRORINFO_SIZE*8-1:0] ErrorInfo_t;
-  localparam int unsigned ERRORINFO_BYTES_COMPLETED_OFFSET = 0;
-  localparam int unsigned ERRORINFO_BYTES_COMPLETED_SIZE = 8;
+    // Stopping command progress
+    // Stopping command progress.
+    // Committed write prefix before the stopping error; never rolled back
+    // Committed write prefix before the stopping error; never rolled back.
+  localparam logic [63:0] ERRORINFO_BYTES_COMPLETED_OFFSET = 0;
+  localparam logic [63:0] ERRORINFO_BYTES_COMPLETED_SIZE = 8;
   function automatic logic [63:0] ErrorInfo_get_bytes_completed(input ErrorInfo_t record_value);
     ErrorInfo_get_bytes_completed[0 +: 8] = record_value[(ERRORINFO_BYTES_COMPLETED_OFFSET+0)*8 +: 8];
     ErrorInfo_get_bytes_completed[8 +: 8] = record_value[(ERRORINFO_BYTES_COMPLETED_OFFSET+1)*8 +: 8];
@@ -1334,11 +1482,15 @@ package pdma_contract_records;
     record_value[(ERRORINFO_BYTES_COMPLETED_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
 
-  localparam int unsigned EVENT_SIZE = 24;
-  localparam int unsigned EVENT_ALIGNMENT = 8;
+  localparam logic [63:0] EVENT_SIZE = 64'd24;
+  localparam logic [63:0] EVENT_ALIGNMENT = 64'd8;
   typedef logic [EVENT_SIZE*8-1:0] Event_t;
-  localparam int unsigned EVENT_ID_OFFSET = 0;
-  localparam int unsigned EVENT_ID_SIZE = 8;
+    // Error-only event
+    // Error-only event. Error stop latches before publication; ring failure escalates to channel fatal.
+    // Original command identifier
+    // Original command identifier.
+  localparam logic [63:0] EVENT_ID_OFFSET = 0;
+  localparam logic [63:0] EVENT_ID_SIZE = 8;
   function automatic logic [63:0] Event_get_id(input Event_t record_value);
     Event_get_id[0 +: 8] = record_value[(EVENT_ID_OFFSET+0)*8 +: 8];
     Event_get_id[8 +: 8] = record_value[(EVENT_ID_OFFSET+1)*8 +: 8];
@@ -1359,8 +1511,10 @@ package pdma_contract_records;
     record_value[(EVENT_ID_OFFSET+6)*8 +: 8] = value[48 +: 8];
     record_value[(EVENT_ID_OFFSET+7)*8 +: 8] = value[56 +: 8];
   endfunction
-  localparam int unsigned EVENT_CODE_OFFSET = 8;
-  localparam int unsigned EVENT_CODE_SIZE = 4;
+    // Stopping error code
+    // Stopping error code. Zero is invalid; successful commands produce no event.
+  localparam logic [63:0] EVENT_CODE_OFFSET = 8;
+  localparam logic [63:0] EVENT_CODE_SIZE = 4;
   function automatic logic [31:0] Event_get_code(input Event_t record_value);
     Event_get_code[0 +: 8] = record_value[(EVENT_CODE_OFFSET+0)*8 +: 8];
     Event_get_code[8 +: 8] = record_value[(EVENT_CODE_OFFSET+1)*8 +: 8];
@@ -1381,8 +1535,10 @@ package pdma_contract_records;
   localparam logic [63:0] EVENT_CODE_UNSUPPORTED = 64'd6;
   localparam logic [63:0] EVENT_CODE_INVALIDOPERATION = 64'd7;
   localparam logic [63:0] EVENT_CODE_ARITHMETICOVERFLOW = 64'd8;
-  localparam int unsigned EVENT_INFO_OFFSET = 16;
-  localparam int unsigned EVENT_INFO_SIZE = 8;
+    // Code-selected error progress
+    // Code-selected error progress.
+  localparam logic [63:0] EVENT_INFO_OFFSET = 16;
+  localparam logic [63:0] EVENT_INFO_SIZE = 8;
   function automatic logic [63:0] Event_get_info(input Event_t record_value);
     Event_get_info[0 +: 8] = record_value[(EVENT_INFO_OFFSET+0)*8 +: 8];
     Event_get_info[8 +: 8] = record_value[(EVENT_INFO_OFFSET+1)*8 +: 8];

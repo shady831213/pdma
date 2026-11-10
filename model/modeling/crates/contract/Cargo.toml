@@ -10,9 +10,10 @@ description = "PDMA DMA and management wire and register schemas"
 
 [features]
 default = []
-export-uvm-regs = []
+export-uvm-regs = ["hw-model-schema/export-uvm-regs"]
 export-c-header = ["hw-model-schema/export-c-header", "hw-model-schema/discovery"]
 export-rtl-layout = ["hw-model-schema/export-veryl-layout"]
+export-sv = ["hw-model-schema/export-sv"]
 
 [[bin]]
 name = "pdma-abi-header"
@@ -25,7 +26,7 @@ path = "src/bin/pdma-rtl-layout.rs"
 required-features = ["export-rtl-layout"]
 
 [dependencies]
-hw-model-schema = "0.2.0"
+hw-model-schema = "0.3.0"
 
 [lints]
 workspace = true
@@ -33,9 +34,14 @@ workspace = true
 [[bin]]
 name = "pdma-sv-records"
 path = "src/bin/pdma-sv-records.rs"
-required-features = ["export-rtl-layout"]
+required-features = ["export-sv"]
 
 [[bin]]
 name = "pdma-uvm-regs"
 path = "src/bin/pdma-uvm-regs.rs"
 required-features = ["export-uvm-regs"]
+
+[[bin]]
+name = "pdma-sv-layout"
+path = "src/bin/pdma-sv-layout.rs"
+required-features = ["export-sv"]

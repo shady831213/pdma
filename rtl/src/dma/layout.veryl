@@ -3,10 +3,10 @@
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package CommandHeaderLayout {
-    // Shared command discriminator
-    // One byte at the start of every complete command record. The protocol selects the complete union member using this opcode.
     const EXTENT: u64 = 1;
     const ALIGNMENT: u64 = 1;
+    // Shared command discriminator
+    // One byte at the start of every complete command record. The protocol selects the complete union member using this opcode.
     // Command opcode
     // Assigned opcodes 0 through 8; all other values are invalid.
 }
@@ -14,10 +14,10 @@ pub package CommandHeaderLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package LinearEndpointLayout {
-    // Linear copy endpoint
-    // Base address and full-width byte offset in the selected payload context.
     const EXTENT: u64 = 16;
     const ALIGNMENT: u64 = 8;
+    // Linear copy endpoint
+    // Base address and full-width byte offset in the selected payload context.
     // Payload base
     // Payload base address.
     // Byte offset
@@ -27,10 +27,10 @@ pub package LinearEndpointLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ScatterGatherEndpointLayout {
-    // Scatter/gather copy endpoint
-    // Original list geometry and full-width starting position. Lists remain stable until retirement.
     const EXTENT: u64 = 32;
     const ALIGNMENT: u64 = 8;
+    // Scatter/gather copy endpoint
+    // Original list geometry and full-width starting position. Lists remain stable until retirement.
     // Original table address
     // Original table address in the SG context.
     // Total entry count
@@ -44,10 +44,10 @@ pub package ScatterGatherEndpointLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package CopyCommandLayout {
-    // Complete independent-endpoint copy command
-    // A 96-byte command with independently selected linear or scatter/gather endpoints; both ranges are validated before writes.
     const EXTENT: u64 = 96;
     const ALIGNMENT: u64 = 8;
+    // Complete independent-endpoint copy command
+    // A 96-byte command with independently selected linear or scatter/gather endpoints; both ranges are validated before writes.
     // Shared command header
     // Copy opcode in the shared header.
     // Independent endpoint selectors
@@ -75,10 +75,10 @@ pub package CopyCommandLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package WordTargetLayout {
-    // Shared scalar target
-    // Shared scalar target.
     const EXTENT: u64 = 16;
     const ALIGNMENT: u64 = 8;
+    // Shared scalar target
+    // Shared scalar target.
     // Naturally aligned little-endian word address
     // Naturally aligned little-endian word address.
     // Target address-space selector
@@ -90,10 +90,10 @@ pub package WordTargetLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package WordWriteLayout {
-    // Write payload; Fence additionally publishes prior channel access completion with release semantics
-    // Write payload; Fence additionally publishes prior channel access completion with release semantics.
     const EXTENT: u64 = 24;
     const ALIGNMENT: u64 = 8;
+    // Write payload; Fence additionally publishes prior channel access completion with release semantics
+    // Write payload; Fence additionally publishes prior channel access completion with release semantics.
     // Destination word
     // Destination word.
     // Low selected-width bits to store
@@ -103,10 +103,10 @@ pub package WordWriteLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package WriteCommandLayout {
-    // Complete Write command
-    // Complete Write command including shared header and software identifier.
     const EXTENT: u64 = 40;
     const ALIGNMENT: u64 = 8;
+    // Complete Write command
+    // Complete Write command including shared header and software identifier.
     // Shared command header
     // Opcode selecting this complete command.
     // Software identifier
@@ -118,10 +118,10 @@ pub package WriteCommandLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package FillCommandLayout {
-    // Repeated pattern fill with arbitrary byte length
-    // Repeated pattern fill with arbitrary byte length.
     const EXTENT: u64 = 48;
     const ALIGNMENT: u64 = 8;
+    // Repeated pattern fill with arbitrary byte length
+    // Repeated pattern fill with arbitrary byte length.
     // Shared command header
     // Opcode selecting this complete command.
     // Software identifier
@@ -141,10 +141,10 @@ pub package FillCommandLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package WaitCommandLayout {
-    // Retained polling dependency; successful observation has acquire semantics
-    // Retained polling dependency; successful observation has acquire semantics.
     const EXTENT: u64 = 48;
     const ALIGNMENT: u64 = 8;
+    // Retained polling dependency; successful observation has acquire semantics
+    // Retained polling dependency; successful observation has acquire semantics.
     // Shared command header
     // Opcode selecting this complete command.
     // Software identifier
@@ -160,10 +160,10 @@ pub package WaitCommandLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package AtomicCommandLayout {
-    // One atomic effect with no returned-result storage
-    // One atomic effect with no returned-result storage.
     const EXTENT: u64 = 56;
     const ALIGNMENT: u64 = 8;
+    // One atomic effect with no returned-result storage
+    // One atomic effect with no returned-result storage.
     // Shared command header
     // Opcode selecting this complete command.
     // Software identifier
@@ -181,10 +181,10 @@ pub package AtomicCommandLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package SemaphoreCommandLayout {
-    // Atomic semaphore; requires selected-width RMW capability
-    // Atomic semaphore; requires selected-width RMW capability.
     const EXTENT: u64 = 40;
     const ALIGNMENT: u64 = 8;
+    // Atomic semaphore; requires selected-width RMW capability
+    // Atomic semaphore; requires selected-width RMW capability.
     // Shared command header
     // Opcode selecting this complete command.
     // Software identifier
@@ -198,10 +198,10 @@ pub package SemaphoreCommandLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package FenceCommandLayout {
-    // Complete Fence command
-    // Complete Fence command including shared header and software identifier.
     const EXTENT: u64 = 40;
     const ALIGNMENT: u64 = 8;
+    // Complete Fence command
+    // Complete Fence command including shared header and software identifier.
     // Shared command header
     // Opcode selecting this complete command.
     // Software identifier
@@ -213,10 +213,10 @@ pub package FenceCommandLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package TrapCommandLayout {
-    // Complete Trap command
-    // Complete Trap command including shared header and software identifier.
     const EXTENT: u64 = 16;
     const ALIGNMENT: u64 = 8;
+    // Complete Trap command
+    // Complete Trap command including shared header and software identifier.
     // Shared command header
     // Opcode selecting this complete command.
     // Software identifier
@@ -226,10 +226,10 @@ pub package TrapCommandLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package TimestampCommandLayout {
-    // External timer sample destination
-    // Writes one little-endian 64-bit external timer sample. A target PageFault retains the original sample until resume or cancellation; units and timer progression belong to the platform.
     const EXTENT: u64 = 32;
     const ALIGNMENT: u64 = 8;
+    // External timer sample destination
+    // Writes one little-endian 64-bit external timer sample. A target PageFault retains the original sample until resume or cancellation; units and timer progression belong to the platform.
     // Shared command header
     // Opcode selecting this complete command.
     // Software identifier
@@ -243,19 +243,19 @@ pub package TimestampCommandLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package CommandLayout {
-    // Complete copy-engine command union
-    // Untagged 96-byte union of complete command records. PDMA selects a member using the shared header opcode at byte zero.
     const EXTENT: u64 = 96;
     const ALIGNMENT: u64 = 8;
+    // Complete copy-engine command union
+    // Untagged 96-byte union of complete command records. PDMA selects a member using the shared header opcode at byte zero.
 }
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package ErrorInfoLayout {
-    // Stopping command progress
-    // Stopping command progress.
     const EXTENT: u64 = 8;
     const ALIGNMENT: u64 = 8;
+    // Stopping command progress
+    // Stopping command progress.
     // Committed write prefix before the stopping error; never rolled back
     // Committed write prefix before the stopping error; never rolled back.
 }
@@ -263,10 +263,10 @@ pub package ErrorInfoLayout {
 // Generated schema layout; do not edit.
 #[fmt(skip)]
 pub package EventLayout {
-    // Error-only event
-    // Error-only event. Error stop latches before publication; ring failure escalates to channel fatal.
     const EXTENT: u64 = 24;
     const ALIGNMENT: u64 = 8;
+    // Error-only event
+    // Error-only event. Error stop latches before publication; ring failure escalates to channel fatal.
     // Original command identifier
     // Original command identifier.
     // Stopping error code

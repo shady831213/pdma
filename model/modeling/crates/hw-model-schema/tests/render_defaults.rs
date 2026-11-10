@@ -1,4 +1,4 @@
-//! Partial renderers ignore optional syntax and reusable target definitions.
+//! Structural defaults recurse; unhandled leaf syntax and named references remain silent.
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Bindings},
     ast::SchemaSet,
@@ -18,14 +18,6 @@ impl value::Backend for Expressions {
     type Domain = register::Domain;
     type Error = std::io::Error;
     type Context<'a> = register::Context<'a>;
-    fn expression<'a>(
-        &mut self,
-        _: view::Expression<'a>,
-        _: Self::Context<'a>,
-        writer: &mut dyn std::io::Write,
-    ) -> Result<(), Self::Error> {
-        writer.write_all(b"bare expression")
-    }
 }
 
 struct Records;
@@ -47,16 +39,7 @@ impl value::Backend for Records {
 }
 
 struct ExpressionLeaves;
-impl register::Backend for ExpressionLeaves {
-    fn layout_property<'a>(
-        &mut self,
-        _: register::LayoutProperty<'a>,
-        ctx: register::Context<'a>,
-        writer: &mut dyn std::io::Write,
-    ) -> Result<(), Self::Error> {
-        self.emit_all(ctx.children(), writer)
-    }
-}
+impl register::Backend for ExpressionLeaves {}
 impl value::Backend for ExpressionLeaves {
     type Domain = register::Domain;
     type Error = std::io::Error;
@@ -81,7 +64,7 @@ fn symbolic_expressions_are_leaf_render_visits() {
     set.add::<Block>();
     let schema = AnalyzedSchema::analyze(set, &Bindings::new()).unwrap();
     let mut bytes = Vec::new();
-    // When a backend explicitly emits every layout property expression.
+    // When a backend inherits structural traversal and only implements the expression leaf.
     ExpressionLeaves
         .emit_all(register::entries(&schema), &mut bytes)
         .unwrap();
@@ -90,8 +73,8 @@ fn symbolic_expressions_are_leaf_render_visits() {
 }
 
 #[test]
-fn unhandled_layout_and_metadata_do_not_emit_bare_expressions() {
-    // Given a partial backend that spells expressions but handles no layout properties.
+fn unhandled_leaf_syntax_does_not_emit_output() {
+    // Given a backend implementing structural recursion but no expression syntax.
     let mut set = SchemaSet::new();
     set.add::<Block>();
     let schema = AnalyzedSchema::analyze(set, &Bindings::new()).unwrap();

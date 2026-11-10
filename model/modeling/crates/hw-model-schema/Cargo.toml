@@ -1,6 +1,6 @@
 [package]
 name = "hw-model-schema"
-version = "0.2.0"
+version = "0.3.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -8,7 +8,7 @@ repository.workspace = true
 publish = ["crates-io"]
 readme = "README.md"
 include = ["src/**", "tests/**", "examples/**", "README.md", "clippy.toml", "LICENSE-MIT", "LICENSE-APACHE", "Cargo.toml"]
-description = "Reusable hardware interface schema vocabulary and scalar codecs"
+description = "Hardware interface schemas, typed codecs, register maps, and extensible code generation"
 keywords = ["hardware", "modeling", "schema", "registers", "codegen"]
 categories = ["development-tools"]
 documentation = "https://docs.rs/hw-model-schema"
@@ -28,6 +28,8 @@ default = []
 discovery = ["dep:inventory"]
 export-c-header = []
 export-veryl-layout = []
+export-sv = []
+export-uvm-regs = []
 
 [lints]
 workspace = true
@@ -51,3 +53,19 @@ path = "tests/register_layout_dsl/mod.rs"
 [[test]]
 name = "instance_banks"
 path = "tests/instance_banks_tests.rs"
+
+[[test]]
+name = "uvm_exports"
+path = "tests/uvm_exports/mod.rs"
+
+[[example]]
+name = "register_listing"
+test = true
+
+[[example]]
+name = "sv_packages"
+required-features = ["export-sv"]
+
+[[example]]
+name = "uvm_model"
+required-features = ["export-uvm-regs"]

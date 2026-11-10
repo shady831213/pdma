@@ -9,7 +9,7 @@ members = ["peer"]
 resolver = "3"
 
 [dependencies]
-schema = { package = "hw-model-schema", version = "0.2.0", default-features = false, features = ["discovery"] }
+schema = { package = "hw-model-schema", version = "0.3.0", default-features = false, features = ["discovery"] }
 schema-peer = { path = "peer" }
 
 [lints.rust]

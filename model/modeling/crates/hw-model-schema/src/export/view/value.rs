@@ -50,7 +50,7 @@ impl Enumeration {
     pub const fn variant_count(self) -> usize {
         self.0.variants().len()
     }
-    /// Encoding of this occurrence, independent of its enclosing placement.
+    /// Effective encoding at this occurrence; byte order belongs to its embedding.
     pub const fn encoding(self) -> EnumEncoding {
         match self.0 {
             ast::value::Enumeration::Scalar(v) => EnumEncoding::Scalar(Scalar(v)),
@@ -92,12 +92,23 @@ impl Bits<'_> {
         self.0.declared_mask()
     }
 }
-/// Borrowed bit-field placement without its enumeration subtree.
+/// Bit-field placement without its enumeration subtree or source ID type.
 #[derive(Clone, Copy)]
-pub struct BitField<'a, I: 'static = u16>(pub(crate) &'a crate::BitsFieldSpec<I>);
-impl<I: Copy> BitField<'_, I> {
+pub struct BitField(crate::BitsFieldSpec<usize>);
+impl BitField {
+    pub(crate) fn from_spec<I: Copy + Into<usize>>(spec: &crate::BitsFieldSpec<I>) -> Self {
+        Self(
+            crate::BitsFieldSpec::place(
+                spec.id().into(),
+                spec.name(),
+                spec.lsb(),
+                spec.definition(),
+            )
+            .with_documentation(spec.documentation()),
+        )
+    }
     /// Sibling-local identity.
-    pub const fn id(self) -> I {
+    pub const fn id(self) -> usize {
         self.0.id()
     }
     /// Declared field name.
@@ -208,7 +219,7 @@ impl core::fmt::Debug for StorageMember<'_> {
     }
 }
 
-impl<I: Copy> core::fmt::Debug for BitField<'_, I> {
+impl core::fmt::Debug for BitField {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("BitField")
             .field("name", &self.name())

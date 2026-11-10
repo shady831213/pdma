@@ -83,7 +83,7 @@ fn symbolic_expressions_are_leaf_render_visits() {
     let mut bytes = Vec::new();
     // When a backend explicitly emits every layout property expression.
     ExpressionLeaves
-        .emit_all(register::roots(&schema), &mut bytes)
+        .emit_all(register::entries(&schema), &mut bytes)
         .unwrap();
     // Then expression callbacks run without exposing recursive operand dispatch.
     assert!(!bytes.is_empty());
@@ -98,7 +98,7 @@ fn unhandled_layout_and_metadata_do_not_emit_bare_expressions() {
     let mut bytes = Vec::new();
     // When structural defaults visit all selected units.
     Expressions
-        .emit_all(register::roots(&schema), &mut bytes)
+        .emit_all(register::entries(&schema), &mut bytes)
         .unwrap();
     // Then no unrequested expression syntax leaks into the artifact.
     assert!(bytes.is_empty(), "{bytes:?}");
@@ -113,7 +113,7 @@ fn unhandled_record_references_do_not_duplicate_definitions() {
     let mut bytes = Vec::new();
     // When the containment defaults encounter a reusable record reference.
     Records
-        .emit_all(record::roots(&schema), &mut bytes)
+        .emit_all(record::entries(&schema), &mut bytes)
         .unwrap();
     // Then each definition is emitted exactly once, in dependency order.
     assert_eq!(String::from_utf8(bytes).unwrap(), "Payload\nPacket\n");

@@ -93,7 +93,8 @@ impl RegisterWalk {
                     DefinitionBody::RegisterMap(child_map) => {
                         self.map(child_map, &resolved.arguments, offset)?;
                     }
-                    DefinitionBody::Bits(_)
+                    DefinitionBody::Enumeration(_)
+                    | DefinitionBody::Bits(_)
                     | DefinitionBody::Record(_)
                     | DefinitionBody::Union { .. }
                     | DefinitionBody::Opaque(_) => return Err(LayoutError::Geometry),

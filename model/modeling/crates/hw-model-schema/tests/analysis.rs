@@ -80,13 +80,13 @@ fn manual_record() -> RecordDefinition {
 #[derive(Default)]
 struct DefinitionList(Vec<String>);
 impl Backend for DefinitionList {
-    fn root(
+    fn entry(
         &mut self,
         ctx: RecordContext<'_>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
         {
-            let event: String = ctx.root_name().to_owned();
+            let event: String = ctx.entry_name().to_owned();
             if !self.0.is_empty() {
                 writer.write_all(b"\n")?;
             }
@@ -100,17 +100,6 @@ impl value::Backend for DefinitionList {
     type Domain = hw_model_schema::export::record::Domain;
     type Error = std::io::Error;
     type Context<'a> = RecordContext<'a>;
-}
-impl hw_model_schema::export::OutputBackend for DefinitionList {
-    fn metadata(
-        &mut self,
-        ctx: &Self::Context<'_>,
-    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
-        Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.root_name().to_owned(),
-            media_type: "text/plain".into(),
-        })
-    }
 }
 
 #[test]

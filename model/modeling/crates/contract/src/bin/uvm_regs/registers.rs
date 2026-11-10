@@ -1,4 +1,4 @@
-use super::backend::Uvm;
+use super::Uvm;
 use hw_model_schema::{
     Endian,
     ast::register::Parameter,
@@ -11,17 +11,6 @@ use hw_model_schema::{
 };
 use std::io::{Error, Write};
 impl register::Backend for Uvm {
-    fn root(&mut self, ctx: Context<'_>, writer: &mut dyn Write) -> Result<(), Error> {
-        let children: Vec<_> = ctx.children().collect();
-        let has_layout = children.iter().any(|visit| visit.kind() == Kind::MapLayout);
-        self.emit_all(
-            children
-                .into_iter()
-                .filter(|visit| !has_layout || visit.kind() != Kind::RegisterMap),
-            writer,
-        )
-    }
-
     fn register<'a>(
         &mut self,
         reg: view::Register<'a>,
@@ -35,7 +24,7 @@ impl register::Backend for Uvm {
         }
         self.variants = SymbolScope::default();
         self.initialization.clear();
-        let name = ctx.root_name();
+        let name = ctx.entry_name();
         writeln!(
             writer,
             "  class {name} extends uvm_reg;\n    `uvm_object_utils({name})"
@@ -55,14 +44,19 @@ impl register::Backend for Uvm {
         writeln!(writer, "    endfunction\n  endclass\n")
     }
 
-    fn map_layout<'a>(
+    fn register_map<'a>(
         &mut self,
-        _: view::MapLayout<'a>,
+        map: view::Map<'a>,
         ctx: Context<'a>,
         writer: &mut dyn Write,
     ) -> Result<(), Error> {
+        if map.is_projection() {
+            return Err(Error::other(
+                "permission-projected register maps are unsupported",
+            ));
+        }
         self.initialization.clear();
-        let name = ctx.root_name();
+        let name = ctx.entry_name();
         writeln!(
             writer,
             "  class {name} extends uvm_reg_block;\n    `uvm_object_utils({name})"
@@ -93,26 +87,6 @@ impl register::Backend for Uvm {
         writeln!(writer, "    endfunction\n  endclass\n")
     }
 
-    fn register_map<'a>(
-        &mut self,
-        _: view::Map<'a>,
-        _: Context<'a>,
-        _: &mut dyn Write,
-    ) -> Result<(), Error> {
-        Err(Error::other(
-            "permission-projected register maps are unsupported",
-        ))
-    }
-
-    fn register_field<'a>(
-        &mut self,
-        field: view::BitField<'a, usize>,
-        ctx: Context<'a>,
-        writer: &mut dyn Write,
-    ) -> Result<(), Error> {
-        self.field((field.name(), field.lsb(), field.bit_width()), &ctx, writer)
-    }
-
     fn reference<'a>(
         &mut self,
         _: view::Reference<'a>,
@@ -121,7 +95,7 @@ impl register::Backend for Uvm {
         ctx: Context<'a>,
         writer: &mut dyn Write,
     ) -> Result<(), Error> {
-        if target.kind == Kind::Bits {
+        if matches!(target.kind, Kind::Bits | Kind::Enum) {
             return self.emit(visit, writer);
         }
         let p = ctx

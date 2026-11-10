@@ -2,8 +2,8 @@
 mod complete;
 mod instance;
 mod math;
-mod opaque;
 mod simplify;
+mod storage;
 pub use complete::{CompleteMapLayout, CompletePlacementLayout, Constraint};
 mod input;
 mod layout;
@@ -76,6 +76,10 @@ pub enum Layout {
 /// A prepared definition and its dependencies, before target naming.
 #[derive(Debug, Clone)]
 pub struct Unit {
+    /// Original declaration form; independent from generation entry selection.
+    pub origin: crate::ast::Origin,
+    /// Explicitly selected generation entry, including referenced definitions.
+    pub selected: bool,
     /// Canonical declaration; absent only for a concrete permission projection.
     pub declaration: Option<crate::ast::DefinitionBody>,
     /// Stable identity within a generation request.
@@ -101,6 +105,8 @@ pub struct Unit {
 pub struct AnalyzedSchema {
     units: Vec<Unit>,
     opaque_layouts: std::collections::HashMap<crate::traversal::NodeId, crate::ResolvedRecord>,
+    union_storage:
+        std::collections::HashMap<crate::traversal::NodeId, Vec<(usize, crate::FieldSpec)>>,
 }
 impl AnalyzedSchema {
     /// Looks up a reusable root at the Rust frontend identity boundary.
@@ -119,32 +125,23 @@ impl AnalyzedSchema {
     }
     /// Selects an explicit source record with its dependencies and checks their layouts.
     pub fn record(name: &str, record: crate::ast::RecordDefinition) -> Result<Self, AnalysisError> {
-        validate::record(&record)?;
-        let layout = record
-            .spec()
-            .resolve()
-            .map_err(|source| AnalysisError::Record {
-                path: record.spec().name(),
-                source,
-            })?;
-        let mut dependencies = SchemaSet::new();
-        let mut references = Vec::new();
-        for reference in Node::Record(crate::ast::record::Node::Record(&record)).references() {
-            dependencies.add_definition(reference.target());
-            references.push(Dependency::from(reference));
-        }
-        let graph = dependencies
-            .resolve()
-            .map_err(AnalysisError::Dependencies)?;
+        struct ManualRecord;
+        let id = crate::ast::DefinitionId::of::<ManualRecord>().derived(&[name.into()]);
+        let definition = crate::ast::Definition::from_body(
+            id.clone(),
+            name.into(),
+            record.spec().documentation(),
+            crate::ast::DefinitionBody::Record(record),
+        );
+        let mut set = SchemaSet::new();
+        set.add_definition(definition);
+        let graph = set.resolve().map_err(AnalysisError::Dependencies)?;
         let mut units = pipeline::prepare_graph(&graph, &Bindings::new())?;
-        units.push(Unit {
-            declaration: Some(crate::ast::DefinitionBody::Record(record)),
-            id: crate::traversal::NodeId::view(name),
-            name: name.into(),
-            documentation: layout.documentation(),
-            references,
-            body: Layout::Record(layout),
-        });
+        for unit in &mut units {
+            if unit.id == crate::traversal::NodeId::definition(id.clone()) {
+                unit.id = crate::traversal::NodeId::view(name);
+            }
+        }
         Self::finish(units)
     }
     /// Selects manually supplied storage metadata without inventing source fields.
@@ -154,6 +151,8 @@ impl AnalyzedSchema {
             source,
         })?;
         Self::finish(vec![Unit {
+            origin: crate::ast::Origin::Named,
+            selected: true,
             declaration: Some(crate::ast::DefinitionBody::Opaque(spec)),
             id: crate::traversal::NodeId::view(name),
             name: name.into(),

@@ -14,7 +14,7 @@ fn schema() -> Result<AnalyzedSchema, hw_model_schema::analysis::AnalysisError> 
 #[test]
 fn shared_referents_preserve_distinct_occurrence_ancestry() {
     let schema = schema().unwrap();
-    let root = hw_model_schema::traversal::record::roots(&schema)
+    let root = hw_model_schema::traversal::record::definitions(&schema)
         .find(|v| v.context().unit().name == "Pair")
         .unwrap();
     let mut paths = Vec::new();
@@ -88,7 +88,7 @@ fn opaque_reference_stops_at_declared_storage_boundary() {
         )],
     );
     let schema = AnalyzedSchema::record("Envelope", source).unwrap();
-    let root = hw_model_schema::traversal::record::roots(&schema)
+    let root = hw_model_schema::traversal::record::definitions(&schema)
         .find(|v| v.context().unit().name == "Envelope")
         .unwrap();
     let field = root

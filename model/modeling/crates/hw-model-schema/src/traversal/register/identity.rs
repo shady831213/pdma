@@ -11,7 +11,7 @@ pub(super) const fn edge(parent: Node<'_>, index: usize, child: Node<'_>) -> Edg
         return Edge::Derived(index);
     }
     let role = match child {
-        Node::MapLayout(_) | Node::Register(_) => SourceRole::Declaration,
+        Node::RegisterMap(_) | Node::Register(_) => SourceRole::Declaration,
         Node::Value(_) if matches!(parent, Node::Root(_)) => SourceRole::Declaration,
         Node::Parameter(_) => SourceRole::Parameter,
         Node::Placement(_) => SourceRole::Placement,
@@ -21,7 +21,6 @@ pub(super) const fn edge(parent: Node<'_>, index: usize, child: Node<'_>) -> Edg
         Node::Attribute(value) => source_edge::attribute(value),
         Node::Value(_) => SourceRole::Value,
         Node::Root(_)
-        | Node::RegisterMap(_)
         | Node::RegisterPlacement { .. }
         | Node::Bank(_)
         | Node::BankProperty(_)

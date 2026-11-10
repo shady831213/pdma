@@ -78,6 +78,8 @@ impl AnalyzedSchema {
         map: &ResolvedRegisterMap<I, F>,
     ) -> Result<Self, super::AnalysisError> {
         Self::finish(vec![Unit {
+            origin: crate::ast::Origin::Named,
+            selected: true,
             declaration: None,
             id: crate::traversal::NodeId::view(name),
             name: name.into(),

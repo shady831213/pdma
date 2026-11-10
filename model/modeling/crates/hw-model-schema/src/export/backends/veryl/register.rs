@@ -7,7 +7,7 @@ use crate::{
         expression::ExpressionSyntax,
         register::Backend,
         value::Emit as _,
-        view::{BitField, Map, Register},
+        view::{Map, Register},
     },
 };
 use std::io::Write;
@@ -21,14 +21,18 @@ impl Backend for VerylRegisterBackend {
         _: Context<'a>,
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
-        if metadata.kind == crate::export::Kind::Bits {
+        if matches!(
+            metadata.kind,
+            crate::export::Kind::Bits | crate::export::Kind::Enum
+        ) {
             self.emit(target, writer)?;
         }
         Ok(())
     }
 
-    fn root(&mut self, ctx: Context<'_>, writer: &mut dyn Write) -> Result<(), Self::Error> {
-        self.output.begin(ctx.root_id(), ctx.root_name(), writer)?;
+    fn entry(&mut self, ctx: Context<'_>, writer: &mut dyn Write) -> Result<(), Self::Error> {
+        self.output
+            .begin(ctx.entry_id(), ctx.entry_name(), writer)?;
         self.emit(ctx.current(), writer)?;
         writer.write_all(b"}\n")?;
         Ok(())
@@ -39,13 +43,11 @@ impl Backend for VerylRegisterBackend {
         ctx: Context<'_>,
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
-        if ctx.bank().is_some()
-            || matches!(
-                property.kind(),
-                crate::ast::register::LayoutPropertyKind::End
-                    | crate::ast::register::LayoutPropertyKind::OccupiedEnd
-            )
-        {
+        if matches!(
+            property.kind(),
+            crate::ast::register::LayoutPropertyKind::End
+                | crate::ast::register::LayoutPropertyKind::OccupiedEnd
+        ) {
             return Ok(());
         }
         let name = property.owner().map_or_else(
@@ -69,27 +71,38 @@ impl Backend for VerylRegisterBackend {
         writeln!(writer, ";\n    }}")?;
         Ok(())
     }
-    fn map_layout<'a>(
-        &mut self,
-        layout: crate::export::view::MapLayout<'a>,
-        ctx: Context<'a>,
-        writer: &mut dyn Write,
-    ) -> Result<(), Self::Error> {
-        self.output
-            .package
-            .constant("ALIGNMENT", "u64", layout.alignment(), writer)?;
-        self.emit_all(ctx.children(), writer)
-    }
     fn register_map<'a>(
         &mut self,
         map: Map<'a>,
         ctx: Context<'a>,
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
-        self.output
-            .package
-            .constant("EXTENT", "u64", map.extent(), writer)?;
-        self.emit_all(ctx.children(), writer)
+        if !map.is_projection() {
+            if let Some(alignment) = map.alignment() {
+                self.output
+                    .package
+                    .constant("ALIGNMENT", "u64", alignment, writer)?;
+            }
+            self.emit_all(ctx.children(), writer)?;
+        }
+        if let Some(extent) = map.extent() {
+            self.output
+                .package
+                .constant("EXTENT", "u64", extent, writer)?;
+        }
+        if map.is_projection() {
+            self.emit_all(ctx.children(), writer)
+        } else {
+            self.emit_all(ctx.projected_children(), writer)
+        }
+    }
+    fn bank<'a>(
+        &mut self,
+        _: crate::export::view::Bank<'a>,
+        ctx: Context<'a>,
+        writer: &mut dyn Write,
+    ) -> Result<(), Self::Error> {
+        self.emit_all(ctx.instances(), writer)
     }
     fn register<'a>(
         &mut self,
@@ -98,9 +111,6 @@ impl Backend for VerylRegisterBackend {
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
         if let Some(site) = ctx.register_site() {
-            if matches!(site.location, RegisterLocation::Template { .. }) {
-                return Ok(());
-            }
             let name = register_name(site.segments);
             self.output
                 .package
@@ -152,37 +162,9 @@ impl Backend for VerylRegisterBackend {
         )?;
         self.emit_all(ctx.children(), writer)
     }
-    fn register_field<'a>(
-        &mut self,
-        field: BitField<'a, usize>,
-        ctx: Context<'a>,
-        writer: &mut dyn Write,
-    ) -> Result<(), Self::Error> {
-        self.field_metadata(field, &ctx, writer)
-    }
 }
 
-impl VerylRegisterBackend {
-    pub(super) fn field_metadata<I: Copy>(
-        &mut self,
-        field: BitField<'_, I>,
-        ctx: &Context<'_>,
-        writer: &mut dyn Write,
-    ) -> Result<(), super::VerylExportError> {
-        let prefix = register_name(ctx.register_segments());
-        let name = format!("{prefix}_{}", field.name().to_ascii_uppercase());
-        self.output
-            .package
-            .constant(&format!("{name}_LSB"), "u32", field.lsb(), writer)?;
-        self.output
-            .package
-            .constant(&format!("{name}_BITS"), "u32", field.bit_width(), writer)?;
-        self.emit_all(ctx.children(), writer)
-    }
-}
-
-pub(super) struct Syntax;
-impl ExpressionSyntax for Syntax {
+impl ExpressionSyntax for VerylRegisterBackend {
     fn parameter(&mut self, name: &str) -> String {
         format!("p_{name}")
     }

@@ -143,19 +143,13 @@ fn prepared_roots_retain_independent_c_prefixes() -> super::support::TestResult 
     let mut record = CRecordBackend::new(&analysis.input().1);
     let mut register = CRegisterBackend::new();
     for root in prepare(&schema, &mut record)? {
-        let expected = format!(
-            "#define C_{}_SIZE ",
-            root.metadata().logical_name.to_ascii_uppercase()
-        );
+        let expected = format!("#define C_{}_SIZE ", root.name().to_ascii_uppercase());
         let mut bytes = Vec::new();
         root.emit(&mut record, &mut bytes)?;
         assert!(std::str::from_utf8(&bytes)?.starts_with(&expected));
     }
     for root in prepare(&schema, &mut register)? {
-        let expected = format!(
-            "#define C_{}_SIZE ",
-            root.metadata().logical_name.to_ascii_uppercase()
-        );
+        let expected = format!("#define C_{}_SIZE ", root.name().to_ascii_uppercase());
         let mut bytes = Vec::new();
         root.emit(&mut register, &mut bytes)?;
         assert!(std::str::from_utf8(&bytes)?.starts_with(&expected));

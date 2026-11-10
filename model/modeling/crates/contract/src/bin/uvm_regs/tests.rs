@@ -90,8 +90,8 @@ fn rejects_permission_projected_maps_without_reusable_hierarchy() {
         })
         .unwrap();
     let schema = AnalyzedSchema::register_map("Restricted", &restricted).unwrap();
-    let mut backend = backend::Uvm::default();
-    let outputs = prepare_roots(&mut backend, register::roots(&schema)).unwrap();
+    let mut backend = Uvm::default();
+    let outputs = prepare_entries(&mut backend, register::entries(&schema)).unwrap();
     let error = outputs
         .into_iter()
         .next()
@@ -148,8 +148,8 @@ fn zero_geometry_parameter_and_reserved_names_are_supported() {
     };
     let geometry = map.plan.as_ref().unwrap().evaluate(&[0, 0]).unwrap();
     assert_eq!(geometry.placements.get(1).unwrap().offset, 4);
-    let mut backend = backend::Uvm::default();
-    let outputs = prepare_roots(&mut backend, register::roots(&schema)).unwrap();
+    let mut backend = Uvm::default();
+    let outputs = prepare_entries(&mut backend, register::entries(&schema)).unwrap();
     let mut bytes = Vec::new();
     for output in outputs {
         output.emit(&mut backend, &mut bytes).unwrap();
@@ -187,8 +187,8 @@ fn writer_failure_propagates_from_output_rendering() {
     let mut definitions = SchemaSet::new();
     definitions.add::<DmaRegisters>();
     let schema = AnalyzedSchema::analyze(definitions, &Bindings::new()).unwrap();
-    let mut backend = backend::Uvm::default();
-    let outputs = prepare_roots(&mut backend, register::roots(&schema)).unwrap();
+    let mut backend = Uvm::default();
+    let outputs = prepare_entries(&mut backend, register::entries(&schema)).unwrap();
     for output in outputs {
         let mut complete = Vec::new();
         output.emit(&mut backend, &mut complete).unwrap();

@@ -7,6 +7,7 @@ pub struct BitsDefinition {
     bit_width: usize,
     declared_mask: u64,
     fields: &'static [BitsFieldSpec],
+    enum_references: Vec<Option<super::Reference>>,
 }
 impl BitsDefinition {
     /// Constructs an inline source bits declaration from its original members.
@@ -29,6 +30,7 @@ impl BitsDefinition {
             bit_width,
             declared_mask,
             fields,
+            enum_references: Vec::new(),
         }
     }
 
@@ -39,7 +41,23 @@ impl BitsDefinition {
             bit_width: T::BIT_WIDTH,
             declared_mask: T::DECLARED_MASK,
             fields: T::FIELDS,
+            enum_references: Vec::new(),
         }
+    }
+    pub(crate) fn with_enum_references(
+        &self,
+        enum_references: Vec<Option<super::Reference>>,
+    ) -> Self {
+        Self {
+            enum_references,
+            ..self.clone()
+        }
+    }
+    /// Packed field occurrences, including canonical defined-type edges.
+    pub fn members(&self) -> impl Iterator<Item = super::value::BitField<'_>> {
+        self.fields.iter().enumerate().map(|(i, field)| {
+            super::value::BitField::new(field, self.enum_references.get(i).and_then(Option::as_ref))
+        })
     }
     /// Scalar storage kind, independent of memory byte order.
     pub const fn scalar(&self) -> ScalarKind {

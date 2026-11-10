@@ -29,6 +29,28 @@ impl<'a> Bank<'a> {
     pub const fn documentation(self) -> crate::Documentation {
         self.view.documentation
     }
+    pub(super) fn instances(self) -> Vec<Node<'a>> {
+        if self.expanded {
+            return Vec::new();
+        }
+        self.view
+            .instances
+            .iter()
+            .enumerate()
+            .flat_map(|(instance, rs)| {
+                rs.iter()
+                    .enumerate()
+                    .map(move |(member, view)| Node::RegisterPlacement {
+                        view,
+                        location: RegisterLocation::Instance {
+                            bank: self.index,
+                            instance,
+                            member,
+                        },
+                    })
+            })
+            .collect()
+    }
     pub(super) fn children(self) -> Vec<Node<'a>> {
         let mut nodes = Vec::new();
         if self.expanded {
@@ -59,24 +81,6 @@ impl<'a> Bank<'a> {
                             bank: self.index,
                             member,
                         },
-                    }),
-            );
-            nodes.extend(
-                self.view
-                    .instances
-                    .iter()
-                    .enumerate()
-                    .flat_map(|(instance, rs)| {
-                        rs.iter()
-                            .enumerate()
-                            .map(move |(member, view)| Node::RegisterPlacement {
-                                view,
-                                location: RegisterLocation::Instance {
-                                    bank: self.index,
-                                    instance,
-                                    member,
-                                },
-                            })
                     }),
             );
         }

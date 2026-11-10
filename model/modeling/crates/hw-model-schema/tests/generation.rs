@@ -98,7 +98,7 @@ fn named_instances_survive_preparation_with_independent_geometry()
     Ok(())
 }
 impl Backend for FailsAfterOne {
-    fn root(
+    fn entry(
         &mut self,
         _: RegisterContext<'_>,
         _writer: &mut dyn std::io::Write,
@@ -116,22 +116,12 @@ impl value::Backend for FailsAfterOne {
     type Error = &'static str;
     type Context<'a> = RegisterContext<'a>;
 }
-impl hw_model_schema::export::OutputBackend for FailsAfterOne {
-    fn metadata(
-        &mut self,
-        ctx: &Self::Context<'_>,
-    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
-        Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.root_name().to_owned(),
-            media_type: "text/plain".into(),
-        })
-    }
-}
 
 #[test]
 fn rendering_failure_preserves_completed_root_output() -> Result<(), Box<dyn std::error::Error>> {
-    // Given: multiple definitions and a renderer failing on the second definition.
+    // Given: explicitly selected entries and a renderer failing on its second output.
     let mut set = hw_model_schema::ast::SchemaSet::new();
+    set.add::<Word>();
     set.add::<Root>();
     let schema = AnalyzedSchema::from_graph(&set.resolve()?, &Bindings::new())?;
     let mut sink = MemoryOutput::new();
@@ -148,7 +138,7 @@ fn rendering_failure_preserves_completed_root_output() -> Result<(), Box<dyn std
         return Err("expected first root only".into());
     };
     assert_eq!(
-        completed.metadata.logical_name,
+        completed.entry_name,
         schema.units().next().ok_or("first root")?.name
     );
 
@@ -157,7 +147,7 @@ fn rendering_failure_preserves_completed_root_output() -> Result<(), Box<dyn std
 
 struct CountCallbacks<'a>(&'a std::cell::Cell<usize>);
 impl Backend for CountCallbacks<'_> {
-    fn root(
+    fn entry(
         &mut self,
         _: RegisterContext<'_>,
         _writer: &mut dyn std::io::Write,
@@ -170,17 +160,6 @@ impl value::Backend for CountCallbacks<'_> {
     type Domain = hw_model_schema::export::register::Domain;
     type Error = core::convert::Infallible;
     type Context<'a> = RegisterContext<'a>;
-}
-impl hw_model_schema::export::OutputBackend for CountCallbacks<'_> {
-    fn metadata(
-        &mut self,
-        ctx: &Self::Context<'_>,
-    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
-        Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.root_name().to_owned(),
-            media_type: "text/plain".into(),
-        })
-    }
 }
 
 hw_model_schema::record_schema! { pub record ZRecord { endian: Little, fields: { value: u32 } } }

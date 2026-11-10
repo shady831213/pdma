@@ -86,17 +86,6 @@ impl value::Backend for Recording {
         Ok(())
     }
 }
-impl hw_model_schema::export::OutputBackend for Recording {
-    fn metadata(
-        &mut self,
-        ctx: &Self::Context<'_>,
-    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
-        Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.root_name().to_owned(),
-            media_type: "text/plain".into(),
-        })
-    }
-}
 
 fn packet() -> Result<AnalyzedSchema, Box<dyn std::error::Error>> {
     let mut set = SchemaSet::new();
@@ -138,7 +127,11 @@ fn complete_node_handlers_wrap_sorted_children_without_mutating_source() -> Test
             "record:end"
         ]
     );
-    let node = analysis.units().next().ok_or("missing record")?.node()?;
+    let node = analysis
+        .units()
+        .find(|u| u.selected)
+        .ok_or("missing record")?
+        .node()?;
     let names: Vec<_> = node
         .children()
         .filter_map(|node| match node {
@@ -190,7 +183,7 @@ fn recursive_failure_stops_siblings_and_publishes_no_partial_artifacts() -> Test
 #[derive(Default)]
 struct PlacementScopes(Vec<usize>);
 impl register::Backend for PlacementScopes {
-    fn root(
+    fn entry(
         &mut self,
         ctx: Self::Context<'_>,
         writer: &mut dyn std::io::Write,
@@ -230,17 +223,6 @@ impl value::Backend for PlacementScopes {
     type Domain = register::Domain;
     type Error = &'static str;
     type Context<'a> = hw_model_schema::export::register::Context<'a>;
-}
-impl hw_model_schema::export::OutputBackend for PlacementScopes {
-    fn metadata(
-        &mut self,
-        ctx: &Self::Context<'_>,
-    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
-        Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.root_name().to_owned(),
-            media_type: "text/plain".into(),
-        })
-    }
 }
 
 #[test]

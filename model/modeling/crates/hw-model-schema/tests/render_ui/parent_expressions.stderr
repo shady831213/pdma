@@ -43,8 +43,8 @@ error[E0599]: no method named `expression` found for struct `hw_model_schema::ex
 13 |     let _ = property.expression();
    |                      ^^^^^^^^^^ method not found in `hw_model_schema::export::view::LayoutProperty<'_>`
 
-error[E0599]: no method named `extent` found for struct `hw_model_schema::export::view::MapLayout<'a>` in the current scope
+error[E0599]: no method named `layout` found for struct `hw_model_schema::export::view::Map<'a>` in the current scope
   --> tests/render_ui/parent_expressions.rs:14:17
    |
-14 |     let _ = map.extent();
-   |                 ^^^^^^ method not found in `hw_model_schema::export::view::MapLayout<'_>`
+14 |     let _ = map.layout();
+   |                 ^^^^^^ method not found in `hw_model_schema::export::view::Map<'_>`

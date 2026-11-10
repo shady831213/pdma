@@ -54,6 +54,7 @@ pub(super) fn placement<'a>(
         DefinitionBody::RegisterMap(map) => map.parameters(),
         DefinitionBody::Bits(_)
         | DefinitionBody::Register(_)
+        | DefinitionBody::Enumeration(_)
         | DefinitionBody::Record(_)
         | DefinitionBody::Union(_)
         | DefinitionBody::Opaque(_) => &[],
@@ -71,14 +72,7 @@ pub(super) fn placement<'a>(
         })
         .collect();
     nodes.push(Node::Attribute(Attribute::Count(placement.count())));
-    match placement.body() {
-        crate::ast::PlacementBody::Reference(reference) => nodes.push(Node::Reference(reference)),
-        crate::ast::PlacementBody::Inline(child) => match child.node() {
-            crate::ast::Node::Register(node) => nodes.push(node),
-            crate::ast::Node::Value(node) => nodes.push(Node::Value(node)),
-            crate::ast::Node::Record(_) => {}
-        },
-    }
+    nodes.push(Node::Reference(placement.reference()));
     nodes.push(Node::Attribute(Attribute::Bank(placement.is_bank())));
     nodes.extend(
         placement

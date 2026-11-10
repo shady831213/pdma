@@ -52,7 +52,7 @@ fn generic_metadata_does_not_truncate_large_register_offsets()
     let artifact = sink
         .outputs()
         .iter()
-        .find(|item| item.metadata.logical_name == "LargeAddressMapLayout.veryl")
+        .find(|item| item.entry_name == "LargeAddressMap")
         .ok_or("missing map")?;
     assert!(std::str::from_utf8(&artifact.bytes)?.contains("WORD_OFFSET: u64 = 4294967296"));
     Ok(())
@@ -98,7 +98,7 @@ fn veryl_keeps_the_count_parameter_and_child_alignment_rule()
     let root = sink
         .outputs()
         .iter()
-        .find(|artifact| artifact.metadata.logical_name == "RootLayout.veryl")
+        .find(|artifact| artifact.entry_name == "Root")
         .ok_or("missing root")?;
     let source = String::from_utf8_lossy(&root.bytes);
     assert!(source.contains("p_count: input u64"));
@@ -167,7 +167,7 @@ fn veryl_bound_map_uses_prepared_geometry_and_expanded_members()
     let artifact = sink
         .outputs()
         .iter()
-        .find(|artifact| artifact.metadata.logical_name == "RootLayout.veryl")
+        .find(|artifact| artifact.entry_name == "Root")
         .ok_or("missing root")?;
     let text = std::str::from_utf8(&artifact.bytes)?;
     assert!(text.contains("function extent() -> u64"));
@@ -221,7 +221,7 @@ fn nested_maximum_remains_one_operand_of_addition() -> Result<(), Box<dyn std::e
     let artifact = sink
         .outputs()
         .iter()
-        .find(|artifact| artifact.metadata.logical_name == "NestedMaximumLayout.veryl")
+        .find(|artifact| artifact.entry_name == "NestedMaximum")
         .ok_or("missing nested maximum map")?;
     let text = std::str::from_utf8(&artifact.bytes)?;
     assert!(text.contains("return ((if p_count >: 2 ? p_count : 2) + 1);"));
@@ -251,10 +251,7 @@ fn prepared_metadata_does_not_change_root_package() -> Result<(), Box<dyn std::e
     let mut backend = VerylRegisterBackend::new();
     let roots = prepare(&schema, &mut backend)?;
     for root in roots {
-        let expected = format!(
-            "pub package {} {{",
-            root.metadata().logical_name.trim_end_matches(".veryl")
-        );
+        let expected = format!("pub package {}Layout {{", root.name());
         let mut bytes = Vec::new();
         root.emit(&mut backend, &mut bytes)?;
         assert!(

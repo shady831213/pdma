@@ -1,5 +1,5 @@
 use crate::output_support::MemoryOutput;
-use hw_model_schema::analysis::{AnalyzedSchema, Bindings, Pass, Pipeline};
+use hw_model_schema::analysis::{AnalyzedSchema, Bindings, Pipeline};
 use hw_model_schema::ast::{DefinitionId, DescribeSchema, SchemaSet};
 use std::{
     error::Error,
@@ -55,9 +55,7 @@ pub(super) fn render_record(
 pub(super) fn source<T: DescribeSchema + 'static>(prefix: &str) -> TestResult<CapturedOutput> {
     let mut set = SchemaSet::new();
     set.add::<T>();
-    let graph = hw_model_schema::transform::Inline::new()
-        .run(set)?
-        .resolve()?;
+    let graph = set.resolve()?;
     let schema = AnalyzedSchema::from_graph(&graph, &Bindings::new())?;
     let preparation = Pipeline::new((&schema, ())).run(CRecordAnalysisPass)?;
     let id = schema

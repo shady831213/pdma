@@ -69,7 +69,15 @@ fn cross_domain_name_conflict_fails_before_any_write() -> Result<(), Box<dyn Err
     // When: preparation checks the complete output namespace.
     let error = emit_schema(&schema, &mut bytes).expect_err("duplicate package must fail");
     // Then: collision is diagnosed without writing even the file preamble.
-    assert!(error.to_string().contains("target symbol collision"));
+    assert!(error.to_string().contains("Same"));
+    assert!(matches!(
+        error.downcast_ref::<hw_model_schema::export::ExportError<
+            hw_model_schema::export::backends::veryl::VerylExportError,
+        >>(),
+        Some(hw_model_schema::export::ExportError::Render(
+            hw_model_schema::export::backends::veryl::VerylExportError::Name(_)
+        ))
+    ));
     assert!(bytes.is_empty());
     Ok(())
 }

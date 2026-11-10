@@ -17,14 +17,45 @@ impl CompleteMapLayout {
                 .map(|name| LayoutExpr::Parameter(name))
                 .collect(),
         };
-        let mut result = Self::substitute(plan, &arguments)?;
+        let mut result = Self::substitute(
+            plan,
+            &arguments,
+            if bindings.is_some() {
+                &[]
+            } else {
+                plan.parameters()
+            },
+        )?;
         if let Some(bindings) = bindings {
             result.parameters = &[];
             result.bindings = Some(bindings.to_vec());
         }
         Ok(result)
     }
-    fn substitute(plan: &MapLayoutPlan, arguments: &[LayoutExpr]) -> Result<Self, LayoutError> {
+    fn bind_child(
+        plan: &MapLayoutPlan,
+        args: &[LayoutExpr],
+        scope: &'static [&'static str],
+    ) -> Result<Self, LayoutError> {
+        let mut child = Self::substitute(plan, args, scope)?;
+        child.bindings = args
+            .iter()
+            .map(|v| match v.evaluate(&[], &[]) {
+                Ok(value) => Ok(Some(value)),
+                Err(LayoutError::Parameter(_)) => Ok(None),
+                Err(error) => Err(error),
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .collect();
+        child.parameters = if child.bindings.is_some() { &[] } else { scope };
+        Ok(child)
+    }
+    fn substitute(
+        plan: &MapLayoutPlan,
+        arguments: &[LayoutExpr],
+        scope_parameters: &'static [&'static str],
+    ) -> Result<Self, LayoutError> {
         use PlanValue::{ChildAlignment, ChildExtent, Count, Cursor, End, Offset, Stride};
         let mut substitute = Substitute {
             parameters: plan.parameters(),
@@ -35,22 +66,29 @@ impl CompleteMapLayout {
         let mut placements: Vec<CompletePlacementLayout> = Vec::new();
         let mut constraints = Vec::new();
         for placement in plan.placements() {
-            let (child_alignment, child_extent, child_arguments, child_parameters) =
+            let (child_alignment, child_extent, child_arguments, child_parameters, referent_layout) =
                 match &placement.child {
                     ChildLayout::Fixed { alignment, extent } => (
                         *alignment,
                         LayoutExpr::Constant(*extent),
                         Vec::new(),
                         &[][..],
+                        None,
                     ),
                     ChildLayout::Call { arguments, plan } => {
                         let args = arguments
                             .iter()
                             .map(|e| e.visit(&mut substitute))
                             .collect::<Result<Vec<_>, _>>()?;
-                        let child = Self::substitute(plan, &args)?;
-                        constraints.extend(child.constraints);
-                        (child.alignment, child.extent, args, plan.parameters())
+                        let child = Self::bind_child(plan, &args, scope_parameters)?;
+                        constraints.extend(child.constraints.clone());
+                        (
+                            child.alignment,
+                            child.extent.clone(),
+                            args,
+                            plan.parameters(),
+                            Some(Box::new(child)),
+                        )
                     }
                 };
             let mut values = vec![
@@ -83,13 +121,7 @@ impl CompleteMapLayout {
             };
             let complete = CompletePlacementLayout {
                 source: placement.source.clone(),
-                inline_map: match (&placement.source.body(), &placement.child) {
-                    (crate::ast::PlacementBody::Inline(_), ChildLayout::Call { plan, .. }) => {
-                        Some(Box::new(Self::resolve(plan, None)?))
-                    }
-                    (crate::ast::PlacementBody::Reference(_), _)
-                    | (crate::ast::PlacementBody::Inline(_), ChildLayout::Fixed { .. }) => None,
-                },
+                referent_layout,
                 child_definition: crate::traversal::NodeId::definition(
                     placement.child_definition.clone(),
                 ),
@@ -116,7 +148,7 @@ impl CompleteMapLayout {
         })?;
         constraints.push(Constraint::Fits(cursor, extent.clone()));
         Ok(Self {
-            parameters: plan.parameters(),
+            parameters: scope_parameters,
             source_parameters: plan.parameters(),
             bindings: None,
             alignment: plan.alignment(),

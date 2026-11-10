@@ -69,8 +69,8 @@ fn writer_failure_propagates_from_output_rendering() {
     let mut definitions = SchemaSet::new();
     definitions.add::<InlineChoice>();
     let schema = AnalyzedSchema::analyze(definitions, &Bindings::new()).unwrap();
-    let mut backend = backend::SystemVerilog::default();
-    let outputs = prepare_roots(&mut backend, record::roots(&schema)).unwrap();
+    let mut backend = backend::SystemVerilog;
+    let outputs = prepare_entries(&mut backend, record::entries(&schema)).unwrap();
     for output in outputs {
         let mut complete = Vec::new();
         output.emit(&mut backend, &mut complete).unwrap();

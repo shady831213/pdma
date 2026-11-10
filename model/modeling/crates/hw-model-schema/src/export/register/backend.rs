@@ -3,21 +3,23 @@ use crate::ast::register::Parameter;
 use crate::export::{value::Emit as _, view};
 /// Target syntax restricted to register source constructs.
 pub trait Backend: for<'a> super::super::value::Backend<Context<'a> = Context<'a>> {
-    /// Handles a placement reference and its definition-scoped target visit.
-    /// The context retains the use site; the target retains its own formal parameters.
-    /// Defaults to no output; explicitly emit the target to inline its definition.
+    /// Handles a type reference and its use-bound expansion visit.
+    /// Defaults to expanding anonymous value types; named types remain references.
     fn reference<'a>(
         &mut self,
         _: view::Reference<'a>,
         _: view::Target<'a>,
-        _: crate::export::Visit<Context<'a>>,
+        target: crate::export::Visit<Context<'a>>,
         _: Context<'a>,
-        _: &mut dyn std::io::Write,
+        writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
+        if target.definition_origin() == crate::ast::Origin::Inline {
+            self.emit(target, writer)?;
+        }
         Ok(())
     }
-    /// Handles a selected register/value root.
-    fn root(
+    /// Handles a selected register/value entry.
+    fn entry(
         &mut self,
         ctx: Context<'_>,
         writer: &mut dyn std::io::Write,
@@ -37,15 +39,6 @@ pub trait Backend: for<'a> super::super::value::Backend<Context<'a> = Context<'a
     fn register_map<'a>(
         &mut self,
         _value: view::Map<'a>,
-        ctx: Context<'a>,
-        writer: &mut dyn std::io::Write,
-    ) -> Result<(), Self::Error> {
-        self.emit_all(ctx.children(), writer)
-    }
-    /// Handles a completed symbolic or constant map layout.
-    fn map_layout<'a>(
-        &mut self,
-        _value: view::MapLayout<'a>,
         ctx: Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
@@ -78,14 +71,15 @@ pub trait Backend: for<'a> super::super::value::Backend<Context<'a> = Context<'a
     ) -> Result<(), Self::Error> {
         self.emit_all(ctx.children(), writer)
     }
-    /// Handles a register bit field.
-    fn register_field<'a>(
+    /// Handles a register bit field; defaults to the shared value callback.
+    /// The original occurrence, register ownership and children remain bound in ctx.
+    fn register_field(
         &mut self,
-        _value: view::BitField<'a, usize>,
-        ctx: Context<'a>,
+        field: view::BitField,
+        ctx: Context<'_>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        self.emit_all(ctx.children(), writer)
+        self.bit_field(field, ctx, writer)
     }
     /// Handles a source or concrete placement.
     fn placement<'a>(
@@ -96,7 +90,7 @@ pub trait Backend: for<'a> super::super::value::Backend<Context<'a> = Context<'a
     ) -> Result<(), Self::Error> {
         self.emit_all(ctx.children(), writer)
     }
-    /// Handles a declared constructor parameter and optional root binding.
+    /// Handles a declared constructor parameter and optional entry binding.
     fn parameter(
         &mut self,
         _: Parameter,

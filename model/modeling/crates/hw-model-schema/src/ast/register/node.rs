@@ -1,8 +1,5 @@
 use super::{Argument, Attribute, LayoutProperty, Parameter, RegisterInfo};
-use crate::{
-    BitsFieldSpec,
-    ast::{MapView, PlacementView, Reference, value},
-};
+use crate::ast::{MapView, PlacementView, Reference, value};
 /// Containment within the register domain.
 #[derive(Debug, Clone, Copy)]
 pub enum Node<'a> {
@@ -11,7 +8,7 @@ pub enum Node<'a> {
     /// Source map with optional checked layout attributes.
     RegisterMap(MapView<'a>),
     /// Register bit field with erased application index.
-    RegisterField(&'a BitsFieldSpec<usize>),
+    RegisterField(value::BitField<'a, usize>),
     /// Source or concrete placement.
     Placement(PlacementView<'a>),
     /// Reusable definition edge owned by a map placement.
@@ -45,20 +42,18 @@ impl<'a> Node<'a> {
                 ];
                 if let Some(source) = register.source() {
                     nodes.push(Self::Reference(source));
-                } else if let Some(bits) = register.inline_bits() {
-                    nodes.push(Self::Value(value::Node::Bits(bits)));
                 } else {
-                    nodes.extend(register.fields().iter().map(Self::RegisterField));
+                    nodes.extend(register.members().map(Self::RegisterField));
                 }
                 nodes
             }
             Self::RegisterMap(map) => map.children().collect(),
             Self::RegisterField(field) => field
-                .definition()
-                .enum_definition()
-                .map(|_| value::Node::Enum(value::Enumeration::Bits(field.definition())))
-                .map(Self::Value)
-                .into_iter()
+                .children()
+                .map(|v| match v {
+                    value::Node::Reference(r) => Self::Reference(r),
+                    other => Self::Value(other),
+                })
                 .collect(),
             Self::Placement(placement) => placement.children().collect(),
             Self::Argument(argument) => {
@@ -68,7 +63,13 @@ impl<'a> Node<'a> {
             | Self::LayoutProperty(LayoutProperty { expression, .. }) => {
                 vec![Self::Value(value::Node::Expression(expression))]
             }
-            Self::Value(value) => value.children().map(Self::Value).collect(),
+            Self::Value(value) => value
+                .children()
+                .map(|v| match v {
+                    value::Node::Reference(r) => Self::Reference(r),
+                    other => Self::Value(other),
+                })
+                .collect(),
             Self::Reference(_)
             | Self::Parameter(_)
             | Self::Attribute(
@@ -88,7 +89,9 @@ impl<'a> Node<'a> {
     /// Reusable definition referenced directly by this node.
     pub const fn reference(self) -> Option<&'a Reference> {
         match self {
-            Self::Reference(reference) => Some(reference),
+            Self::Reference(reference) | Self::Value(value::Node::Reference(reference)) => {
+                Some(reference)
+            }
             Self::Register(_)
             | Self::RegisterMap(_)
             | Self::RegisterField(_)

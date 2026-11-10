@@ -6,6 +6,10 @@ use std::rc::Rc;
 pub trait DomainNode<'a>: Copy {
     /// Children in canonical source order, before any consumer-selected reordering.
     fn children(self) -> std::vec::IntoIter<Self>;
+    /// Defined type referenced by this semantic occurrence.
+    fn reference(self) -> Option<&'a crate::ast::Reference> {
+        None
+    }
     /// Classifies a child edge before centrally assigning source-role ordinals.
     fn edge(self, index: usize, _child: Self) -> Edge {
         Edge::Child(index)
@@ -49,6 +53,14 @@ impl<'a, N: DomainNode<'a>, S: Schema> BoundContext<'a, N, S> {
     pub const fn owner(&self) -> &'a S::Root {
         self.owner
     }
+    /// Reusable declaration containing this subtree; the output owner is unchanged.
+    pub fn definition(&self) -> &'a S::Root {
+        self.ancestors
+            .iter()
+            .rev()
+            .find_map(|node| node.reference().and_then(|r| self.resolve(r)))
+            .unwrap_or(self.owner)
+    }
     /// Current semantic node.
     pub const fn node(&self) -> N {
         self.node
@@ -56,6 +68,17 @@ impl<'a, N: DomainNode<'a>, S: Schema> BoundContext<'a, N, S> {
     /// Identity of this occurrence rather than merely its reusable definition.
     pub const fn id(&self) -> &NodeId {
         &self.id
+    }
+    /// Identity inside the canonical declaration rather than its expanded use site.
+    pub(crate) fn local_id(&self) -> NodeId {
+        self.ancestors
+            .iter()
+            .rev()
+            .find_map(|node| node.reference())
+            .map_or_else(
+                || self.id.clone(),
+                |reference| self.id.within_referent(reference.target().id()),
+            )
     }
     /// Identity of the immediate containing occurrence.
     pub fn parent_id(&self) -> Option<NodeId> {

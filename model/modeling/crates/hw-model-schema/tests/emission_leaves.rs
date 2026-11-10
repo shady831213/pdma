@@ -74,17 +74,6 @@ impl value::Backend for Recorder {
         Ok(())
     }
 }
-impl hw_model_schema::export::OutputBackend for Recorder {
-    fn metadata(
-        &mut self,
-        ctx: &Self::Context<'_>,
-    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
-        Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.root_name().to_owned(),
-            media_type: "text/plain".into(),
-        })
-    }
-}
 
 #[test]
 fn documentation_and_geometry_reach_owner_callbacks() -> Result<(), Box<dyn std::error::Error>> {

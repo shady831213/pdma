@@ -33,10 +33,10 @@ fn mixed() -> Result<AnalyzedSchema, AnalysisError> {
 #[test]
 fn mixed_schema_roots_keep_only_the_selected_domain_and_shared_values() {
     let schema = mixed().unwrap();
-    let mut registers: Vec<_> = hw_model_schema::traversal::register::roots(&schema)
+    let mut registers: Vec<_> = hw_model_schema::traversal::register::definitions(&schema)
         .map(|v| v.context().unit().name.as_str())
         .collect();
-    let mut records: Vec<_> = hw_model_schema::traversal::record::roots(&schema)
+    let mut records: Vec<_> = hw_model_schema::traversal::record::definitions(&schema)
         .map(|v| v.context().unit().name.as_str())
         .collect();
     registers.sort_unstable();
@@ -46,7 +46,7 @@ fn mixed_schema_roots_keep_only_the_selected_domain_and_shared_values() {
 }
 struct Probe<'a>(&'a std::cell::Cell<usize>);
 impl register::Backend for Probe<'_> {
-    fn root(
+    fn entry(
         &mut self,
         _: hw_model_schema::export::register::Context<'_>,
         _writer: &mut dyn std::io::Write,
@@ -59,17 +59,6 @@ impl value::Backend for Probe<'_> {
     type Domain = register::Domain;
     type Error = Infallible;
     type Context<'a> = hw_model_schema::export::register::Context<'a>;
-}
-impl hw_model_schema::export::OutputBackend for Probe<'_> {
-    fn metadata(
-        &mut self,
-        ctx: &Self::Context<'_>,
-    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
-        Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.root_name().to_owned(),
-            media_type: "text/plain".into(),
-        })
-    }
 }
 
 #[test]

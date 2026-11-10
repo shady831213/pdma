@@ -14,7 +14,6 @@ pub(super) fn emit<'a, B: Backend>(
     super::documentation::emit(node, &ctx, backend, writer)?;
     match node {
         Node::Root(_) => backend.emit_all(ctx.children(), writer),
-        Node::MapLayout(v) => backend.map_layout(view::MapLayout(v), ctx, writer),
         Node::Bank(v) => backend.bank(view::Bank(v), ctx, writer),
         Node::BankProperty(v) => backend.bank_property(v, ctx, writer),
         Node::RegisterPlacement { view, .. } => {
@@ -24,7 +23,9 @@ pub(super) fn emit<'a, B: Backend>(
         Node::RegisterMap(v) => backend.register_map(view::Map(v), ctx, writer),
         Node::Placement(v) => backend.placement(view::Placement(v), ctx, writer),
         Node::Reference(v) => super::reference::emit(v, ctx, backend, writer),
-        Node::RegisterField(v) => backend.register_field(view::BitField(v), ctx, writer),
+        Node::RegisterField(v) => {
+            backend.register_field(view::BitField::from_spec(v.spec()), ctx, writer)
+        }
         Node::Parameter(v) => backend.parameter(v, ctx, writer),
         Node::Argument(v) => backend.argument(view::Argument(v), ctx, writer),
         Node::Attribute(_) => Ok(()),

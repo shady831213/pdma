@@ -1,16 +1,14 @@
 //! Inlined union payloads retain their containing package boundary.
 #![cfg(feature = "export-veryl-layout")]
 use hw_model_schema::{
-    analysis::{AnalyzedSchema, Bindings, Pass},
+    analysis::{AnalyzedSchema, Bindings},
     ast::{
         Case, Definition, DefinitionBody, DescribeSchema, Reference, ReferenceKind, SchemaSet,
         UnionDefinition,
     },
     bits_schema,
     export::{backends::veryl::VerylRecordBackend, generate},
-    record_schema,
-    transform::Inline,
-    union_schema,
+    record_schema, union_schema,
 };
 
 record_schema! { pub record Small { endian:Little, fields:{value:u16} } }
@@ -32,11 +30,22 @@ fn inlined_payload_records_do_not_repeat_package_extent() -> Result<(), Box<dyn 
     let cases = union
         .cases()
         .iter()
-        .cloned()
-        .chain([Case::external(Reference::new(
+        .map(|case| {
+            let hw_model_schema::ast::CaseBody::Reference(reference) = case.body() else {
+                return case.clone();
+            };
+            let target = reference.target();
+            match target.body() {
+                DefinitionBody::Record(record) => {
+                    Case::inline(case.name(), case.discriminant(), record.clone())
+                }
+                _ => case.clone(),
+            }
+        })
+        .chain([Case::external(Reference::owned(
             "Flags",
             ReferenceKind::Variant,
-            Flags::schema_definition,
+            Flags::schema_definition().with_origin(hw_model_schema::ast::Origin::Inline),
         ))])
         .collect();
     set.add_definition(Definition::from_body(
@@ -49,7 +58,7 @@ fn inlined_payload_records_do_not_repeat_package_extent() -> Result<(), Box<dyn 
             cases,
         )),
     ));
-    let schema = AnalyzedSchema::analyze(Inline::new().run(set)?, &Bindings::new())?;
+    let schema = AnalyzedSchema::analyze(set, &Bindings::new())?;
     let mut bytes = Vec::new();
     generate(&schema, VerylRecordBackend::new(), &mut bytes)?;
     let text = String::from_utf8(bytes)?;

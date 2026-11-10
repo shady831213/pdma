@@ -112,11 +112,16 @@ const fn fits(value: u64, width: usize) -> bool {
 }
 const fn extent(body: &DefinitionBody) -> Option<usize> {
     match body {
+        DefinitionBody::Enumeration(crate::ast::value::Enumeration::Scalar(value)) => {
+            Some(value.width())
+        }
         DefinitionBody::Bits(bits) => Some(bits.scalar().width()),
         DefinitionBody::Record(record) => Some(record.spec().size()),
         DefinitionBody::Union(union) => Some(union.storage().size()),
         DefinitionBody::Opaque(spec) => Some(spec.size()),
-        DefinitionBody::Register(_) | DefinitionBody::RegisterMap(_) => None,
+        DefinitionBody::Enumeration(crate::ast::value::Enumeration::Bits(_))
+        | DefinitionBody::Register(_)
+        | DefinitionBody::RegisterMap(_) => None,
     }
 }
 pub(super) fn union(union: &UnionDefinition) -> Result<(), AnalysisError> {

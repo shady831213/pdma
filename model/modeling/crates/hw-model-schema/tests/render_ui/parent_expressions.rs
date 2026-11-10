@@ -3,7 +3,7 @@ fn inspect(
     placement: view::Placement<'_>,
     argument: view::Argument<'_>,
     property: view::LayoutProperty<'_>,
-    map: view::MapLayout<'_>,
+    map: view::Map<'_>,
 ) {
     let _ = placement.offset();
     let _ = placement.count();
@@ -11,6 +11,6 @@ fn inspect(
     let _ = placement.child_extent();
     let _ = argument.expression();
     let _ = property.expression();
-    let _ = map.extent();
+    let _ = map.layout();
 }
 fn main() {}

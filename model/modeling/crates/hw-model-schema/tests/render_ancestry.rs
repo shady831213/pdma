@@ -42,14 +42,14 @@ impl value::Backend for Registers {
     type Context<'a> = register::Context<'a>;
 }
 impl register::Backend for Registers {
-    fn register_field<'a>(
+    fn register_field(
         &mut self,
-        field: view::BitField<'a, usize>,
-        ctx: register::Context<'a>,
+        field: view::BitField,
+        ctx: register::Context<'_>,
         writer: &mut dyn Write,
     ) -> io::Result<()> {
         let kinds: Vec<_> = ctx.ancestor_kinds().collect();
-        assert_eq!(kinds, [Kind::Root, Kind::Register]);
+        assert_eq!(kinds, [Kind::Entry, Kind::Register]);
         writer.write_all(field.name().as_bytes())
     }
 }
@@ -61,7 +61,7 @@ fn containment_ancestry_distinguishes_inline_case_fields() -> Result<(), Box<dyn
     set.add::<Packet>();
     let schema = AnalyzedSchema::analyze(set, &Bindings::new())?;
     let mut output = Vec::new();
-    Records.emit_all(record::roots(&schema), &mut output)?;
+    Records.emit_all(record::entries(&schema), &mut output)?;
     assert_eq!(output, b"tag:false;payload:false;data:true;");
     Ok(())
 }
@@ -72,7 +72,7 @@ fn register_ancestry_preserves_outer_to_inner_order() -> Result<(), Box<dyn std:
     set.add::<Status>();
     let schema = AnalyzedSchema::analyze(set, &Bindings::new())?;
     let mut output = Vec::new();
-    Registers.emit_all(register::roots(&schema), &mut output)?;
+    Registers.emit_all(register::entries(&schema), &mut output)?;
     assert_eq!(output, b"ready");
     Ok(())
 }

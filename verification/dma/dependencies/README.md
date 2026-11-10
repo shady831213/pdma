@@ -1,47 +1,31 @@
-# jarvisuk allocator dependency patch
+# jarvisuk dependency
 
-PDMA uses [jarvisuk](https://github.com/shady831213/jarvisuk) as its UVM memory
-allocator. Its Apache-2.0 license applies to the upstream source and the derived
-allocator patch. The preparation helper copies the dependency with its `LICENSE`
-and other notices, excludes `.git`, and leaves the supplied checkout unchanged.
+PDMA uses [jarvisuk](https://github.com/shady831213/jarvisuk) as its UVM memory,
+clock/reset and interrupt library. Its Apache-2.0 license remains applicable.
 
-`patches/jarvisuk-allocator-free.patch` fixes only `jvs_memory_allocator::free`.
-The original coalescing path can use a still-allocated lower neighbor's start
-address, or leave the newly created free block at its default address when there
-is no lower neighbor. The patch initializes the free block to the released
-interval and merges adjacent entries only from the free queue. Allocation,
-alignment, backing storage and the public allocator API remain unchanged.
-
-The accepted upstream `src/memory/jvs_memory_allocator.sv` SHA-256 is
-`8e893c07f27538a586687b00692db982004ecfa775280b47d73b57d936d0f9ee`.
-The patched file SHA-256 is
-`e85bb69f54ca1f756996aee29d530a6b82bad53d4cdefcd91e05f0117372668b`.
-A different upstream allocator requires explicit patch review; the helper rejects
-it instead of attempting a fuzzy application.
+The allocator free/coalescing correction and its regression are upstream on
+[master at bd24e3891d502d9fca8b85993260174f032bca3a](https://github.com/shady831213/jarvisuk/commit/bd24e3891d502d9fca8b85993260174f032bca3a).
+`jarvisuk.lock.json` pins that revision and the allocator's SHA-256. There is no
+PDMA allocator patch.
 
 ```sh
+GIT_MASTER=1 git -C "$JVSUK_HOME" fetch origin master
 bash verification/dma/flow/prepare-jarvisuk.sh "$JVSUK_HOME" "$BUILD/jarvisuk"
 export JVSUK_HOME="$BUILD/jarvisuk"
 ```
 
-The destination must not exist. It receives the copied dependency plus
-`pdma-allocator-before.sha256`, `pdma-allocator-after.sha256`,
-`pdma-allocator-patch.sha256` and `pdma-allocator-patch.log`. Patch application uses
-`--fuzz=0`; the compile flow should hash the copied dependency as a build input.
+Preparation archives the pinned commit from the supplied Git checkout into a new
+destination, retaining licenses and notices and excluding Git metadata. It does
+not alter the checkout or incorporate its uncommitted changes. Missing pinned
+commits, mismatched allocator content and existing destinations are rejected.
+The build receives revision/pin receipts; compilation fingerprints the actual
+dependency inputs. Dependency upgrades require an explicit lock update.
 
-Regression scenarios use the real `jvs_pkg` with heap `[0x1000, 0x10ff]`:
-
-- Reserve adjacent 32-byte blocks at `0x1000` and `0x1020`, free the second,
-  reject reallocation at the live first block, and reuse the second interval.
-- Free the first with the second still live, reject the live and outside-heap
-  addresses, then reuse the first interval.
-- Free the sole 32-byte heap-start allocation with a free upper neighbor and
-  reject allocation at address zero.
-- Fill the heap with two 128-byte blocks and free each without overlapping the
-  remaining live block.
-
-Each scenario ends by allocating the complete heap, rejecting another allocation
-within it, freeing it and allocating the complete heap again. The first three
-scenarios fail before the patch; all four must pass after it. Simulator exit code
-alone is insufficient: require each scenario's explicit pass marker and reject
-fatal diagnostics.
+The upstream `jvs_memory_allocator_free` regression tests four cases using the
+real public allocator and memory model: live lower-neighbour isolation, a
+heap-start release with a live upper neighbour, a heap-start release with a free
+upper neighbour, and full-heap reclamation while other blocks remain live.
+Every case checks outside-heap rejection and two complete heap reuse cycles.
+All four fail before the correction and pass after it under UVM 1.1 and 1.2.
+Require each `JVS_ALLOCATOR_FREE_PASS case=N` marker and zero UVM errors/fatals;
+simulator exit status alone is not sufficient.

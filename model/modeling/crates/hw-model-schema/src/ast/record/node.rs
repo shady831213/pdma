@@ -73,7 +73,13 @@ impl<'a> Node<'a> {
                 CaseBody::Opaque(spec) => vec![Self::Value(value::Node::Opaque(spec))],
                 CaseBody::Reference(reference) => vec![Self::Reference(reference)],
             },
-            Self::Value(value) => value.children().map(Self::Value).collect(),
+            Self::Value(value) => value
+                .children()
+                .map(|v| match v {
+                    value::Node::Reference(r) => Self::Reference(r),
+                    other => Self::Value(other),
+                })
+                .collect(),
             Self::Attribute(_) | Self::Constant(_) | Self::Reference(_) => Vec::new(),
         };
         nodes.into_iter()
@@ -81,7 +87,9 @@ impl<'a> Node<'a> {
     /// Reference owned directly by this node, excluding descendants.
     pub const fn reference(self) -> Option<&'a Reference> {
         match self {
-            Self::Reference(reference) => Some(reference),
+            Self::Reference(reference) | Self::Value(value::Node::Reference(reference)) => {
+                Some(reference)
+            }
             Self::Field(_)
             | Self::Case(_)
             | Self::Record(_)

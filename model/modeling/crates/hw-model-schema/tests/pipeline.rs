@@ -37,7 +37,7 @@ impl<'a> Pass<(&'a AnalyzedSchema, Vec<String>)> for Join {
 }
 struct Text<'a>(&'a str);
 impl record::Backend for Text<'_> {
-    fn root(
+    fn entry(
         &mut self,
         _: Self::Context<'_>,
         writer: &mut dyn std::io::Write,
@@ -49,17 +49,6 @@ impl value::Backend for Text<'_> {
     type Domain = record::Domain;
     type Error = std::io::Error;
     type Context<'a> = hw_model_schema::export::record::Context<'a>;
-}
-impl hw_model_schema::export::OutputBackend for Text<'_> {
-    fn metadata(
-        &mut self,
-        ctx: &Self::Context<'_>,
-    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
-        Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.root_name().to_owned(),
-            media_type: "text/plain".into(),
-        })
-    }
 }
 
 #[test]

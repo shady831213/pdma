@@ -33,11 +33,11 @@ help: there is a method `has_fields` with a similar name
 9 |     let _ = register.has_fields();
   |                      ++++
 
-error[E0599]: no method named `placements` found for struct `hw_model_schema::export::view::MapLayout<'a>` in the current scope
+error[E0599]: no method named `placements` found for struct `hw_model_schema::export::view::Map<'a>` in the current scope
   --> tests/render_ui/views.rs:10:17
    |
 10 |     let _ = map.placements();
-   |                 ^^^^^^^^^^ method not found in `hw_model_schema::export::view::MapLayout<'_>`
+   |                 ^^^^^^^^^^ method not found in `hw_model_schema::export::view::Map<'_>`
 
 error[E0599]: no method named `target` found for struct `hw_model_schema::export::view::Reference<'a>` in the current scope
   --> tests/render_ui/views.rs:14:23

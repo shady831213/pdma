@@ -21,6 +21,8 @@ find "$JVSUK_HOME/src" "$JVSUK_HOME/include" "$JVSUK_HOME/interfaces" "$JVSUK_HO
 find "$SVT_COMMON_HOME/sverilog" "$SVT_AMBA_HOME/sverilog" \
     -type f -print0 | sort -z | xargs -0 sha256sum > "$build/vip.sha256"
 sha256sum "$root/tools/rtl-flow/environment.sh" "$root/verification/dma/flow/compile.sh" \
+    "$root/verification/dma/flow/prepare-jarvisuk.sh" \
+    "$root/verification/dma/dependencies/jarvisuk.lock.json" \
     "$snapshot/snapshot.sha256" > "$build/flow.sha256"
 timeout "${PDMA_COMPILE_TIMEOUT:-1200}" "${PDMA_SIM_COMPILER:-vcs}" \
     -full64 -sverilog -ntb_opts uvm-1.2 -timescale=1ns/1ps -j4 \

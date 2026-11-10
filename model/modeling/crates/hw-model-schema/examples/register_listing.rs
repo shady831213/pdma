@@ -6,7 +6,6 @@ use hw_model_schema::export::value::Emit as _;
 use hw_model_schema::{
     ast::{DefinitionId, RegisterLocation, SchemaSet},
     export::{
-        OutputMetadata,
         register::Backend,
         value,
         view::{Map, Register},
@@ -29,12 +28,12 @@ struct RegisterListing {
     selected: hw_model_schema::traversal::NodeId,
 }
 impl Backend for RegisterListing {
-    fn root(
+    fn entry(
         &mut self,
         ctx: RegisterContext<'_>,
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
-        if ctx.root_id() == &self.selected {
+        if ctx.entry_id() == &self.selected {
             self.emit(ctx.current(), writer)?;
         }
         Ok(())
@@ -81,14 +80,7 @@ impl value::Backend for RegisterListing {
     type Error = io::Error;
     type Context<'a> = RegisterContext<'a>;
 }
-impl hw_model_schema::export::OutputBackend for RegisterListing {
-    fn metadata(&mut self, _: &Self::Context<'_>) -> Result<OutputMetadata, Self::Error> {
-        Ok(OutputMetadata {
-            logical_name: "registers.tsv".into(),
-            media_type: "text/tab-separated-values".into(),
-        })
-    }
-}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let mut selected = SchemaSet::new();
     selected.add::<Device>();

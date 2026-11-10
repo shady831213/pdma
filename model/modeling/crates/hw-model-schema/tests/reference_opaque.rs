@@ -1,12 +1,11 @@
 //! Inline opaque payloads retain their own prepared storage geometry.
 use hw_model_schema::{
     Endian, FieldSpec, RecordPlacement, RecordSpec, ScalarKind,
-    analysis::{AnalyzedSchema, Bindings, Pass},
+    analysis::{AnalyzedSchema, Bindings},
     ast::{
         Definition, DefinitionBody, DefinitionId, DescribeSchema, Field, FieldType, Reference,
         ReferenceKind, SchemaSet, record::Node,
     },
-    transform::{Inline, Outline},
     traversal::record,
 };
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -50,20 +49,20 @@ impl DescribeSchema for Container {
     }
 }
 #[test]
-fn inline_opaque_layout_is_local_and_reoutline_preserves_its_extent() -> TestResult {
+fn expanded_opaque_layout_is_local_and_preserves_its_extent() -> TestResult {
     // Given opaque storage embedded at a nonzero outer offset.
     let mut set = SchemaSet::new();
     set.add::<Container>();
-    // When explicitly expanded and analyzed.
-    let graph = Inline::new().run(set)?.resolve()?;
+    // When analyzed once and expanded through use-site traversal.
+    let graph = set.resolve()?;
     let schema = AnalyzedSchema::from_graph(&graph, &Bindings::new())?;
     // Then prepared opaque members remain local, with the source field owning its offset/endian.
     let mut found = 0;
-    for root in record::roots(&schema) {
+    for root in record::definitions(&schema).filter(|v| v.context().unit().selected) {
         check(root.context(), &mut found)?;
     }
     assert_eq!(found, 1);
-    let outlined = Outline::new().run(graph)?.resolve()?;
+    let outlined = graph;
     let root = outlined
         .get(DefinitionId::of::<Container>())
         .ok_or("root")?;
@@ -90,6 +89,9 @@ fn check(ctx: &record::Context<'_>, found: &mut usize) -> TestResult {
         assert_eq!(ctx.field().ok_or("field")?.offset(), 4);
         assert_eq!(ctx.field().ok_or("field")?.endian(), Endian::Big);
         *found += 1;
+    }
+    if let Some(target) = ctx.referent() {
+        check(target.context(), found)?;
     }
     for child in ctx.children() {
         check(child.context(), found)?;

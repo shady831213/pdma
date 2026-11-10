@@ -13,7 +13,7 @@ error[E0407]: method `record_size` is not a member of trait `record::Backend`
 error[E0407]: method `metadata` is not a member of trait `value::Backend`
   --> tests/render_ui/attribute_callbacks.rs:19:5
    |
-19 | /     fn metadata(&mut self, _: &Self::Context<'_>) -> Result<OutputMetadata, Self::Error> {
+19 | /     fn metadata(&mut self, _: &Self::Context<'_>) -> Result<(), Self::Error> {
 20 | |         unreachable!()
 21 | |     }
    | |_____^ not a member of trait `value::Backend`

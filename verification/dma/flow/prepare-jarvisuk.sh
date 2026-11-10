@@ -3,29 +3,37 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 source_dir=$(realpath "${1:?Usage: prepare-jarvisuk.sh SOURCE NEW_DEST}")
 dest=$(realpath -m "${2:?Usage: prepare-jarvisuk.sh SOURCE NEW_DEST}")
-patch_file="$root/verification/dma/dependencies/patches/jarvisuk-allocator-free.patch"
+pin="$root/verification/dma/dependencies/jarvisuk.lock.json"
 allocator=src/memory/jvs_memory_allocator.sv
-expected=8e893c07f27538a586687b00692db982004ecfa775280b47d73b57d936d0f9ee
-[[ -f "$source_dir/LICENSE" && -f "$source_dir/etc/jvs.f" ]]
+read -r revision expected < <(python3 - "$pin" <<'PY'
+import json, sys
+with open(sys.argv[1]) as file:
+    pin = json.load(file)
+print(pin["revision"], pin["allocator_sha256"])
+PY
+)
+[[ $revision =~ ^[0-9a-f]{40}$ && $expected =~ ^[0-9a-f]{64}$ ]]
 if [[ -e "$dest" || -L "$dest" || "$dest/" == "$source_dir/"* ]]; then
     printf 'Destination must be new and outside the source directory\n' >&2
     exit 1
 fi
-actual=$(sha256sum "$source_dir/$allocator")
+if ! GIT_MASTER=1 git -C "$source_dir" cat-file -e "$revision^{commit}" 2>/dev/null; then
+    printf 'Pinned jarvisuk revision is unavailable; fetch the dependency checkout first\n' >&2
+    exit 1
+fi
+actual=$(GIT_MASTER=1 git -C "$source_dir" show "$revision:$allocator" | sha256sum)
 if [[ "${actual%% *}" != "$expected" ]]; then
-    printf 'Unsupported jarvisuk allocator source checksum\n' >&2
+    printf 'Pinned jarvisuk allocator checksum mismatch\n' >&2
     exit 1
 fi
 mkdir -p "$(dirname "$dest")"
 mkdir "$dest"
-tar -C "$source_dir" --exclude=.git -cf - . | tar -C "$dest" -xf -
+GIT_MASTER=1 git -C "$source_dir" archive --format=tar "$revision" | tar -C "$dest" -xf -
 (
     cd "$dest"
+    [[ -f LICENSE && -f etc/jvs.f ]]
     printf '%s  %s\n' "$expected" "$allocator" | sha256sum --check --status
-    sha256sum "$allocator" > pdma-allocator-before.sha256
-    sha256sum "$patch_file" > pdma-allocator-patch.sha256
-    patch --batch --forward --fuzz=0 -p1 < "$patch_file" > pdma-allocator-patch.log
-    printf '%s  %s\n' e85bb69f54ca1f756996aee29d530a6b82bad53d4cdefcd91e05f0117372668b "$allocator" | sha256sum --check --status
-    sha256sum "$allocator" > pdma-allocator-after.sha256
+    printf '%s\n' "$revision" > pdma-jarvisuk-revision.txt
+    sha256sum "$pin" > pdma-jarvisuk-pin.sha256
 )
-printf 'PDMA_JARVISUK_PREPARED\n'
+printf 'PDMA_JARVISUK_PREPARED revision=%s\n' "$revision"

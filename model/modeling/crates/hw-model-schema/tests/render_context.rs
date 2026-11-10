@@ -63,7 +63,7 @@ fn typed_failure_preserves_completed_dependency() {
     ));
     assert_eq!(sink.outputs().len(), 1);
     let completed = sink.outputs().first().expect("completed dependency");
-    assert_eq!(completed.metadata.logical_name, "Word");
+    assert_eq!(completed.entry_name, "Word");
     assert!(completed.bytes.is_empty());
 }
 
@@ -109,7 +109,7 @@ fn bound_parameters_remain_available_before_parameter_visitation() {
 fn roots_are_bound_visits_with_default_recursive_dispatch() {
     use hw_model_schema::export::Domain;
     let schema = schema().unwrap();
-    let roots = <register::Domain as Domain<Probe>>::roots(&schema);
+    let roots = <register::Domain as Domain<Probe>>::entries(&schema);
     let mut probe = Probe {
         events: vec![],
         fail: false,
@@ -117,9 +117,10 @@ fn roots_are_bound_visits_with_default_recursive_dispatch() {
     };
     for visit in roots {
         assert!(visit.parent_id().is_none());
-        assert_eq!(visit.kind(), hw_model_schema::export::Kind::Root);
+        assert_eq!(visit.kind(), hw_model_schema::export::Kind::Entry);
         assert!(schema.units().any(|unit| &unit.id == visit.id()));
-        <register::Domain as Domain<Probe>>::root(visit, &mut probe, &mut std::io::sink()).unwrap();
+        <register::Domain as Domain<Probe>>::entry(visit, &mut probe, &mut std::io::sink())
+            .unwrap();
     }
     assert_eq!(
         probe.events.first().map(String::as_str),

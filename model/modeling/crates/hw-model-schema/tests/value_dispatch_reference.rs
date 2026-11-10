@@ -3,7 +3,7 @@ use hw_model_schema::{
     analysis::{AnalyzedSchema, Bindings},
     ast::SchemaSet,
     export::{
-        Kind, OutputMetadata, register,
+        Kind, register,
         value::{self, Emit as _},
         view,
     },
@@ -65,18 +65,20 @@ impl register::Backend for Probe {
         self.emit(visit.clone(), writer)?;
         self.emit(visit, writer)
     }
-    fn map_layout<'a>(
+    fn register_map<'a>(
         &mut self,
-        _: view::MapLayout<'a>,
+        _: view::Map<'a>,
         ctx: register::Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        if ctx.root_name() == "Child" {
+        if ctx.definition_name() == "Child" {
+            assert_eq!(ctx.entry_name(), "Parent");
+            assert_eq!(ctx.parameters(), &["n"]);
             return writeln!(
                 writer,
                 "definition:{}:{}",
-                ctx.root_name(),
-                ctx.parameters().join(",")
+                ctx.definition_name(),
+                ctx.declared_parameters().join(",")
             );
         }
         self.emit_all(ctx.children(), writer)
@@ -107,14 +109,6 @@ impl value::Backend for Probe {
         writeln!(writer, "argument:{number}")
     }
 }
-impl hw_model_schema::export::OutputBackend for Probe {
-    fn metadata(&mut self, ctx: &Self::Context<'_>) -> Result<OutputMetadata, Self::Error> {
-        Ok(OutputMetadata {
-            logical_name: ctx.root_name().into(),
-            media_type: "text/plain".into(),
-        })
-    }
-}
 
 #[test]
 fn placement_reference_has_an_independent_bound_visit() {
@@ -126,7 +120,7 @@ fn placement_reference_has_an_independent_bound_visit() {
     // When: a target chooses only reference children of placements.
     probe
         .emit_all(
-            register::roots(&schema).filter(|v| v.name() == Some("Parent")),
+            register::entries(&schema).filter(|v| v.name() == Some("Parent")),
             &mut std::io::sink(),
         )
         .unwrap();
@@ -169,7 +163,7 @@ fn reference_target_and_constructor_arguments_keep_distinct_parameter_scopes() {
     // When: the reference callback evaluates its argument and repeats target expansion.
     probe
         .emit_all(
-            register::roots(&schema).filter(|v| v.name() == Some("Parent")),
+            register::entries(&schema).filter(|v| v.name() == Some("Parent")),
             &mut output,
         )
         .unwrap();

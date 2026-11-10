@@ -1,4 +1,4 @@
-use hw_model_schema::export::{OutputMetadata, record, value};
+use hw_model_schema::export::{record, value};
 
 struct Fragment;
 impl record::Backend for Fragment {
@@ -16,7 +16,7 @@ impl value::Backend for Fragment {
     type Error = std::io::Error;
     type Context<'a> = record::Context<'a>;
 
-    fn metadata(&mut self, _: &Self::Context<'_>) -> Result<OutputMetadata, Self::Error> {
+    fn metadata(&mut self, _: &Self::Context<'_>) -> Result<(), Self::Error> {
         unreachable!()
     }
 }

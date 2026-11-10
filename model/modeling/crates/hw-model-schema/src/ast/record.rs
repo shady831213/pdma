@@ -14,7 +14,10 @@ pub struct Constant {
     pub value: u64,
 }
 
-/// Source type of one logical record field.
+/// Construction form of one logical record field.
+///
+/// Graph resolution retains only builtin `Scalar` values and defined-type `Reference` edges;
+/// the other forms let frontends preserve inline source syntax during construction.
 #[derive(Debug, Clone)]
 pub enum FieldType {
     /// Integer scalar with an optional required value.
@@ -178,7 +181,7 @@ impl UnionDefinition {
     }
 }
 
-/// Original payload declaration of a union alternative.
+/// Construction form of a union alternative; resolved graphs use only `Reference`.
 #[derive(Debug, Clone)]
 pub enum CaseBody {
     /// Fields declared directly inside this alternative.
@@ -201,7 +204,7 @@ pub struct Case {
     body: CaseBody,
 }
 impl Case {
-    /// Constructs an inline case whose fields remain owned containment.
+    /// Constructs an inline case; graph construction gives its payload an anonymous definition.
     pub const fn inline(
         name: &'static str,
         discriminant: Option<u64>,

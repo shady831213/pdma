@@ -36,7 +36,7 @@ impl<'a> Context<'a> {
     }
     fn layout_owner(&self) -> Option<crate::traversal::register::Context<'a>> {
         let mut owner = self.0.clone();
-        while !matches!(owner.node(), Node::Placement(_) | Node::MapLayout(_)) {
+        while !matches!(owner.node(), Node::Placement(_) | Node::RegisterMap(_)) {
             owner = owner.parent()?;
         }
         Some(owner)

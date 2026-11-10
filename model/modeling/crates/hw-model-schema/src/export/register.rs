@@ -10,7 +10,7 @@ pub use super::view::LayoutProperty;
 pub use crate::traversal::register::BankProperty;
 use crate::traversal::register::Node;
 pub use backend::Backend;
-pub use context::{Context, roots};
+pub use context::{Context, entries};
 /// Register source domain for a target's shared value callbacks.
 #[derive(Debug)]
 pub struct Domain;
@@ -24,6 +24,19 @@ impl<B: Backend> super::Domain<B> for Domain {
         let ctx = visit.into_context();
         emit::emit(ctx.0.node(), ctx, backend, writer)
     }
+    fn reference<'a>(
+        reference: &'a crate::ast::Reference,
+        ctx: B::Context<'a>,
+        backend: &mut B,
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), B::Error> {
+        emit::emit(
+            crate::traversal::register::Node::Reference(reference),
+            ctx,
+            backend,
+            writer,
+        )
+    }
     fn validate(unit: &crate::analysis::Unit) -> Result<(), crate::analysis::AnalysisError> {
         if crate::traversal::register::supports(unit) {
             Ok(())
@@ -34,16 +47,16 @@ impl<B: Backend> super::Domain<B> for Domain {
             })
         }
     }
-    fn roots(
+    fn entries(
         schema: &crate::analysis::AnalyzedSchema,
     ) -> impl Iterator<Item = super::Visit<B::Context<'_>>> {
-        roots(schema)
+        entries(schema)
     }
-    fn root(
+    fn entry(
         visit: super::Visit<B::Context<'_>>,
         backend: &mut B,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), B::Error> {
-        backend.root(visit.into_context(), writer)
+        backend.entry(visit.into_context(), writer)
     }
 }

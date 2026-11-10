@@ -1,7 +1,6 @@
-use super::backend::Uvm;
 use hw_model_schema::{
     Access, ResetKind,
-    export::{Kind, register::Context, value::Emit, view::Register},
+    export::{Kind, view::Register},
 };
 use std::io::{Error, Write};
 
@@ -84,20 +83,4 @@ pub(super) fn ral_field(
         u8::from(f.known_reset)
     )?;
     writeln!(writer, "      {}_field.set_compare(UVM_NO_CHECK);", f.name)
-}
-
-impl Uvm {
-    pub(super) fn field(
-        &mut self,
-        shape: (&str, usize, usize),
-        ctx: &Context<'_>,
-        writer: &mut dyn Write,
-    ) -> Result<(), Error> {
-        writeln!(writer, "    uvm_reg_field {}_field;", shape.0)?;
-        let reg = ctx
-            .register()
-            .ok_or_else(|| Error::other("missing register owner"))?;
-        ral_field(reg, shape, &mut self.initialization)?;
-        self.emit_all(ctx.children(), writer)
-    }
 }

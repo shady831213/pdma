@@ -59,17 +59,6 @@ impl value::Backend for Probe {
         Ok(())
     }
 }
-impl hw_model_schema::export::OutputBackend for Probe {
-    fn metadata(
-        &mut self,
-        ctx: &Self::Context<'_>,
-    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
-        Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.root_name().to_owned(),
-            media_type: "text/plain".into(),
-        })
-    }
-}
 
 #[test]
 fn sorted_sibling_visits_keep_original_field_and_bit_scopes() {
@@ -94,7 +83,7 @@ fn root_visit_retains_owner_when_dispatched_as_an_ordinary_visit() {
     set.add_record::<Packet>();
     let schema = AnalyzedSchema::analyze(set, &Bindings::new()).unwrap();
     let mut probe = Probe(vec![]);
-    for visit in <record::Domain as Domain<Probe>>::roots(&schema) {
+    for visit in <record::Domain as Domain<Probe>>::entries(&schema) {
         assert!(schema.units().any(|unit| &unit.id == visit.id()));
         assert!(visit.parent_id().is_none());
         probe.emit(visit, &mut std::io::sink()).unwrap();
@@ -114,19 +103,23 @@ impl record::Backend for RootNames {
         ctx: RecordContext<'a>,
         _: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        let name = target.name().ok_or("missing reference target name")?;
-        assert!(self.0.iter().any(|root| root == name));
+        let name = target.definition_name();
+        if target.definition_origin() == hw_model_schema::ast::Origin::Named {
+            assert!(self.0.iter().any(|root| root == name));
+        } else {
+            assert!(!self.0.iter().any(|root| root == name));
+        }
         assert_eq!(target.parent_id().as_ref(), Some(ctx.id()));
         Ok(())
     }
-    fn root(
+    fn entry(
         &mut self,
         ctx: RecordContext<'_>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
         assert!(ctx.parent_id().is_none());
         {
-            let event: String = ctx.root_name().to_owned();
+            let event: String = ctx.entry_name().to_owned();
             if !self.0.is_empty() {
                 writer.write_all(b"\n").map_err(|_| "writer rejected")?;
             }
@@ -143,7 +136,7 @@ impl record::Backend for RootNames {
         ctx: RecordContext<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
-        assert_eq!(ctx.parent_id().as_ref(), Some(ctx.root_id()));
+        assert_eq!(ctx.parent_id().as_ref(), Some(ctx.entry_id()));
         self.emit_all(ctx.children(), writer)
     }
 }
@@ -151,17 +144,6 @@ impl value::Backend for RootNames {
     type Domain = record::Domain;
     type Error = &'static str;
     type Context<'a> = RecordContext<'a>;
-}
-impl hw_model_schema::export::OutputBackend for RootNames {
-    fn metadata(
-        &mut self,
-        ctx: &Self::Context<'_>,
-    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
-        Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.root_name().to_owned(),
-            media_type: "text/plain".into(),
-        })
-    }
 }
 
 #[test]

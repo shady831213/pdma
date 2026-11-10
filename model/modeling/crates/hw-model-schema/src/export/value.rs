@@ -1,6 +1,6 @@
 //! Recursive value callbacks shared by independent domain emitters.
 mod documentation;
-use super::{Context, Visit, view};
+use super::{Context, Domain, Visit, view};
 use crate::{EnumVariantSpec, ast::value::Node};
 pub use documentation::{
     DocumentationFragment, DocumentationKind, DocumentationOwner, documentation_fragments,
@@ -14,6 +14,15 @@ pub trait Backend: Sized {
     type Error;
     /// Domain-specific immutable recursion context.
     type Context<'a>: Context;
+    /// Optional target naming/validity check, run for every entry before writing.
+    /// Fragment-only renderers need no output metadata or naming implementation.
+    fn check_entry(
+        &mut self,
+        _: &Self::Context<'_>,
+        _: &mut super::EntrySymbols,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
     /// Handles a scalar value and any packed field declarations.
     fn scalar(
         &mut self,
@@ -60,10 +69,10 @@ pub trait Backend: Sized {
         self.emit_all(ctx.children(), writer)
     }
     /// Handles one bit field.
-    fn bit_field<'a>(
+    fn bit_field(
         &mut self,
-        _value: view::BitField<'a>,
-        ctx: Self::Context<'a>,
+        _value: view::BitField,
+        ctx: Self::Context<'_>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
         self.emit_all(ctx.children(), writer)
@@ -160,7 +169,11 @@ pub(super) fn emit<'a, B: Backend>(
         Node::Variant(v) => Some((v.documentation(), v.name(), DocumentationKind::Variant)),
         Node::StorageMember(v) => Some((v.documentation(), v.path(), DocumentationKind::Field)),
         Node::StorageField(v) => Some((v.documentation(), v.name(), DocumentationKind::Field)),
-        Node::Scalar(_) | Node::Bits(_) | Node::Enum(_) | Node::Expression(_) => None,
+        Node::Reference(_)
+        | Node::Scalar(_)
+        | Node::Bits(_)
+        | Node::Enum(_)
+        | Node::Expression(_) => None,
     };
     if let Some((text, name, kind)) = documentation {
         emit_documentation(
@@ -172,6 +185,7 @@ pub(super) fn emit<'a, B: Backend>(
         )?;
     }
     match node {
+        Node::Reference(reference) => B::Domain::reference(reference, ctx, backend, writer),
         Node::Scalar(value) => backend.scalar(view::Scalar(value), ctx, writer),
         Node::StorageField(value) => backend.storage_field(view::StorageField(value), ctx, writer),
         Node::StorageMember(value) => {
@@ -180,7 +194,9 @@ pub(super) fn emit<'a, B: Backend>(
         Node::Opaque(value) => backend.opaque(view::Storage(*value), ctx, writer),
         Node::Bits(value) => backend.bits(view::Bits(value, endian), ctx, writer),
         Node::Enum(value) => backend.enumeration(view::Enumeration(value), ctx, writer),
-        Node::BitField(value) => backend.bit_field(view::BitField(value), ctx, writer),
+        Node::BitField(value) => {
+            backend.bit_field(view::BitField::from_spec(value.spec()), ctx, writer)
+        }
         Node::Variant(value) => backend.variant(value, ctx, writer),
         Node::Expression(value) => backend.expression(view::Expression(value), ctx, writer),
     }

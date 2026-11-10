@@ -1,7 +1,7 @@
 use super::super::{CHeaderExportError, CRecordBackend, fragment::Fragment, naming};
 use crate::EnumVariantSpec;
 use crate::export::{
-    OutputMetadata, record,
+    record,
     value::{Backend, DocumentationKind, DocumentationOwner, Emit as _},
     view::{
         BitField, Bits, EnumEncoding, Enumeration, Field, Scalar, Storage, StorageField,
@@ -16,6 +16,14 @@ impl Backend for CRecordBackend<'_> {
     type Domain = record::Domain;
     type Error = CHeaderExportError;
     type Context<'a> = crate::export::record::Context<'a>;
+    fn check_entry(
+        &mut self,
+        ctx: &Self::Context<'_>,
+        symbols: &mut crate::export::EntrySymbols,
+    ) -> CResult {
+        self.names
+            .check_entry(ctx.entry_id(), ctx.entry_name(), symbols)
+    }
     fn scalar(&mut self, value: Scalar, ctx: Self::Context<'_>, writer: &mut dyn Write) -> CResult {
         Self::value_intro(&ctx, writer)?;
         self.emit_all(ctx.children(), writer)?;
@@ -32,6 +40,9 @@ impl Backend for CRecordBackend<'_> {
         ctx: Self::Context<'_>,
         writer: &mut dyn Write,
     ) -> CResult {
+        if ctx.is_entry() {
+            return self.emit_all(ctx.children(), writer);
+        }
         match value.encoding() {
             EnumEncoding::Scalar(encoding) => {
                 Self::value_intro(&ctx, writer)?;
@@ -95,7 +106,7 @@ impl Backend for CRecordBackend<'_> {
     }
     fn bit_field(
         &mut self,
-        field: BitField<'_>,
+        field: BitField,
         ctx: Self::Context<'_>,
         writer: &mut dyn Write,
     ) -> CResult {
@@ -133,7 +144,7 @@ impl Backend for CRecordBackend<'_> {
     }
     fn opaque(&mut self, spec: Storage, ctx: Self::Context<'_>, writer: &mut dyn Write) -> CResult {
         self.analysis.check_names(ctx.id())?;
-        if ctx.is_root() {
+        if ctx.is_entry() {
             self.header(spec, writer)?;
         } else if let Some(field) = ctx.field() {
             self.placement(field, &ctx, spec.documentation(), writer)?;
@@ -161,15 +172,6 @@ impl Backend for CRecordBackend<'_> {
             )?;
         }
         self.emit_all(ctx.children(), writer)
-    }
-}
-impl crate::export::OutputBackend for CRecordBackend<'_> {
-    fn metadata(&mut self, ctx: &Self::Context<'_>) -> CResult<OutputMetadata> {
-        let logical_name = self.names.reserve_unit(ctx.root_id(), ctx.root_name())?;
-        Ok(OutputMetadata {
-            logical_name,
-            media_type: "text/x-c; charset=utf-8".into(),
-        })
     }
 }
 

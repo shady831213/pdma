@@ -1,4 +1,5 @@
-use std::collections::{HashMap, HashSet};
+mod build;
+use build::Collector;
 
 use super::{Definition, DefinitionBody, DefinitionId, DescribeSchema, LayoutError, MapInstance};
 
@@ -107,12 +108,7 @@ impl SchemaSet {
         }
         Ok(())
     }
-    /// Retains named instances when a source rewrite preserves root identities.
-    pub(crate) fn with_instances(mut self, instances: &[MapInstance]) -> Self {
-        self.instances = instances.to_vec();
-        self
-    }
-    /// Collects dependencies and checks cycles and identity/path ambiguity.
+    /// Normalizes inline types, collects canonical dependencies and rejects cycles/identity ambiguity.
     pub fn resolve(mut self) -> Result<SchemaGraph, GraphError> {
         for instance in &mut self.instances {
             let definition = self
@@ -134,7 +130,7 @@ impl SchemaSet {
         let roots = self.roots.iter().map(Definition::id).collect();
         let mut collector = Collector::default();
         for root in self.roots {
-            collector.visit(root, &mut Vec::new())?;
+            collector.visit(&root, &mut Vec::new())?;
         }
         let mut definitions: Vec<_> = collector.complete.into_values().collect();
         definitions.sort_by_key(|node| (node.id().path(), node.id().structural_path().to_vec()));
@@ -177,42 +173,5 @@ impl SchemaGraph {
         self.definitions
             .iter()
             .find(|node| &node.id() == id.borrow())
-    }
-}
-
-#[derive(Default)]
-struct Collector {
-    order: Vec<DefinitionId>,
-    complete: HashMap<DefinitionId, Definition>,
-    active: HashSet<DefinitionId>,
-    paths: HashMap<(&'static str, Vec<String>), DefinitionId>,
-}
-impl Collector {
-    fn visit(&mut self, definition: Definition, path: &mut Vec<String>) -> Result<(), GraphError> {
-        let id = definition.id();
-        if self.complete.contains_key(&id) {
-            return Ok(());
-        }
-        if !self.active.insert(id.clone()) {
-            let mut cycle = path.clone();
-            cycle.push(id.path().to_owned());
-            return Err(GraphError::Cycle(cycle));
-        }
-        if self
-            .paths
-            .insert((id.path(), id.structural_path().to_vec()), id.clone())
-            .is_some_and(|previous| previous != id)
-        {
-            return Err(GraphError::AmbiguousPath(id.path().to_owned()));
-        }
-        for reference in definition.references() {
-            path.push(format!("{}.{}", id.path(), reference.name()));
-            self.visit(reference.target(), path)?;
-            path.pop();
-        }
-        self.active.remove(&id);
-        self.complete.insert(id.clone(), definition);
-        self.order.push(id);
-        Ok(())
     }
 }

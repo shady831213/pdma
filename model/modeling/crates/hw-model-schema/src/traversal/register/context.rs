@@ -71,10 +71,10 @@ impl<'a> Context<'a> {
     pub fn parameters(&self) -> &'a [&'static str] {
         self.lineage()
             .find_map(|node| match node {
-                Node::MapLayout(map) => Some(map.parameters()),
+                Node::RegisterMap(map) => Some(map.parameters()),
                 _ => None,
             })
-            .unwrap_or_else(|| match &self.unit().body {
+            .unwrap_or_else(|| match &self.definition().body {
                 Layout::Map(map) => map.plan.as_ref().map_or(&[], |p| p.parameters()),
                 Layout::None | Layout::Record(_) => &[],
             })
@@ -83,10 +83,10 @@ impl<'a> Context<'a> {
     pub fn declared_parameters(&self) -> &'a [&'static str] {
         self.lineage()
             .find_map(|node| match node {
-                Node::MapLayout(map) => Some(map.source_parameters()),
+                Node::RegisterMap(map) => Some(map.source_parameters()),
                 _ => None,
             })
-            .unwrap_or_else(|| match &self.unit().body {
+            .unwrap_or_else(|| match &self.definition().body {
                 Layout::Map(map) => map.plan.as_ref().map_or(&[], |p| p.source_parameters()),
                 Layout::None | Layout::Record(_) => &[],
             })
@@ -94,12 +94,12 @@ impl<'a> Context<'a> {
     /// Concrete bindings in the nearest contained map's formal scope.
     pub fn bindings(&self) -> Option<&'a [usize]> {
         if let Some(map) = self.lineage().find_map(|node| match node {
-            Node::MapLayout(map) => Some(map),
+            Node::RegisterMap(map) => Some(map),
             _ => None,
         }) {
             return map.bindings();
         }
-        match &self.unit().body {
+        match &self.definition().body {
             Layout::Map(map) => map.plan.as_ref().and_then(|p| p.bindings()),
             Layout::None | Layout::Record(_) => None,
         }
@@ -117,6 +117,12 @@ impl<'a> Context<'a> {
                 segments: &view.segments,
                 offset: view.offset,
             }),
+            _ if self
+                .lineage()
+                .any(|node| matches!(node, Node::Placement(_))) =>
+            {
+                None
+            }
             _ => self.register().map(|_| RegisterSite {
                 location: RegisterLocation::Root,
                 path: &self.unit().name,
@@ -145,10 +151,12 @@ impl<'a> Context<'a> {
             Node::LayoutProperty(property) => Some(property),
             _ => None,
         })?;
-        let owner = match self
-            .lineage()
-            .find(|node| matches!(node, Node::Placement(_) | Node::Bank(_)))
-        {
+        let owner = match self.lineage().find(|node| {
+            matches!(
+                node,
+                Node::Placement(_) | Node::Bank(_) | Node::RegisterMap(_)
+            )
+        }) {
             Some(Node::Placement(p)) => Some(p.source.name()),
             Some(Node::Bank(bank)) => Some(bank.name()),
             _ => None,
@@ -176,7 +184,19 @@ impl<'a> Context<'a> {
         let mut current = Some(self.clone());
         while let Some(ctx) = current {
             if matches!(ctx.node(), Node::Value(crate::ast::value::Node::Opaque(_))) {
-                return ctx.analysis().opaque_layout(ctx.id());
+                let id = ctx
+                    .ancestors()
+                    .iter()
+                    .rev()
+                    .find_map(|node| {
+                        use crate::traversal::DomainNode;
+                        node.reference()
+                    })
+                    .map_or_else(
+                        || ctx.id().clone(),
+                        |r| ctx.id().within_referent(r.target().id()),
+                    );
+                return ctx.analysis().opaque_layout(&id);
             }
             current = ctx.parent();
         }

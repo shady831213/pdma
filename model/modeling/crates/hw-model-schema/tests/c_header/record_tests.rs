@@ -38,8 +38,7 @@ fn c_header_record_is_exact_and_deterministic_when_rendered_twice() -> TestResul
 
     // Then: both owned UTF-8 artifacts exactly match the reviewed golden fragment.
     assert_eq!(first, second);
-    assert_eq!(first.metadata.logical_name, "packet.fragment.h");
-    assert_eq!(first.metadata.media_type, "text/x-c; charset=utf-8");
+    assert_eq!(first.entry_name, "packet.fragment.h");
     assert_eq!(first.bytes, RECORD_GOLDEN);
     Ok(())
 }

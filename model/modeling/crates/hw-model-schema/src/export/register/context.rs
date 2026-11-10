@@ -7,17 +7,29 @@ use crate::{Documentation, traversal::NodeId};
 pub struct Context<'a>(pub(super) crate::traversal::register::Context<'a>);
 impl context::sealed::Context for Context<'_> {}
 impl<'a> Context<'a> {
-    /// Selected root identity.
-    pub const fn root_id(&self) -> &NodeId {
+    /// Selected entry identity.
+    pub const fn entry_id(&self) -> &NodeId {
         &self.0.unit().id
     }
-    /// Selected root source name.
-    pub fn root_name(&self) -> &'a str {
+    /// Selected entry source name.
+    pub fn entry_name(&self) -> &'a str {
         &self.0.unit().name
     }
-    /// Selected root documentation.
-    pub const fn root_documentation(&self) -> Documentation {
+    /// Selected entry documentation.
+    pub const fn entry_documentation(&self) -> Documentation {
         self.0.unit().documentation
+    }
+    /// Identity of the reusable definition currently being expanded.
+    pub fn definition_id(&self) -> &'a NodeId {
+        &self.0.definition().id
+    }
+    /// Name of the reusable definition currently being expanded.
+    pub fn definition_name(&self) -> &'a str {
+        &self.0.definition().name
+    }
+    /// Original source form of the current definition.
+    pub fn definition_origin(&self) -> crate::ast::Origin {
+        self.0.definition().origin
     }
     /// Stable occurrence identity.
     pub const fn id(&self) -> &NodeId {
@@ -33,14 +45,13 @@ impl<'a> Context<'a> {
             .parent()
             .map(|parent| crate::export::Context::kind(&Self(parent)))
     }
-    /// Ancestor kinds from the root to the immediate parent, without raw node access.
+    /// Ancestor kinds from the entry to the immediate parent, without raw node access.
     pub fn ancestor_kinds(&self) -> impl Iterator<Item = Kind> + '_ {
         self.0.ancestors().iter().copied().map(Self::node_kind)
     }
     const fn node_kind(node: Node<'_>) -> Kind {
         match node {
-            Node::Root(_) => Kind::Root,
-            Node::MapLayout(_) => Kind::MapLayout,
+            Node::Root(_) => Kind::Entry,
             Node::RegisterMap(_) => Kind::RegisterMap,
             Node::Register(_) => Kind::Register,
             Node::RegisterField(_) => Kind::RegisterField,
@@ -62,8 +73,8 @@ impl<'a> Context<'a> {
             .parent()
             .and_then(|parent| crate::export::Context::name(&Self(parent)).map(str::to_owned))
     }
-    /// Whether this occurrence is the selected root.
-    pub const fn is_root(&self) -> bool {
+    /// Whether this occurrence is the selected entry.
+    pub const fn is_entry(&self) -> bool {
         self.id().is_root()
     }
     /// Repeats the bound occurrence.
@@ -103,6 +114,22 @@ impl<'a> Context<'a> {
             .collect::<Vec<_>>()
             .into_iter()
     }
+    /// Explicit prepared address projection; excluded from ordinary children.
+    pub fn projected_children(&self) -> std::vec::IntoIter<Visit<Self>> {
+        self.0
+            .projected_children()
+            .map(|v| Visit::new(Self(v.into_context())))
+            .collect::<Vec<_>>()
+            .into_iter()
+    }
+    /// Explicit bank instances; default bank children describe its template once.
+    pub fn instances(&self) -> std::vec::IntoIter<Visit<Self>> {
+        self.0
+            .instances()
+            .map(|v| Visit::new(Self(v.into_context())))
+            .collect::<Vec<_>>()
+            .into_iter()
+    }
     /// Enclosing bit-field source name.
     pub fn bit(&self) -> Option<&'static str> {
         self.0.bit()
@@ -119,15 +146,15 @@ impl<'a> Context<'a> {
     pub fn repeated_documentation(&self) -> bool {
         self.0.repeated_documentation()
     }
-    /// Unbound root parameter names.
+    /// Unbound entry parameter names.
     pub fn parameters(&self) -> &'a [&'static str] {
         self.0.parameters()
     }
-    /// Declared root parameter names including bound parameters.
+    /// Declared entry parameter names including bound parameters.
     pub fn declared_parameters(&self) -> &'a [&'static str] {
         self.0.declared_parameters()
     }
-    /// Concrete root argument values.
+    /// Concrete entry argument values.
     pub fn bindings(&self) -> Option<&'a [usize]> {
         self.0.bindings()
     }
@@ -143,7 +170,7 @@ impl<'a> Context<'a> {
     pub fn register_segments(&self) -> &'a [crate::analysis::ViewPathSegment] {
         self.0.register_segments()
     }
-    /// Register source path or selected root name.
+    /// Register source path or selected entry name.
     pub fn semantic_path(&self) -> &'a str {
         self.0.semantic_path()
     }
@@ -154,7 +181,7 @@ impl<'a> Context<'a> {
     /// Bound parameter visits from the enclosing map regardless of traversal order.
     pub fn lexical_parameters(&self) -> std::vec::IntoIter<Visit<Self>> {
         let mut owner = self.0.clone();
-        while !matches!(owner.node(), Node::MapLayout(_)) {
+        while !matches!(owner.node(), Node::RegisterMap(_)) {
             let Some(parent) = owner.parent() else {
                 return Vec::new().into_iter();
             };
@@ -169,8 +196,20 @@ impl<'a> Context<'a> {
     }
 }
 impl crate::export::Context for Context<'_> {
-    fn root_kind(&self) -> Kind {
-        context::root_kind(self.0.unit())
+    fn entry_name(&self) -> &str {
+        self.entry_name()
+    }
+    fn definition_id(&self) -> &NodeId {
+        self.definition_id()
+    }
+    fn definition_name(&self) -> &str {
+        self.definition_name()
+    }
+    fn definition_origin(&self) -> crate::ast::Origin {
+        self.definition_origin()
+    }
+    fn entry_kind(&self) -> Kind {
+        context::entry_kind(self.0.unit())
     }
     fn id(&self) -> &NodeId {
         self.id()
@@ -190,8 +229,7 @@ impl crate::export::Context for Context<'_> {
             Node::Parameter(v) => Some(v.name),
             Node::Argument(v) => v.parameter,
             Node::Value(v) => context::value_name(v),
-            Node::MapLayout(_)
-            | Node::RegisterMap(_)
+            Node::RegisterMap(_)
             | Node::BankProperty(_)
             | Node::Attribute(_)
             | Node::LayoutProperty(_) => None,
@@ -206,8 +244,7 @@ impl crate::export::Context for Context<'_> {
             Node::RegisterPlacement { view, .. } => view.documentation,
             Node::Bank(v) => v.documentation(),
             Node::Value(v) => context::value_documentation(v),
-            Node::MapLayout(_)
-            | Node::RegisterMap(_)
+            Node::RegisterMap(_)
             | Node::BankProperty(_)
             | Node::Parameter(_)
             | Node::Reference(_)
@@ -220,9 +257,15 @@ impl crate::export::Context for Context<'_> {
         self.children()
     }
 }
-/// Binds roots for restricted renderer dispatch.
-pub fn roots(schema: &crate::analysis::AnalyzedSchema) -> impl Iterator<Item = Visit<Context<'_>>> {
-    crate::traversal::register::roots(schema).map(|v| Visit::new(Context(v.into_context())))
+/// Binds entrys for restricted renderer dispatch.
+pub fn entries(
+    schema: &crate::analysis::AnalyzedSchema,
+) -> impl Iterator<Item = Visit<Context<'_>>> {
+    crate::traversal::register::definitions(schema)
+        .filter(|v| {
+            v.context().unit().selected || v.context().unit().origin == crate::ast::Origin::Named
+        })
+        .map(|v| Visit::new(Context(v.into_context())))
 }
 
 impl core::fmt::Debug for Context<'_> {

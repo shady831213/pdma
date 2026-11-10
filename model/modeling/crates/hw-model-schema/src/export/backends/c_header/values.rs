@@ -19,7 +19,7 @@ fn bits_metadata(
 fn bit_metadata(
     output: &mut Fragment,
     prefix: &str,
-    field: BitField<'_>,
+    field: BitField,
     writer: &mut dyn Write,
 ) -> CResult {
     let prefix = format!("{prefix}_{}", naming::c_identifier(field.name()));

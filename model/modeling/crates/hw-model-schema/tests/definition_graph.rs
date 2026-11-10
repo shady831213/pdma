@@ -36,25 +36,21 @@ fn inline_union_exposes_its_selector_and_case_fields() -> TestResult {
         })
         .nth(1)
         .ok_or("missing union field")?;
-    let hw_model_schema::ast::Node::Record(hw_model_schema::ast::record::Node::Union(union)) =
-        field
-            .children()
-            .find(|node| {
-                matches!(
-                    node,
-                    hw_model_schema::ast::Node::Record(hw_model_schema::ast::record::Node::Union(
-                        _
-                    ))
-                )
-            })
-            .ok_or("missing union")?
-    else {
+    let reference = field.references().next().ok_or("union reference")?;
+    assert_eq!(reference.selector_binding(), Some("self.kind"));
+    let target = reference.target();
+    let hw_model_schema::ast::DefinitionBody::Union(union) = target.body() else {
         return Err("expected union".into());
     };
     let alternative = union.cases().get(1).ok_or("missing Value case")?;
     assert_eq!(alternative.discriminant(), Some(7));
-    let hw_model_schema::ast::CaseBody::Inline(spec) = alternative.body() else {
-        return Err("expected inline case fields".into());
+    let hw_model_schema::ast::CaseBody::Reference(reference) = alternative.body() else {
+        return Err("expected case type reference".into());
+    };
+    let target = reference.target();
+    assert_eq!(target.origin(), hw_model_schema::ast::Origin::Inline);
+    let hw_model_schema::ast::DefinitionBody::Record(spec) = target.body() else {
+        return Err("case record".into());
     };
     let field = spec.fields().first().ok_or("missing case field")?;
     assert_eq!(field.name(), "number");
@@ -97,19 +93,10 @@ fn tagged_union_preserves_case_references_and_wire_discriminants() -> TestResult
         })
         .nth(1)
         .ok_or("missing union field")?;
-    let hw_model_schema::ast::Node::Record(hw_model_schema::ast::record::Node::Union(union)) =
-        field
-            .children()
-            .find(|node| {
-                matches!(
-                    node,
-                    hw_model_schema::ast::Node::Record(hw_model_schema::ast::record::Node::Union(
-                        _
-                    ))
-                )
-            })
-            .ok_or("missing union")?
-    else {
+    let reference = field.references().next().ok_or("union reference")?;
+    assert_eq!(reference.selector_binding(), Some("self.kind"));
+    let target = reference.target();
+    let hw_model_schema::ast::DefinitionBody::Union(union) = target.body() else {
         return Err("expected union".into());
     };
     let codes: Vec<_> = union

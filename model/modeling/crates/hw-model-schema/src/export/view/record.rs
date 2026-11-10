@@ -90,10 +90,6 @@ impl Case<'_> {
     pub const fn discriminant(self) -> Option<u64> {
         self.0.discriminant()
     }
-    /// Whether this alternative names a reusable payload definition.
-    pub const fn is_reference(self) -> bool {
-        matches!(self.0.body(), ast::CaseBody::Reference(_))
-    }
 }
 
 impl core::fmt::Debug for Record<'_> {

@@ -9,11 +9,10 @@ pub(super) mod naming;
 use super::{CHeaderExportError, CRegisterBackend, naming as symbols};
 use crate::ast::RegisterLocation;
 use crate::export::value::Emit as _;
-use crate::export::view::{Map, MapLayout, Register};
+use crate::export::view::{Map, Register};
 use crate::export::{expression::ExpressionSyntax, register::Backend};
 type CResult<T = ()> = Result<T, CHeaderExportError>;
-pub(super) struct Syntax;
-impl ExpressionSyntax for Syntax {
+impl ExpressionSyntax for CRegisterBackend {
     fn literal(&mut self, value: usize) -> String {
         format!("UINT64_C({value})")
     }
@@ -31,37 +30,46 @@ impl Backend for CRegisterBackend {
         _: Context<'a>,
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
-        if metadata.kind == crate::export::Kind::Bits {
+        if matches!(
+            metadata.kind,
+            crate::export::Kind::Bits | crate::export::Kind::Enum
+        ) {
             self.emit(target, writer)?;
         }
         Ok(())
     }
 
-    fn root(&mut self, ctx: Context<'_>, writer: &mut dyn Write) -> CResult {
-        self.prefix = self.names.unit_name(ctx.root_id(), ctx.root_name()).1;
+    fn entry(&mut self, ctx: Context<'_>, writer: &mut dyn Write) -> CResult {
+        self.prefix = self.names.entry_prefix(ctx.entry_id(), ctx.entry_name());
         self.output = Fragment::default();
         self.emit(ctx.current(), writer)
     }
-    fn map_layout<'a>(
-        &mut self,
-        _: MapLayout<'a>,
-        ctx: Context<'a>,
-        writer: &mut dyn Write,
-    ) -> CResult {
-        self.emit_geometry(&ctx, writer)
-    }
     fn register_map<'a>(
         &mut self,
-        value: Map<'a>,
+        map: Map<'a>,
         ctx: Context<'a>,
         writer: &mut dyn Write,
     ) -> CResult {
-        self.map_constants(value.extent(), writer)?;
-        self.emit_all(ctx.children(), writer)
+        if map.is_projection() {
+            self.map_constants(
+                map.extent()
+                    .ok_or(CHeaderExportError::InvalidVisit("concrete map extent"))?,
+                writer,
+            )?;
+            self.emit_all(ctx.children(), writer)
+        } else {
+            self.emit_geometry(&ctx, writer)?;
+            if let Some(extent) = map.extent() {
+                self.map_constants(extent, writer)?;
+                self.emit_all(ctx.projected_children(), writer)?;
+            }
+            Ok(())
+        }
     }
     fn bank<'a>(&mut self, _: Bank<'a>, ctx: Context<'a>, writer: &mut dyn Write) -> CResult {
         writer.write_all(b"\n")?;
-        self.emit_all(ctx.children(), writer)
+        self.emit_all(ctx.children(), writer)?;
+        self.emit_all(ctx.instances(), writer)
     }
     fn bank_property(
         &mut self,

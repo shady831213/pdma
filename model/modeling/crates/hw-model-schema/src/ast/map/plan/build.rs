@@ -99,7 +99,8 @@ impl MapDefinition {
                     plan: Box::new(result?),
                 }
             }
-            DefinitionBody::Bits(_)
+            DefinitionBody::Enumeration(_)
+            | DefinitionBody::Bits(_)
             | DefinitionBody::Record(_)
             | DefinitionBody::Union { .. }
             | DefinitionBody::Register(_)

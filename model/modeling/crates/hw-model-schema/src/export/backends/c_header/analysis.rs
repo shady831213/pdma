@@ -50,7 +50,7 @@ impl<'a> Pass<(&'a AnalyzedSchema, ())> for CRecordAnalysisPass {
             offsets: HashMap::new(),
             collisions: HashMap::new(),
         };
-        for root in record::roots(schema) {
+        for root in record::definitions(schema) {
             collect(root.context(), &mut output)?;
         }
         Ok((schema, output))
@@ -80,6 +80,9 @@ fn collect(ctx: &Context<'_>, output: &mut CRecordAnalysis) -> Result<(), CHeade
     }
     if matches!(ctx.node(), Node::Union(_)) {
         return Ok(());
+    }
+    if let Some(target) = ctx.referent() {
+        collect(target.context(), output)?;
     }
     for child in ctx.children() {
         collect(child.context(), output)?;

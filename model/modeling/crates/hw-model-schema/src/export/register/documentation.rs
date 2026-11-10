@@ -1,5 +1,4 @@
 use super::{Backend, Context, Node};
-use crate::analysis::Layout;
 use crate::export::value::{DocumentationKind as Kind, DocumentationOwner, emit_documentation};
 
 pub(super) fn emit<B: Backend>(
@@ -11,7 +10,9 @@ pub(super) fn emit<B: Backend>(
     let docs = match node {
         Node::Root(unit) => match &unit.declaration {
             Some(
-                crate::ast::DefinitionBody::RegisterMap(_) | crate::ast::DefinitionBody::Bits(_),
+                crate::ast::DefinitionBody::RegisterMap(_)
+                | crate::ast::DefinitionBody::Bits(_)
+                | crate::ast::DefinitionBody::Enumeration(_),
             )
             | None => Some((unit.documentation, unit.name.as_str(), Kind::Definition)),
             Some(
@@ -28,18 +29,18 @@ pub(super) fn emit<B: Backend>(
             _ => None,
         },
         Node::RegisterField(v) => Some((v.documentation(), v.name(), Kind::BitField)),
-        Node::Placement(v) => match &ctx.0.unit().body {
-            Layout::Map(m) if m.instance.is_some() => None,
-            Layout::Map(_) | Layout::None | Layout::Record(_) => {
-                Some((v.documentation, v.source.name(), Kind::Placement))
-            }
-        },
+        Node::Placement(v) => Some((v.documentation, v.source.name(), Kind::Placement)),
         Node::RegisterPlacement { view, .. } => {
             Some((view.documentation, view.name, Kind::Placement))
         }
         Node::Bank(bank) => Some((bank.documentation(), bank.name(), Kind::Placement)),
         Node::RegisterMap(map) => {
-            for (name, documentation) in &map.groups {
+            for (name, documentation) in map
+                .projection()
+                .filter(|_| map.is_projection())
+                .into_iter()
+                .flat_map(|map| &map.groups)
+            {
                 emit_documentation(
                     *documentation,
                     DocumentationOwner {
@@ -55,7 +56,6 @@ pub(super) fn emit<B: Backend>(
         }
         Node::BankProperty(_)
         | Node::Reference(_)
-        | Node::MapLayout(_)
         | Node::Parameter(_)
         | Node::Argument(_)
         | Node::Attribute(_)

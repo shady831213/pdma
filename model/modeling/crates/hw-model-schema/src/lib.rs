@@ -96,6 +96,3 @@ pub type RegisterCodecError = RegisterValueError;
 
 /// Target-neutral bound semantic traversal and occurrence identities.
 pub mod traversal;
-
-/// Application-selected source containment rewrites.
-pub mod transform;

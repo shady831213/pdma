@@ -37,7 +37,7 @@ fn enum_name_cannot_overwrite_generated_field_metadata() -> Result<(), Box<dyn s
     let [dependency] = sink.outputs() else {
         return Err("expected one completed dependency".into());
     };
-    assert_eq!(dependency.metadata.logical_name, "FlagsLayout.veryl");
+    assert_eq!(dependency.entry_name, "Flags");
     Ok(())
 }
 
@@ -68,7 +68,7 @@ fn package_alias_collision_prevents_all_output() -> Result<(), Box<dyn std::erro
     let mut bytes = Vec::new();
     // When: common generation renders the complete request.
     let result = hw_model_schema::export::generate(&prepared, renderer, &mut bytes);
-    // Then: metadata preflight rejects the later alias before publishing any package.
+    // Then: entry preflight rejects the later alias before publishing any package.
     assert!(
         matches!(result, Err(ExportError::Render(VerylExportError::Name(name))) if name == "Shared")
     );
@@ -96,7 +96,7 @@ fn backend_emits_fields_and_enums_once_for_each_expanded_register()
     let artifact = sink
         .outputs()
         .iter()
-        .find(|artifact| artifact.metadata.logical_name == "ControlsLayout.veryl")
+        .find(|artifact| artifact.entry_name == "Controls")
         .ok_or("missing map")?;
     let text = std::str::from_utf8(&artifact.bytes)?;
     for index in 0..2 {
@@ -134,7 +134,7 @@ fn independent_record_backend_preserves_record_and_bits_packages()
     let packet = sink
         .outputs()
         .iter()
-        .find(|item| item.metadata.logical_name == "PacketLayout.veryl")
+        .find(|item| item.entry_name == "Packet")
         .ok_or("missing record package")?;
     let packet = std::str::from_utf8(&packet.bytes)?;
     assert!(packet.contains("EXTENT: u64 = 8"));
@@ -142,7 +142,7 @@ fn independent_record_backend_preserves_record_and_bits_packages()
     let bits = sink
         .outputs()
         .iter()
-        .find(|item| item.metadata.logical_name == "ModeLayout.veryl")
+        .find(|item| item.entry_name == "Mode")
         .ok_or("missing bits package")?;
     let bits = std::str::from_utf8(&bits.bytes)?;
     assert!(bits.contains("BIT_WIDTH: u32 = 6"));

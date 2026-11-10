@@ -12,8 +12,8 @@ use crate::{
 pub struct CompletePlacementLayout {
     /// Original reference and member name.
     pub source: MapPlacement,
-    /// Completed inline child map in its own formal parameter scope.
-    pub inline_map: Option<Box<CompleteMapLayout>>,
+    /// Completed referenced map with use-site arguments substituted; independent of bank expansion.
+    pub referent_layout: Option<Box<CompleteMapLayout>>,
     /// Referenced definition identity.
     pub child_definition: crate::traversal::NodeId,
     /// Source child name.

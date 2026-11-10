@@ -1,7 +1,7 @@
 use super::super::{CHeaderExportError, CRegisterBackend, fragment::Fragment, naming};
 use crate::EnumVariantSpec;
 use crate::export::{
-    OutputMetadata, register,
+    register,
     value::{Backend, DocumentationOwner, Emit as _},
     view::{BitField, Bits, Storage},
 };
@@ -13,6 +13,14 @@ impl Backend for CRegisterBackend {
     type Domain = register::Domain;
     type Error = CHeaderExportError;
     type Context<'a> = crate::export::register::Context<'a>;
+    fn check_entry(
+        &mut self,
+        ctx: &Self::Context<'_>,
+        symbols: &mut crate::export::EntrySymbols,
+    ) -> CResult {
+        self.names
+            .check_entry(ctx.entry_id(), ctx.entry_name(), symbols)
+    }
     fn expression(
         &mut self,
         value: crate::export::view::Expression<'_>,
@@ -25,11 +33,7 @@ impl Backend for CRegisterBackend {
         if ctx.bank().is_some() {
             write!(writer, "{}", value.evaluate(&[], &[])?)?;
         } else {
-            write!(
-                writer,
-                "{}",
-                value.format(&mut super::super::register::Syntax)?
-            )?;
+            write!(writer, "{}", value.format(self)?)?;
         }
         Ok(())
     }
@@ -62,7 +66,7 @@ impl Backend for CRegisterBackend {
     }
     fn bit_field(
         &mut self,
-        field: BitField<'_>,
+        field: BitField,
         ctx: Self::Context<'_>,
         writer: &mut dyn Write,
     ) -> CResult {
@@ -100,14 +104,5 @@ impl Backend for CRegisterBackend {
             &[("ENDIAN_LITTLE", 0), ("ENDIAN_BIG", 1)],
             writer,
         )
-    }
-}
-impl crate::export::OutputBackend for CRegisterBackend {
-    fn metadata(&mut self, ctx: &Self::Context<'_>) -> CResult<OutputMetadata> {
-        let logical_name = self.names.reserve_unit(ctx.root_id(), ctx.root_name())?;
-        Ok(OutputMetadata {
-            logical_name,
-            media_type: "text/x-c; charset=utf-8".into(),
-        })
     }
 }

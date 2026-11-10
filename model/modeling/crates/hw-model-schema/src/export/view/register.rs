@@ -80,38 +80,35 @@ impl Register<'_> {
         self.0.writable_mask()
     }
 }
-/// Borrowed map metadata without contained declarations.
+/// One analyzed register map; binding does not change its node kind.
 #[derive(Clone, Copy)]
-pub struct Map<'a>(pub(crate) &'a analysis::RegisterMapView);
+pub struct Map<'a>(pub(crate) crate::traversal::register::Map<'a>);
 impl Map<'_> {
-    /// Returns the extent.
-    pub const fn extent(self) -> usize {
-        self.0.extent
+    /// Concrete extent, when all needed parameters are bound.
+    pub fn extent(self) -> Option<usize> {
+        self.0.extent()
     }
-    /// Returns the alignment.
+    /// Alignment when known from the declaration.
     pub const fn alignment(self) -> Option<usize> {
-        self.0.alignment
-    }
-    /// Returns the documentation.
-    pub const fn documentation(self) -> crate::Documentation {
-        self.0.documentation
-    }
-}
-/// Borrowed map layout metadata without contained declarations.
-#[derive(Clone, Copy)]
-pub struct MapLayout<'a>(pub(crate) &'a analysis::CompleteMapLayout);
-impl MapLayout<'_> {
-    /// Returns the alignment.
-    pub const fn alignment(self) -> usize {
         self.0.alignment()
     }
-    /// Returns the parameters.
-    pub const fn parameters(self) -> &'static [&'static str] {
+    /// Whether the input is an authoritative permission/address projection.
+    pub const fn is_projection(self) -> bool {
+        self.0.is_projection()
+    }
+    /// Free expression parameters.
+    pub fn parameters(self) -> &'static [&'static str] {
         self.0.parameters()
     }
-    /// Returns the source parameters.
-    pub const fn source_parameters(self) -> &'static [&'static str] {
+    /// Declared constructor parameters.
+    pub fn source_parameters(self) -> &'static [&'static str] {
         self.0.source_parameters()
+    }
+}
+impl<'a> Map<'a> {
+    /// Concrete constructor bindings, if selected.
+    pub fn bindings(self) -> Option<&'a [usize]> {
+        self.0.bindings()
     }
 }
 /// Borrowed placement metadata without contained declarations.
@@ -152,12 +149,6 @@ impl RegisterPlacement<'_> {
         self.0.documentation
     }
 }
-impl<'a> MapLayout<'a> {
-    /// Concrete root bindings, if selected.
-    pub fn bindings(self) -> Option<&'a [usize]> {
-        self.0.bindings()
-    }
-}
 impl<'a> RegisterPlacement<'a> {
     /// Root-qualified source path.
     pub fn path(self) -> &'a str {
@@ -187,14 +178,6 @@ impl core::fmt::Debug for Map<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Map")
             .field("extent", &self.extent())
-            .finish_non_exhaustive()
-    }
-}
-
-impl core::fmt::Debug for MapLayout<'_> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("MapLayout")
-            .field("alignment", &self.alignment())
             .finish_non_exhaustive()
     }
 }

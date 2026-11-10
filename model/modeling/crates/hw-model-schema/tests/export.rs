@@ -5,7 +5,7 @@ use hw_model_schema::{
     RecordSpec,
     analysis::AnalyzedSchema,
     export::record::Context as RecordContext,
-    export::{ExportError, OutputMetadata, generate, record::Backend, value},
+    export::{ExportError, generate, record::Backend, value},
 };
 use output_support::{CapturedOutput, MemoryOutput};
 use std::io::Write;
@@ -46,18 +46,10 @@ impl value::Backend for LocalRenderer {
             .map_err(|error| LocalExportError::Write(error.kind()))
     }
 }
-impl hw_model_schema::export::OutputBackend for LocalRenderer {
-    fn metadata(&mut self, ctx: &RecordContext<'_>) -> Result<OutputMetadata, Self::Error> {
-        Ok(OutputMetadata {
-            logical_name: format!("{}.bin", ctx.root_name()),
-            media_type: "application/x-local-schema".into(),
-        })
-    }
-}
 
 struct RejectingRenderer;
 impl Backend for RejectingRenderer {
-    fn root(&mut self, _: RecordContext<'_>, _: &mut dyn Write) -> Result<(), Self::Error> {
+    fn entry(&mut self, _: RecordContext<'_>, _: &mut dyn Write) -> Result<(), Self::Error> {
         Err(LocalExportError::RendererRejected)
     }
 }
@@ -65,14 +57,6 @@ impl value::Backend for RejectingRenderer {
     type Domain = hw_model_schema::export::record::Domain;
     type Error = LocalExportError;
     type Context<'a> = RecordContext<'a>;
-}
-impl hw_model_schema::export::OutputBackend for RejectingRenderer {
-    fn metadata(&mut self, ctx: &RecordContext<'_>) -> Result<OutputMetadata, Self::Error> {
-        Ok(OutputMetadata {
-            logical_name: ctx.root_name().to_owned(),
-            media_type: "text/plain".into(),
-        })
-    }
 }
 
 const fn record_schema() -> RecordSpec {
@@ -84,16 +68,13 @@ fn caller_capture_preserves_owned_odd_contents_after_renderer_locals_drop() {
     let schema = AnalyzedSchema::opaque("record", record_schema()).expect("fixture must resolve");
     let mut output = MemoryOutput::new();
     // When: the renderer writes through the caller's writer.
-    let result = output.generate(&schema, LocalRenderer);
+    let result = output.generate_named(&schema, LocalRenderer, |name| format!("{name}.bin"));
     // Then: the caller retains exact metadata and non-text bytes.
     assert_eq!(result, Ok(()));
     assert_eq!(
         output.outputs(),
         &[CapturedOutput {
-            metadata: OutputMetadata {
-                logical_name: "record.bin".into(),
-                media_type: "application/x-local-schema".into(),
-            },
+            entry_name: "record.bin".into(),
             bytes: vec![0, 255, 7],
         }]
     );
@@ -156,12 +137,14 @@ fn downstream_local_renderer_and_output_preserve_root_emission_order() {
     let schema = AnalyzedSchema::analyze(set, &Bindings::new()).unwrap();
     let mut output = MemoryOutput::new();
     // When: generation visits each root through the downstream implementation.
-    output.generate(&schema, LocalRenderer).unwrap();
+    output
+        .generate_named(&schema, LocalRenderer, |name| format!("{name}.bin"))
+        .unwrap();
     // Then: the caller observes stable root ordering and independent binary contents.
     let actual: Vec<_> = output
         .outputs()
         .iter()
-        .map(|value| (value.metadata.logical_name.as_str(), value.bytes.as_slice()))
+        .map(|value| (value.entry_name.as_str(), value.bytes.as_slice()))
         .collect();
     assert_eq!(
         actual,

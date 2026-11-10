@@ -24,7 +24,7 @@ impl register::Backend for Banks {
     ) -> Result<(), Self::Error> {
         self.emit_all(ctx.children(), writer)
     }
-    fn root(
+    fn entry(
         &mut self,
         ctx: Self::Context<'_>,
         writer: &mut dyn std::io::Write,
@@ -93,17 +93,6 @@ impl value::Backend for Banks {
             ));
         }
         Ok(())
-    }
-}
-impl hw_model_schema::export::OutputBackend for Banks {
-    fn metadata(
-        &mut self,
-        ctx: &Self::Context<'_>,
-    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
-        Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.root_name().to_owned(),
-            media_type: "text/plain".into(),
-        })
     }
 }
 

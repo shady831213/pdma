@@ -28,11 +28,15 @@ pub(super) fn emit<'a, B: Backend>(
             v.name(),
             super::super::value::DocumentationKind::Field,
         )),
-        Node::Value(crate::ast::value::Node::Bits(_)) if ctx.is_root() => Some((
-            ctx.0.unit().documentation,
-            ctx.0.unit().name.as_str(),
-            super::super::value::DocumentationKind::Definition,
-        )),
+        Node::Value(crate::ast::value::Node::Bits(_) | crate::ast::value::Node::Enum(_))
+            if ctx.is_entry() =>
+        {
+            Some((
+                ctx.0.unit().documentation,
+                ctx.0.unit().name.as_str(),
+                super::super::value::DocumentationKind::Definition,
+            ))
+        }
         Node::Case(_)
         | Node::Reference(_)
         | Node::Attribute(_)
@@ -70,6 +74,18 @@ pub(super) fn emit<'a, B: Backend>(
             let endian = ctx
                 .field()
                 .map_or(crate::Endian::Little, view::Field::endian);
+            // Byte order belongs to the field occurrence, not its reusable enum type.
+            // Physical storage projections already carry their own encoding.
+            let v = match v {
+                crate::ast::value::Node::Enum(crate::ast::value::Enumeration::Scalar(value))
+                    if ctx.parent_kind() == Some(crate::export::Kind::Reference) =>
+                {
+                    crate::ast::value::Node::Enum(crate::ast::value::Enumeration::Scalar(
+                        value.with_endian(endian),
+                    ))
+                }
+                other => other,
+            };
             super::super::value::emit(v, endian, ctx, backend, writer)
         }
     }

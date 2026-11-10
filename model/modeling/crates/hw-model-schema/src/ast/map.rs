@@ -10,29 +10,11 @@ pub use plan::{ChildLayout, MapLayoutPlan, PlacementPlan};
 pub use resolve::{MapGeometry, PlacementGeometry};
 pub use walk::{MapPathSegment, RegisterInstance};
 
-/// The source relationship at a child map/register placement.
-#[derive(Debug, Clone)]
-pub enum PlacementBody {
-    /// A reusable named definition.
-    Reference(Reference),
-    /// Owned child declaration retaining its independent parameter scope.
-    Inline(Box<Definition>),
-}
-impl PlacementBody {
-    /// Obtains the child without traversing its own dependencies.
-    pub fn target(&self) -> Definition {
-        match self {
-            Self::Reference(reference) => reference.target(),
-            Self::Inline(child) => child.as_ref().clone(),
-        }
-    }
-}
-
 /// One ordered placement, retaining its child type and parameter bindings.
 #[derive(Debug, Clone)]
 pub struct MapPlacement {
     name: &'static str,
-    body: PlacementBody,
+    reference: Reference,
     arguments: Vec<LayoutExpr>,
     count: LayoutExpr,
     offset: Option<usize>,
@@ -51,7 +33,7 @@ impl MapPlacement {
     ) -> Self {
         Self {
             name,
-            body: PlacementBody::Reference(Reference::new(name, ReferenceKind::Placement, target)),
+            reference: Reference::new(name, ReferenceKind::Placement, target),
             arguments,
             count,
             offset,
@@ -69,17 +51,17 @@ impl MapPlacement {
     pub const fn name(&self) -> &'static str {
         self.name
     }
-    /// Explicit child containment or reusable reference.
-    pub const fn body(&self) -> &PlacementBody {
-        &self.body
+    /// Canonical child type edge.
+    pub const fn reference(&self) -> &Reference {
+        &self.reference
     }
-    /// Obtains the exact child declaration in either representation.
+    /// Obtains the referenced declaration.
     pub fn target(&self) -> Definition {
-        self.body.target()
+        self.reference.target()
     }
-    pub(crate) fn with_body(&self, body: PlacementBody) -> Self {
+    pub(crate) fn with_reference(&self, reference: Reference) -> Self {
         Self {
-            body,
+            reference,
             ..self.clone()
         }
     }

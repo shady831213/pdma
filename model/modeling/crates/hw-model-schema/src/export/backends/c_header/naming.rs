@@ -71,33 +71,30 @@ pub(super) fn collision<S: Into<String>>(
 #[derive(Debug, Default)]
 pub(super) struct Names {
     overrides: HashMap<NodeId, String>,
-    symbols: Scope,
 }
 impl Names {
     pub(super) fn set(&mut self, source: NodeId, target: &str) {
         self.overrides.insert(source, target.into());
     }
-    pub(super) fn prefix(&self, source: &NodeId, fallback: &str) -> String {
-        c_identifier(self.overrides.get(source).map_or(fallback, String::as_str))
-    }
-    pub(super) fn unit_name(&self, id: &NodeId, name: &str) -> (String, String) {
-        let logical_name = if id.source_path().is_some() {
+    pub(super) fn entry_prefix(&self, id: &NodeId, name: &str) -> String {
+        let default = if id.source_path().is_some() {
             name.to_ascii_lowercase()
         } else {
             name.to_owned()
         };
-        let prefix = self.prefix(id, &logical_name);
-        (logical_name, prefix)
+        c_identifier(self.overrides.get(id).map_or(&default, String::as_str))
     }
-    pub(super) fn reserve_unit(
-        &mut self,
+    pub(super) fn check_entry(
+        &self,
         id: &NodeId,
         name: &str,
-    ) -> Result<String, CHeaderExportError> {
-        let (logical_name, prefix) = self.unit_name(id, name);
+        symbols: &mut crate::export::EntrySymbols,
+    ) -> Result<(), CHeaderExportError> {
+        let prefix = self.entry_prefix(id, name);
         let path = id.source_path().unwrap_or(name);
-        self.symbols.insert(&prefix, path)?;
-        Ok(logical_name)
+        symbols
+            .declare(significant_prefix(&prefix), path)
+            .map_err(collision)
     }
 }
 

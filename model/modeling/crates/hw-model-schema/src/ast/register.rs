@@ -8,7 +8,6 @@ pub use semantic::{Argument, Attribute, LayoutProperty, LayoutPropertyKind, Para
 #[derive(Debug, Clone)]
 pub struct RegisterInfo {
     source: Option<super::Reference>,
-    inline_bits: Option<super::BitsDefinition>,
     name: &'static str,
     documentation: Documentation,
     width: usize,
@@ -19,6 +18,7 @@ pub struct RegisterInfo {
     reset_value: u64,
     writable_mask: u64,
     fields: Vec<BitsFieldSpec<usize>>,
+    enum_references: Vec<Option<super::Reference>>,
 }
 impl RegisterInfo {
     /// Preserves declaration order, semantic bit fields and all access metadata.
@@ -35,7 +35,6 @@ impl RegisterInfo {
             .collect();
         Self {
             source: None,
-            inline_bits: None,
             name: spec.name(),
             documentation: spec.documentation(),
             width: spec.width(),
@@ -46,34 +45,29 @@ impl RegisterInfo {
             reset_value: spec.reset_value(),
             writable_mask: spec.writable_mask(),
             fields,
+            enum_references: Vec::new(),
         }
+    }
+    pub(crate) fn with_enum_references(
+        &self,
+        enum_references: Vec<Option<super::Reference>>,
+    ) -> Self {
+        Self {
+            enum_references,
+            ..self.clone()
+        }
+    }
+    /// Packed field occurrences, including canonical defined-type edges.
+    pub fn members(&self) -> impl Iterator<Item = super::value::BitField<'_, usize>> {
+        self.fields.iter().enumerate().map(|(i, field)| {
+            super::value::BitField::new(field, self.enum_references.get(i).and_then(Option::as_ref))
+        })
     }
     /// Attaches a reused bits definition instead of inline source fields.
     #[must_use]
     pub fn with_source(mut self, source: super::Reference) -> Self {
         self.source = Some(source);
-        self.inline_bits = None;
         self
-    }
-    pub(crate) fn rewritten_source(&self, source: Option<super::Reference>) -> Self {
-        Self {
-            source,
-            inline_bits: None,
-            ..self.clone()
-        }
-    }
-    /// Attaches an owned bits declaration without changing register access or encoding.
-    #[must_use]
-    pub fn with_inline_bits(&self, bits: super::BitsDefinition) -> Self {
-        Self {
-            source: None,
-            inline_bits: Some(bits),
-            ..self.clone()
-        }
-    }
-    /// Explicit owned bits source, when a reusable source has been expanded.
-    pub const fn inline_bits(&self) -> Option<&super::BitsDefinition> {
-        self.inline_bits.as_ref()
     }
     /// Source bits reference, absent when fields were declared inline.
     pub const fn source(&self) -> Option<&super::Reference> {

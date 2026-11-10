@@ -4,7 +4,6 @@ mod package;
 mod record;
 mod register;
 mod values;
-use crate::export::{OutputMetadata, SymbolScope};
 use crate::traversal::NodeId;
 use std::collections::HashMap;
 
@@ -51,7 +50,6 @@ impl From<std::io::Error> for VerylExportError {
 #[derive(Debug, Default)]
 struct Output {
     names: HashMap<NodeId, String>,
-    symbols: SymbolScope<NodeId>,
     package: package::Package,
 }
 impl Output {
@@ -97,15 +95,19 @@ impl VerylRegisterBackend {
     }
 }
 impl Output {
-    fn metadata(&mut self, id: &NodeId, name: &str) -> Result<OutputMetadata, VerylExportError> {
+    fn check_entry(
+        &self,
+        id: &NodeId,
+        name: &str,
+        symbols: &mut crate::export::EntrySymbols,
+    ) -> Result<(), VerylExportError> {
         let name = self.name(id, name);
-        if !identifier::is_identifier(&name) || self.symbols.insert(&name, id.clone()).is_err() {
+        if !identifier::is_identifier(&name) {
             return Err(VerylExportError::Name(name));
         }
-        Ok(OutputMetadata {
-            logical_name: format!("{name}.veryl"),
-            media_type: "text/x-veryl; charset=utf-8".into(),
-        })
+        symbols
+            .declare(&name, id.source_path().unwrap_or(&name))
+            .map_err(|_| VerylExportError::Name(name))
     }
     fn begin(
         &mut self,

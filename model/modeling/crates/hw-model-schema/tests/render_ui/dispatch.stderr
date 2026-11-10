@@ -16,9 +16,9 @@ error[E0407]: method `emit_all` is not a member of trait `value::Backend`
    | |_____^ not a member of trait `value::Backend`
 
 error[E0119]: conflicting implementations of trait `Emit` for type `Target`
-  --> tests/render_ui/dispatch.rs:23:1
+  --> tests/render_ui/dispatch.rs:19:1
    |
-23 | impl value::Emit for Target {}
+19 | impl value::Emit for Target {}
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = note: conflicting implementation in crate `hw_model_schema`:
@@ -26,15 +26,15 @@ error[E0119]: conflicting implementations of trait `Emit` for type `Target`
              where B: hw_model_schema::export::value::Backend;
 
 error[E0277]: the trait bound `CustomDomain: export::context::sealed::Domain<Target>` is not satisfied
-  --> tests/render_ui/dispatch.rs:25:33
+  --> tests/render_ui/dispatch.rs:21:33
    |
-25 | impl export::Domain<Target> for CustomDomain {
+21 | impl export::Domain<Target> for CustomDomain {
    |                                 ^^^^^^^^^^^^ unsatisfied trait bound
    |
 help: the trait `export::context::sealed::Domain<Target>` is not implemented for `CustomDomain`
-  --> tests/render_ui/dispatch.rs:24:1
+  --> tests/render_ui/dispatch.rs:20:1
    |
-24 | struct CustomDomain;
+20 | struct CustomDomain;
    | ^^^^^^^^^^^^^^^^^^^
    = note: `CustomDomain` implements similarly named trait `hw_model_schema::export::Domain`, but not `export::context::sealed::Domain<Target>`
 help: the following other types implement trait `export::context::sealed::Domain<B>`

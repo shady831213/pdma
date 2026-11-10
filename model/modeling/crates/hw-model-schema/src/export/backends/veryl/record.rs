@@ -6,10 +6,23 @@ use crate::{
 };
 use std::io::Write;
 impl Backend for VerylRecordBackend {
-    fn root(&mut self, ctx: Context<'_>, writer: &mut dyn Write) -> Result<(), Self::Error> {
-        self.output.begin(ctx.root_id(), ctx.root_name(), writer)?;
+    fn entry(&mut self, ctx: Context<'_>, writer: &mut dyn Write) -> Result<(), Self::Error> {
+        self.output
+            .begin(ctx.entry_id(), ctx.entry_name(), writer)?;
         self.emit(ctx.current(), writer)?;
         writer.write_all(b"}\n")?;
+        Ok(())
+    }
+    fn reference<'a>(
+        &mut self,
+        _: crate::export::view::Reference<'a>,
+        target: crate::export::Visit<Context<'a>>,
+        _: Context<'a>,
+        writer: &mut dyn Write,
+    ) -> Result<(), Self::Error> {
+        if target.definition_origin() == crate::ast::Origin::Inline {
+            self.emit(target, writer)?;
+        }
         Ok(())
     }
     fn record<'a>(
@@ -37,8 +50,8 @@ impl VerylRecordBackend {
         ctx: &Context<'_>,
         writer: &mut dyn Write,
     ) -> Result<(), VerylExportError> {
-        if ctx.is_root()
-            && let Some((size, alignment)) = ctx.root_extent()
+        if ctx.is_entry()
+            && let Some((size, alignment)) = ctx.entry_extent()
         {
             self.output.package.extent(size, alignment, writer)?;
         }

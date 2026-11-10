@@ -6,7 +6,9 @@ mod generate;
 pub use context::{Context, Kind, Visit};
 mod symbols;
 pub mod view;
-pub use generate::{Domain, OutputBackend, PreparedOutput, generate, prepare, prepare_roots};
+pub use generate::{Domain, PreparedEntry, generate, prepare, prepare_entries};
+mod preparation;
+pub use preparation::{EntrySymbols, PrepareEntries};
 pub use symbols::{SymbolCollision, SymbolScope};
 /// Shared mathematical expression folding with target-defined spelling.
 pub mod expression;
@@ -21,15 +23,6 @@ use crate::analysis::AnalysisError;
 /// Built-in artifact renderers enabled by format-specific crate features.
 #[cfg(any(feature = "export-c-header", feature = "export-veryl-layout"))]
 pub mod backends;
-
-/// Format-neutral identity supplied before opening each root output.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OutputMetadata {
-    /// Application-defined logical output name with no filesystem meaning.
-    pub logical_name: String,
-    /// Application-defined media type.
-    pub media_type: String,
-}
 
 /// Analysis or rendering failure retaining the error owned by its origin.
 #[derive(Debug, Clone, PartialEq, Eq)]

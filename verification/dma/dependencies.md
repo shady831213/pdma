@@ -10,11 +10,12 @@ master configuration and sequencer as the bus agent. PDMA generates its RAL
 hierarchy from contract; it does not duplicate the vendor's protocol adapter.
 
 [jarvisuk](https://github.com/shady831213/jarvisuk) is an external Apache-2.0
-dependency, tested at `4b19c79959246e6c8d0ce9b023c931d6cff37914`.
-Set `JVSUK_HOME` to that checkout. The compile flow copies it into the build
-directory and applies the narrowly scoped [allocator free patch](dependencies/README.md).
-The external checkout is unchanged. Its supplied package/filelist is compiled;
-the manifest records the patched sources and preparation hashes.
+dependency pinned by [jarvisuk.lock.json](dependencies/jarvisuk.lock.json).
+Set `JVSUK_HOME` to a Git checkout containing that revision. Preparation archives
+the pinned upstream tree into the build directory without modifying the supplied
+checkout or incorporating uncommitted edits. The allocator fix is upstream;
+no local patch is applied. The manifest records dependency and preparation hashes.
+See the [dependency preparation contract](dependencies/README.md).
 
 The `pdma_clock_config` override corrects integer truncation in that revision's
 initial phase calculation and supplies a full period: the transaction already

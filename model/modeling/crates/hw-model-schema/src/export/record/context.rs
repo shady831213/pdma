@@ -7,24 +7,36 @@ use crate::{Documentation, traversal::NodeId};
 pub struct Context<'a>(pub(super) crate::traversal::record::Context<'a>);
 impl context::sealed::Context for Context<'_> {}
 impl<'a> Context<'a> {
-    /// Selected root identity, preserved through reference expansion.
-    pub const fn root_id(&self) -> &NodeId {
+    /// Selected entry identity, preserved through reference expansion.
+    pub const fn entry_id(&self) -> &NodeId {
         &self.0.unit().id
     }
-    /// Selected root source name.
-    pub fn root_name(&self) -> &'a str {
+    /// Selected entry source name.
+    pub fn entry_name(&self) -> &'a str {
         &self.0.unit().name
     }
-    /// Selected root documentation.
-    pub const fn root_documentation(&self) -> Documentation {
+    /// Selected entry documentation.
+    pub const fn entry_documentation(&self) -> Documentation {
         self.0.unit().documentation
     }
-    /// Analyzed record size and alignment, when this root is a record.
-    pub const fn root_extent(&self) -> Option<(usize, usize)> {
+    /// Analyzed record size and alignment, when this entry is a record.
+    pub const fn entry_extent(&self) -> Option<(usize, usize)> {
         match &self.0.unit().body {
             crate::analysis::Layout::Record(r) => Some((r.size(), r.alignment())),
             crate::analysis::Layout::None | crate::analysis::Layout::Map(_) => None,
         }
+    }
+    /// Identity of the reusable definition currently being expanded.
+    pub fn definition_id(&self) -> &'a NodeId {
+        &self.0.definition().id
+    }
+    /// Name of the reusable definition currently being expanded.
+    pub fn definition_name(&self) -> &'a str {
+        &self.0.definition().name
+    }
+    /// Original source form of the current definition.
+    pub fn definition_origin(&self) -> crate::ast::Origin {
+        self.0.definition().origin
     }
     /// Stable identity of the current occurrence.
     pub const fn id(&self) -> &NodeId {
@@ -40,7 +52,7 @@ impl<'a> Context<'a> {
             .parent()
             .map(|parent| crate::export::Context::kind(&Self(parent)))
     }
-    /// Ancestor kinds from the root to the immediate parent, without raw node access.
+    /// Ancestor kinds from the entry to the immediate parent, without raw node access.
     pub fn ancestor_kinds(&self) -> impl Iterator<Item = Kind> + '_ {
         self.0.ancestors().iter().copied().map(Self::node_kind)
     }
@@ -62,8 +74,8 @@ impl<'a> Context<'a> {
             .parent()
             .and_then(|parent| crate::export::Context::name(&Self(parent)).map(str::to_owned))
     }
-    /// Whether this is the selected root occurrence.
-    pub const fn is_root(&self) -> bool {
+    /// Whether this is the selected entry occurrence.
+    pub const fn is_entry(&self) -> bool {
         self.id().is_root()
     }
     /// A bound visit of the current occurrence.
@@ -150,7 +162,7 @@ impl<'a> Context<'a> {
     pub fn bit(&self) -> Option<&'static str> {
         self.0.bit()
     }
-    /// Source field and case path relative to the selected root.
+    /// Source field and case path relative to the selected entry.
     pub fn path(&self) -> String {
         self.0
             .ancestors()
@@ -174,8 +186,20 @@ impl<'a> Context<'a> {
     }
 }
 impl crate::export::Context for Context<'_> {
-    fn root_kind(&self) -> Kind {
-        context::root_kind(self.0.unit())
+    fn entry_name(&self) -> &str {
+        self.entry_name()
+    }
+    fn definition_id(&self) -> &NodeId {
+        self.definition_id()
+    }
+    fn definition_name(&self) -> &str {
+        self.definition_name()
+    }
+    fn definition_origin(&self) -> crate::ast::Origin {
+        self.definition_origin()
+    }
+    fn entry_kind(&self) -> Kind {
+        context::entry_kind(self.0.unit())
     }
     fn id(&self) -> &NodeId {
         self.id()
@@ -211,9 +235,15 @@ impl crate::export::Context for Context<'_> {
     }
 }
 
-/// Binds selected roots for restricted renderer dispatch.
-pub fn roots(schema: &crate::analysis::AnalyzedSchema) -> impl Iterator<Item = Visit<Context<'_>>> {
-    crate::traversal::record::roots(schema).map(|v| Visit::new(Context(v.into_context())))
+/// Binds selected entrys for restricted renderer dispatch.
+pub fn entries(
+    schema: &crate::analysis::AnalyzedSchema,
+) -> impl Iterator<Item = Visit<Context<'_>>> {
+    crate::traversal::record::definitions(schema)
+        .filter(|v| {
+            v.context().unit().selected || v.context().unit().origin == crate::ast::Origin::Named
+        })
+        .map(|v| Visit::new(Context(v.into_context())))
 }
 
 impl core::fmt::Debug for Context<'_> {

@@ -1,25 +1,36 @@
 use hw_model_schema::{
     Endian, EnumVariantSpec,
     export::{
-        Kind, OutputMetadata, SymbolScope, Visit,
+        Kind, Visit,
         record::{self, Context},
         value::{self, Emit},
         view::{BitField, Bits, EnumEncoding, Enumeration, Field, Reference, Scalar, Union},
     },
-    traversal::NodeId,
 };
 use std::io::{Error, Write};
 
 #[derive(Default)]
-pub(super) struct SystemVerilog {
-    names: SymbolScope<NodeId>,
-}
+pub(super) struct SystemVerilog;
 
 impl value::Backend for SystemVerilog {
     type Error = Error;
     type Domain = record::Domain;
     type Context<'a> = Context<'a>;
 
+    fn check_entry(
+        &mut self,
+        ctx: &Context<'_>,
+        symbols: &mut hw_model_schema::export::EntrySymbols,
+    ) -> Result<(), Error> {
+        symbols
+            .declare(
+                ctx.entry_name(),
+                ctx.entry_id()
+                    .source_path()
+                    .unwrap_or_else(|| ctx.entry_name()),
+            )
+            .map_err(Error::other)
+    }
     fn scalar(
         &mut self,
         value: Scalar,
@@ -61,7 +72,7 @@ impl value::Backend for SystemVerilog {
         let field = ctx.path().replace('.', "_");
         let bit = ctx.bit().map_or(String::new(), |name| format!("_{name}"));
         let name =
-            format!("{}_{field}{bit}_{}", ctx.root_name(), value.name()).to_ascii_uppercase();
+            format!("{}_{field}{bit}_{}", ctx.entry_name(), value.name()).to_ascii_uppercase();
         writeln!(
             writer,
             "  localparam logic [63:0] {name} = 64'd{};",
@@ -70,14 +81,14 @@ impl value::Backend for SystemVerilog {
         Ok(())
     }
 
-    fn bit_field<'a>(
+    fn bit_field(
         &mut self,
-        value: BitField<'a>,
-        ctx: Context<'a>,
+        value: BitField,
+        ctx: Context<'_>,
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
         let field = ctx.path().replace('.', "_");
-        let name = format!("{}_{field}_{}", ctx.root_name(), value.name()).to_ascii_uppercase();
+        let name = format!("{}_{field}_{}", ctx.entry_name(), value.name()).to_ascii_uppercase();
         writeln!(
             writer,
             "  localparam int unsigned {name}_LSB = {};",
@@ -93,10 +104,10 @@ impl value::Backend for SystemVerilog {
 }
 
 impl record::Backend for SystemVerilog {
-    fn root(&mut self, ctx: Context<'_>, writer: &mut dyn Write) -> Result<(), Self::Error> {
-        let name = ctx.root_name();
+    fn entry(&mut self, ctx: Context<'_>, writer: &mut dyn Write) -> Result<(), Self::Error> {
+        let name = ctx.entry_name();
         let upper = name.to_ascii_uppercase();
-        if let Some((size, alignment)) = ctx.root_extent() {
+        if let Some((size, alignment)) = ctx.entry_extent() {
             writeln!(writer, "\n  localparam int unsigned {upper}_SIZE = {size};")?;
             writeln!(
                 writer,
@@ -126,7 +137,9 @@ impl record::Backend for SystemVerilog {
         ctx: Context<'a>,
         writer: &mut dyn Write,
     ) -> Result<(), Error> {
-        if target.kind() == Kind::Bits {
+        if matches!(target.kind(), Kind::Bits | Kind::Enum)
+            || target.definition_origin() == hw_model_schema::ast::Origin::Inline
+        {
             self.emit(target, writer)
         } else if let Some(field) = ctx.field() {
             Self::accessor(&ctx, field.width(), Endian::Little, writer)
@@ -144,7 +157,7 @@ impl record::Backend for SystemVerilog {
         if ctx.ancestor_kinds().any(|kind| kind == Kind::Case) {
             return self.emit_all(ctx.children(), writer);
         }
-        let record = ctx.root_name();
+        let record = ctx.entry_name();
         let name = field.name();
         let constant = format!("{record}_{name}").to_ascii_uppercase();
         writeln!(
@@ -175,20 +188,8 @@ impl SystemVerilog {
             return Ok(());
         }
         if let Some(field) = ctx.field() {
-            super::codec::accessors(ctx.root_name(), field.name(), bytes, endian, writer)?;
+            super::codec::accessors(ctx.entry_name(), field.name(), bytes, endian, writer)?;
         }
         Ok(())
-    }
-}
-
-impl hw_model_schema::export::OutputBackend for SystemVerilog {
-    fn metadata(&mut self, ctx: &Context<'_>) -> Result<OutputMetadata, Self::Error> {
-        self.names
-            .insert(ctx.root_name(), ctx.root_id().clone())
-            .map_err(Error::other)?;
-        Ok(OutputMetadata {
-            logical_name: ctx.root_name().to_owned(),
-            media_type: "text/x-systemverilog".into(),
-        })
     }
 }

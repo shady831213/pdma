@@ -3,7 +3,7 @@ use hw_model_schema::{
     EnumDefinition, EnumVariantSpec, FieldSpec, RecordPlacement, RecordSpec, ScalarKind,
     analysis::{AnalyzedSchema, Bindings},
     ast::{Definition, SchemaSet},
-    export::{self, Kind, OutputMetadata, record, value, value::Emit as _, view},
+    export::{self, Kind, record, value, value::Emit as _, view},
     traversal::NodeId,
 };
 
@@ -101,14 +101,6 @@ impl value::Backend for Target {
             .ok_or_else(|| std::io::Error::other("missing variant storage path"))?;
         self.variants.push(format!("{path}:{}", value.name()));
         Ok(())
-    }
-}
-impl hw_model_schema::export::OutputBackend for Target {
-    fn metadata(&mut self, ctx: &Self::Context<'_>) -> Result<OutputMetadata, Self::Error> {
-        Ok(OutputMetadata {
-            logical_name: ctx.root_name().into(),
-            media_type: "text/plain".into(),
-        })
     }
 }
 

@@ -36,7 +36,7 @@ fn distinct_same_named_types_require_an_explicit_backend_name_override()
     let c_prepared = hw_model_schema::analysis::Pipeline::new((&prepared, ()))
         .run(hw_model_schema::export::backends::c_header::CRecordAnalysisPass)?;
     let failure = sink.generate_prepared(&c_prepared, CRecordBackend::new);
-    // Then: metadata preflight prevents all output; renaming permits both roots.
+    // Then: entry preflight prevents all output; renaming permits both roots.
     let Err(ExportError::Render(CHeaderExportError::NameCollision {
         first_path,
         second_path,
@@ -152,7 +152,7 @@ fn graph_register_uses_prepared_register_metadata() -> Result<(), Box<dyn std::e
     let register = sink
         .outputs()
         .iter()
-        .find(|artifact| artifact.metadata.logical_name == "control")
+        .find(|artifact| artifact.entry_name == "Control")
         .ok_or("register artifact")?;
     assert!(std::str::from_utf8(&register.bytes)?.contains("#define C_CONTROL_WIDTH UINT64_C(4)"));
     Ok(())

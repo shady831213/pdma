@@ -2,7 +2,7 @@
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Bindings},
     ast::SchemaSet,
-    export::{self, OutputBackend, register, value, view},
+    export::{self, register, value, view},
     register_map, register_schema,
 };
 use value::Emit as _;
@@ -30,23 +30,16 @@ impl value::Backend for Listing {
         write!(writer, "{number}")
     }
 }
-impl OutputBackend for Listing {
-    fn metadata(&mut self, ctx: &Self::Context<'_>) -> Result<export::OutputMetadata, Self::Error> {
-        Ok(export::OutputMetadata {
-            logical_name: ctx.root_name().into(),
-            media_type: "text/plain".into(),
-        })
-    }
-}
+
 impl register::Backend for Listing {
-    fn map_layout<'a>(
+    fn register_map<'a>(
         &mut self,
-        _: view::MapLayout<'a>,
+        _: view::Map<'a>,
         ctx: register::Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
         self.values.clear();
-        write!(writer, "{}[", ctx.root_name())?;
+        write!(writer, "{}[", ctx.entry_name())?;
         self.emit_all(ctx.children(), writer)?;
         writer.write_all(&self.values)?;
         writer.write_all(b"]")
@@ -81,8 +74,8 @@ fn schema() -> Result<AnalyzedSchema, Box<dyn std::error::Error>> {
 fn render_sections_preserve_bindings_and_unit_local_order() {
     // Given two named instances and a renderer with local output sections.
     let schema = schema().unwrap();
-    let roots = register::roots(&schema).filter(|root| root.id().view_name().is_some());
-    let prepared = export::prepare_roots(&mut Listing::default(), roots).unwrap();
+    let roots = register::entries(&schema).filter(|root| root.id().view_name().is_some());
+    let prepared = export::prepare_entries(&mut Listing::default(), roots).unwrap();
     let mut bytes = Vec::new();
     // When each instance is traversed once before flushing its value section.
     for output in prepared {
@@ -114,8 +107,8 @@ impl std::io::Write for RejectValue {
 fn buffered_section_writer_failure_stops_before_closing_or_next_unit() {
     // Given a destination rejecting the buffered numeric output.
     let schema = schema().unwrap();
-    let roots = register::roots(&schema).filter(|root| root.id().view_name().is_some());
-    let prepared = export::prepare_roots(&mut Listing::default(), roots).unwrap();
+    let roots = register::entries(&schema).filter(|root| root.id().view_name().is_some());
+    let prepared = export::prepare_entries(&mut Listing::default(), roots).unwrap();
     let mut writer = RejectValue::default();
     // When prepared outputs are emitted until the first writer failure.
     let result = prepared

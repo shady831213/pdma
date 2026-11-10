@@ -3,6 +3,9 @@ use crate::{analysis::AnalyzedSchema, ast::record::Node};
 /// Record-domain traversal context, shared by passes and emitters.
 pub type Context<'a> = BoundContext<'a, Node<'a>>;
 impl<'a> DomainNode<'a> for Node<'a> {
+    fn reference(self) -> Option<&'a crate::ast::Reference> {
+        self.reference()
+    }
     fn children(self) -> std::vec::IntoIter<Self> {
         self.children()
     }
@@ -35,7 +38,7 @@ impl<'a, S: Schema> BoundContext<'a, Node<'a>, S> {
 }
 /// Binds record roots independently of backend or artifact-generation features.
 /// Non-record domains are omitted; opaque storage remains an opaque value node.
-pub fn roots(schema: &AnalyzedSchema) -> impl Iterator<Item = Visit<Context<'_>>> {
+pub fn definitions(schema: &AnalyzedSchema) -> impl Iterator<Item = Visit<Context<'_>>> {
     bind_roots(schema, schema.units())
 }
 pub(crate) fn bind_roots<'a, S: Schema>(
@@ -58,15 +61,7 @@ impl<'a> Context<'a> {
         let mut current = Some(self.clone());
         while let Some(ctx) = current {
             if matches!(ctx.node(), Node::Value(crate::ast::value::Node::Opaque(_))) {
-                let id = ctx
-                    .ancestors()
-                    .iter()
-                    .rev()
-                    .find_map(|node| node.reference())
-                    .map_or_else(
-                        || ctx.id().clone(),
-                        |reference| ctx.id().within_referent(reference.target().id()),
-                    );
+                let id = ctx.local_id();
                 return ctx.analysis().opaque_layout(&id);
             }
             current = ctx.parent();

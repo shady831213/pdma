@@ -1,4 +1,4 @@
-use super::backend::Uvm;
+use super::Uvm;
 use hw_model_schema::{
     ast::register::LayoutPropertyKind as Layout,
     export::{Kind, register::Context, value::Emit, view},

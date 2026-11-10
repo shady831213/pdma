@@ -43,9 +43,15 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // DMA discovery
+    // Read-only hardware instance configuration, independent of privileged DMA controls.
   class DmaDiscovery extends uvm_reg_block;
     `uvm_object_utils(DmaDiscovery)
+    // Implemented channel count
+    // Number of implemented channels, preserved across DMA reset.
     ChannelCount channel_num_reg;
+    // Immutable native or exclusive atomic operation support by word width
+    // Immutable native or exclusive atomic operation support by word width.
     Capabilities capabilities_reg;
     function new(string name = "DmaDiscovery");
       super.new(name, UVM_NO_COVERAGE);
@@ -116,10 +122,18 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Dma-wide controls
+    // Owns the device fatal input, its interrupt enable and whole-device reset. Channel causes and enables remain channel-owned.
   class DmaControl extends uvm_reg_block;
     `uvm_object_utils(DmaControl)
+    // Enables notification of device fatal independently of channel IRQ enable
+    // Enables notification of device fatal independently of channel IRQ enable.
     Switch irq_enable_reg;
+    // Dma fatal cause; read-only and sticky until device reset
+    // Dma fatal cause; read-only and sticky until device reset.
     DmaFatal fatal_reg;
+    // Requests reset of device controls and every channel, including retained execution
+    // Requests reset of device controls and every channel, including retained execution. Reads busy until all affected memory accesses drain and cleanup completes. Hardware channel count is preserved.
     Reset reset_reg;
     function new(string name = "DmaControl");
       super.new(name, UVM_NO_COVERAGE);
@@ -141,8 +155,12 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Channel administration
+    // Privileged recovery aperture, separate from channel data registers.
   class ChannelAdmin extends uvm_reg_block;
     `uvm_object_utils(ChannelAdmin)
+    // Channel reset request and busy state
+    // Requests channel cleanup; reads busy until accepted work retires. Other channels and DMA fatal state are unaffected.
     Reset reset_reg;
     function new(string name = "ChannelAdmin");
       super.new(name, UVM_NO_COVERAGE);
@@ -156,6 +174,8 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // DMA administration aperture
+    // Contiguous privileged DMA controls and per-channel reset registers, separate from discovery and data apertures.
   class DmaAdmin extends uvm_reg_block;
     `uvm_object_utils(DmaAdmin)
     // DMA-wide administration
@@ -229,11 +249,21 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Command ring registers
+    // Software writes command records and publishes the producer cursor; hardware fetches records and advances the consumer cursor. Cursors are wrapping 32-bit entry counts, not byte offsets.
   class CommandRegisters extends uvm_reg_block;
     `uvm_object_utils(CommandRegisters)
+    // Command ring base address
+    // Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset.
     Address base_reg;
+    // Command ring capacity
+    // Number of command slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
     Word capacity_reg;
+    // Published command count
+    // Software advances this wrapping cursor only after writing command records to memory. Publication may not exceed the ring's free capacity; hardware reads entries between consumer and producer.
     Word producer_reg;
+    // Fetched command count
+    // Hardware advances this wrapping cursor after successfully reading and decoding a command. It releases the command slot; it does not indicate that the copy has completed.
     ReadWord consumer_reg;
     function new(string name = "CommandRegisters");
       super.new(name, UVM_NO_COVERAGE);
@@ -259,11 +289,21 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Event ring registers
+    // Hardware writes event records and publishes the producer cursor; software consumes records and advances the consumer cursor. A full ring is fatal only when an error event must be published; successful work needs no event capacity.
   class EventRegisters extends uvm_reg_block;
     `uvm_object_utils(EventRegisters)
+    // Event ring base address
+    // Start of event storage in the attached memory backend, aligned to eight bytes. Event slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
     Address base_reg;
+    // Event ring capacity
+    // Number of event slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
     Word capacity_reg;
+    // Published event count
+    // Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
     ReadWord producer_reg;
+    // Consumed event count
+    // Software advances this wrapping cursor after reading and decoding events. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
     Word consumer_reg;
     function new(string name = "EventRegisters");
       super.new(name, UVM_NO_COVERAGE);
@@ -289,9 +329,15 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Channel configuration
+    // Processing enable remains writable; ring context freezes after the first successful enable.
   class ChannelConfiguration extends uvm_reg_block;
     `uvm_object_utils(ChannelConfiguration)
+    // Channel processing enable
+    // One permits pipeline progress and validates command ring geometry; the first successful enable locks both rings' base addresses and capacities. Event geometry is checked when publishing an error event. Zero pauses processing without clearing cursors, retained work or errors.
     Switch enable_reg;
+    // Context shared by command and event ring accesses
+    // Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
     Word ring_context_reg;
     function new(string name = "ChannelConfiguration");
       super.new(name, UVM_NO_COVERAGE);
@@ -375,10 +421,18 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Channel failure and resume
+    // Channel-owned fatal status and recoverable payload suspension. Privileged reset remains in ChannelAdmin.
   class ChannelRecovery extends uvm_reg_block;
     `uvm_object_utils(ChannelRecovery)
+    // Sticky channel fatal
+    // A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
     ChannelFatal fatal_reg;
+    // Payload fault status
+    // The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
     FaultStatus fault_status_reg;
+    // Resume suspended command
+    // Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
     Resume resume_reg;
     function new(string name = "ChannelRecovery");
       super.new(name, UVM_NO_COVERAGE);
@@ -475,11 +529,21 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Channel interrupt controls
+    // Independent channel notification enable, causes, masks and Trap acknowledgment.
   class ChannelInterrupts extends uvm_reg_block;
     `uvm_object_utils(ChannelInterrupts)
+    // Channel interrupt enable
+    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
     Switch enable_reg;
+    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked
+    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
     ChannelIrqCause cause_reg;
+    // Independent non-empty and Trap notification masks
+    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
     ChannelIrqMask mask_reg;
+    // Write one to clear sticky Trap cause without retracting platform notifications
+    // Write one to clear sticky Trap cause without retracting platform notifications.
     TrapAck trap_ack_reg;
     function new(string name = "ChannelInterrupts");
       super.new(name, UVM_NO_COVERAGE);
@@ -505,10 +569,15 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // Channel controls and fatal state
+    // Channel-owned configuration, recovery and interrupt groups. Stopping errors require reset; recoverable payload faults retain the command until explicit resume.
   class ChannelRegisters extends uvm_reg_block;
     `uvm_object_utils(ChannelRegisters)
+    // Processing enable and locked ring context.
     ChannelConfiguration config_block;
+    // Sticky fatal status and payload fault recovery.
     ChannelRecovery recovery_block;
+    // Notification enable, causes, masks and Trap acknowledgment.
     ChannelInterrupts irq_block;
     function new(string name = "ChannelRegisters");
       super.new(name, UVM_NO_COVERAGE);
@@ -530,10 +599,18 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // PDMA channel register block
+    // One independent channel's command/event rings, notification controls and sticky fatal. DmaRegisters repeats this data block for every implemented channel; privileged reset lives in ChannelAdmin.
   class ChannelBlock extends uvm_reg_block;
     `uvm_object_utils(ChannelBlock)
+    // Command queue interface
+    // Registers owned by the software-produced, hardware-consumed command ring. Software programs storage before enabling the channel and publishes descriptors through its producer cursor.
     CommandRegisters command_block;
+    // Event queue interface
+    // Registers owned by the hardware-produced, software-consumed event ring. Software programs storage before enabling the channel and releases events through its consumer cursor.
     EventRegisters event_block;
+    // Channel management interface
+    // Processing enable, interrupt causes and sticky channel fatal. Trap notifications do not use event storage.
     ChannelRegisters control_block;
     function new(string name = "ChannelBlock");
       super.new(name, UVM_NO_COVERAGE);
@@ -555,6 +632,8 @@ package pdma_uvm_regs;
     endfunction
   endclass
 
+    // PDMA register apertures
+    // Read-only discovery followed by contiguous administration and page-aligned channel data apertures. Layout gaps are reserved, not registers.
   class DmaRegisters extends uvm_reg_block;
     `uvm_object_utils(DmaRegisters)
     // Hardware discovery aperture

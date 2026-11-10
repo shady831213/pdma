@@ -1,14 +1,14 @@
 //! Explicit per-root staging used only by exporter tests.
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Pipeline},
-    export::{ExportError, OutputBackend, OutputMetadata, prepare},
+    export::{ExportError, prepare},
 };
 
 #[derive(Debug, PartialEq, Eq)]
 /// One successfully published root.
 pub struct CapturedOutput {
     /// Identity supplied before rendering.
-    pub metadata: OutputMetadata,
+    pub entry_name: String,
     /// Completed rendered bytes.
     pub bytes: Vec<u8>,
 }
@@ -36,10 +36,19 @@ impl MemoryOutput {
 }
 impl MemoryOutput {
     /// Prepares all roots, then stages and publishes each successful root.
-    pub fn generate<B: OutputBackend>(
+    pub fn generate<B: hw_model_schema::export::value::Backend>(
+        &mut self,
+        schema: &AnalyzedSchema,
+        backend: B,
+    ) -> Result<(), ExportError<B::Error>> {
+        self.generate_named(schema, backend, str::to_owned)
+    }
+    /// The caller decides destination names; a backend never chooses files or MIME.
+    pub fn generate_named<B: hw_model_schema::export::value::Backend>(
         &mut self,
         schema: &AnalyzedSchema,
         mut backend: B,
+        mut name: impl FnMut(&str) -> String,
     ) -> Result<(), ExportError<B::Error>> {
         for output in prepare(schema, &mut backend)? {
             let mut bytes = Vec::new();
@@ -47,14 +56,14 @@ impl MemoryOutput {
                 .emit(&mut backend, &mut bytes)
                 .map_err(ExportError::Render)?;
             self.outputs.push(CapturedOutput {
-                metadata: output.metadata().clone(),
+                entry_name: name(output.name()),
                 bytes,
             });
         }
         Ok(())
     }
     /// Constructs a backend borrowing previously analyzed data.
-    pub fn generate_prepared<'b, D, B: OutputBackend>(
+    pub fn generate_prepared<'b, D, B: hw_model_schema::export::value::Backend>(
         &mut self,
         pipeline: &'b Pipeline<(&AnalyzedSchema, D)>,
         backend: impl FnOnce(&'b D) -> B,

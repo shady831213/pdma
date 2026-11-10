@@ -9,13 +9,13 @@ use crate::export::value::Emit as _;
 use crate::export::view::{Field, Record, Reference, Scalar, Storage, Union};
 type CResult<T = ()> = Result<T, CHeaderExportError>;
 impl Backend for CRecordBackend<'_> {
-    fn root(&mut self, ctx: Context<'_>, writer: &mut dyn Write) -> CResult {
-        self.prefix = self.names.unit_name(ctx.root_id(), ctx.root_name()).1;
+    fn entry(&mut self, ctx: Context<'_>, writer: &mut dyn Write) -> CResult {
+        self.prefix = self.names.entry_prefix(ctx.entry_id(), ctx.entry_name());
         self.output = Fragment::default();
         self.emit(ctx.current(), writer)
     }
     fn record(&mut self, value: Record<'_>, ctx: Context<'_>, writer: &mut dyn Write) -> CResult {
-        if ctx.is_root() {
+        if ctx.is_entry() {
             self.header(value.spec(), writer)?;
         } else if let Some(field) = ctx.field() {
             self.placement(field, &ctx, value.spec().documentation(), writer)?;
@@ -26,21 +26,21 @@ impl Backend for CRecordBackend<'_> {
         &mut self,
         _: Reference<'a>,
         target: crate::export::Visit<Context<'a>>,
-        ctx: Context<'a>,
+        _ctx: Context<'a>,
         writer: &mut dyn Write,
     ) -> CResult {
-        if let Some(field) = ctx.field() {
-            self.placement(field, &ctx, target.documentation(), writer)?;
-        }
-        Ok(())
+        self.emit(target, writer)
     }
     fn union(&mut self, value: Union<'_>, ctx: Context<'_>, writer: &mut dyn Write) -> CResult {
-        if ctx.is_root() {
+        if ctx.is_entry() {
             return self.header(value.storage(), writer);
         }
         let storage = ctx.union_storage();
         if storage.len() == 0
-            && ctx.parent_kind() == Some(crate::export::Kind::Field)
+            && matches!(
+                ctx.parent_kind(),
+                Some(crate::export::Kind::Field | crate::export::Kind::Reference)
+            )
             && let Some(field) = ctx.field()
         {
             self.placement(field, &ctx, value.storage().documentation(), writer)?;

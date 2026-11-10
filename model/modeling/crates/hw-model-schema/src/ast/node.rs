@@ -50,6 +50,7 @@ impl<'a> Node<'a> {
         let direct = match self {
             Self::Record(node) => node.reference(),
             Self::Register(node) => node.reference(),
+            Self::Value(value::Node::Reference(reference)) => Some(reference),
             Self::Value(_) => None,
         };
         direct
@@ -70,6 +71,7 @@ impl DefinitionBody {
             Self::RegisterMap(v) => {
                 Node::Register(register::Node::RegisterMap(MapView::Declared(v)))
             }
+            Self::Enumeration(v) => Node::Value(value::Node::Enum(*v)),
             Self::Bits(v) => Node::Value(value::Node::Bits(v)),
         }
     }

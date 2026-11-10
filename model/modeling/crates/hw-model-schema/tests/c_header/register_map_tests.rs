@@ -81,7 +81,7 @@ fn c_header_register_map_is_exact_when_fixed_and_repeated_registers_are_present(
     let artifact = render_map(exporter.0, exporter.1, &MAP.resolve()?)?;
 
     // Then: exact metadata and expanded offsets match the reviewed golden fragment.
-    assert_eq!(artifact.metadata.logical_name, "map.fragment.h");
+    assert_eq!(artifact.entry_name, "map.fragment.h");
     assert_eq!(artifact.bytes, MAP_GOLDEN);
     Ok(())
 }

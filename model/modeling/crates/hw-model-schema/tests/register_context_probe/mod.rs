@@ -31,9 +31,9 @@ impl register::Backend for Probe {
         assert!(ctx.placement().is_some());
         Ok(())
     }
-    fn map_layout<'a>(
+    fn register_map<'a>(
         &mut self,
-        _: hw_model_schema::export::view::MapLayout<'a>,
+        _: hw_model_schema::export::view::Map<'a>,
         ctx: RegisterContext<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
@@ -52,7 +52,8 @@ impl register::Backend for Probe {
         );
         let mut children: Vec<_> = ctx.children().collect();
         children.reverse();
-        self.emit_all(children, writer)
+        self.emit_all(children, writer)?;
+        self.emit_all(ctx.projected_children(), writer)
     }
     fn parameter(
         &mut self,
@@ -88,7 +89,7 @@ impl register::Backend for Probe {
             self.binding
         );
         match ctx.parent_kind().ok_or("missing parent")? {
-            hw_model_schema::export::Kind::MapLayout => {
+            hw_model_schema::export::Kind::RegisterMap => {
                 assert_eq!(property.owner(), None);
             }
             hw_model_schema::export::Kind::Placement => {
@@ -145,16 +146,5 @@ impl value::Backend for Probe {
             assert_eq!(expression.evaluate(&[], &[]), Ok(expected));
         }
         self.emit_all(ctx.children(), writer)
-    }
-}
-impl hw_model_schema::export::OutputBackend for Probe {
-    fn metadata(
-        &mut self,
-        ctx: &Self::Context<'_>,
-    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
-        Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.root_name().to_owned(),
-            media_type: "text/plain".into(),
-        })
     }
 }

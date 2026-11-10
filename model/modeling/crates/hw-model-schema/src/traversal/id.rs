@@ -11,6 +11,8 @@ pub enum Edge {
     Derived(usize),
     /// Expansion of a reference at this particular occurrence.
     Referent,
+    /// Explicit prepared storage/address projection, outside default source containment.
+    Projection(usize),
 }
 /// Structural source roles; ordinals preserve duplicate names as distinct nodes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

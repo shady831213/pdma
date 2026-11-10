@@ -2,8 +2,7 @@ use hw_model_schema::analysis::{AnalyzedSchema, Bindings, Pass};
 use hw_model_schema::{
     ast::{DefinitionBody, SchemaRegistry, SchemaSet},
     export::backends::c_header::{CRecordAnalysisPass, CRecordBackend, CRegisterBackend},
-    export::{OutputBackend, prepare},
-    transform::Inline,
+    export::{prepare, value},
 };
 use pdma_model_contract::dma::DmaRegisters;
 use pdma_model_contract::hw_components::context::ContextTableRegisters;
@@ -38,7 +37,7 @@ pub fn generate_with_contexts(count: usize, contexts: usize) -> Result<HeaderSet
             records.add_definition(definition.clone());
         }
     }
-    let graph = Inline::new().run(records)?.resolve()?;
+    let graph = records.resolve()?;
     let schema = AnalyzedSchema::from_graph(&graph, &Bindings::default())?;
     let (_, analysis) = CRecordAnalysisPass.run((&schema, ()))?;
     render(&schema, CRecordBackend::new(&analysis), &mut common)?;
@@ -91,7 +90,7 @@ fn render_registers<I: Copy + Eq, F: Copy + Eq + core::fmt::Debug>(
     )
 }
 
-fn render<B: OutputBackend>(
+fn render<B: value::Backend>(
     schema: &AnalyzedSchema,
     mut backend: B,
     writer: &mut dyn Write,

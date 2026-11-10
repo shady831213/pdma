@@ -83,17 +83,6 @@ impl value::Backend for Owners {
     type Context<'a> = Context<'a>;
     type Domain = record::Domain;
 }
-impl hw_model_schema::export::OutputBackend for Owners {
-    fn metadata(
-        &mut self,
-        ctx: &Self::Context<'_>,
-    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
-        Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.root_name().to_owned(),
-            media_type: "text/plain".into(),
-        })
-    }
-}
 
 #[test]
 fn following_a_reference_keeps_record_and_field_attribute_owners_distinct() {

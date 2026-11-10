@@ -2,11 +2,21 @@
 mod bank;
 mod context;
 mod identity;
+mod map;
 mod node;
+mod projection;
+pub use map::Map;
+mod reference;
 pub use bank::{Bank, BankProperty};
 pub use context::{Context, LayoutProperty, LayoutPropertyKind, RegisterSite};
 pub use node::Node;
 impl<'a> super::DomainNode<'a> for Node<'a> {
+    fn reference(self) -> Option<&'a crate::ast::Reference> {
+        match self {
+            Self::Reference(r) | Self::Value(crate::ast::value::Node::Reference(r)) => Some(r),
+            _ => None,
+        }
+    }
     fn children(self) -> std::vec::IntoIter<Self> {
         self.children()
     }
@@ -16,7 +26,7 @@ impl<'a> super::DomainNode<'a> for Node<'a> {
 }
 
 /// Binds register-domain roots for traversal independently of any backend.
-pub fn roots(
+pub fn definitions(
     schema: &crate::analysis::AnalyzedSchema,
 ) -> impl Iterator<Item = crate::traversal::Visit<Context<'_>>> {
     schema

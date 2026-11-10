@@ -31,17 +31,6 @@ impl hw_model_schema::export::value::Backend for Documentation {
         self.emit_all(ctx.children(), writer)
     }
 }
-impl hw_model_schema::export::OutputBackend for Documentation {
-    fn metadata(
-        &mut self,
-        ctx: &Self::Context<'_>,
-    ) -> Result<hw_model_schema::export::OutputMetadata, Self::Error> {
-        Ok(hw_model_schema::export::OutputMetadata {
-            logical_name: ctx.root_name().to_owned(),
-            media_type: "text/plain".into(),
-        })
-    }
-}
 
 impl hw_model_schema::export::register::Backend for Documentation {
     fn parameter(

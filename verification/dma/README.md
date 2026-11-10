@@ -75,8 +75,11 @@ SystemVerilog.
 `tb/register_model.sv` is the generated UVM register model. Regenerate with
 `bash tools/rtl-flow/registers.sh --write` and verify with `--check`. Its generator
 lives in contract's `src/bin/uvm_regs`, alongside the separate SV record generator;
-neither backend has been moved into schema or published. It consumes the published
-schema analysis and expression-rendering API without parsing generated C/Veryl.
+neither backend has been moved into schema or published. During the authorized
+unpublished render-API review, these generators use the explicit local schema
+workspace override. They consume schema analysis and expression-rendering APIs
+without parsing generated C/Veryl; see the model
+[schema review record](../../model/modeling/docs/schema-export-review.md).
 
 The model preserves block hierarchy and parameterized banks, for example
 `registers.channels_block[i].command_block.base_reg`. Register fields have

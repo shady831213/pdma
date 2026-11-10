@@ -321,6 +321,8 @@ pub package DmaDiscoveryLayout {
     // DMA discovery
     // Read-only hardware instance configuration, independent of privileged DMA controls.
     const ALIGNMENT: u64 = 4;
+    // Implemented channel count
+    // Number of implemented channels, preserved across DMA reset.
     function channel_num_offset() -> u64 {
         return 0;
     }
@@ -330,6 +332,8 @@ pub package DmaDiscoveryLayout {
     function channel_num_stride() -> u64 {
         return 4;
     }
+    // Immutable native or exclusive atomic operation support by word width
+    // Immutable native or exclusive atomic operation support by word width.
     function capabilities_offset() -> u64 {
         return 4;
     }
@@ -342,10 +346,6 @@ pub package DmaDiscoveryLayout {
     function extent() -> u64 {
         return 8;
     }
-    // Implemented channel count
-    // Number of implemented channels, preserved across DMA reset.
-    // Immutable native or exclusive atomic operation support by word width
-    // Immutable native or exclusive atomic operation support by word width.
     const EXTENT: u64 = 8;
     // Implemented channel count
     // Number of implemented channels, preserved across DMA reset.
@@ -443,6 +443,8 @@ pub package DmaControlLayout {
     // Dma-wide controls
     // Owns the device fatal input, its interrupt enable and whole-device reset. Channel causes and enables remain channel-owned.
     const ALIGNMENT: u64 = 4;
+    // Enables notification of device fatal independently of channel IRQ enable
+    // Enables notification of device fatal independently of channel IRQ enable.
     function irq_enable_offset() -> u64 {
         return 0;
     }
@@ -452,6 +454,8 @@ pub package DmaControlLayout {
     function irq_enable_stride() -> u64 {
         return 4;
     }
+    // Dma fatal cause; read-only and sticky until device reset
+    // Dma fatal cause; read-only and sticky until device reset.
     function fatal_offset() -> u64 {
         return 4;
     }
@@ -461,6 +465,8 @@ pub package DmaControlLayout {
     function fatal_stride() -> u64 {
         return 4;
     }
+    // Requests reset of device controls and every channel, including retained execution
+    // Requests reset of device controls and every channel, including retained execution. Reads busy until all affected memory accesses drain and cleanup completes. Hardware channel count is preserved.
     function reset_offset() -> u64 {
         return 8;
     }
@@ -473,12 +479,6 @@ pub package DmaControlLayout {
     function extent() -> u64 {
         return 12;
     }
-    // Enables notification of device fatal independently of channel IRQ enable
-    // Enables notification of device fatal independently of channel IRQ enable.
-    // Dma fatal cause; read-only and sticky until device reset
-    // Dma fatal cause; read-only and sticky until device reset.
-    // Requests reset of device controls and every channel, including retained execution
-    // Requests reset of device controls and every channel, including retained execution. Reads busy until all affected memory accesses drain and cleanup completes. Hardware channel count is preserved.
     const EXTENT: u64 = 12;
     // Enables notification of device fatal independently of channel IRQ enable
     // Enables notification of device fatal independently of channel IRQ enable.
@@ -529,6 +529,8 @@ pub package ChannelAdminLayout {
     // Channel administration
     // Privileged recovery aperture, separate from channel data registers.
     const ALIGNMENT: u64 = 4;
+    // Channel reset request and busy state
+    // Requests channel cleanup; reads busy until accepted work retires. Other channels and DMA fatal state are unaffected.
     function reset_offset() -> u64 {
         return 0;
     }
@@ -541,8 +543,6 @@ pub package ChannelAdminLayout {
     function extent() -> u64 {
         return 4;
     }
-    // Channel reset request and busy state
-    // Requests channel cleanup; reads busy until accepted work retires. Other channels and DMA fatal state are unaffected.
     const EXTENT: u64 = 4;
     // Channel reset request and busy state
     // Requests channel cleanup; reads busy until accepted work retires. Other channels and DMA fatal state are unaffected.
@@ -646,6 +646,8 @@ pub package CommandRegistersLayout {
     // Command ring registers
     // Software writes command records and publishes the producer cursor; hardware fetches records and advances the consumer cursor. Cursors are wrapping 32-bit entry counts, not byte offsets.
     const ALIGNMENT: u64 = 8;
+    // Command ring base address
+    // Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset.
     function base_offset() -> u64 {
         return 0;
     }
@@ -655,6 +657,8 @@ pub package CommandRegistersLayout {
     function base_stride() -> u64 {
         return 8;
     }
+    // Command ring capacity
+    // Number of command slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
     function capacity_offset() -> u64 {
         return 8;
     }
@@ -664,6 +668,8 @@ pub package CommandRegistersLayout {
     function capacity_stride() -> u64 {
         return 4;
     }
+    // Published command count
+    // Software advances this wrapping cursor only after writing command records to memory. Publication may not exceed the ring's free capacity; hardware reads entries between consumer and producer.
     function producer_offset() -> u64 {
         return 12;
     }
@@ -673,6 +679,8 @@ pub package CommandRegistersLayout {
     function producer_stride() -> u64 {
         return 4;
     }
+    // Fetched command count
+    // Hardware advances this wrapping cursor after successfully reading and decoding a command. It releases the command slot; it does not indicate that the copy has completed.
     function consumer_offset() -> u64 {
         return 16;
     }
@@ -685,14 +693,6 @@ pub package CommandRegistersLayout {
     function extent() -> u64 {
         return 20;
     }
-    // Command ring base address
-    // Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset.
-    // Command ring capacity
-    // Number of command slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
-    // Published command count
-    // Software advances this wrapping cursor only after writing command records to memory. Publication may not exceed the ring's free capacity; hardware reads entries between consumer and producer.
-    // Fetched command count
-    // Hardware advances this wrapping cursor after successfully reading and decoding a command. It releases the command slot; it does not indicate that the copy has completed.
     const EXTENT: u64 = 20;
     // Command ring base address
     // Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset.
@@ -738,6 +738,8 @@ pub package EventRegistersLayout {
     // Event ring registers
     // Hardware writes event records and publishes the producer cursor; software consumes records and advances the consumer cursor. A full ring is fatal only when an error event must be published; successful work needs no event capacity.
     const ALIGNMENT: u64 = 8;
+    // Event ring base address
+    // Start of event storage in the attached memory backend, aligned to eight bytes. Event slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
     function base_offset() -> u64 {
         return 0;
     }
@@ -747,6 +749,8 @@ pub package EventRegistersLayout {
     function base_stride() -> u64 {
         return 8;
     }
+    // Event ring capacity
+    // Number of event slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
     function capacity_offset() -> u64 {
         return 8;
     }
@@ -756,6 +760,8 @@ pub package EventRegistersLayout {
     function capacity_stride() -> u64 {
         return 4;
     }
+    // Published event count
+    // Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
     function producer_offset() -> u64 {
         return 12;
     }
@@ -765,6 +771,8 @@ pub package EventRegistersLayout {
     function producer_stride() -> u64 {
         return 4;
     }
+    // Consumed event count
+    // Software advances this wrapping cursor after reading and decoding events. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
     function consumer_offset() -> u64 {
         return 16;
     }
@@ -777,14 +785,6 @@ pub package EventRegistersLayout {
     function extent() -> u64 {
         return 20;
     }
-    // Event ring base address
-    // Start of event storage in the attached memory backend, aligned to eight bytes. Event slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
-    // Event ring capacity
-    // Number of event slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
-    // Published event count
-    // Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
-    // Consumed event count
-    // Software advances this wrapping cursor after reading and decoding events. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
     const EXTENT: u64 = 20;
     // Event ring base address
     // Start of event storage in the attached memory backend, aligned to eight bytes. Event slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
@@ -830,6 +830,8 @@ pub package ChannelConfigurationLayout {
     // Channel configuration
     // Processing enable remains writable; ring context freezes after the first successful enable.
     const ALIGNMENT: u64 = 4;
+    // Channel processing enable
+    // One permits pipeline progress and validates command ring geometry; the first successful enable locks both rings' base addresses and capacities. Event geometry is checked when publishing an error event. Zero pauses processing without clearing cursors, retained work or errors.
     function enable_offset() -> u64 {
         return 0;
     }
@@ -839,6 +841,8 @@ pub package ChannelConfigurationLayout {
     function enable_stride() -> u64 {
         return 4;
     }
+    // Context shared by command and event ring accesses
+    // Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
     function ring_context_offset() -> u64 {
         return 4;
     }
@@ -851,10 +855,6 @@ pub package ChannelConfigurationLayout {
     function extent() -> u64 {
         return 8;
     }
-    // Channel processing enable
-    // One permits pipeline progress and validates command ring geometry; the first successful enable locks both rings' base addresses and capacities. Event geometry is checked when publishing an error event. Zero pauses processing without clearing cursors, retained work or errors.
-    // Context shared by command and event ring accesses
-    // Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
     const EXTENT: u64 = 8;
     // Channel processing enable
     // One permits pipeline progress and validates command ring geometry; the first successful enable locks both rings' base addresses and capacities. Event geometry is checked when publishing an error event. Zero pauses processing without clearing cursors, retained work or errors.
@@ -961,6 +961,8 @@ pub package ChannelRecoveryLayout {
     // Channel failure and resume
     // Channel-owned fatal status and recoverable payload suspension. Privileged reset remains in ChannelAdmin.
     const ALIGNMENT: u64 = 4;
+    // Sticky channel fatal
+    // A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
     function fatal_offset() -> u64 {
         return 0;
     }
@@ -970,6 +972,8 @@ pub package ChannelRecoveryLayout {
     function fatal_stride() -> u64 {
         return 4;
     }
+    // Payload fault status
+    // The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
     function fault_status_offset() -> u64 {
         return 4;
     }
@@ -979,6 +983,8 @@ pub package ChannelRecoveryLayout {
     function fault_status_stride() -> u64 {
         return 4;
     }
+    // Resume suspended command
+    // Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
     function resume_offset() -> u64 {
         return 8;
     }
@@ -991,12 +997,6 @@ pub package ChannelRecoveryLayout {
     function extent() -> u64 {
         return 12;
     }
-    // Sticky channel fatal
-    // A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
-    // Payload fault status
-    // The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
-    // Resume suspended command
-    // Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
     const EXTENT: u64 = 12;
     // Sticky channel fatal
     // A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
@@ -1136,6 +1136,8 @@ pub package ChannelInterruptsLayout {
     // Channel interrupt controls
     // Independent channel notification enable, causes, masks and Trap acknowledgment.
     const ALIGNMENT: u64 = 4;
+    // Channel interrupt enable
+    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
     function enable_offset() -> u64 {
         return 0;
     }
@@ -1145,6 +1147,8 @@ pub package ChannelInterruptsLayout {
     function enable_stride() -> u64 {
         return 4;
     }
+    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked
+    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
     function cause_offset() -> u64 {
         return 4;
     }
@@ -1154,6 +1158,8 @@ pub package ChannelInterruptsLayout {
     function cause_stride() -> u64 {
         return 4;
     }
+    // Independent non-empty and Trap notification masks
+    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
     function mask_offset() -> u64 {
         return 8;
     }
@@ -1163,6 +1169,8 @@ pub package ChannelInterruptsLayout {
     function mask_stride() -> u64 {
         return 4;
     }
+    // Write one to clear sticky Trap cause without retracting platform notifications
+    // Write one to clear sticky Trap cause without retracting platform notifications.
     function trap_ack_offset() -> u64 {
         return 12;
     }
@@ -1175,14 +1183,6 @@ pub package ChannelInterruptsLayout {
     function extent() -> u64 {
         return 16;
     }
-    // Channel interrupt enable
-    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
-    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked
-    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
-    // Independent non-empty and Trap notification masks
-    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
-    // Write one to clear sticky Trap cause without retracting platform notifications
-    // Write one to clear sticky Trap cause without retracting platform notifications.
     const EXTENT: u64 = 16;
     // Channel interrupt enable
     // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
@@ -1260,6 +1260,7 @@ pub package ChannelRegistersLayout {
     // Channel controls and fatal state
     // Channel-owned configuration, recovery and interrupt groups. Stopping errors require reset; recoverable payload faults retain the command until explicit resume.
     const ALIGNMENT: u64 = 4;
+    // Processing enable and locked ring context.
     function config_offset() -> u64 {
         return 0;
     }
@@ -1269,6 +1270,7 @@ pub package ChannelRegistersLayout {
     function config_stride() -> u64 {
         return 8;
     }
+    // Sticky fatal status and payload fault recovery.
     function recovery_offset() -> u64 {
         return 8;
     }
@@ -1278,6 +1280,7 @@ pub package ChannelRegistersLayout {
     function recovery_stride() -> u64 {
         return 12;
     }
+    // Notification enable, causes, masks and Trap acknowledgment.
     function irq_offset() -> u64 {
         return 20;
     }
@@ -1290,27 +1293,6 @@ pub package ChannelRegistersLayout {
     function extent() -> u64 {
         return 36;
     }
-    // Processing enable and locked ring context.
-    // Channel processing enable
-    // One permits pipeline progress and validates command ring geometry; the first successful enable locks both rings' base addresses and capacities. Event geometry is checked when publishing an error event. Zero pauses processing without clearing cursors, retained work or errors.
-    // Context shared by command and event ring accesses
-    // Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
-    // Sticky fatal status and payload fault recovery.
-    // Sticky channel fatal
-    // A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
-    // Payload fault status
-    // The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
-    // Resume suspended command
-    // Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
-    // Notification enable, causes, masks and Trap acknowledgment.
-    // Channel interrupt enable
-    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
-    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked
-    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
-    // Independent non-empty and Trap notification masks
-    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
-    // Write one to clear sticky Trap cause without retracting platform notifications
-    // Write one to clear sticky Trap cause without retracting platform notifications.
     const EXTENT: u64 = 36;
     // Channel processing enable
     // One permits pipeline progress and validates command ring geometry; the first successful enable locks both rings' base addresses and capacities. Event geometry is checked when publishing an error event. Zero pauses processing without clearing cursors, retained work or errors.
@@ -1464,6 +1446,8 @@ pub package ChannelBlockLayout {
     // PDMA channel register block
     // One independent channel's command/event rings, notification controls and sticky fatal. DmaRegisters repeats this data block for every implemented channel; privileged reset lives in ChannelAdmin.
     const ALIGNMENT: u64 = 4096;
+    // Command queue interface
+    // Registers owned by the software-produced, hardware-consumed command ring. Software programs storage before enabling the channel and publishes descriptors through its producer cursor.
     function command_offset() -> u64 {
         return 0;
     }
@@ -1473,6 +1457,8 @@ pub package ChannelBlockLayout {
     function command_stride() -> u64 {
         return 24;
     }
+    // Event queue interface
+    // Registers owned by the hardware-produced, software-consumed event ring. Software programs storage before enabling the channel and releases events through its consumer cursor.
     function event_offset() -> u64 {
         return 24;
     }
@@ -1482,6 +1468,8 @@ pub package ChannelBlockLayout {
     function event_stride() -> u64 {
         return 24;
     }
+    // Channel management interface
+    // Processing enable, interrupt causes and sticky channel fatal. Trap notifications do not use event storage.
     function control_offset() -> u64 {
         return 44;
     }
@@ -1494,49 +1482,6 @@ pub package ChannelBlockLayout {
     function extent() -> u64 {
         return 4096;
     }
-    // Command queue interface
-    // Registers owned by the software-produced, hardware-consumed command ring. Software programs storage before enabling the channel and publishes descriptors through its producer cursor.
-    // Command ring base address
-    // Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset.
-    // Command ring capacity
-    // Number of command slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
-    // Published command count
-    // Software advances this wrapping cursor only after writing command records to memory. Publication may not exceed the ring's free capacity; hardware reads entries between consumer and producer.
-    // Fetched command count
-    // Hardware advances this wrapping cursor after successfully reading and decoding a command. It releases the command slot; it does not indicate that the copy has completed.
-    // Event queue interface
-    // Registers owned by the hardware-produced, software-consumed event ring. Software programs storage before enabling the channel and releases events through its consumer cursor.
-    // Event ring base address
-    // Start of event storage in the attached memory backend, aligned to eight bytes. Event slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
-    // Event ring capacity
-    // Number of event slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
-    // Published event count
-    // Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
-    // Consumed event count
-    // Software advances this wrapping cursor after reading and decoding events. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
-    // Channel management interface
-    // Processing enable, interrupt causes and sticky channel fatal. Trap notifications do not use event storage.
-    // Processing enable and locked ring context.
-    // Channel processing enable
-    // One permits pipeline progress and validates command ring geometry; the first successful enable locks both rings' base addresses and capacities. Event geometry is checked when publishing an error event. Zero pauses processing without clearing cursors, retained work or errors.
-    // Context shared by command and event ring accesses
-    // Context shared by command and event ring accesses. Locked with ring geometry until reset completes.
-    // Sticky fatal status and payload fault recovery.
-    // Sticky channel fatal
-    // A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
-    // Payload fault status
-    // The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA event or interrupt.
-    // Resume suspended command
-    // Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
-    // Notification enable, causes, masks and Trap acknowledgment.
-    // Channel interrupt enable
-    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
-    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked
-    // Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
-    // Independent non-empty and Trap notification masks
-    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
-    // Write one to clear sticky Trap cause without retracting platform notifications
-    // Write one to clear sticky Trap cause without retracting platform notifications.
     const EXTENT: u64 = 4096;
     // Command ring base address
     // Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 96 bytes apart. The value cannot change after the channel's first successful enable until reset.

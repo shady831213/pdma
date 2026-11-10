@@ -1,22 +1,18 @@
 # Schema export design and review record
 
-Current output contract: backends stream directly into caller-provided `io::Write`.
-`prepare` exposes bound units with `OutputMetadata` carrying logical name and media
-type without owning bytes. Historical validation notes below describe earlier checkpoints;
-their no-partial-artifact guarantee no longer applies to direct streaming.
-Callers may explicitly stage output before publication.
+Current review candidate (unpublished): backends stream directly into caller-owned
+`io::Write`. `prepare` returns `PreparedEntry` values exposing source name, identity
+and `emit`, without filename or media-type policy. `OutputBackend` and
+`OutputMetadata` have been removed. The temporary relative workspace schema patch
+remains explicitly authorized for this review; standalone downstream fixtures keep
+the published registry dependency. Do not publish the candidate without approval.
 
-Status: schema and schema-macros 0.2.0 were published on 2026-11-05 after user
-authorization and final review. The reviewed snapshot maps to
-`5a3a6f6cf13af855f3505968cfd21f601bfe83d7` after the 2026-11-06 history cleanup;
-commit references in this document use the sanitized history. Published packages
-are unchanged.
-Normal PDMA and downstream builds now consume these registry releases without
-preview patches. See [publishing.md](publishing.md) for release provenance.
-
-The candidate status, temporary patch recipe and intermediate validation results
-below are historical checkpoints, not current publication restrictions or normal
-build instructions. Both C and Veryl backends completed review before release.
+Schema and schema-macros 0.2.0 were published on 2026-11-05. Their reviewed snapshot
+maps to `5a3a6f6cf13af855f3505968cfd21f601bfe83d7` after history cleanup; published
+contents and checksums are unchanged. See [publishing.md](publishing.md).
+Earlier qualification results below describe their own checkpoints and do not
+qualify subsequent candidate edits. Direct streaming can leave partial bytes;
+callers may stage output before publication.
 
 ## Decision and checkpoint
 
@@ -144,9 +140,9 @@ The public names distinguish the source model, analyzed input and traversal role
 | `NodeId` | Identity of roots, child nodes and reference-site occurrences |
 | Traversal `Context` | Read-only node, ancestry, source/analysis and binding queries |
 | `Visit` | A node bound to its context, for roots and descendants alike |
-| `root(ctx)` | Entry callback for one selected tree |
+| `entry(ctx)` | Entry callback for one selected tree |
 | `layout_property` | A completed offset/count/stride/extent attribute |
-| `map_layout` | The completed symbolic or bound map layout |
+| `register_map` | One map node, symbolic, bound, or explicitly projected |
 
 There is no separate public root-visit wrapper. The common generator validates all
 units before the domain constructs their bound visits, then enters each root.
@@ -177,11 +173,13 @@ backend parameter collection and semantic scope reconstruction have been removed
 
 The common generate pass preflights the selected dependency closure for domain
 compatibility before invoking callbacks or opening output. It emits in dependency
-order, preparing every root's metadata before the first write. `generate` accepts
-an ordinary `io::Write`. `prepare` exposes the same bound units and metadata for
-callers selecting separate destinations; `prepare_roots` permits explicit domain
-selection within a unified graph. Backend metadata checks names but does not select
-active rendering state; each root callback initializes its own target-local state.
+order, checking every entry's target name before the first write. `generate` accepts
+an ordinary `io::Write`. `prepare` exposes the same bound entries for callers
+selecting separate destinations; `prepare_entries` permits explicit domain
+selection within a unified graph. `value::Backend::check_entry` defaults to no work;
+targets use it for identifier and collision checks. A generator can share
+`EntrySymbols` across domain backends. `PrepareEntries` integrates this preflight
+with ordinary analysis passes. Each entry callback initializes its own render state.
 Backends write incrementally; no final artifact buffer, `finish`, storage trait or
 writer wrapper exists. Rendering errors may leave partial bytes. Opening, flushing
 and publishing are caller I/O operations with ordinary I/O errors.
@@ -470,11 +468,12 @@ resulting ranges to populate banks. The separate register collection, string-pre
 bank scans and redundant final root extent resolution were removed. This is not a
 claim that all recursive plan evaluation has been globally cached or eliminated.
 
-## Agreed next revision: canonical definitions and reference expansion
+## Canonical definitions and reference expansion
 
-This direction was agreed on 2026-11-09 for the next implementation session.
-It is not implemented by this checkpoint. The current optional Inline/Outline
-passes remain available until their replacements and consumer migration are verified.
+This direction was agreed on 2026-11-09 and implemented in the 2026-11-10 working
+revision. Inline/Outline passes and their owned-map/register-bits alternatives are
+removed. The macro construction syntax stays unchanged: the common graph builder
+normalizes both macro output and manual input before semantic analysis.
 
 - Construct one canonical AST of definitions and references. Builtin types such
   as u64 remain direct values; records, unions, bits and enums are defined types,
@@ -499,8 +498,144 @@ passes remain available until their replacements and consumer migration are veri
   scope stacks and layout calculations. Generator entry selection stays outside
   node rendering; the revision must not add a backend dependency-planning protocol.
 
-Acceptance includes equivalent C/Veryl/SV/UVM output semantics, public rendering
-capability boundaries, parameterized and repeated references, builtin/defined type
-distinction, selector scope and writer errors. Audit intermediate APIs, modules,
-tests and documentation for leftovers before the next review. Publication remains
-subject to separate user approval.
+The default export entry helper selects named declarations in dependency order,
+plus explicitly selected anonymous definitions. Generators can choose a subset
+with `prepare_entries`; incoming references do not disqualify a definition from
+being an output entry. Full AST traversal separately exposes all definitions.
+This preserves dependency declarations without making backends plan dependencies.
+
+Analysis prepares referenced-map geometry with actual arguments substituted while
+retaining formal parameter metadata. Expansion does not unroll banks or invent
+absolute register offsets. Defined enums inherit scalar byte order from their
+record use site; physical storage projections retain their own encoding.
+
+Qualification on 2026-11-10:
+- The full all-features workspace run passed 1,516 tests with zero failures or
+  ignored tests. After removing unused transition helpers, the schema/contract
+  tests and workspace Clippy, strict rustdoc and formatting checks passed again.
+- Regression coverage includes repeated and mixed expansion, explicit entries
+  for referenced and anonymous definitions, packed enums, selector bindings,
+  parameter substitution, local layout ownership and writer failures. Native C11
+  checks include independently selected enum definitions and use-site byte order.
+- Generated UVM, SV and Veryl files remain unchanged. The common C header only
+  changes definition order: all 2,442 lines are preserved as a multiset; the host
+  and firmware headers remain unchanged. All four generator check modes pass.
+- Native UVM metadata checks pass for channel/bus-byte configurations (1,4),
+  (3,4), (1,8), (3,8), and (1020,4). The generated inline-union SV consumer passes.
+- The standalone renamed-dependency exporter fixture still uses published
+  schema 0.2.0 and passes. No dependency declaration or macro package was changed.
+
+Intermediate transform APIs and redundant source/selection helpers were removed;
+source construction, analysis, rendering, tests and documentation were reviewed
+together. Publication remains subject to separate user approval.
+
+## 2026-11-10 interface consolidation candidate
+
+- Map traversal has one `register_map` callback. The analyzed layout stays in
+  analysis, and `layout_property` visits its offset/count/stride/extent children.
+  Binding parameters no longer adds a second implicit concrete map sibling.
+- Backends needing concrete addresses explicitly request `projected_children()`;
+  bank instance expansion uses `instances()`. Source references, bank templates
+  and permission projections remain separate, preserving sparse original indices,
+  effective masks and hidden-address holes.
+- Tagged-union physical fields are prepared during analysis at the selector's
+  use site. Expanded repeated references reuse that projection while keeping
+  distinct occurrence identities. Rendering does not scan parent offset ranges.
+- Filenames, writer routing and MIME types belong to the generator. Target-name
+  checks share `EntrySymbols` across record and register backends before writing.
+  `ExpressionSyntax` stays independently reusable and is implemented directly by
+  the builtin register backends and the application's UVM backend.
+- The UVM value implementation lives in `uvm_regs/values.rs`; register structure
+  and initialization remain under their existing owners. No new output protocol,
+  generation scheduler or multiple generation passes were introduced.
+- Canonical register enum references now reach C value callbacks; a strict C11
+  consumer pins the discriminant declaration, alongside existing source/opaque,
+  streaming-failure, projection and target-name checks.
+
+Consolidation validation: default and all-feature workspace suites passed, with
+no ignored tests, followed by focused tests for final naming/projection cleanup.
+Strict workspace Clippy, private/public rustdoc and formatting checks passed.
+C/Veryl/SV/UVM generation check modes matched the checked-in outputs. The Veryl
+and UVM artifact updates change documentation only; executable declarations are
+unchanged. Native C consumers, Veryl compilation, UVM register metadata profiles,
+and 19 DMA VIP scenarios with seven deliberately invalid checker cases were
+exercised. This is review evidence for the unpublished candidate, not approval
+for a new crate release or full DMA RTL qualification.
+
+## Register defaults cleanup and builtin-backend assessment
+
+`register_field` now delegates to the shared value `bit_field` callback by default.
+The render view normalizes the frontend's `u16`/`usize` IDs without narrowing; it
+has no borrowed lifetime or generic ID parameter. Source AST and typed Rust-side
+IDs remain unchanged. UVM and Veryl no longer implement duplicate field bridges;
+UVM's identical `bits` override and the single-caller field wrappers were removed.
+The regression covers both named bits and direct register fields, preserving the
+register owner, reset/mask metadata and enum recursion.
+
+`placement` already has a structural default. UVM deliberately selects references
+there because it renders layout expressions and constructor arguments at their
+actual initialization syntax sites. Its `layout_property` override opts into
+expression output; changing the global default would leak bare expressions from
+partial renderers. These overrides therefore remain target-specific, not generic
+UVM policy added to schema.
+
+### Feasibility and ownership
+
+Both UVM-register and SV-record rendering are suitable optional schema backends.
+Their renderer/codec/initialization helpers consume only schema metadata and std;
+PDMA imports are confined to the application entry wrappers and integration tests.
+No UVM simulator, VIP, jarvisuk or PDMA runtime dependency is needed by the Rust
+backend. Proposed default-off features are `export-uvm-regs` and `export-sv-records`,
+with separate `UvmRegisterBackend` and `SvRecordBackend` implementations.
+These names describe a migration proposal, not features implemented or published
+by this cleanup.
+
+| Belongs in optional schema backends | Remains in contract / integration |
+| --- | --- |
+| UVM class/field/submap syntax and schema-derived initialization | Selection of DmaRegisters, Command, Event and other entry roots |
+| SV byte-image types, sizes, offsets and endian-aware accessors | Hardware parameter bindings and Host/firmware permission policy |
+| Target symbol validation, supported-input checks and writer errors | Package names, imports, file names, headers and writer publication |
+| Non-PDMA schemas exercising backend capabilities | PDMA ABI oracles, UVM adapters, DUT/VIP assembly and tool invocation |
+
+### Checks required before moving the current code unchanged
+
+This is an architectural fit, not a conclusion that the current application
+backends are ready for a generic release:
+
+- SV target naming needs full collision checks. Entry preflight currently compares
+  original names, but constants uppercase those names: distinct `Foo`/`FOO` entries
+  both generate `FOO_SIZE`. Field/enum path flattening can likewise merge distinct
+  names. UVM checks enum collisions but does not yet validate every emitted class,
+  member and target-language identifier. Target checks must preserve the ability
+  to use custom backends rather than constrain the source schema language.
+- SV zero-sized records need an explicit supported representation or rejection.
+  Current byte-image rendering emits `[SIZE*8-1:0]`; for zero this does not represent
+  a zero-width image. This is an unsupported generic input, not a PDMA layout change.
+- Numeric target widths need an explicit contract. UVM currently renders every
+  unbound `usize` constructor parameter as 32-bit `int unsigned`; larger layout
+  inputs can truncate even though layout arithmetic uses 64-bit literals. SV
+  record size constants likewise use `int unsigned`. PDMA's current parameters
+  fit, but a builtin must either preserve the source range or reject unsupported
+  target sizes/bindings explicitly.
+- UVM's current supported surface is little-endian source maps and fields with
+  uniform access. Big-endian registers, partial writable fields and authoritative
+  permission-only projections are explicitly rejected. A first builtin may retain
+  these stated boundaries rather than imply broader support.
+- UVM uses conservative volatile/no-mirror-comparison defaults and treats PostReset
+  values as unknown. These choices need an explicit backend contract (and options
+  if required), not inferred PDMA side effects. Bus width remains a caller-supplied
+  build argument; hardware state and prediction policy remain outside schema.
+- Migration must carry the non-PDMA tests, document raw byte-image versus typed
+  codec semantics, and retain native SV/UVM qualification. PDMA wrappers should
+  then contain only root selection and package/file assembly.
+
+No backend migration, feature flag addition or publication is performed by this
+assessment. The existing unpublished schema review and temporary override remain
+in force.
+
+Validation for the defaults cleanup: all-feature workspace tests passed 1523 cases,
+default-feature tests passed 1404, with no failures or ignored tests. Strict
+workspace Clippy, rustdoc and formatting passed. C headers, Veryl layouts, SV
+records and the UVM model passed their check modes without changing generated
+bytes. This validates the cleanup; it does not close the generic builtin-readiness
+findings above.

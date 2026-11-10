@@ -124,7 +124,8 @@ impl InstanceWalk {
                         self.map(child, &shape.arguments, &child_scope)?;
                     }
                     DefinitionBody::Opaque(_) => {}
-                    DefinitionBody::Bits(_)
+                    DefinitionBody::Enumeration(_)
+                    | DefinitionBody::Bits(_)
                     | DefinitionBody::Record(_)
                     | DefinitionBody::Union { .. } => return Err(LayoutError::Geometry),
                 }

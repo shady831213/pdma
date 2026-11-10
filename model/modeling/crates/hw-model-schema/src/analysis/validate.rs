@@ -78,6 +78,21 @@ pub(super) fn node(value: Node<'_>) -> Result<(), AnalysisError> {
             }
         }
         Node::Value(crate::ast::value::Node::Bits(bits)) => shape::bits("bits", bits)?,
+        Node::Value(crate::ast::value::Node::Enum(enumeration)) => {
+            let (definition, width) = match enumeration {
+                crate::ast::value::Enumeration::Scalar(value) => {
+                    (value.enum_definition(), value.scalar().width() * 8)
+                }
+                crate::ast::value::Enumeration::Bits(value) => {
+                    (value.enum_definition(), value.bit_width())
+                }
+            };
+            shape::enumeration_values(
+                "enum",
+                definition.ok_or_else(|| shape::failure("enum", ShapeError::MissingEnumeration))?,
+                width,
+            )?;
+        }
         Node::Record(
             crate::ast::record::Node::Field(_)
             | crate::ast::record::Node::Attribute(_)

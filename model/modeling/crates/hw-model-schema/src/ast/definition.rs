@@ -10,6 +10,8 @@ pub use reference::{Reference, ReferenceKind};
 pub enum DefinitionBody {
     /// Scalar bit layout; byte order belongs to each containing field/register.
     Bits(super::BitsDefinition),
+    /// A defined enumeration, distinct from its builtin integer representation.
+    Enumeration(super::value::Enumeration),
     /// Whole-register metadata with field identifiers erased to declaration indices.
     Register(super::RegisterInfo),
     /// Parameterized placement rules, before choosing instance arguments.
@@ -22,10 +24,21 @@ pub enum DefinitionBody {
     Opaque(RecordSpec),
 }
 
+/// Original declaration form; rendering policy is chosen at each reference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Origin {
+    /// A reusable named declaration.
+    Named,
+    /// An anonymous declaration owned by a source occurrence.
+    Inline,
+}
+
 /// One reusable definition, distinct from any placement or configured instance.
 #[derive(Debug, Clone)]
 pub struct Definition {
     id: DefinitionId,
+    origin: Origin,
+    source_member: Option<&'static str>,
     name: Cow<'static, str>,
     documentation: Documentation,
     body: DefinitionBody,
@@ -42,6 +55,8 @@ impl Definition {
     ) -> Self {
         Self {
             id,
+            origin: Origin::Named,
+            source_member: None,
             name: Cow::Owned(name),
             documentation,
             body,
@@ -62,6 +77,8 @@ impl Definition {
     pub fn bits<T: crate::BitsLayout + ?Sized + 'static>() -> Self {
         Self {
             id: DefinitionId::of::<T>(),
+            origin: Origin::Named,
+            source_member: None,
             name: Cow::Borrowed(T::NAME),
             documentation: T::DOCUMENTATION,
             body: DefinitionBody::Bits(super::BitsDefinition::of::<T>()),
@@ -78,6 +95,8 @@ impl Definition {
     pub fn register<T: ?Sized + 'static, I: Copy>(spec: crate::RegisterDefinition<I>) -> Self {
         Self {
             id: DefinitionId::of::<T>(),
+            origin: Origin::Named,
+            source_member: None,
             name: Cow::Borrowed(spec.name()),
             documentation: spec.documentation(),
             body: DefinitionBody::Register(super::RegisterInfo::from_spec(spec)),
@@ -100,6 +119,8 @@ impl Definition {
     ) -> Self {
         Self {
             id: DefinitionId::of::<T>(),
+            origin: Origin::Named,
+            source_member: None,
             name: Cow::Borrowed(name),
             documentation,
             body: DefinitionBody::RegisterMap(map),
@@ -153,11 +174,31 @@ impl Definition {
     ) -> Self {
         Self {
             id: DefinitionId::of::<T>(),
+            origin: Origin::Named,
+            source_member: None,
             name: Cow::Borrowed(spec.name()),
             documentation: spec.documentation(),
             body,
             references,
         }
+    }
+    /// Declares source provenance without prescribing named or expanded rendering.
+    #[must_use]
+    pub const fn with_origin(mut self, origin: Origin) -> Self {
+        self.origin = origin;
+        self
+    }
+    /// Original DSL declaration form, preserved through graph construction.
+    pub const fn origin(&self) -> Origin {
+        self.origin
+    }
+    pub(crate) const fn at_member(mut self, source_member: &'static str) -> Self {
+        self.source_member = Some(source_member);
+        self
+    }
+    /// Original declaring member, when the definition was anonymous.
+    pub const fn source_member(&self) -> Option<&'static str> {
+        self.source_member
     }
     /// Returns identity independent of output naming.
     pub fn id(&self) -> DefinitionId {

@@ -74,7 +74,9 @@ These tests use temporary fixtures and clean them up automatically.
 `bash tools/rtl-flow/layout.sh --write` runs the contract's `pdma-rtl-layout`
 binary and writes `rtl/src/dma/layout.veryl`. `--check` rejects absent or stale
 output without overwriting it. The exporter uses the normal Cargo workspace and
-published schema dependency; it introduces no local framework overrides.
+schema dependency. The current unpublished render-API review uses the explicit
+relative schema override authorized in the model workspace; it does not publish
+that candidate or alter the other framework dependencies.
 Generated packages use `#[fmt(skip)]` so formatter alignment does not change the
 generator's deterministic output. Handwritten RTL uses normal Veryl formatting.
 

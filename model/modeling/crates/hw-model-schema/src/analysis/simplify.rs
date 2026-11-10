@@ -49,16 +49,20 @@ pub(super) fn run(units: &mut [super::Unit]) -> Result<(), LayoutError> {
         if let super::Layout::Map(layout) = &mut unit.body
             && let Some(plan) = &mut layout.plan
         {
-            map(plan)?;
+            simplify_map(plan)?;
         }
     }
     Ok(())
 }
 
-fn map(map: &mut super::CompleteMapLayout) -> Result<(), crate::ast::LayoutError> {
+fn simplify_map(layout: &mut super::CompleteMapLayout) -> Result<(), crate::ast::LayoutError> {
+    let map = layout;
     let mut simplify = Simplify(map.parameters);
     map.extent = map.extent.visit(&mut simplify)?;
     for placement in &mut map.placements {
+        if let Some(child) = &mut placement.referent_layout {
+            simplify_map(child)?;
+        }
         for argument in &mut placement.arguments {
             *argument = argument.visit(&mut simplify)?;
         }

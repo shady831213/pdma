@@ -77,7 +77,7 @@ fn pre_layout_pass_and_completed_schema_share_occurrence_ids() {
     );
     let schema = AnalyzedSchema::from_graph(&graph, &Bindings::new()).unwrap();
     let mut after = BTreeMap::new();
-    for root in record::roots(&schema) {
+    for root in record::definitions(&schema) {
         collect(root.context(), &mut after).unwrap();
     }
     assert_eq!(before, after);
@@ -131,7 +131,7 @@ fn register_source_identity_survives_derived_layout_without_aliasing() {
         match node {
             N::Root(root) => format!("root:{}", root.name),
             N::Register(v) => format!("register:{}", v.name()),
-            N::MapLayout(_) => "map".into(),
+            N::RegisterMap(_) => "map".into(),
             N::RegisterField(v) => format!("field:{}", v.name()),
             N::Placement(v) => format!("placement:{:?}", Some(v.source.name())),
             N::Reference(v) => format!("reference:{}", v.name()),
@@ -139,8 +139,7 @@ fn register_source_identity_survives_derived_layout_without_aliasing() {
             N::Argument(v) => format!("argument:{:?}", v.parameter),
             N::Attribute(v) => format!("attribute:{v:?}"),
             N::Value(v) => format!("value:{v:?}"),
-            N::RegisterMap(_)
-            | N::RegisterPlacement { .. }
+            N::RegisterPlacement { .. }
             | N::Bank(_)
             | N::BankProperty(_)
             | N::LayoutProperty(_) => "derived".into(),
@@ -157,7 +156,7 @@ fn register_source_identity_survives_derived_layout_without_aliasing() {
     bindings.bind::<Parent>(&[3]);
     let schema = AnalyzedSchema::from_graph(&graph, &bindings).unwrap();
     let mut completed_ids = HashMap::new();
-    for root in register::roots(&schema) {
+    for root in register::definitions(&schema) {
         ids(&root, &mut completed_ids, completed_label);
     }
     let derived: Vec<_> = completed_ids

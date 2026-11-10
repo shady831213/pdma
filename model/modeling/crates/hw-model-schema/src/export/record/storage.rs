@@ -8,34 +8,25 @@ use crate::{
 impl<'a> Context<'a> {
     /// Bound physical storage fields covered by the current tagged union.
     pub fn union_storage(&self) -> std::vec::IntoIter<Visit<Self>> {
-        let Node::Union(union) = self.0.node() else {
-            return Vec::new().into_iter();
-        };
-        if union.selector().is_none() {
+        if !matches!(self.0.node(), Node::Union(_)) {
             return Vec::new().into_iter();
         }
-        let Some(field) = self.0.field() else {
+        let Some(parent) = self
+            .0
+            .parent()
+            .filter(|ctx| ctx.node().reference().is_some())
+        else {
             return Vec::new().into_iter();
         };
-        let Some(record) = self.0.ancestors().iter().rev().find_map(|node| match node {
-            Node::Record(record) => Some(record),
-            _ => None,
-        }) else {
-            return Vec::new().into_iter();
-        };
-        record
-            .spec()
-            .fields()
+        self.0
+            .analysis()
+            .union_storage(&parent.local_id())
+            .unwrap_or(&[])
             .iter()
-            .enumerate()
-            .filter(|(_, member)| {
-                member.offset() >= field.offset()
-                    && member.offset().saturating_sub(field.offset()) < field.width()
-            })
             .map(|(index, member)| {
                 Visit::new(Self(self.0.descendant(
                     Node::Value(value::Node::StorageField(member)),
-                    Edge::Derived(index),
+                    Edge::Derived(*index),
                 )))
             })
             .collect::<Vec<_>>()

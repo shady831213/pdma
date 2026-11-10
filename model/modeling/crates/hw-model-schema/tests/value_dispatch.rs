@@ -2,7 +2,7 @@
 use hw_model_schema::{
     analysis::{AnalyzedSchema, Bindings},
     ast::SchemaSet,
-    export::{OutputMetadata, record, value, view},
+    export::{record, value, view},
     record_schema,
 };
 use value::Emit as _;
@@ -38,14 +38,6 @@ impl value::Backend for Probe {
     type Error = std::io::Error;
     type Context<'a> = record::Context<'a>;
 }
-impl hw_model_schema::export::OutputBackend for Probe {
-    fn metadata(&mut self, ctx: &Self::Context<'_>) -> Result<OutputMetadata, Self::Error> {
-        Ok(OutputMetadata {
-            logical_name: ctx.root_name().into(),
-            media_type: "text/plain".into(),
-        })
-    }
-}
 
 #[test]
 fn every_field_value_has_a_bound_semantic_visit() {
@@ -56,10 +48,13 @@ fn every_field_value_has_a_bound_semantic_visit() {
     let mut probe = Probe::default();
     // When: a target selects each field's value visits through shared dispatch.
     probe
-        .emit_all(record::roots(&schema), &mut std::io::sink())
+        .emit_all(record::entries(&schema), &mut std::io::sink())
         .unwrap();
     // Then: ordinary scalars are values too, with no parent type inspection.
-    assert_eq!(probe.0, ["plain:Scalar", "choice:Enum", "flags:Bits"]);
+    assert_eq!(
+        probe.0,
+        ["plain:Scalar", "choice:Reference", "flags:Reference"]
+    );
 }
 
 struct EncodingTarget {
@@ -73,6 +68,9 @@ impl record::Backend for EncodingTarget {
         ctx: record::Context<'a>,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Self::Error> {
+        if target.definition_origin() == hw_model_schema::ast::Origin::Inline {
+            return self.emit(target, writer);
+        }
         if self.expand {
             self.emit(target.clone(), writer)?;
             self.emit(target, writer)
@@ -152,14 +150,6 @@ impl value::Backend for EncodingTarget {
         self.emit_all(ctx.children(), writer)
     }
 }
-impl hw_model_schema::export::OutputBackend for EncodingTarget {
-    fn metadata(&mut self, ctx: &Self::Context<'_>) -> Result<OutputMetadata, Self::Error> {
-        Ok(OutputMetadata {
-            logical_name: ctx.root_name().into(),
-            media_type: "text/plain".into(),
-        })
-    }
-}
 
 #[test]
 fn value_callbacks_receive_complete_scalar_and_enum_encodings() {
@@ -170,7 +160,7 @@ fn value_callbacks_receive_complete_scalar_and_enum_encodings() {
     let mut output = Vec::new();
     // When: the target uses default field traversal and only value callbacks.
     EncodingTarget { expand: true }
-        .emit_all(record::roots(&schema), &mut output)
+        .emit_all(record::entries(&schema), &mut output)
         .unwrap();
     // Then: callbacks receive their own width, byte order, and packed range.
     assert_eq!(
@@ -205,7 +195,7 @@ fn scalar_constant_preserves_constraint_and_encoding_callbacks() {
     let mut output = Vec::new();
     // When: default field traversal dispatches both source constraint and value.
     EncodingTarget { expand: true }
-        .emit_all(record::roots(&schema), &mut output)
+        .emit_all(record::entries(&schema), &mut output)
         .unwrap();
     // Then: the constraint is not lost and scalar encoding remains independent.
     assert_eq!(
@@ -224,7 +214,7 @@ fn reference_targets_support_symbolic_output_without_expansion() {
     // When: the reference callback chooses symbolic output.
     EncodingTarget { expand: false }
         .emit_all(
-            record::roots(&schema).filter(|v| v.name() == Some("References")),
+            record::entries(&schema).filter(|v| v.name() == Some("References")),
             &mut output,
         )
         .unwrap();
@@ -245,7 +235,7 @@ fn repeated_reference_expansion_preserves_each_use_site() {
     // When: the reference callback expands each retained target twice.
     EncodingTarget { expand: true }
         .emit_all(
-            record::roots(&schema).filter(|v| v.name() == Some("References")),
+            record::entries(&schema).filter(|v| v.name() == Some("References")),
             &mut output,
         )
         .unwrap();

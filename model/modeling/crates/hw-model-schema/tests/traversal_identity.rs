@@ -12,7 +12,7 @@ fn occurrence_ids_and_parents_survive_reordering() {
     let mut set = SchemaSet::new();
     set.add_record::<Pair>();
     let schema = AnalyzedSchema::analyze(set, &Bindings::new()).unwrap();
-    let root = record::roots(&schema)
+    let root = record::definitions(&schema)
         .find(|v| v.context().unit().name == "Pair")
         .unwrap();
     assert_eq!(root.context().id(), &root.context().unit().id);
@@ -117,7 +117,14 @@ fn register_expressions_and_instances_have_unique_occurrence_ids() {
         ) {
             *expressions += 1;
         }
-        for child in ctx.children().rev() {
+        for child in ctx
+            .children()
+            .chain(ctx.projected_children())
+            .chain(ctx.instances())
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+        {
             assert_eq!(child.context().parent_id().as_ref(), Some(ctx.id()));
             let parent = child.context().parent().unwrap();
             assert_eq!(parent.id(), ctx.id());
@@ -132,7 +139,11 @@ fn register_expressions_and_instances_have_unique_occurrence_ids() {
         {
             result.push((index, ctx.id().clone()));
         }
-        for child in ctx.children() {
+        for child in ctx
+            .children()
+            .chain(ctx.projected_children())
+            .chain(ctx.instances())
+        {
             instances(child.context(), result);
         }
     }
@@ -141,7 +152,7 @@ fn register_expressions_and_instances_have_unique_occurrence_ids() {
     let mut bindings = Bindings::new();
     bindings.bind::<Bank>(&[3]);
     let schema = AnalyzedSchema::analyze(set, &bindings).unwrap();
-    let root = register::roots(&schema)
+    let root = register::definitions(&schema)
         .find(|v| v.context().unit().name == "Bank")
         .unwrap();
     let mut occurrences = Vec::new();
@@ -163,7 +174,7 @@ fn register_expressions_and_instances_have_unique_occurrence_ids() {
     walk(root.context(), &mut ids, &mut expressions);
     assert!(expressions >= 6);
     assert!(ids.len() > 30);
-    let root_again = register::roots(&schema)
+    let root_again = register::definitions(&schema)
         .find(|v| v.context().unit().name == "Bank")
         .unwrap();
     let mut repeat = HashSet::new();

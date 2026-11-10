@@ -2,13 +2,21 @@ use super::{VerylExportError, VerylRecordBackend, VerylRegisterBackend, package:
 use crate::{
     EnumVariantSpec,
     export::{
-        OutputMetadata, record, register,
+        record, register,
         value::{self, Backend, Emit as _},
         view::{Bits, Storage},
     },
 };
 use std::io::Write;
 impl Backend for VerylRecordBackend {
+    fn check_entry(
+        &mut self,
+        ctx: &Self::Context<'_>,
+        symbols: &mut crate::export::EntrySymbols,
+    ) -> Result<(), Self::Error> {
+        self.output
+            .check_entry(ctx.entry_id(), ctx.entry_name(), symbols)
+    }
     type Error = VerylExportError;
     type Domain = record::Domain;
     type Context<'a> = crate::export::record::Context<'a>;
@@ -18,7 +26,7 @@ impl Backend for VerylRecordBackend {
         ctx: Self::Context<'a>,
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
-        if ctx.is_root() {
+        if ctx.is_entry() {
             self.output
                 .package
                 .extent(bits.scalar().width(), bits.scalar().width(), writer)?;
@@ -61,12 +69,16 @@ impl Backend for VerylRecordBackend {
         super::package::Package::comment(text, writer)
     }
 }
-impl crate::export::OutputBackend for VerylRecordBackend {
-    fn metadata(&mut self, ctx: &Self::Context<'_>) -> Result<OutputMetadata, Self::Error> {
-        self.output.metadata(ctx.root_id(), ctx.root_name())
-    }
-}
+
 impl Backend for VerylRegisterBackend {
+    fn check_entry(
+        &mut self,
+        ctx: &Self::Context<'_>,
+        symbols: &mut crate::export::EntrySymbols,
+    ) -> Result<(), Self::Error> {
+        self.output
+            .check_entry(ctx.entry_id(), ctx.entry_name(), symbols)
+    }
     type Error = VerylExportError;
     type Domain = register::Domain;
     type Context<'a> = crate::export::register::Context<'a>;
@@ -77,7 +89,7 @@ impl Backend for VerylRegisterBackend {
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
         if ctx.parent_kind() == Some(crate::export::Kind::LayoutProperty) {
-            write!(writer, "{}", value.format(&mut super::register::Syntax)?)?;
+            write!(writer, "{}", value.format(self)?)?;
         }
         Ok(())
     }
@@ -105,15 +117,24 @@ impl Backend for VerylRegisterBackend {
     }
     fn bit_field(
         &mut self,
-        field: crate::export::view::BitField<'_>,
+        field: crate::export::view::BitField,
         ctx: Self::Context<'_>,
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
         if ctx.register().is_some() {
-            self.field_metadata(field, &ctx, writer)
-        } else {
-            self.emit_all(ctx.children(), writer)
+            let prefix = super::package::register_name(ctx.register_segments());
+            let name = format!("{prefix}_{}", field.name().to_ascii_uppercase());
+            self.output
+                .package
+                .constant(&format!("{name}_LSB"), "u32", field.lsb(), writer)?;
+            self.output.package.constant(
+                &format!("{name}_BITS"),
+                "u32",
+                field.bit_width(),
+                writer,
+            )?;
         }
+        self.emit_all(ctx.children(), writer)
     }
     fn opaque(
         &mut self,
@@ -163,10 +184,5 @@ impl Backend for VerylRegisterBackend {
         writer: &mut dyn Write,
     ) -> Result<(), Self::Error> {
         super::package::Package::comment(text, writer)
-    }
-}
-impl crate::export::OutputBackend for VerylRegisterBackend {
-    fn metadata(&mut self, ctx: &Self::Context<'_>) -> Result<OutputMetadata, Self::Error> {
-        self.output.metadata(ctx.root_id(), ctx.root_name())
     }
 }

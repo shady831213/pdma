@@ -1,9 +1,8 @@
-//! Invalid source transformations fail with typed provenance.
+//! Canonical collection preserves auxiliary edges and rejects invalid graphs.
 use hw_model_schema::{
-    analysis::{AnalyzedSchema, Bindings, Pass},
+    analysis::{AnalyzedSchema, Bindings},
     ast::{Definition, DescribeSchema, FieldType, GraphError, Reference, ReferenceKind, SchemaSet},
     record_schema,
-    transform::{Inline, TransformError},
 };
 record_schema! { pub record Packet { endian: Little, fields: { value: u32 } } }
 struct Recursive;
@@ -22,20 +21,17 @@ fn recursive() -> Definition {
     )])
 }
 #[test]
-fn transform_rejects_cycles_before_rewriting() {
+fn canonical_collection_rejects_cycles() {
     // Given a recursive source graph.
     let mut set = SchemaSet::new();
     set.add_definition(recursive());
-    // When a transform is invoked on source selection.
-    let result = Inline::new().run(set);
+    // When canonical graph construction resolves its dependencies.
+    let result = set.resolve();
     // Then the graph failure remains typed and chained.
-    assert!(matches!(
-        result,
-        Err(TransformError::Graph(GraphError::Cycle(_)))
-    ));
+    assert!(matches!(result, Err(GraphError::Cycle(_))));
 }
 #[test]
-fn selected_extra_edge_reports_unsupported_containment() {
+fn auxiliary_edges_are_preserved_without_inventing_containment() {
     // Given an opaque custom declaration with an auxiliary edge and no field owner.
     let definition = Definition::opaque::<Recursive>(hw_model_schema::RecordSpec::named(
         "Custom",
@@ -51,10 +47,22 @@ fn selected_extra_edge_reports_unsupported_containment() {
     )]);
     let mut set = SchemaSet::new();
     set.add_definition(definition);
-    // When selected expansion cannot place the target in the source shape.
-    let result = Inline::new().run(set);
-    // Then it reports the selected path rather than silently dropping that edge.
-    assert!(matches!(result, Err(TransformError::Unsupported { path }) if path == ["aux"]));
+    // When the graph is constructed without requesting a containment rewrite.
+    let result = set.resolve();
+    // Then dependency provenance is retained without adding a physical field.
+    let graph = result.unwrap();
+    let definition = graph
+        .get(hw_model_schema::ast::DefinitionId::of::<Recursive>())
+        .unwrap();
+    assert_eq!(definition.references().len(), 1);
+    assert_eq!(
+        definition
+            .references()
+            .first()
+            .expect("auxiliary reference")
+            .name(),
+        "aux"
+    );
 }
 #[test]
 fn selector_binding_rejects_a_non_union_target() {

@@ -7,7 +7,7 @@ mod value;
 
 pub use expression::{Argument, Expression, LayoutProperty};
 pub use record::{Case, Field, Record, Reference, Union};
-pub use register::{Bank, Map, MapLayout, Placement, Register, RegisterPlacement};
+pub use register::{Bank, Map, Placement, Register, RegisterPlacement};
 pub use storage::StorageField;
 pub use value::{BitField, Bits, EnumEncoding, Enumeration, Scalar, Storage, StorageMember};
 

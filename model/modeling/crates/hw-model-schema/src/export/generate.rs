@@ -1,14 +1,9 @@
 use super::{Context, Visit};
-use super::{ExportError, OutputMetadata, value};
+use super::{EntrySymbols, ExportError, PrepareEntries, value};
 use crate::analysis::{AnalysisError, AnalyzedSchema, Unit};
 use crate::traversal::NodeId;
 use std::io::Write;
-/// Output identity for complete exporters; rendering fragments need only a backend.
-pub trait OutputBackend: value::Backend {
-    /// Identifies one root before its output writer is opened.
-    fn metadata(&mut self, ctx: &Self::Context<'_>) -> Result<OutputMetadata, Self::Error>;
-}
-/// A source domain owns preflight and root dispatch, independently of target syntax.
+/// A source domain owns preflight and entry dispatch, independently of target syntax.
 pub trait Domain<B: value::Backend>: super::context::sealed::Domain<B> {
     /// Dispatches an already bound visit without permitting raw-node rebinding.
     fn emit(
@@ -16,35 +11,43 @@ pub trait Domain<B: value::Backend>: super::context::sealed::Domain<B> {
         backend: &mut B,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), B::Error>;
+    /// Dispatches a defined value edge through its domain's existing reference callback.
+    fn reference<'a>(
+        reference: &'a crate::ast::Reference,
+        ctx: B::Context<'a>,
+        backend: &mut B,
+        writer: &mut dyn Write,
+    ) -> Result<(), B::Error>;
     /// Rejects an incompatible unit before target callbacks run.
     fn validate(unit: &Unit) -> Result<(), AnalysisError>;
-    /// Binds selected roots to their completed analysis in dependency order.
-    fn roots(schema: &AnalyzedSchema) -> impl Iterator<Item = Visit<B::Context<'_>>>;
-    /// Invokes the root callback with a framework-bound visit.
-    fn root(
+    /// Binds selected entries to their completed analysis in dependency order.
+    fn entries(schema: &AnalyzedSchema) -> impl Iterator<Item = Visit<B::Context<'_>>>;
+    /// Invokes the entry callback with a framework-bound visit.
+    fn entry(
         visit: Visit<B::Context<'_>>,
         backend: &mut B,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), B::Error>;
 }
-/// One bound root with metadata prepared before any output is written.
+/// One bound entry with target checks prepared before any output is written.
 #[derive(Debug, Clone)]
-pub struct PreparedOutput<C> {
+pub struct PreparedEntry<C> {
     visit: Visit<C>,
-    metadata: OutputMetadata,
 }
-impl<C: Context> PreparedOutput<C> {
-    /// Identity used by callers to route this root to a destination.
-    #[must_use]
-    pub const fn metadata(&self) -> &OutputMetadata {
-        &self.metadata
+impl<C: Context> PreparedEntry<C> {
+    pub(super) const fn new(visit: Visit<C>) -> Self {
+        Self { visit }
+    }
+    /// Source entry name for caller-owned routing, with no filename or MIME policy.
+    pub fn name(&self) -> &str {
+        self.visit.context().entry_name()
     }
     /// Stable identity of the bound semantic occurrence.
     #[must_use]
     pub fn id(&self) -> &NodeId {
         self.visit.context().id()
     }
-    /// Emits this root without flushing or publishing its destination.
+    /// Emits this entry without flushing or publishing its destination.
     ///
     /// # Errors
     /// Returns the backend error; partial bytes remain in the writer on failure.
@@ -52,51 +55,41 @@ impl<C: Context> PreparedOutput<C> {
     where
         B: value::Backend<Context<'a> = C>,
     {
-        B::Domain::root(self.visit.clone(), backend, writer)
+        B::Domain::entry(self.visit.clone(), backend, writer)
     }
 }
-/// Validates the entire domain and prepares every root before writing any bytes.
+/// Validates the entire domain and prepares every entry before writing any bytes.
 ///
 /// # Errors
-/// Returns incompatible-domain or backend metadata errors.
-pub fn prepare<'a, B: OutputBackend>(
+/// Returns incompatible-domain or backend target checks errors.
+pub fn prepare<'a, B: value::Backend>(
     schema: &'a AnalyzedSchema,
     backend: &mut B,
-) -> Result<Vec<PreparedOutput<B::Context<'a>>>, ExportError<B::Error>> {
-    for unit in schema.units() {
-        B::Domain::validate(unit).map_err(ExportError::Analysis)?;
-    }
-    prepare_roots(backend, B::Domain::roots(schema))
+) -> Result<Vec<PreparedEntry<B::Context<'a>>>, ExportError<B::Error>> {
+    use crate::analysis::Pass;
+    PrepareEntries.run((schema, backend, &mut EntrySymbols::new()))
 }
-/// Prepares explicitly selected bound visits, including roots of a mixed graph.
+/// Prepares explicitly selected bound visits, including entries of a mixed graph.
 ///
 /// The visits already carry their domain and lexical binding. Their iteration
 /// order is retained; no writer is opened and no bytes are produced here.
 ///
 /// # Errors
-/// Returns backend metadata errors before any prepared outputs are returned.
-pub fn prepare_roots<'a, B: OutputBackend>(
+/// Returns backend target checks errors before any prepared outputs are returned.
+pub fn prepare_entries<'a, B: value::Backend>(
     backend: &mut B,
-    roots: impl IntoIterator<Item = Visit<B::Context<'a>>>,
-) -> Result<Vec<PreparedOutput<B::Context<'a>>>, ExportError<B::Error>> {
-    roots
-        .into_iter()
-        .map(|visit| {
-            let metadata = backend
-                .metadata(visit.context())
-                .map_err(ExportError::Render)?;
-            Ok(PreparedOutput { visit, metadata })
-        })
-        .collect()
+    entries: impl IntoIterator<Item = Visit<B::Context<'a>>>,
+) -> Result<Vec<PreparedEntry<B::Context<'a>>>, ExportError<B::Error>> {
+    EntrySymbols::new().prepare(backend, entries)
 }
-/// Prepares every root, then concatenates their bytes into a caller-owned writer.
+/// Prepares every entry, then concatenates their bytes into a caller-owned writer.
 ///
 /// The caller owns buffering, flushing, staging and publication. Rendering errors
-/// can leave partial bytes; metadata and domain errors occur before any writes.
+/// can leave partial bytes; target checks and domain errors occur before any writes.
 ///
 /// # Errors
-/// Returns domain-analysis or backend metadata/rendering errors.
-pub fn generate<B: OutputBackend>(
+/// Returns domain-analysis or backend target checks/rendering errors.
+pub fn generate<B: value::Backend>(
     schema: &AnalyzedSchema,
     mut backend: B,
     writer: &mut dyn Write,
@@ -114,7 +107,7 @@ impl<D> crate::analysis::Pipeline<(&AnalyzedSchema, D)> {
     ///
     /// # Errors
     /// Returns the analysis or backend error from generation.
-    pub fn generate<'b, B: OutputBackend>(
+    pub fn generate<'b, B: value::Backend>(
         &'b self,
         backend: impl FnOnce(&'b D) -> B,
         writer: &mut dyn Write,

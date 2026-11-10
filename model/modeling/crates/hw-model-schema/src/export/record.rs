@@ -4,7 +4,7 @@ mod context;
 mod emit;
 mod storage;
 pub use backend::Backend;
-pub use context::{Context, roots};
+pub use context::{Context, entries};
 /// Record source domain for a target's shared value callbacks.
 #[derive(Debug)]
 pub struct Domain;
@@ -17,6 +17,19 @@ impl<B: Backend> super::Domain<B> for Domain {
     ) -> Result<(), B::Error> {
         let ctx = visit.into_context();
         emit::emit(ctx.0.node(), ctx, backend, writer)
+    }
+    fn reference<'a>(
+        reference: &'a crate::ast::Reference,
+        ctx: B::Context<'a>,
+        backend: &mut B,
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), B::Error> {
+        emit::emit(
+            crate::ast::record::Node::Reference(reference),
+            ctx,
+            backend,
+            writer,
+        )
     }
     fn validate(unit: &crate::analysis::Unit) -> Result<(), crate::analysis::AnalysisError> {
         if matches!(
@@ -35,16 +48,16 @@ impl<B: Backend> super::Domain<B> for Domain {
             Ok(())
         }
     }
-    fn roots(
+    fn entries(
         schema: &crate::analysis::AnalyzedSchema,
     ) -> impl Iterator<Item = super::Visit<B::Context<'_>>> {
-        roots(schema)
+        entries(schema)
     }
-    fn root(
+    fn entry(
         visit: super::Visit<B::Context<'_>>,
         backend: &mut B,
         writer: &mut dyn std::io::Write,
     ) -> Result<(), B::Error> {
-        backend.root(visit.into_context(), writer)
+        backend.entry(visit.into_context(), writer)
     }
 }

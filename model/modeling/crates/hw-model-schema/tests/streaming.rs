@@ -1,5 +1,5 @@
 //! Caller-owned writers and preparation ordering.
-use hw_model_schema::export::{ExportError, OutputMetadata};
+use hw_model_schema::export::ExportError;
 use std::io::{self, BufWriter, Write};
 /// Explicit output staging for tests.
 pub mod output_support;
@@ -19,17 +19,9 @@ impl value::Backend for TextBackend {
     type Error = io::Error;
     type Context<'a> = hw_model_schema::export::record::Context<'a>;
 }
-impl hw_model_schema::export::OutputBackend for TextBackend {
-    fn metadata(&mut self, ctx: &Self::Context<'_>) -> Result<OutputMetadata, Self::Error> {
-        Ok(OutputMetadata {
-            logical_name: ctx.root_name().to_owned(),
-            media_type: "text/plain".into(),
-        })
-    }
-}
 
 impl record::Backend for TextBackend {
-    fn root(&mut self, _: Self::Context<'_>, writer: &mut dyn Write) -> io::Result<()> {
+    fn entry(&mut self, _: Self::Context<'_>, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_all(b"first:")?;
         writer.write_all(b"second")
     }
@@ -130,7 +122,7 @@ fn buffered_and_direct_generation_match() {
 }
 
 #[test]
-fn metadata_reaches_the_destination_with_root_bytes() {
+fn entry_identity_reaches_the_destination_with_root_bytes() {
     // Given the explicit staged test destination.
     let mut output = MemoryOutput::new();
     // When generation identifies and writes its root.
@@ -139,8 +131,8 @@ fn metadata_reaches_the_destination_with_root_bytes() {
     let outputs = output.into_outputs();
     assert_eq!(outputs.len(), 1);
     let captured = outputs.first().unwrap();
-    assert_eq!(captured.metadata.logical_name, "Packet");
-    assert_eq!(captured.metadata.media_type, "text/plain");
+    assert_eq!(captured.entry_name, "Packet");
+
     assert_eq!(captured.bytes, b"first:second");
 }
 
@@ -160,41 +152,40 @@ fn preflight_rejects_incompatible_units_before_writing() {
 }
 
 record_schema! { pub record SecondPacket { endian: Little, fields: { word: u32 } } }
-struct RejectSecondMetadata(usize);
-impl value::Backend for RejectSecondMetadata {
-    type Domain = record::Domain;
-    type Error = io::Error;
-    type Context<'a> = hw_model_schema::export::record::Context<'a>;
-}
-impl hw_model_schema::export::OutputBackend for RejectSecondMetadata {
-    fn metadata(&mut self, _: &Self::Context<'_>) -> io::Result<OutputMetadata> {
+struct RejectSecondEntry(usize);
+impl value::Backend for RejectSecondEntry {
+    fn check_entry(
+        &mut self,
+        _: &Self::Context<'_>,
+        _: &mut hw_model_schema::export::EntrySymbols,
+    ) -> io::Result<()> {
         self.0 += 1;
         if self.0 == 2 {
             Err(io::Error::from(io::ErrorKind::InvalidInput))
         } else {
-            Ok(OutputMetadata {
-                logical_name: "sample".into(),
-                media_type: "text/plain".into(),
-            })
+            Ok(())
         }
     }
+    type Domain = record::Domain;
+    type Error = io::Error;
+    type Context<'a> = hw_model_schema::export::record::Context<'a>;
 }
 
-impl record::Backend for RejectSecondMetadata {
-    fn root(&mut self, _: Self::Context<'_>, writer: &mut dyn Write) -> io::Result<()> {
+impl record::Backend for RejectSecondEntry {
+    fn entry(&mut self, _: Self::Context<'_>, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_all(b"unexpected")
     }
 }
 #[test]
-fn metadata_failure_precedes_every_write() {
-    // Given two roots whose second metadata callback fails.
+fn entry_check_failure_precedes_every_write() {
+    // Given two roots whose second entry check fails.
     let mut set = SchemaSet::new();
     set.add::<Packet>();
     set.add::<SecondPacket>();
     let schema = AnalyzedSchema::analyze(set, &Bindings::new()).unwrap();
     let mut output = Vec::new();
-    // When generation preflights output metadata.
-    let result = generate(&schema, RejectSecondMetadata(0), &mut output);
+    // When generation preflights target entries.
+    let result = generate(&schema, RejectSecondEntry(0), &mut output);
     // Then no first-root bytes escape.
     assert!(matches!(result, Err(ExportError::Render(_))));
     assert!(output.is_empty());
@@ -206,14 +197,9 @@ impl value::Backend for FailRender {
     type Error = io::Error;
     type Context<'a> = hw_model_schema::export::record::Context<'a>;
 }
-impl hw_model_schema::export::OutputBackend for FailRender {
-    fn metadata(&mut self, ctx: &Self::Context<'_>) -> io::Result<OutputMetadata> {
-        TextBackend.metadata(ctx)
-    }
-}
 
 impl record::Backend for FailRender {
-    fn root(&mut self, _: Self::Context<'_>, writer: &mut dyn Write) -> io::Result<()> {
+    fn entry(&mut self, _: Self::Context<'_>, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_all(b"partial")?;
         Err(io::Error::from(io::ErrorKind::InvalidData))
     }
@@ -254,22 +240,22 @@ fn staging_publishes_nothing_when_first_root_fails() {
 }
 #[test]
 fn selected_mixed_graph_roots_keep_metadata_identity_and_separate_bytes() {
-    use hw_model_schema::export::{prepare_roots, record::roots};
+    use hw_model_schema::export::{prepare_entries, record::entries};
     // Given explicitly selected record roots in a mixed graph.
     let mut set = SchemaSet::new();
     set.add::<Packet>();
     set.add::<SecondPacket>();
     set.add::<Register>();
     let schema = AnalyzedSchema::analyze(set, &Bindings::new()).unwrap();
-    let ids: Vec<_> = roots(&schema).map(|v| v.id().clone()).collect();
+    let ids: Vec<_> = entries(&schema).map(|v| v.id().clone()).collect();
     let mut backend = TextBackend;
     // When the application prepares and routes each unit into its own staging buffer.
-    let prepared = prepare_roots(&mut backend, roots(&schema)).unwrap();
+    let prepared = prepare_entries(&mut backend, entries(&schema)).unwrap();
     let mut captured = Vec::new();
     for output in &prepared {
         let mut bytes = Vec::new();
         output.emit(&mut backend, &mut bytes).unwrap();
-        captured.push((output.metadata().logical_name.clone(), bytes));
+        captured.push((output.name(), bytes));
     }
     // Then each bound identity and independently staged output survives.
     assert_eq!(
@@ -279,8 +265,8 @@ fn selected_mixed_graph_roots_keep_metadata_identity_and_separate_bytes() {
     assert_eq!(
         captured,
         [
-            ("Packet".into(), b"first:second".to_vec()),
-            ("SecondPacket".into(), b"first:second".to_vec())
+            ("Packet", b"first:second".to_vec()),
+            ("SecondPacket", b"first:second".to_vec())
         ]
     );
 }

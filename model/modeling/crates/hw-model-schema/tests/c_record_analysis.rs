@@ -2,7 +2,7 @@
 #![cfg(feature = "export-c-header")]
 pub mod output_support;
 use hw_model_schema::{
-    analysis::{AnalyzedSchema, Bindings, Pass, Pipeline},
+    analysis::{AnalyzedSchema, Bindings, Pipeline},
     ast::SchemaSet,
     export::backends::c_header::{CRecordAnalysisPass, CRecordBackend},
     record_schema,
@@ -14,16 +14,14 @@ record_schema! { pub record Pair { endian: Little, fields: { first: Leaf, gap: u
 fn prepared_occurrences_keep_inlined_site_offsets() -> Result<(), Box<dyn std::error::Error>> {
     let mut set = SchemaSet::new();
     set.add_record::<Pair>();
-    let graph = hw_model_schema::transform::Inline::new()
-        .run(set)?
-        .resolve()?;
+    let graph = set.resolve()?;
     let schema = AnalyzedSchema::from_graph(&graph, &Bindings::new())?;
     let prepared = Pipeline::new((&schema, ())).run(CRecordAnalysisPass)?;
     let id = &schema
         .definition(hw_model_schema::ast::DefinitionId::of::<Pair>())
         .ok_or("pair definition")?
         .id;
-    let root = hw_model_schema::traversal::record::roots(&schema)
+    let root = hw_model_schema::traversal::record::definitions(&schema)
         .find(|visit| visit.context().id() == id)
         .ok_or("pair root")?;
     let mut offsets = Vec::new();
@@ -34,7 +32,7 @@ fn prepared_occurrences_keep_inlined_site_offsets() -> Result<(), Box<dyn std::e
         for record in child
             .context()
             .children()
-            .filter(|visit| matches!(visit.node(), hw_model_schema::ast::record::Node::Record(_)))
+            .filter_map(|visit| visit.context().referent())
         {
             for leaf in record.context().children() {
                 if matches!(leaf.node(), hw_model_schema::ast::record::Node::Field(_)) {
@@ -49,7 +47,7 @@ fn prepared_occurrences_keep_inlined_site_offsets() -> Result<(), Box<dyn std::e
     let text = sink
         .outputs()
         .iter()
-        .find(|a| a.metadata.logical_name == "pair")
+        .find(|a| a.entry_name == "Pair")
         .ok_or("pair missing")?;
     let text = std::str::from_utf8(&text.bytes)?;
     assert!(text.contains("C_SECONDQX2EVALUE_OFFSET UINT64_C(8)"));
@@ -89,7 +87,7 @@ fn duplicate_source_names_keep_distinct_offsets_and_fail_target_naming()
     let graph = set.resolve()?;
     let schema = AnalyzedSchema::from_graph(&graph, &Bindings::new())?;
     let prepared = Pipeline::new((&schema, ())).run(CRecordAnalysisPass)?;
-    let root = hw_model_schema::traversal::record::roots(&schema)
+    let root = hw_model_schema::traversal::record::definitions(&schema)
         .next()
         .ok_or("record root")?;
     let fields: Vec<_> = root

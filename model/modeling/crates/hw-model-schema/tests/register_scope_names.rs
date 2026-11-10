@@ -134,7 +134,7 @@ fn projected_bank_and_register_paths_share_source_segments() {
             }
             _ => {}
         }
-        for child in ctx.children() {
+        for child in ctx.children().chain(ctx.instances()) {
             walk(child.context(), seen);
         }
     }
@@ -147,7 +147,7 @@ fn projected_bank_and_register_paths_share_source_segments() {
         .unwrap();
     let schema = AnalyzedSchema::register_map("unrelated target alias", &resolved).unwrap();
     let mut seen = Vec::new();
-    for root in register::roots(&schema) {
+    for root in register::definitions(&schema) {
         walk(root.context(), &mut seen);
     }
     assert_eq!(seen.len(), 3);

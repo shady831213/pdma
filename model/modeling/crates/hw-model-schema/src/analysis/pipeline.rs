@@ -24,8 +24,9 @@ impl AnalyzedSchema {
         let mut schema = Self {
             units,
             opaque_layouts: std::collections::HashMap::new(),
+            union_storage: std::collections::HashMap::new(),
         };
-        schema.prepare_opaque()?;
+        schema.prepare_storage()?;
         Ok(schema)
     }
 }

@@ -1,6 +1,8 @@
 //! Shared value declarations and mathematical expressions.
+mod field;
 use super::{BitsDefinition, LayoutExpr};
-use crate::{BitsFieldDefinition, BitsFieldSpec, EnumVariantSpec, FieldDefinition, RecordSpec};
+use crate::{BitsFieldDefinition, EnumVariantSpec, FieldDefinition, RecordSpec};
+pub use field::BitField;
 /// Original encoding definition of an enumeration occurrence.
 #[derive(Debug, Clone, Copy)]
 pub enum Enumeration {
@@ -35,10 +37,12 @@ pub enum Node<'a> {
     Opaque(&'a RecordSpec),
     /// Reusable or inline bits.
     Bits(&'a BitsDefinition),
-    /// Inline enumeration.
+    /// Enumeration definition, or a physical storage projection's enum encoding.
     Enum(Enumeration),
     /// Contained bit field.
-    BitField(&'a BitsFieldSpec),
+    BitField(BitField<'a>),
+    /// A defined value type at its use site.
+    Reference(&'a super::Reference),
     /// Enumeration alternative.
     Variant(&'a EnumVariantSpec),
     /// Mathematical layout expression.
@@ -55,16 +59,15 @@ impl Node<'_> {
                 crate::ResolvedMemberKind::Record { .. } => Vec::new(),
             },
             Self::StorageField(field) => vec![Self::field(field.definition())],
-            Self::Scalar(definition) => definition.bits().iter().map(Self::BitField).collect(),
-            Self::Bits(bits) => bits.fields().iter().map(Self::BitField).collect(),
-            Self::Enum(enumeration) => enumeration.variants().iter().map(Self::Variant).collect(),
-            Self::BitField(field) => field
-                .definition()
-                .enum_definition()
-                .map(|_| Self::Enum(Enumeration::Bits(field.definition())))
-                .into_iter()
+            Self::Scalar(definition) => definition
+                .bits()
+                .iter()
+                .map(|f| Self::BitField(BitField::new(f, None)))
                 .collect(),
-            Self::Variant(_) | Self::Opaque(_) => Vec::new(),
+            Self::Bits(bits) => bits.members().map(Self::BitField).collect(),
+            Self::Enum(enumeration) => enumeration.variants().iter().map(Self::Variant).collect(),
+            Self::BitField(field) => field.children().collect(),
+            Self::Reference(_) | Self::Variant(_) | Self::Opaque(_) => Vec::new(),
             Self::Expression(expression) => match expression {
                 LayoutExpr::Add(a, b)
                 | LayoutExpr::Subtract(a, b)

@@ -1,11 +1,12 @@
 # Schema export design and review record
 
-Current review candidate (unpublished): backends stream directly into caller-owned
-`io::Write`. `prepare` returns `PreparedEntry` values exposing source name, identity
-and `emit`, without filename or media-type policy. `OutputBackend` and
-`OutputMetadata` have been removed. The temporary relative workspace schema patch
-remains explicitly authorized for this review; standalone downstream fixtures keep
-the published registry dependency. Do not publish the candidate without approval.
+The reviewed API is published as **hw-model-schema 0.3.0**. Backends stream into
+caller-owned `io::Write`; `PreparedEntry` exposes source name, identity and emission
+without filename/MIME policy. `OutputBackend` and `OutputMetadata` are removed.
+The temporary workspace override is removed; PDMA and standalone downstream
+fixtures consume the registry release. See [publishing.md](publishing.md) for source
+provenance, checksum and release verification. Notes below retain their original
+pre-release checkpoint scope; they are not instructions to restore preview setup.
 
 Schema and schema-macros 0.2.0 were published on 2026-11-05. Their reviewed snapshot
 maps to `5a3a6f6cf13af855f3505968cfd21f601bfe83d7` after history cleanup; published

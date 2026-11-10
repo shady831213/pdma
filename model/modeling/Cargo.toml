@@ -16,10 +16,6 @@ members = [
 ]
 resolver = "3"
 
-# Temporary review of the unpublished export API; remove after its approved release.
-[patch.crates-io]
-hw-model-schema = { path = "crates/hw-model-schema" }
-
 [workspace.package]
 edition = "2024"
 rust-version = "1.96"

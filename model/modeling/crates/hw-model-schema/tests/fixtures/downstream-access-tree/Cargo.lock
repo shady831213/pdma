@@ -23,9 +23,9 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "hw-model-schema"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b623635263a60dbbcefecf00b55fc114af9fc4864e19c5f7dc0ed497efea8c87"
+checksum = "6b6584298952ba4469915ddd422025759b9c1b69567061edad6985ff6b41b69d"
 dependencies = [
  "hw-model-schema-macros",
 ]

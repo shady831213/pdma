@@ -34,10 +34,10 @@ Do not add path/patch overrides to the default build. Verify resolved source IDs
 from PDMA roots when changing dependency wiring; names alone cannot distinguish
 local members from published packages with the same name and version.
 
-For the unpublished render API review only, the user authorized a temporary
-workspace `hw-model-schema` patch on 2026-11-09. Keep dependency requirements
-versioned; remove the relative override after approval and publication, then
-recheck registry resolution. Other framework dependencies remain registry-backed.
+The schema 0.3.0 release completed the render API review and removed its temporary
+relative override. PDMA and standalone consumers use registry schema 0.3.0 with
+the unchanged pinned registry macro implementation 0.2.0. Maintenance members
+remain distinct packages; verify source IDs and checksums, not names alone.
 
 ## Historical references
 

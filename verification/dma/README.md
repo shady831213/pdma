@@ -77,7 +77,7 @@ SystemVerilog.
 selects the DMA roots in contract's `src/bin/uvm_regs`; its renderer is the optional
 schema `UvmRegisterBackend`. SV record rendering likewise uses schema's builtin
 `SvRecordBackend`. The contract wrappers own package/import/file assembly only.
-The unpublished backends currently use the authorized relative schema override;
+The backends are supplied by registry schema 0.3.0, with no local override;
 see the model [schema review record](../../model/modeling/docs/schema-export-review.md).
 
 `tb/register_layout.sv` is the separate plain-SV register metadata package set,

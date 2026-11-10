@@ -1,26 +1,38 @@
 # Publishing the reusable libraries
 
-The published schema release is **0.2.0** for both `hw-model-schema` and
-`hw-model-schema-macros`, edition 2024, with **Rust 1.96** as its supported baseline
-and **MIT OR Apache-2.0** licensing. Both versions were uploaded on 2026-11-05;
-other reusable crates remain at 0.1.0 and are not part of this release.
-The six library manifests allow only
-the `crates-io` registry; the workspace default, PDMA packages and standalone test
-fixtures keep publication disabled.
+The current facade release is **hw-model-schema 0.3.0**, edition 2024, with
+**Rust 1.96** as its supported baseline and **MIT OR Apache-2.0** licensing.
+It pins the unchanged **hw-model-schema-macros =0.2.0**; other reusable crates
+remain at 0.1.0. Only the facade was uploaded in this release.
+The six library manifests allow only crates.io; PDMA and standalone fixtures
+remain unpublished applications.
 
-## Schema 0.3.0 release candidate
+## Schema 0.3.0 provenance and adoption
 
-The user authorized final review and publication of the new schema API. Version
-0.3.0 is required because the restricted renderer contexts and entry callbacks
-replace the 0.2 export API. The macro implementation is byte-identical to the 0.2.0
-release source and remains pinned at `=0.2.0`; no duplicate macro release is needed.
+Release source commit: `6bd212bc53e21e994258a02d48e05f86af65b967`.
+Published archive checksum: `6b6584298952ba4469915ddd422025759b9c1b69567061edad6985ff6b41b69d`.
+The version bump reflects incompatible export-context/entry APIs, while declaration,
+codec, register-access and wire behavior remain unchanged. SV record/register and
+UVM backends are now optional builtins alongside C and Veryl.
 
-The temporary relative workspace override remains only for pre-upload model
-verification. Publication must use a clean reviewed commit and an independently
-verified package manifest without this override. After upload, remove the override,
-update workspace and standalone consumer locks to registry checksums, and verify
-that every PDMA root consumes the published schema. Independent exporters and
-cross-crate discovery are release gates, not merely workspace compile checks.
+The final gate passed 1545 all-feature workspace tests, 1407 default-feature tests,
+562 archive tests, all 32 feature combinations, strict lint/docs and independent
+exporter, access-tree and release/LTO discovery consumers. The macro implementation
+was compared byte-for-byte with its published 0.2.0 archive; no macro update was needed.
+The standalone exporter was migrated to restricted callbacks and a custom analysis
+pass, retaining its original output and byte-layout assertions.
+
+Publication used a clean source commit, normal Cargo package verification, and an
+isolated package manifest with registry dependencies only. No `--allow-dirty`,
+`--no-verify` or sibling override was used for the upload. The isolated upload has
+no automatic Git VCS stamp; the source commit above records its provenance.
+The registry download matches the registry checksum, and all source, tests,
+examples, README and license files match the reviewed payload.
+
+The temporary relative workspace override has been removed. PDMA and standalone
+fixtures require 0.3.0 and resolve it through crates.io with checked-in checksums;
+local library members remain separate maintenance packages. Future releases
+still require explicit authorization.
 
 ## Schema 0.2.0 provenance
 
@@ -139,3 +151,9 @@ self-contained, while links to a private source repository require access to it.
 
 References: [Cargo publishing guide](https://doc.rust-lang.org/cargo/reference/publishing.html)
 and [manifest publish setting](https://doc.rust-lang.org/cargo/reference/manifest.html#the-publish-field).
+
+For 0.3.0, post-publication source/checksum checks covered all seven PDMA roots
+and all three standalone consumers. Registry-backed all-feature/default workspace
+regressions and strict Clippy passed, and every generated artifact passed its
+check mode. The versioned docs.rs Rustdoc pages, including SV and UVM APIs, are
+available. The integration checkpoint is tagged `hw-model-schema-v0.3.0`.

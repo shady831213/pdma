@@ -92,19 +92,16 @@ from crates.io. The library sources remain workspace members for maintenance;
 they do not override registry dependencies. Preserve this distinction and do not
 add local path dependencies or `[patch.crates-io]` overrides to the normal model build.
 
-Temporary exception authorized on 2026-11-09: while reviewing the unpublished schema
-render API, the model workspace patches `hw-model-schema` to its local member.
-Keep this override explicit and relative. Review the migrated generators in this
-workspace; do not publish until user approval. After the approved release, remove
-the override and verify registry identities and checksums again.
-
-Schema and schema-macros 0.2.0 are published on crates.io. Their reviewed source
-snapshot maps to `5a3a6f6cf13af855f3505968cfd21f601bfe83d7` in the sanitized history;
-the published package contents and checksums are unchanged. PDMA and downstream fixtures use
-the registry releases with checked-in checksums; no preview patch is needed.
-See `model/modeling/docs/publishing.md` for release provenance and
-`model/modeling/docs/schema-export-review.md` for the historical review record.
-Future releases still require explicit user authorization.
+Schema 0.3.0 is published on crates.io and pins the unchanged schema-macros 0.2.0.
+Its reviewed source commit is `6bd212bc53e21e994258a02d48e05f86af65b967`.
+The temporary local schema override authorized for review on 2026-11-09 has ended;
+PDMA and standalone fixtures consume the registry release with checked-in checksums.
+Do not restore local path/patch overrides to the normal build.
+The earlier paired schema/schema-macros 0.2.0 release maps to
+`5a3a6f6cf13af855f3505968cfd21f601bfe83d7` in the sanitized history; its published
+contents and checksums are unchanged. See `model/modeling/docs/publishing.md` for
+release provenance and `model/modeling/docs/schema-export-review.md` for the review
+record. Future releases require explicit user authorization.
 
 The original scenarios sources are preserved on the backup branch only.
 The new `crates/scenarios` contains current-model integration tests. Current acceptance

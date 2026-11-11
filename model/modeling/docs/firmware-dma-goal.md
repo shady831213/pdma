@@ -39,12 +39,13 @@ must not make the direct configuration depend on firmware or PCIe machinery.
 
 The current phase is DMA-only RTL convergence against the implemented system
 contract. [RTL design inputs](../../../docs/rtl/architecture.md) records the agreed AXI5 master,
-32/64-bit AXI4-Lite slave, three clock domains, configurable geometry and tentative
-22nm/500MHz target. Tool/EDA flows are assumed available for this phase; it does
-not start a toolchain split or add model features. The register-access slice has
-native tests; execution, IRQ/lifecycle owners and the AXI5 memory endpoint remain
-to be implemented. RTL transaction retirement and reset/drain must be verified at
-their own boundaries. Broader subsystem integration follows DMA RTL convergence.
+32/64-bit AXI4-Lite slave, three clock domains, configurable geometry and current
+physical targets. The [minimal Copy/Fence loop](../../../docs/rtl/minimal-loop-review.md)
+now has scenario verification and implementation-flow results; reviewed CDC/RDC
+dispositions and remaining proof/physical-signoff limits remain explicit. This does not start a
+toolchain split or add model features. Full command/multichannel execution still
+needs implementation. RTL transaction retirement and reset/drain must be verified
+at their own boundaries. Broader subsystem integration follows DMA RTL convergence.
 
 On 2026-10-29 the first RTL phase was scoped to DMA only. CPU, managed peripherals
 and subsystem integration follow DMA convergence. Existing DMA-maintenance behavior

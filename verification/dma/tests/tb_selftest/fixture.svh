@@ -15,12 +15,7 @@ virtual class pdma_tb_test extends uvm_test;
         super.build_phase(phase);
         clock_cfg=new;
         void'($value$plusargs("clock_mode=%s",mode));
-        case(mode)
-            "random": if(!clock_cfg.randomize() with {foreach(jitter[i]) jitter[i] inside {[0:12]};})
-                `uvm_fatal("CLOCK_CONFIG","Cannot randomize TB clock configuration")
-            "fixed": ;
-            default: `uvm_fatal("CLOCK_CONFIG","clock_mode must be fixed or random")
-        endcase
+        clock_cfg.select_mode(mode);
         uvm_config_db#(pdma_clocks_config)::set(this,"env.clocks","cfg",clock_cfg);
         env=new("env",this);
         clocks=pdma_clocks::type_id::create("clocks",env);

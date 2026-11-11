@@ -29,8 +29,9 @@ The related [memory interface](../docs/rtl/memory-interface.md),
 define transaction ownership and identify correctness constraints on pipelining.
 The [next implementation steps](../docs/rtl/architecture.md#后续执行顺序)
 start with concrete transaction resources and reset drain, then a two-channel
-functional slice. The existing evaluation environment remains the baseline;
-future tool/technology migration does not block this work.
+functional slice. The implementation target is now 12nm/Genus without ULVT,
+core/bus 1GHz and reg 500MHz, with separate VC SpyGlass CDC/RDC checks; see
+[implementation checks](../impl/pdma/README.md).
 
 ## Source ownership
 

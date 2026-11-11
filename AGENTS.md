@@ -80,8 +80,17 @@ The 2026-11-11 implementation target is 12nm with Genus: core and bus clocks
 at 1GHz, register clock at 500MHz, still three asynchronous domains. ULVT is
 forbidden; qualify library selection, mapping exclusions and actual mapped-cell
 identities. Both CDC and RDC must use VC SpyGlass with PDMA-owned constraints
-and reviewed findings. Genus migration and the PDMA VC SpyGlass flow remain
-pending; historical DC results and randomized simulation do not qualify them.
+and reviewed findings. The Genus and VC SpyGlass flows are implemented;
+the first mapped setup estimate meets the target with zero slack margin. The
+redundant mailbox startup gates are removed; CDC/RDC reviewed gates accept only
+source-bound, path-specific protocol/resetless-payload findings, retaining raw
+reports. See `docs/rtl/cdc-review.md` and `docs/rtl/minimal-loop-review.md` for the
+proof limits and physical timing/MTBF obligations. Historical DC results and
+randomized simulation do not substitute for these checks or physical signoff.
+Genus and VC share generated clock SDC from the design profile. Instance-scoped
+mailbox constraints are reusable without creating platform clocks or global cuts;
+fresh mapping validates the 0.5ns budgets and local synchronizer paths. See
+`impl/pdma/constraints/README.md`; mapped timing does not close routed timing or MTBF.
 Keep deployment, proprietary inputs and raw reports private; generic executable
 flows and design constraints belong in the repository.
 The model's Cargo workspace contains the core `contract`, `dma` and `host` crates, the

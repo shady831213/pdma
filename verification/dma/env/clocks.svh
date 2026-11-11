@@ -42,6 +42,16 @@ class pdma_clocks_config extends uvm_object;
         initial_phase='{64,128,192};
         reset_cycles='{8,8,8};
     endfunction
+    function void select_mode(string mode);
+        case(mode)
+            "random": if(!randomize() with {foreach(jitter[i]) jitter[i] inside {[0:12]};})
+                `uvm_fatal("CLOCK_CONFIG","Cannot randomize constrained clock configuration")
+            "fixed": ;
+            // Independent phase offsets remain; equal frequency is not a synchronous promise.
+            "target": period_ns='{2,1,1};
+            default: `uvm_fatal("CLOCK_CONFIG","clock_mode must be fixed, random or target")
+        endcase
+    endfunction
     static function string domain_name(int index);
         case(index)
             0: return "reg";

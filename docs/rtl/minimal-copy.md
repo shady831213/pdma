@@ -95,6 +95,14 @@ no-unreasonable-throughput-loss objective. The measured interval must be compare
 with the external port capacity, not declared to be the engine's target throughput.
 Unaligned byte transfers are also a functional baseline, not an optimized datapath.
 
+Do not extend the one-entry mailbox choice to the sustained DMA data path. The
+next throughput design needs bounded asynchronous queues/stream buffers and enough
+in-flight requests, receipts and data capacity to hide CDC and bus latency. Replacing
+only the mailbox cannot remove the current engine's read/wait/write/wait serialization.
+Register configuration/status access remains a separate, lower-rate transaction
+bridge; it need not use the same transport as payload. See the
+[CDC transport decision](cdc-review.md#传输选择与-payload-reset的边界).
+
 Implementation assessments use the emitted hardware, excluding test modules,
 and bind source, compiler, constraints and library identities to each result.
 Reproducible flow scripts are tracked under `verification/dma/flow` and
@@ -105,3 +113,13 @@ power based on synthetic activity is not workload power.
 Review this complete loop before adding channels, outstanding windows or more
 opcodes. Priorities for that review are resource ownership, reset obligations,
 the cost of retained state and CDC, and the measured sources of throughput loss.
+
+The [2026-11-11 loop review](minimal-loop-review.md) records target-frequency VIP
+regressions, non-ULVT Genus mapping and VC SpyGlass results. The earlier mapped
+snapshot meets the pre-layout setup target with zero margin. Subsequent
+[CDC/RDC convergence](cdc-review.md) removes redundant startup gates and resolves
+the remaining structural findings through source-bound, path-specific review.
+The updated RTL has now been remapped with scoped 0.5ns mailbox budgets and preserved
+synchronizer stages. Mapped crossing/setup checks pass; routed CDC/reset timing and
+MTBF remain open. See [constraint reuse and integration](../../impl/pdma/constraints/README.md).
+That record is not physical or complete-DMA signoff.

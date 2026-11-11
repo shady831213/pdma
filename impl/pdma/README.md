@@ -1,48 +1,151 @@
 # PDMA implementation checks
 
-This directory documents implementation obligations for the DMA-only top in the
-first phase. CPU, peripheral and subsystem assessments are deferred. Reproducible
-flow code lives in `flow/`, with generic three-clock timing constraints under
-`constraints/`. Deployment details, library inputs and raw reports stay outside
-version control. See [the flow guide](../../tools/rtl-flow/flows.md).
+These flows assess the DMA-only top. CPU, peripheral and subsystem implementation
+remain deferred. The approved target is 12nm with Genus: core and bus clocks at
+1GHz (1ns), register clock at 500MHz (2ns), with ULVT forbidden. Equal frequencies
+do not establish a synchronous relationship. Library/PVT and electrical budgets
+are private inputs; target frequency is not a timing-closure claim.
 
-Use the three domains and reset requirements recorded in the
-[architecture draft](../../docs/rtl/architecture.md). The approved target is
-12nm with Genus synthesis: core and bus clocks each at 1GHz (1ns), register clock
-at 500MHz (2ns), with ULVT forbidden. Equal core/bus frequencies do not establish
-a synchronous relationship. This target is not a library/PVT selection or a timing
-result. IO budgets, storage providers and configuration limits must be explicit.
+## Ownership and entries
 
-Re-establish the physical baseline with the new flow instead of mixing it with
-the historical 22nm/500MHz evaluation. Select approved non-ULVT libraries, disable
-forbidden mapping candidates and audit final mapped library/cell identities and
-threshold-voltage attributes, including inserted cells. Filename filtering alone
-is insufficient. Keep commercial implementation runs outside version control.
-Do not copy another design's CDC/RDC waivers, deployment configuration or
-qualification claims. Public flow references come from
-[pcie_modeling](https://github.com/shady831213/pcie_modeling); its frozen-design
-evidence does not qualify PDMA.
+| Location | Responsibility |
+| --- | --- |
+| `constraints/dma-copy.tcl` | Fixed top, clock periods, port widths/directions/owners and coordinated cold-reset assertion |
+| `flow/profile.tcl` | Tool-independent profile validation and traversal |
+| `flow/constraints-common.tcl` | Shared standalone clock SDC and instance/budget traversal |
+| `rtl/common_cell/constraints/duplex_mailbox.tcl` | Reusable scoped IP constraints; integration supplies clocks, hierarchy and budget |
+| `flow/run.sh` | Fresh run ownership, immutable input copies, hashes and failure receipts |
+| `tools/rtl-flow/process.sh` | Shared owned-process-group teardown for simulation and implementation |
+| `flow/genus/` | Genus units, mapping/library policy, constraints, reports and setup gate |
+| `flow/vc/` | VC SpyGlass constraint translation, CDC/RDC analysis and unresolved-finding gate |
+| `constraints/dma-copy-review.tcl` | Explicit, source-bound dispositions for the fixed Copy slice; never a generic block waiver |
+| `tests/` | Synthetic tool-sensitivity fixtures and launcher/profile tests |
 
-`flow/synthesize.sh SNAPSHOT NEW_RUN` consumes a source snapshot from
-`tools/rtl-flow/snapshot.sh` and a private `PDMA_TECH_CONFIG` Tcl file. The Tcl
-file provides `target_libraries`, `operating_library`, `operating_condition`,
-`time_unit`, `capacitance_unit`, `clock_period`, `clock_uncertainty`, `transition`,
-`io_min`, `io_max` and `output_load`. The public flow checks library units, mapping,
-design consistency and input hashes, then writes timing/area/power reports and
-the applied SDC. The current DC flow estimates synchronous mapped timing with
-asynchronous clock groups and reset false paths; it is not CDC/RDC signoff.
-Power uses declared vectorless activity, not a measured workload.
+The profile describes the actual emitted boundary. A new top can select its own
+profile through `PDMA_DESIGN_PROFILE`; it must account for every port. Adapters
+fail on missing ports, unexpected bits/directions or incomplete coverage. Genus
+flattens SV interface separators; VC retains them. Neither adapter owns a second
+DMA interface specification. Optional reset groups describe simultaneous
+assertion only; release remains locally synchronous and independent.
+Mailbox entries declare a maximum propagation budget and their two actual domains.
+See [integration and constraint reuse](constraints/README.md): the standalone wrapper
+owns clock creation, while the reusable cell API touches only the named instance.
 
-The checked-in launcher above still implements the historical DC flow and one
-common clock-period input. Selecting a different executable does not convert its
-Tcl to Genus or implement the new per-domain constraints. The Genus port, explicit
-three-period constraints and non-ULVT guard qualification remain to be completed
-before claiming the new baseline. Preserve library-unit checks when converting
-the 1ns/1ns/2ns targets to the tool's units.
+Generate an immutable source snapshot, then invoke the desired tool adapter:
 
-CDC and RDC must both run in VC SpyGlass against the actual emitted DMA top and
-its common cells. Explicit clock/reset and boundary ownership constraints, negative
-fixtures, retained raw findings and reviewed narrow exceptions are required; see
-[the reset/CDC obligations](../../docs/rtl/reset-cdc.md#vc-spyglass-cdcrdc-检查门槛).
-The PDMA VC SpyGlass flow and its qualification are pending. Neither randomized
-three-clock simulation nor asynchronous STA clock groups establish CDC/RDC closure.
+```sh
+bash tools/rtl-flow/snapshot.sh "$PDMA_RUN_ROOT/snapshot"
+PDMA_SYNTH_STAGE=prepare bash impl/pdma/flow/genus.sh \
+    "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/prepare"
+bash impl/pdma/flow/genus.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/map"
+bash impl/pdma/flow/crossings.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/cdc" cdc
+bash impl/pdma/flow/crossings.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/rdc" rdc
+```
+
+`prepare` validates the library, elaboration and constraints without mapping.
+The default `map` stage produces the mapped database/netlist, cell-area, timing,
+constraint coverage, reference identities and vectorless power reports. Power
+uses explicit tool-default activity parameters (toggle rate 0.02, probability
+0.5), not measured workload activity. Setup slack is read from the native timing
+object in ps, rather than rounded text; negative slack fails the setup gate.
+Hold, routed parasitics, clock-tree implementation, synchronizer MTBF and physical
+CDC/reset timing still require separate qualification.
+`cdc-timing.tsv` and `cdc-timing-status.json` additionally check that every declared
+mapped crossing is timed under its explicit budget, that held-payload paths remain
+visible, and that synchronizer stage paths retain normal local timing. The current
+0.5ns budgets are not blanket asynchronous false paths. Sync flops are preserved
+after mapping; technology-specific synchronizer qualification remains separate.
+
+## Private configuration and reproducibility
+
+See [the flow guide](../../tools/rtl-flow/flows.md) for environment injection.
+Genus consumes `PDMA_TECH_CONFIG`, a trusted private Tcl file defining:
+
+- `target_libraries`, `operating_library`, `operating_condition`;
+- `time_unit=1e-9`, `capacitance_unit=1e-12`;
+- `clock_uncertainty`, `transition`, `io_min`, `io_max`, `output_load` in ns/pF;
+- optionally `approved_standard_cell_libraries` (otherwise the operating library).
+
+Clock periods come from the design profile. Library units are checked separately;
+Genus database/report time and capacitance use ps/fF. Mapping candidates must be
+approved non-ULVT cells, and final instances are audited by actual library/cell
+identity plus threshold attributes. Filename filtering alone is insufficient.
+The synthetic policy tests exercise forbidden names, hidden cell/library threshold
+attributes, unapproved references and empty mappings in the real tool.
+
+Each run has fresh outputs and copied Tcl/profile/launcher inputs. The complete
+launcher is parsed before starting a long command. Do not edit an active run's
+copies. Input identity is rechecked at exit even after failure; `result.json`
+records the flow exit status and `artifacts.sha256` inventories the retained
+outputs. A tool timeout or failed report check is not a successful run. Raw logs,
+private configurations, library identities and deployment data stay outside Git.
+Publish only reviewed summaries without that information.
+
+## CDC/RDC interpretation
+
+VC SpyGlass runs against the actual emitted DUT and common cells, without a
+simulation testbench or inherited waivers. RDC follows corruption through
+resetless storage to observable consumers and includes asynchronous-clock paths,
+primary outputs and disconnected sinks. A dedicated unsafe resetless-chain
+fixture verifies this is not blanket exclusion of resetless storage. CDC and RDC
+retain raw and unresolved reports; unresolved errors or warnings return failure.
+See [reset/CDC obligations](../../docs/rtl/reset-cdc.md#vc-spyglass-cdcrdc-检查门槛).
+
+The reviewed Copy profile removes redundant mailbox startup gates. Its remaining
+3 protocol reconvergences and 12 resetless-payload setup warnings have explicit
+[path-by-path conclusions](../../docs/rtl/cdc-review.md). Select them deliberately:
+
+```sh
+PDMA_STATIC_REVIEW="$PWD/impl/pdma/constraints/dma-copy-review.tcl" \
+    bash impl/pdma/flow/crossings.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/cdc-reviewed" cdc
+```
+
+The same policy supports `rdc`. Raw findings are reported before exceptions;
+`reviewed.rpt`, `unresolved.rpt` and `finding-counts.txt` distinguish the results.
+The success marker is `PDMA_STATIC_REVIEWED`, never a claim of raw zero findings.
+Exact emitted RTL, source manifest, profile, constraints, analysis configuration
+and tool identities must match, including the shared constraint sources. Each entry must match one distinct finding by
+native fields; unknown findings still fail. A changed source/configuration needs
+a fresh review, not an automatically refreshed digest. No policy is selected by
+default. These structural exceptions do not waive physical timing or MTBF.
+
+`cdc-formal` additionally runs the tool's data-hold, data-loss and convergence
+properties, with a 60-second limit per property and the ordinary overall timeout.
+Inconclusive properties remain findings. `tests/mailbox.sh DUT_SNAPSHOT NEW_PROOF`
+uses the same mode on the actual memory mailbox and payload types, with free
+interface inputs, to separate cell invariants from whole-DMA proof complexity.
+It retains the raw structural verdict; proven properties do not silently create
+waivers. Formal clock/reset assumptions remain explicit in its selected profile.
+The current whole-DUT run still has one inconclusive datahold property; it remains
+a failure in `cdc-formal`, while the isolated exact mailbox proof passes. No
+inconclusive/formal-error tag appears in the reviewed structural policy.
+
+Tool-sensitivity checks use an independent two-clock fixture: a synchronized
+control passes CDC, direct unsynchronized control fails, independent-reset
+corruption fails (including through resetless storage), and a bad boundary fails
+before analysis. They establish flow sensitivity, not DMA correctness:
+
+```sh
+bash impl/pdma/tests/run.test.sh "$PDMA_RUN_ROOT/runner-tests"
+tclsh impl/pdma/tests/profile.test.tcl "$PDMA_RUN_ROOT/profile-tests"
+bash impl/pdma/tests/genus-policy.sh "$PDMA_RUN_ROOT/policy-tests"
+bash impl/pdma/tests/genus-timing.sh "$PDMA_RUN_ROOT/map" "$PDMA_RUN_ROOT/timing-test"
+bash impl/pdma/tests/genus-cdc.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/cdc-integration"
+bash impl/pdma/tests/crossings.sh "$PDMA_RUN_ROOT/static-tests"
+bash impl/pdma/tests/review.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/review-tests"
+```
+
+The timing test restores a verified mapped database, confirms the baseline and
+deliberately tightens the core period to reject negative slack. It does not change
+the design target or producer artifacts. Timed-out or interrupted implementation
+and simulation jobs tear down their own process groups; failed runs retain their
+input and result records.
+The review tests use the real unchanged DUT to reject stale identity, a changed
+endpoint and an omitted disposition; missing coverage cannot become a pass.
+
+The older `flow/synthesize.sh` and `constraints/timing.tcl` retain the historical
+DC evaluation with a single `clock_period` input. They do not implement this new
+target. Do not compare the old and new libraries/tools as interchangeable area or
+slack measurements. Public reference flows originate from
+[pcie_modeling](https://github.com/shady831213/pcie_modeling); its qualification and
+waivers do not transfer to PDMA.

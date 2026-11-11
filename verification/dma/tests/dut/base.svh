@@ -10,12 +10,7 @@ virtual class pdma_base_test extends uvm_test;
         platform=new; clocks=new;
         platform.ring_context=$urandom;
         void'($value$plusargs("clock_mode=%s",clock_mode));
-        case(clock_mode)
-            "random": if(!clocks.randomize() with {foreach(jitter[i]) jitter[i] inside {[0:12]};})
-                `uvm_fatal("CLOCK_CONFIG","Cannot randomize constrained clock configuration")
-            "fixed": ;
-            default: `uvm_fatal("CLOCK_CONFIG","clock_mode must be fixed or random")
-        endcase
+        clocks.select_mode(clock_mode);
         if($value$plusargs("checker_mutation=%s",mutation)) begin
             if(!(mutation inside {"data","identity","unknown_identity","missing_completion","duplicate_completion",
                 "early_fence","underreported_prefix"}))

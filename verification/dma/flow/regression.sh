@@ -8,7 +8,9 @@ shift 2
 jobs=${PDMA_JOBS:-4}
 [[ $jobs =~ ^[1-9][0-9]{0,3}$ ]] || { printf 'PDMA_JOBS must be in 1..9999\n' >&2; exit 2; }
 clock_mode=${PDMA_CLOCK_MODE:-random}
-[[ $clock_mode == random || $clock_mode == fixed ]] || { printf 'PDMA_CLOCK_MODE must be random or fixed\n' >&2; exit 2; }
+[[ $clock_mode == random || $clock_mode == fixed || $clock_mode == target ]] || {
+    printf 'PDMA_CLOCK_MODE must be random, fixed or target\n' >&2; exit 2;
+}
 if (($#==0)); then set -- 1 7 19 41 97 211 503 997; fi
 seeds=("$@")
 suite=${PDMA_SUITE:-dut}

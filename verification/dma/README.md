@@ -27,6 +27,20 @@ scenario operation through the software objects. See
 [dependencies](dependencies.md) for external inputs and adapter boundaries.
 Measured checkpoints and their coverage gaps are in [results](results.md).
 
+`tb/cdc_assertions.sv` passively binds the real mailbox ports to check retained
+ownership, payload, no duplicate delivery and backpressure stability. It adds no
+clock-period polling or DUT scheduling. Qualify the assertions, including corrupted
+data, duplicate delivery, premature overwrite and broken hold negative cases:
+
+```sh
+bash verification/dma/flow/cdc-custody.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/cdc-custody"
+```
+
+Some simulators return zero for `$fatal`; the negative gate requires the exact
+fatal diagnostic and absence of the success marker. Timeout and signal exits do
+not qualify. This monitor checks digital protocol invariants; static CDC/RDC and
+physical timing/MTBF obligations remain separate.
+
 Software submits Copy followed by Fence32/64 and polls the real memory marker for
 successful completion. Destination equality is a checker result, never a
 completion signal. Fault, error and fatal results come from software-visible

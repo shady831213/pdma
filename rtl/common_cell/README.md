@@ -15,6 +15,8 @@ files relative to `rtl`. The original cells and tests are unchanged. The README
 is PDMA-specific; `DuplexMailbox` and its test are additions extracted from PDMA.
 Updates must be deliberate, with provenance and regression results; there is no
 automatic synchronization or dependency on an external checkout.
+The instance-scoped `constraints/duplex_mailbox.tcl` is also a PDMA addition;
+it owns no platform clocks, global clock groups, external IO budgets or reset policy.
 
 ## Boundaries and use
 
@@ -23,7 +25,7 @@ automatic synchronization or dependency on an external checkout.
 | `ReadyValidSlice` | Typed single-clock Bypass/Forward/Reverse/Full transport | RegisterFrontend AW/W/AR holding registers use Forward |
 | `BoundedIndex`, `RoundRobin` | Pure bounded selection; ownership/cursor remain with caller | Available for later multi-channel composition |
 | `Ram1RW`, `Ram1R1W`, `Ram1R1WAsync` | Typed RAM ports and provider contracts; optional same-clock forwarding | Provider-independent storage building blocks; not forced into current scratch |
-| `DuplexMailbox` | Two typed acknowledged CDC mailboxes with mutual startup gating | Register and memory request/receipt crossings |
+| `DuplexMailbox` | Two typed acknowledged CDC mailboxes with independent release and bounded custody | Register and memory request/receipt crossings |
 
 Slice modes have capacity/empty latency of 0/0 (Bypass), 1/1 (Forward), 1/0
 (Reverse), and 2/1 (Full), with unstalled rate one beat per clock. Reset clears
@@ -42,9 +44,16 @@ reset, valid/ready and typed request/response ports. Each direction stores one
 message using the standard-library acknowledged handshake. The directions are
 independent: the cell does not associate responses with requests, count active
 transactions or implement drain/cancellation. Both resets must assert together
-and release synchronously to their clocks; startup waits for both domains. Do
-not drive these reset ports with a software channel reset. Owners close admission
+and release synchronously to their clocks. A released sender may buffer one
+message while its peer is still reset; delivery waits for that peer to run, and
+the sender retains the message until acknowledgement. Independent warm reset is
+not supported. Do not drive these reset ports with a software channel reset. Owners close admission
 and drain obligations before clearing their own state.
+
+Use the [reusable timing API](../../impl/pdma/constraints/README.md) for synthesis
+and integration. It accepts the mailbox instance, actual clock objects and an
+explicit maximum-delay budget. CDC structural review does not replace applying
+and checking those physical constraints.
 
 PDMA wire decoding, ring geometry, AXI arbitration/credit, fault handling and reset
 policy stay in `src/dma`. A helper belongs here only when its interface and
@@ -61,6 +70,7 @@ VERYL_DUT_REUSE=0 bash ../../../tools/rtl-flow/veryl.sh test --backend cranelift
 
 The imported tests cover slice modes, custody/pressure, selection, RAM masks,
 depths, forwarding and clock ownership. The mailbox test checks independent wide
-payload types, retained snapshots, backpressure and no duplicate delivery. DMA
-integration tests remain in `rtl/src/tests`; cell tests do not replace subsystem
+payload types, retained snapshots, backpressure and no duplicate delivery.
+The startup test covers both release orders and early custody with a reset peer.
+DMA integration tests remain in `rtl/src/tests`; cell tests do not replace subsystem
 randomized verification, VIP checks, CDC/RDC or physical qualification.

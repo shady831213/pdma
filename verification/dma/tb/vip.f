@@ -20,5 +20,6 @@ tb/register_model.sv
 tb/package.sv
 tb/clock_domain.sv
 tb/assertions.sv
+tb/cdc_assertions.sv
 tb/dut.sv
 tb/top.sv

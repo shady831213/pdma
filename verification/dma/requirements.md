@@ -68,6 +68,40 @@ functional and code coverage. A pass marker alone is insufficient: reject UVM
 errors/fatals, timeouts, missing test completion and vacuous activity. Coverage
 reports combine only successful seeds, excluding checker mutation runs.
 
+## Planned throughput and bubble qualification
+
+Agreed on 2026-11-11 for the next iteration; these cases are not yet implemented
+or counted as passed coverage. Reference the existing Veryl tests and UVM zero-delay
+case construction in [pcie_modeling](https://github.com/shady831213/pcie_modeling),
+adapting their methodology to the DMA contract rather than importing project-specific
+paths, deployment settings or assumptions.
+
+- Native Veryl tests cover continuous offers/acceptance, local stage and buffer
+  handoffs, simultaneous release/replacement, and backpressure recovery. Check
+  sustained initiation rate and locate avoidable idle cycles.
+- Separate UVM zero-delay scenarios use the real VIP/memory path, continuous
+  legal acceptance and minimum legal response latency, with no artificial responder
+  waits. Zero-delay does not mean zero CDC latency or a protocol-violating combinational
+  response. Keep each case independently runnable by the parallel runner.
+- Exercise long aligned copies, back-to-back tasks and short tasks. Measure both
+  the steady data phase and full submission-to-Fence completion; expose fill/drain,
+  descriptor fetch and task-boundary costs rather than hiding them outside the window.
+- Use the external bandwidth reference from the architecture, not the DUT's current
+  peak as its own target. Classify bubbles by causal evidence. Real dependencies and
+  external pressure differ from periodic gaps caused by undersized internal resources
+  or repeatedly restarting control; the latter must be fixed or explicitly justified
+  against the agreed capacity/throughput requirement.
+- Retain three genuinely independent clock domains. Cover the target frequencies
+  with differing phase, plus representative clock ratios and controlled backpressure;
+  equal core/bus frequency is not a synchronous-clock assumption.
+- Functional checks stay at scenario/task scope, using real Fence completion and
+  independently expected memory/state. Passive bus observations provide throughput
+  metrics; VIP and reusable assertions check protocol, credit/custody and no early
+  completion. Do not introduce a shadow hardware executor.
+- Increasing in-flight work must retain reset drain, fault/park/resume and error
+  reporting semantics. Recheck CDC/RDC and scoped timing constraints after changing
+  transport; existing mailbox waivers do not automatically cover a FIFO implementation.
+
 ## Testbench lifecycle and selftest scope
 
 Ordinary DUT regressions do not instantiate the clock-generator selftest.
@@ -107,6 +141,11 @@ mutation cases. `PDMA_SUITE=tb-selftest` selects the independent cases listed in
 `flow/tb-selftests.list`; they do not run DMA task flows or contribute DUT coverage.
 The coverage flow rejects that suite. The same bounded parallel runner and
 per-case process-group cleanup serve both suites.
+
+`PDMA_CLOCK_MODE=target` uses 2ns/1ns/1ns reg/core/bus periods with the configured
+phase offsets. It does not replace randomized asynchronous ratios/jitter or imply
+related clocks in static analysis. Both DUT and TB selftests use the same
+test-owned clock-mode selection; period checking remains TB-selftest-only.
 
 Record runtime comparisons only with matching inputs and configuration. This
 cleanup removes redundant selftest work from DUT runs; no wall-clock speedup is

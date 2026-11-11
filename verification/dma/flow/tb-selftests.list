@@ -1,0 +1,5 @@
+pdma_clock_selftest
+pdma_irq_wait_isolation_test
+pdma_irq_wait_timeout_test
+pdma_irq_wait_reentrant_test
+pdma_reset_wait_isolation_test

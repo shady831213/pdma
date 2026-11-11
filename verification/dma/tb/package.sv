@@ -9,7 +9,7 @@ package pdma_vip_pkg;
     import pdma_contract_records::*;
     import pdma_uvm_regs::*;
     `include "env/configuration.svh"
-    `include "env/clock_env.svh"
+    `include "env/clocks.svh"
     `include "env/memory/memory_backing.svh"
     `include "env/memory/buffer_allocation.svh"
     `include "env/task_data.svh"
@@ -33,4 +33,8 @@ package pdma_vip_pkg;
     `include "tests/dut/ring.svh"
     `include "tests/dut/event.svh"
     `include "tests/dut/registers.svh"
+    `include "tests/tb_selftest/fixture.svh"
+    `include "tests/tb_selftest/interrupt_wait.svh"
+    `include "tests/tb_selftest/reset_scope.svh"
+    `include "tests/tb_selftest/clock_checks.svh"
 endpackage

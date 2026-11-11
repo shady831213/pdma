@@ -11,16 +11,22 @@ clock_mode=${PDMA_CLOCK_MODE:-random}
 [[ $clock_mode == random || $clock_mode == fixed ]] || { printf 'PDMA_CLOCK_MODE must be random or fixed\n' >&2; exit 2; }
 if (($#==0)); then set -- 1 7 19 41 97 211 503 997; fi
 seeds=("$@")
+suite=${PDMA_SUITE:-dut}
+case "$suite" in
+    dut) test_list="$root/verification/dma/flow/tests.list" ;;
+    tb-selftest) test_list="$root/verification/dma/flow/tb-selftests.list" ;;
+    *) printf 'PDMA_SUITE must be dut or tb-selftest\n' >&2; exit 2 ;;
+esac
 tests=()
 if [[ ${PDMA_TESTS+x} ]]; then
     read -r -a tests <<< "${PDMA_TESTS//$'\n'/ }"
 else
-    mapfile -t tests < "$root/verification/dma/flow/tests.list"
+    mapfile -t tests < "$test_list"
 fi
 ((${#tests[@]})) || { printf 'No tests selected\n' >&2; exit 2; }
 for test_name in "${tests[@]}"; do
     [[ $test_name =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || exit 2
-    grep -Fxq "$test_name" "$root/verification/dma/flow/tests.list" || { printf 'Unknown test: %s\n' "$test_name" >&2; exit 2; }
+    grep -Fxq "$test_name" "$test_list" || { printf 'Unknown test for %s: %s\n' "$suite" "$test_name" >&2; exit 2; }
 done
 for seed in "${seeds[@]}"; do [[ $seed =~ ^[1-9][0-9]{0,8}$ ]] || exit 2; done
 [[ $(printf '%s\n' "${tests[@]}" | sort -u | wc -l) == ${#tests[@]} ]] || { printf 'Duplicate test selection\n' >&2; exit 2; }
@@ -30,6 +36,7 @@ printf '%s\n' "${tests[@]}" > "$run/tests.list"
 printf '%s\n' "${seeds[@]}" > "$run/seeds.list"
 printf 'jobs=%s\n' "$jobs" > "$run/configuration.txt"
 printf 'clock_mode=%s\n' "$clock_mode" >> "$run/configuration.txt"
+printf 'suite=%s\n' "$suite" >> "$run/configuration.txt"
 : > "$run/results.txt"
 pids=() names=() case_seeds=() directories=() diagnostics=() mutations=()
 head=0 tail=0 failed=0
@@ -76,18 +83,20 @@ launch() {
 for test_name in "${tests[@]}"; do
     for seed in "${seeds[@]}"; do launch "$test_name" "$seed" "$run/$test_name/seed-$seed" '' ''; done
 done
-for mutation in data identity unknown_identity missing_completion duplicate_completion early_fence underreported_prefix; do
-    mutation_test=pdma_aligned_copy_test
-    case "$mutation" in
-        data) diagnostic=TASK_DATA ;;
-        identity|unknown_identity) diagnostic=TASK_IDENTITY ;;
-        missing_completion) diagnostic=TASK_TIMEOUT ;;
-        duplicate_completion) diagnostic=TASK_DUPLICATE ;;
-        early_fence) diagnostic=TASK_COMPLETION; mutation_test=pdma_read_error_irq_test ;;
-        underreported_prefix) diagnostic=TASK_ERROR_INFO; mutation_test=pdma_read_error_irq_test ;;
-    esac
-    launch "$mutation_test" 1 "$run/negative-$mutation" "$diagnostic" "$mutation"
-done
+if [[ $suite == dut ]]; then
+    for mutation in data identity unknown_identity missing_completion duplicate_completion early_fence underreported_prefix; do
+        mutation_test=pdma_aligned_copy_test
+        case "$mutation" in
+            data) diagnostic=TASK_DATA ;;
+            identity|unknown_identity) diagnostic=TASK_IDENTITY ;;
+            missing_completion) diagnostic=TASK_TIMEOUT ;;
+            duplicate_completion) diagnostic=TASK_DUPLICATE ;;
+            early_fence) diagnostic=TASK_COMPLETION; mutation_test=pdma_read_error_irq_test ;;
+            underreported_prefix) diagnostic=TASK_ERROR_INFO; mutation_test=pdma_read_error_irq_test ;;
+        esac
+        launch "$mutation_test" 1 "$run/negative-$mutation" "$diagnostic" "$mutation"
+    done
+fi
 while ((head<tail)); do collect; done
 if ((failed)); then printf 'PDMA_REGRESSION_FAILED\n'; exit 1; fi
 printf 'PDMA_REGRESSION_COMPLETE\n'

@@ -5,6 +5,12 @@ source "$root/tools/rtl-flow/environment.sh"
 build=$(realpath "${1:?Usage: coverage.sh BUILD REGRESSION NEW_REPORT}")
 regression=$(realpath "${2:?Usage: coverage.sh BUILD REGRESSION NEW_REPORT}")
 report=$(realpath -m "${3:?Usage: coverage.sh BUILD REGRESSION NEW_REPORT}")
+# Old DUT runs predate explicit suites; TB qualification must never enter DUT coverage.
+suite=
+if [[ -f $regression/configuration.txt ]]; then
+    suite=$(sed -n 's/^suite=//p' "$regression/configuration.txt")
+fi
+[[ ${suite:-dut} == dut ]] || { printf 'Only DUT regressions may enter DUT coverage reports\n' >&2; exit 2; }
 pdma_environment verification
 pdma_new_run "$report"
 databases=("$build/coverage.vdb")

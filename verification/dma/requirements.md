@@ -65,48 +65,46 @@ functional and code coverage. A pass marker alone is insufficient: reject UVM
 errors/fatals, timeouts, missing test completion and vacuous activity. Coverage
 reports combine only successful seeds, excluding checker mutation runs.
 
-## Pending testbench lifecycle cleanup
+## Testbench lifecycle and selftest scope
 
-The following review decisions are approved follow-up work. They are not yet
-implemented; this checkpoint changes documentation only.
+Ordinary DUT regressions do not instantiate the clock-generator selftest.
+`pdma_clocks` in `env/clocks.svh` is a component around the existing `jvs_clk_env`;
+it owns configuration, power-on reset control, event-driven completion waits and
+a bounded reset watchdog. It has no `run_phase`, period sampler or selftest counters.
+All three real reset interfaces must finish before `reset_phase` is released.
 
-- Ordinary DUT regressions must not run the clock-generator selftest. The current
-  `pdma_clocks` checks 64 periods per domain, rather than sampling periods for the
-  entire simulation, but repeats that work and holds a `run_phase` objection in
-  every DUT case. Move period/jitter and reset-stimulus edge qualification into
-  explicitly selected TB selftests. The ordinary clock component retains stimulus
-  configuration, power-on reset control, completion waits and bounded watchdogs.
-  Remove the unconditional `clocks_verified == 3` requirement from the DUT base test
-  together with that move; retain equivalent non-vacuity checks in the TB selftest.
-- `pdma_clocks` is a `uvm_component` around the existing `jvs_clk_env`, not a second
-  independent test environment. Clarify its naming and keep its responsibility
-  limited to clock/reset integration. Selftest observers must be absent from
-  ordinary runs, rather than waking each cycle to test an enable flag.
-- Use one task-phase family within each owned component. Currently `pdma_clocks`
-  mixes `reset_phase` and `run_phase`, and `pdma_env` mixes `configure_phase` and
-  `run_phase`. Keep physical reset in `reset_phase`; use the runtime phase sequence
-  for lifecycle-managed services, including IRQ registration and service execution.
-  A continuously passive monitor may use only `run_phase`. Do not mechanically
-  rewrite third-party VIP phase implementations.
-- Bound cancellation to the operation that owns the competing processes. The
-  current `disable fork` sites in `await_reset`, clock phase tasks and
-  `wait_interrupt` need review/removal or an isolated calling process. A normal
-  task call does not create a process boundary: cancellation can affect earlier
-  children of its caller, not merely the adjacent lexical fork. Other components'
-  independent phase processes are not affected solely by sharing a phase. Use
-  per-invocation process isolation or explicit process handles; a named block
-  alone is not a general solution for concurrent/reentrant calls.
+Explicit TB selftests own period/jitter and reset-stimulus edge qualification.
+They check 64 periods per domain against the requested configuration, independently
+of the driver's period-conversion helpers. Only that selftest retains the required
+sample counts; DUT test completion depends on scenarios and task checks. No disabled
+observer wakes each cycle to check an enable flag.
 
-Keep AXI protocol checks, DUT invariant assertions and IRQ handshake observation
-in ordinary verification. These check DUT behavior, not the clock generator.
-IRQ monitoring must preserve consecutive accepted notifications even when the
-notification signal stays high. Scenario coverage already samples completed
-observations, rather than every clock cycle. Software MMIO polling and cycle-based
-timeouts have behavioral meaning and must not be removed just to reduce activity.
+Use one task-phase family within each owned component. `pdma_env` registers IRQ
+handlers in `configure_phase` and runs their service in `main_phase`, through
+software teardown. The clock component uses `reset_phase`; the optional clock
+selftest adds `post_reset_phase`. The continuously passive IRQ acceptance monitor
+uses only `run_phase`. Third-party VIP phase implementations remain unchanged.
 
-Before changing the implementation, capture a failing process-isolation test with
-an unrelated caller-owned thread. Cover successful IRQ waits, timeout cleanup and
-concurrent invocations. Qualify the clock selftest independently, then run the
-existing DUT scenarios and checker-negative cases with the selftest disabled.
-Record any runtime comparison under matching configuration; no performance gain
-has been measured at this checkpoint.
+Cancellation belongs to the operation that spawned the competing processes.
+A normal task call creates no process boundary. Each IRQ wait and reset watchdog
+therefore runs inside its own forked process; its `disable fork` can terminate
+only that invocation's children. Do not substitute a named block as a general
+solution for concurrent/reentrant calls. The isolation tests keep a caller-owned
+thread alive across successful and timed-out IRQ waits and across reset; they
+also check that a timed-out receiver cannot consume a later notification.
+
+AXI protocol checks, DUT invariant assertions and IRQ handshake observation remain
+in ordinary verification. IRQ monitoring preserves consecutive accepted notifications
+when the signal stays high. Scenario coverage samples completed observations; the
+memory responder and IRQ service block on transactions. Software MMIO polling and
+cycle-based timeouts retain their behavioral meaning.
+
+`PDMA_SUITE=dut` is the default regression suite, including the seven checker
+mutation cases. `PDMA_SUITE=tb-selftest` selects the independent cases listed in
+`flow/tb-selftests.list`; they do not run DMA task flows or contribute DUT coverage.
+The coverage flow rejects that suite. The same bounded parallel runner and
+per-case process-group cleanup serve both suites.
+
+Record runtime comparisons only with matching inputs and configuration. This
+cleanup removes redundant selftest work from DUT runs; no wall-clock speedup is
+claimed from the reduced clock checks.

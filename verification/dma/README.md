@@ -49,6 +49,24 @@ Run one case with `flow/run.sh BUILD NEW_RUN TEST SEED`. The 19 independently
 selectable tests are listed in `flow/tests.list`. `PDMA_JOBS` bounds parallel runs
 (default 4); `PDMA_TESTS` optionally selects a space-separated subset.
 `PDMA_CLOCK_MODE=random|fixed` selects the clock profile for the entire batch.
+
+`PDMA_SUITE=dut` is the default. Clock period/jitter selfchecks are not instantiated
+in DUT runs; clock/reset integration lives in `env/clocks.svh`. AXI protocol checks,
+DUT assertions and the IRQ handshake monitor remain active. The environment uses
+`configure_phase` for handler registration and `main_phase` for the IRQ service;
+power-on reset stays in `reset_phase`.
+
+The separate `PDMA_SUITE=tb-selftest` suite contains five independently selectable
+cases: clock/reset-stimulus qualification, IRQ wait success isolation, timeout cleanup,
+concurrent waits and reset-thread isolation. Its minimal fixture does not construct
+DMA software flows or functional coverage collectors. These results are TB
+qualification, and `flow/coverage.sh` rejects them as DUT coverage inputs.
+Both suites use the same bounded parallel runner:
+
+```sh
+PDMA_SUITE=tb-selftest bash verification/dma/flow/regression.sh "$PDMA_RUN_ROOT/build" "$PDMA_RUN_ROOT/tb-selftest" 1 7
+```
+
 Regression
 output is separated by test and seed. Each output directory must be new; stale
 output is rejected. The regression also runs deliberately corrupted

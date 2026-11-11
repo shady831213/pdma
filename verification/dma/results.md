@@ -1,5 +1,46 @@
 # Scenario-level verification checkpoints
 
+## Testbench lifecycle cleanup (2026-11-11)
+
+Testbench manifest SHA-256:
+`9ec97793f8a1176f380b86821a6ac4aea012377a6417acd74063e7e6d42e4c5e`.
+One fresh native build passes all **19 DUT tests x 8 random seeds** and all
+**19 DUT tests with fixed clocks at seed 7**: **171 positive runs,
+369 scenarios, 405 terminal checks and 32,045 checked bytes**.
+Both batches reject all seven checker mutations with their intended diagnostics.
+No positive DUT run reports a UVM error/fatal or assertion failure.
+
+The ordinary DUT runs instantiate no clock-period selftest and log no
+`CLOCK_CHECK` activity. Clock/reset-stimulus qualification is an explicit TB suite.
+All **5 TB tests x 8 random seeds** pass; each also passes with fixed clocks in the
+focused qualification. They test clock periods/reset edges, IRQ wait isolation,
+timeout receiver cleanup, concurrent waits and reset-thread isolation. These
+minimal fixtures do not exercise DMA task flows or contribute DUT coverage.
+
+Before the fix, real native runs showed `IRQ_WAIT_SCOPE` after successful and
+timed-out waits, and `RESET_WAIT_SCOPE` after reset: each operation killed an
+unrelated caller-owned thread. Ordinary Copy and concurrent waits passed on that
+same baseline. The corrected implementation preserves those threads and prevents
+a timed-out receiver from consuming a later notification.
+
+The parallel runner distinguishes DUT and TB suites, rejects unknown selection,
+and excludes TB runs from DUT coverage. Runner tests also retain cancellation,
+child-process teardown, timeout rejection and exact negative-diagnostic checks.
+The coverage merge uses the build plus all 152 positive random DUT runs, excluding
+negative and TB selftest databases. Native summary generation succeeds:
+
+| RTL module | Line | Condition | Branch |
+| --- | ---: | ---: | ---: |
+| DmaCopy | 100.00% | 86.21% | 100.00% |
+| CopyEngine | 93.09% | 78.07% | 85.90% |
+| CopyMemoryEndpoint | 98.70% | 81.45% | 90.32% |
+
+DUT RTL, AXI protocol checks and DUT invariant assertions are unchanged. This
+qualifies the testbench lifecycle cleanup, not a new hardware feature, physical
+signoff or measured wall-clock speedup. Raw logs and tool/deployment details stay
+outside version control.
+
+
 ## UVM RAL qualification (2026-11-09)
 
 Final testbench manifest SHA-256:

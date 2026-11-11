@@ -83,9 +83,6 @@ class pdma_clocks extends uvm_component;
     jvs_clk_top_cfg driver_cfg;
     jvs_clk_env driver;
     virtual jvs_gen_clk_if vif[3];
-    int unsigned clocks_verified;
-    int unsigned verified_cycles[3];
-    bit reset_complete;
     function new(string name,uvm_component parent); super.new(name,parent); endfunction
     virtual function void build_phase(uvm_phase phase);
         super.build_phase(phase);
@@ -105,83 +102,36 @@ class pdma_clocks extends uvm_component;
             delay+=(cfg.reset_cycles[i]+128)*driver_cfg.groups[cfg.domain_name(i)].root_clk.get_max_period();
         return delay;
     endfunction
+    // Completion synchronization only; stimulus edge/period checks belong to TB selftests.
     task await_reset(int index);
-        realtime last_rise=-1;
-        fork
-            forever begin
-                @(posedge vif[index].clock);
-                last_rise=$realtime;
-            end
-            begin
-                wait(vif[index].rst_process===1'b1);
-                wait(vif[index].reset_n===1'b0);
-                @(posedge vif[index].reset_n);
-                if(vif[index].clock!==1'b1 || $realtime!=last_rise)
-                    `uvm_fatal("CLOCK_RESET_SYNC",$sformatf("%s reset did not deassert on its rising edge",cfg.domain_name(index)))
-                wait(vif[index].rst_process===1'b0);
-                if(vif[index].reset_n!==1'b1)
-                    `uvm_fatal("CLOCK_RESET",$sformatf("%s reset remained asserted",cfg.domain_name(index)))
-            end
-        join_any
-        disable fork;
+        wait(vif[index].rst_process===1'b1);
+        wait(vif[index].reset_n===1'b0);
+        @(posedge vif[index].reset_n);
+        wait(vif[index].rst_process===1'b0);
+        if(vif[index].reset_n!==1'b1)
+            `uvm_fatal("CLOCK_RESET",$sformatf("%s reset remained asserted",cfg.domain_name(index)))
     endtask
     virtual task reset_phase(uvm_phase phase);
         phase.raise_objection(this);
-        // Upstream event pools key drivers by short name, which is shared
-        // across groups. Observe every interface before releasing the phase.
-        fork
-            begin
-                fork
-                    driver.hw_reset("*");
-                    await_reset(0);
-                    await_reset(1);
-                    await_reset(2);
-                join
-            end
-            begin
-                #(watchdog_delay());
-                `uvm_fatal("CLOCK_RESET_TIMEOUT","Power-up clock reset did not complete")
-            end
-        join_any
-        disable fork;
-        reset_complete=1;
-        phase.drop_objection(this);
-    endtask
-    task check_clock(int index);
-        realtime previous, delta;
-        jvs_root_clk_cfg root_cfg=driver_cfg.groups[cfg.domain_name(index)].root_clk;
-        @(posedge vif[index].clock);
-        previous=$realtime;
-        repeat(64) begin
-            @(posedge vif[index].clock);
-            delta=$realtime-previous;
-            if(delta<root_cfg.get_min_period()-0.002ns || delta>root_cfg.get_max_period()+0.002ns)
-                `uvm_fatal("CLOCK_PERIOD",$sformatf("%s observed=%0t min=%0t max=%0t",cfg.domain_name(index),delta,
-                    root_cfg.get_min_period(),root_cfg.get_max_period()))
-            previous=$realtime;
-            verified_cycles[index]++;
-        end
-        clocks_verified++;
-        `uvm_info("CLOCK_CHECK",$sformatf("%s verified_cycles=%0d period_ns=%0d jitter=%0d phase=%0d",cfg.domain_name(index),
-            verified_cycles[index],cfg.period_ns[index],cfg.jitter[index],cfg.initial_phase[index]),UVM_LOW)
-    endtask
-    virtual task run_phase(uvm_phase phase);
-        phase.raise_objection(this);
-        fork
-            begin
-                wait(reset_complete);
-                fork
-                    check_clock(0);
-                    check_clock(1);
-                    check_clock(2);
-                join
-            end
-            begin
-                #(watchdog_delay()*2.0);
-                `uvm_fatal("CLOCK_CHECK_TIMEOUT","Generated clock verification did not complete")
-            end
-        join_any
-        disable fork;
+        // The wrapper process owns only this reset operation and its watchdog.
+        fork begin
+            fork
+                begin
+                    // Group event names are shared upstream; wait on every real interface.
+                    fork
+                        driver.hw_reset("*");
+                        await_reset(0);
+                        await_reset(1);
+                        await_reset(2);
+                    join
+                end
+                begin
+                    #(watchdog_delay());
+                    `uvm_fatal("CLOCK_RESET_TIMEOUT","Power-up clock reset did not complete")
+                end
+            join_any
+            disable fork;
+        end join
         phase.drop_objection(this);
     endtask
 endclass

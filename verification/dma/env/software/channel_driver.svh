@@ -157,14 +157,18 @@ class pdma_channel extends uvm_object;
         `uvm_fatal("TASK_TIMEOUT",$sformatf("channel=%0d task=%0d has no completion",channel_id,job.id))
     endtask
     task wait_interrupt(output pdma_result result);
-        fork
-            interrupts.get(result);
-            begin
-                repeat(cfg.irq_timeout_cycles) @(posedge control.core_clk);
-                `uvm_fatal("TASK_TIMEOUT",$sformatf("channel=%0d IRQ did not arrive",channel_id))
-            end
-        join_any
-        disable fork;
+        result=null;
+        // A task call does not isolate processes. Give each wait its own fork owner.
+        fork begin
+            fork
+                interrupts.get(result);
+                begin
+                    repeat(cfg.irq_timeout_cycles) @(posedge control.core_clk);
+                    `uvm_fatal("TASK_TIMEOUT",$sformatf("channel=%0d IRQ did not arrive",channel_id))
+                end
+            join_any
+            disable fork;
+        end join
     endtask
     task interrupt_snapshot(output pdma_result result);
         bit[31:0] fatal_code;

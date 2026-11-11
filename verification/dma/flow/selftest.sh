@@ -78,6 +78,12 @@ SIM
 chmod +x "$fixture/build/simv"
 (cd "$fixture/build" && sha256sum simv > executable.sha256)
 
+if PDMA_SUITE=invalid bash "$flow/regression.sh" "$fixture/build" "$evidence/invalid-suite" 1 > "$evidence/invalid-suite.log" 2>&1; then
+    printf 'FAIL unknown regression suite accepted\n' >&2; exit 1
+fi
+[[ ! -e $evidence/invalid-suite ]]
+printf 'PASS unknown suite rejected before output allocation\n' > "$evidence/suite-assertions.txt"
+
 PDMA_CLOCK_MODE=fixed FIXTURE_CLOCK_MODE=fixed bash "$flow/regression.sh" "$fixture/build" "$evidence/parallel" 1 7 > "$evidence/parallel.log" 2>&1
 read -r active maximum < "$FIXTURE_STATE/count"
 [[ $active == 0 && $maximum == 2 ]]
@@ -85,6 +91,12 @@ read -r active maximum < "$FIXTURE_STATE/count"
 [[ $(grep -c '^REJECTED mutation=' "$evidence/parallel/results.txt") == 7 ]]
 cp "$FIXTURE_STATE/events" "$evidence/parallel-events.txt"
 printf 'PASS concurrency maximum=%s limit=2 active_at_end=%s positive=4 negative=7\n' "$maximum" "$active" > "$evidence/assertions.txt"
+
+PDMA_SUITE=tb-selftest PDMA_TESTS="$(cat "$flow/tb-selftests.list")" bash "$flow/regression.sh" "$fixture/build" "$evidence/tb" 1 > "$evidence/tb.log" 2>&1
+[[ $(grep -c '^PASS test=' "$evidence/tb/results.txt") == $(wc -l < "$flow/tb-selftests.list") ]]
+! grep -q 'mutation=' "$evidence/tb/results.txt"
+grep -Fxq 'suite=tb-selftest' "$evidence/tb/configuration.txt"
+printf 'PASS TB selftests run independently without DUT checker mutations\n' >> "$evidence/suite-assertions.txt"
 
 export FIXTURE_FAIL=pdma_aligned_copy_test:1
 if bash "$flow/regression.sh" "$fixture/build" "$evidence/failure" 1 7 > "$evidence/failure.log" 2>&1; then exit 1; fi
@@ -121,6 +133,9 @@ while (($#)); do
 done
 URG
 chmod +x "$fixture/urg"
+if PDMA_COVERAGE_TOOL="$fixture/urg" bash "$flow/coverage.sh" "$fixture/build" "$evidence/tb" "$evidence/tb-coverage" > "$evidence/tb-coverage.log" 2>&1; then exit 1; fi
+[[ ! -e $evidence/tb-coverage ]]
+printf 'PASS TB selftest coverage excluded from DUT reports\n' >> "$evidence/suite-assertions.txt"
 PDMA_COVERAGE_TOOL="$fixture/urg" bash "$flow/coverage.sh" "$fixture/build" "$evidence/failure" "$evidence/coverage" > "$evidence/coverage.log" 2>&1
 [[ $(wc -l < "$evidence/coverage/databases.list") == 4 ]]
 ! grep -Eq '/negative-|/pdma_aligned_copy_test/seed-1/' "$evidence/coverage/databases.list"
@@ -150,6 +165,6 @@ while read -r group; do
     printf 'group=%s live_members=0\n' "$group" >> "$evidence/cancel-observed.txt"
 done < <(cat "$evidence/cancel/pdma_aligned_copy_test"/seed-*/group.txt)
 printf 'PASS cancellation exit=143 all simulator/TERM-resistant descendant processes stopped\n'  >> "$evidence/assertions.txt"
-sha256sum "$flow"/*.sh "$flow/tests.list" > "$evidence/source.sha256"
+sha256sum "$flow"/*.sh "$flow"/*.list > "$evidence/source.sha256"
 printf 'PDMA_FLOW_SELFTEST_PASS\n'
 cat "$evidence/assertions.txt"

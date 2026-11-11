@@ -50,8 +50,8 @@ virtual class pdma_base_test extends uvm_test;
     virtual function void check_phase(uvm_phase phase);
         int checked_tasks=0;
         foreach(env.checkers[i]) checked_tasks+=env.checkers[i].checked_tasks;
-        if(cases!=expected_cases || checked_tasks<expected_cases || env.clocks.clocks_verified!=3)
-            `uvm_error("TEST_INCOMPLETE","Required scenarios, task checks or clocks are missing")
+        if(cases!=expected_cases || checked_tasks<expected_cases)
+            `uvm_error("TEST_INCOMPLETE","Required scenarios or task checks are missing")
     endfunction
     virtual function void report_phase(uvm_phase phase);
         uvm_report_server reports=uvm_report_server::get_server();

@@ -75,7 +75,7 @@ class pdma_env extends uvm_env;
         foreach(channels[i]) interrupts.register_irq(channels[i].vector,handlers[i]);
         phase.drop_objection(this);
     endtask
-    virtual task run_phase(uvm_phase phase);
+    virtual task main_phase(uvm_phase phase);
         jvs_irq_vir_seq service=new("irq_service"); service.start(interrupts);
     endtask
     function pdma_task_flow task_flow(int channel_id=0);

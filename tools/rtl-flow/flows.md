@@ -5,6 +5,14 @@ synthesis and constraint code. The platform supplies installed tools, license
 setup, proprietary libraries/VIP and output locations. A tool name or generic
 option is public; machine deployment details are not.
 
+The next implementation baseline requires Genus at the approved per-domain
+frequencies and a non-ULVT library policy. CDC and RDC require VC SpyGlass.
+These ports are pending: the current synthesis command below still uses DC Tcl,
+and the repository does not yet provide a qualified PDMA VC SpyGlass launcher.
+See [implementation status](../../impl/pdma/README.md). Reusable launcher,
+constraint and report-check code belongs here or in the design flow directories;
+only deployment and proprietary inputs remain private.
+
 Set `PDMA_ENV` to a trusted shell file outside the repository. It may export
 configuration variables and define `pdma_setup()` accepting `simulation`,
 `verification` or `synthesis`. The hook can load local modules and licenses.

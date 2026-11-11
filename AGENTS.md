@@ -76,6 +76,14 @@ pins and maintains Veryl under `tools/rtl-flow`, starting from a verified snapsh
 of [pcie_modeling's tool inputs](https://github.com/shady831213/pcie_modeling).
 Do not modify that project's active toolchain or
 automatically follow its updates; shared tool extraction is deferred.
+The 2026-11-11 implementation target is 12nm with Genus: core and bus clocks
+at 1GHz, register clock at 500MHz, still three asynchronous domains. ULVT is
+forbidden; qualify library selection, mapping exclusions and actual mapped-cell
+identities. Both CDC and RDC must use VC SpyGlass with PDMA-owned constraints
+and reviewed findings. Genus migration and the PDMA VC SpyGlass flow remain
+pending; historical DC results and randomized simulation do not qualify them.
+Keep deployment, proprietary inputs and raw reports private; generic executable
+flows and design constraints belong in the repository.
 The model's Cargo workspace contains the core `contract`, `dma` and `host` crates, the
 managed MVP's `hw-components` and `firmware`, shared PDMA `software`, system scenarios,
 and six reusable building blocks:

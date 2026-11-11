@@ -58,7 +58,10 @@ The initial profile implements Linear Copy and Fence32/64. It does not implement
 SG, multi-channel arbitration, Write, Fill, Wait, Atomic, Semaphore, Trap or
 Timestamp. Those Rust scenarios are future
 coverage obligations, not passed/skipped tests in this regression. Protocol VIP
-and randomized clocks do not establish analog CDC/RDC or metastability signoff.
+and randomized clocks do not establish CDC/RDC or metastability signoff. VC
+SpyGlass CDC and RDC are separate required checks on the actual emitted DMA
+design; their constraints, negative fixtures and closure obligations are specified
+in [reset/CDC](../../docs/rtl/reset-cdc.md#vc-spyglass-cdcrdc-检查门槛).
 
 Record each run's seed, source hashes, tool identity, scenario/task counts,
 functional and code coverage. A pass marker alone is insufficient: reject UVM

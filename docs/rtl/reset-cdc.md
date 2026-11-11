@@ -1,6 +1,7 @@
 # 三域 reset、责任排空与通知设计草案
 
-状态：设计方案，未实现。软件可观察语义保持
+状态：完整多事务实现的设计方案；已实现的最小切片及其验证边界见
+[最小 Copy 切片](minimal-copy.md)。软件可观察语义保持
 [reset](../../model/modeling/docs/reset.md) 和
 [context](../../model/modeling/docs/context-contract.md) 合同；本文给出多时钟、多事务
 实现必须维持的不变量。与 [memory-interface](memory-interface.md) 配套。
@@ -146,3 +147,34 @@ Timestamp 消费一次一致的 u64 外部时间样本，单位由平台决定�
 | 平台已接收 IRQ 后 reset/rebind | 旧消息仍属于原接收方，新 cause 不被旧 ACK 吞掉 |
 
 这些是针对真实端口的验收义务，不以原生仿真替代 CDC/RDC 或物理 reset 签核。
+
+## VC SpyGlass CDC/RDC 检查门槛
+
+2026-11-11 确认：DMA 必须使用 **VC SpyGlass** 分别运行 CDC 和 RDC。首个检查
+对象是实际生成的 `DmaCopy` 及其引用的 common cells；随后随 DMA 实现扩展覆盖。
+当前尚未建立 PDMA 的 VC SpyGlass 检查通过证据。
+
+- 明确 reg/core/bus 三域及每个接口的 clock/reset 归属。core 与 bus 即使都为
+  1GHz，也没有同步关系；reg 目标为 500MHz。约束必须匹配实际端口和位宽，缺失
+  或未分类端口使检查失败，不能用自动猜测的归属得到干净报告。
+- CDC 检查 reg/core 请求与回执、core/bus 请求/数据与回执、初始化和清理握手。
+  检查同步器、脉冲/事件传递、多位数据稳定性及控制重汇聚；握手 payload 不能
+  简单视为可逐位同步的总线。未来 FIFO/Gray-pointer 通路也需按实际结构检查。
+- RDC 独立检查异步置位、本域同步释放、不同释放顺序、复位与非复位状态之间
+  的传播和跨域重汇聚，包含异步时钟路径。不能仅凭各域有复位同步器就判定通过。
+  本地同步释放由内部电路还是集成边界保证，必须据实际实现明确，不假定存在。
+- 软件 channel/DMA reset 是停止与排空协议，不是电气 reset。请求、确认和初始化
+  信号的跨域结构由静态检查覆盖；不丢失 outstanding、无伪回执、busy 不提前清零
+  等时序性质仍由 DUT assertions 和随机异步仿真检查。不得放宽系统 reset 合同
+  来隐藏发现；首版未承诺的任意单域热复位恢复也不能冒称已获验证。
+- 流程资格验证应包含漏同步的 CDC 负例、reset-domain 不安全传播的 RDC 负例及
+  错误端口/约束负例。工具完成、零路径或约束错误均不等于设计通过。
+- 保留 raw 与 unresolved 报告；逐项修复或说明受精确路径、源文件、配置和工具
+  身份约束的例外。不得照搬其它设计的 waiver 或整类关闭规则。相关源文件或
+  拓扑改变后重新审查。
+
+VC SpyGlass 的结构检查不替代同步器 MTBF、reset recovery/removal、握手 payload
+最大延迟/偏斜及布线约束。STA 的异步 clock group 或 reset false path 不能抹去这些
+物理义务。通用 launcher、设计约束和报告验收代码应进入仓库；部署配置、原始报告
+及工艺库内容保持私有。检查工具与流程参考
+[pcie_modeling](https://github.com/shady831213/pcie_modeling)，验证结论必须重新绑定 PDMA。

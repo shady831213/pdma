@@ -24,9 +24,11 @@ main() {
             hash=$(sha256sum "${item#*:}")
             printf ' %s %s' "${item%%:*}" "${hash%% *}" >> "$run/review-inputs.tcl"
         done
-        shared_hash=$(cd "$run" && sha256sum constraints-common.tcl duplex-mailbox.tcl profile.tcl | sha256sum)
+        shared_hash=$(cd "$run" && sha256sum constraints-common.tcl duplex-mailbox.tcl async-queue.tcl profile.tcl | sha256sum)
         printf ' common %s' "${shared_hash%% *}" >> "$run/review-inputs.tcl"
-        for item in "analysis:$run/check.tcl" "tool:$run/tool-version.txt"; do
+        analysis_hash=$(cd "$run" && sha256sum check.tcl review.tcl | sha256sum)
+        printf ' analysis %s' "${analysis_hash%% *}" >> "$run/review-inputs.tcl"
+        for item in "tool:$run/tool-version.txt"; do
             hash=$(sha256sum "${item#*:}")
             printf ' %s %s' "${item%%:*}" "${hash%% *}" >> "$run/review-inputs.tcl"
         done

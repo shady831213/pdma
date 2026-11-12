@@ -1,131 +1,61 @@
-// A slot is retained through all external obligations and receipt acceptance.
-// Software reset cannot retract VALID or discard R/B; only the core stops admission.
+// Independent ordered AXI lanes. Each accepted internal request owns one receipt;
+// software reset closes the producer but never retracts accepted AW/W/AR or R/B.
 pub module CopyMemoryEndpoint (
     clk  : input   clock                                   ,
     rst_n: input   reset_async_low                         ,
     port : modport CopyMemoryPort::slave                   ,
     axi  : modport $std::axi4_if::<CopyMemory::Bus>::master,
 ) {
-    enum Phase: logic<2> {
-        Idle,
-        Read,
-        Write,
-        Receipt,
-    }
-    var phase       : Phase                 ;
-    var job         : CopyMemory::Request   ;
-    var result      : CopyMemory::Receipt   ;
-    var address_done: logic                 ;
-    var data_done   : logic                 ;
-    var beat        : logic              <3>;
-    let lane        : logic              <3> = job.address[2:0];
-    assign port.ready    = phase == Phase::Idle;
-    assign port.returned = phase == Phase::Receipt;
-    assign port.receipt  = result;
-    assign axi.arvalid   = phase == Phase::Read && !address_done;
-    assign axi.araddr    = job.address;
-    assign axi.arlen     = job.length as 8;
-    assign axi.arsize    = job.size as CopyMemory::Bus::size_t;
-    assign axi.arburst   = 2'b01 as CopyMemory::Bus::burst_t;
-    assign axi.arcache   = '0;
-    assign axi.arprot    = '0;
-    assign axi.arid      = 0;
-    assign axi.arlock    = 0;
-    assign axi.arqos     = 0;
-    assign axi.arregion  = 0;
-    assign axi.aruser    = job.selector;
-    assign axi.rready    = phase == Phase::Read && address_done;
-    assign axi.awvalid   = phase == Phase::Write && !address_done;
-    assign axi.awaddr    = job.address;
-    assign axi.awlen     = job.length as 8;
-    assign axi.awsize    = job.size as CopyMemory::Bus::size_t;
-    assign axi.awburst   = 2'b01 as CopyMemory::Bus::burst_t;
-    assign axi.awcache   = '0;
-    assign axi.awprot    = '0;
-    assign axi.awid      = 0;
-    assign axi.awlock    = 0;
-    assign axi.awqos     = 0;
-    assign axi.awregion  = 0;
-    assign axi.awuser    = job.selector;
-    assign axi.wvalid    = phase == Phase::Write && !data_done;
-    assign axi.wdata     = if job.size == 0 ?
-        (job.data[7:0] as 64) << (lane * 8)
-    : if job.size == 2 ?
-        (job.data[31:0] as 64) << (lane * 8)
-    :
-        (job.data >> ((beat as u32) * 64)) as 64
-    ;
-    assign axi.wstrb     = if job.size == 0 ? 8'h01 << lane : if job.size == 2 ? 8'h0f << lane : 8'hff;
-    assign axi.wlast     = beat == job.length;
-    assign axi.wuser     = 0;
-    assign axi.bready    = phase == Phase::Write && address_done && data_done;
+    inst reads : CopyMemoryPort;
+    inst writes: CopyMemoryPort;
+    inst lanes : $std::axi4_if::<CopyMemory::Bus>;
+    // A full interface joins disjoint read/write views. Passing the already
+    // restricted master modport as a different modport is illegal SystemVerilog.
+    connect axi            <> lanes.slave;
+    assign reads.valid    = port.valid && !port.request.write;
+    assign writes.valid   = port.valid && port.request.write;
+    assign reads.request  = port.request;
+    assign writes.request = port.request;
+    assign port.ready     = if port.request.write ? writes.ready : reads.ready;
+    inst reader: CopyReadEndpoint (
+        clk         ,
+        rst_n       ,
+        port : reads,
+        axi  : lanes,
+    );
+    inst writer: CopyWriteEndpoint (
+        clk          ,
+        rst_n        ,
+        port : writes,
+        axi  : lanes ,
+    );
+    var cursor  : logic   ;
+    var selected: logic<2>;
+    var ready   : logic   ;
+    assign selected        = common_cell::RoundRobin::<2>::select({writes.returned, reads.returned}, cursor);
+    assign reads.accepted  = selected[0] && ready;
+    assign writes.accepted = selected[1] && ready;
+    // Register the merged receipt; a newly arriving contender cannot replace a
+    // receipt already offered under downstream backpressure.
+    inst result: common_cell::ReadyValidSlice #(
+        TYPE: CopyMemory::Receipt                        ,
+        MODE: common_cell::ReadyValid::SliceMode::Forward,
+    ) (
+        clk                                                      ,
+        rst_n                                                    ,
+        s_valid : |selected                                      ,
+        s_ready : ready                                          ,
+        s_data  : if selected[1] ? writes.receipt : reads.receipt,
+        m_valid : port.returned                                  ,
+        m_ready : port.accepted                                  ,
+        m_data  : port.receipt                                   ,
+        occupied: _                                              ,
+    );
     always_ff (clk, rst_n) {
         if_reset {
-            phase        = Phase::Idle;
-            job          = '0;
-            result       = '0;
-            address_done = 0;
-            data_done    = 0;
-            beat         = 0;
-        } else {
-            case phase {
-                Phase::Idle: if port.valid {
-                    job          = port.request;
-                    result       = '0;
-                    beat         = 0;
-                    address_done = 0;
-                    data_done    = 0;
-                    phase        = if port.request.write ? Phase::Write : Phase::Read;
-                }
-                Phase::Read: {
-                    if axi.arvalid && axi.arready {
-                        address_done = 1;
-                    }
-                    if axi.rvalid && axi.rready {
-                        if job.size == 0 {
-                            result.data = ((axi.rdata >> (lane * 8)) as 8) as 512;
-                        } else {
-                            result.data[beat * 64+:64] = axi.rdata;
-                        }
-                        if (axi.rresp as 2) != 0 {
-                            result.page_fault = (!result.failed || result.page_fault) && axi.ruser == 1
-                                && (axi.rresp as 2) >= 2;
-                            result.failed     = 1;
-                        }
-                        if axi.rid != 0 || axi.rlast != (beat == job.length) || (axi.rresp as 2) == 1
-                            || (axi.ruser != 0 && (axi.ruser != 1 || (axi.rresp as 2) <: 2)) {
-                            result.protocol_error = 1;
-                        }
-                        if axi.rlast {
-                            phase = Phase::Receipt;
-                        } else {
-                            beat += 1;
-                        }
-                    }
-                }
-                Phase::Write: {
-                    if axi.awvalid && axi.awready {
-                        address_done = 1;
-                    }
-                    if axi.wvalid && axi.wready {
-                        if axi.wlast {
-                            data_done = 1;
-                        } else {
-                            beat += 1;
-                        }
-                    }
-                    if axi.bvalid && axi.bready {
-                        result.failed         = (axi.bresp as 2) != 0;
-                        result.page_fault     = axi.buser == 1 && (axi.bresp as 2) >= 2;
-                        result.protocol_error = axi.bid != 0 || (axi.bresp as 2) == 1
-                            || (axi.buser != 0 && (axi.buser != 1 || (axi.bresp as 2) <: 2));
-                        phase                 = Phase::Receipt;
-                    }
-                }
-                Phase::Receipt: if port.accepted {
-                    phase = Phase::Idle;
-                }
-            }
+            cursor = 0;
+        } else if ready && |selected {
+            cursor = selected[0];
         }
     }
 }

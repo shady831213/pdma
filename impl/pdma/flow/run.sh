@@ -3,6 +3,10 @@
 source "$root/tools/rtl-flow/process.sh"
 pdma_impl_prepare() {
     pdma_snapshot=$(realpath "$1") || return
+    if [[ -f $pdma_snapshot/simulation-only.json ]]; then
+        printf 'Simulation-only instrumentation cannot qualify implementation\n' >&2
+        return 2
+    fi
     pdma_output=$(realpath -m "$2") || return
     (cd "$pdma_snapshot" && sha256sum --check --status snapshot.sha256) || return
     pdma_new_run "$pdma_output" || return
@@ -10,6 +14,7 @@ pdma_impl_prepare() {
     cp "$root/impl/pdma/flow/profile.tcl" "$pdma_output/" || return
     cp "$root/impl/pdma/flow/constraints-common.tcl" "$pdma_output/" || return
     cp "$root/rtl/common_cell/constraints/duplex_mailbox.tcl" "$pdma_output/duplex-mailbox.tcl" || return
+    cp "$root/rtl/common_cell/constraints/async_queue.tcl" "$pdma_output/async-queue.tcl" || return
     cp "${PDMA_DESIGN_PROFILE:-$root/impl/pdma/constraints/dma-copy.tcl}" "$pdma_output/design-profile.tcl" || return
     cp "${BASH_SOURCE[1]}" "$pdma_output/launcher.sh" || return
     cp "$root/impl/pdma/flow/run.sh" "$pdma_output/flow-run.sh" || return

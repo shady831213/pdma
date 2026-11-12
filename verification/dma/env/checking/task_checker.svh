@@ -25,7 +25,7 @@ class pdma_task_checker extends uvm_object;
         if(result.outcome==TASK_ERROR) begin
             if($isunknown(result.prefix) || result.prefix>job.length)
                 `uvm_fatal("TASK_ERROR_INFO","Committed prefix is unknown or exceeds task length")
-            if(result.prefix!==job.expected_error_prefix)
+            if(result.prefix!==job.expected_error_prefix && !(job.allow_zero_error_prefix && result.prefix===0))
                 `uvm_fatal("TASK_ERROR_INFO","Committed prefix differs from the scenario expectation")
             for(int i=0;i<result.prefix;i++)
                 if(memory.read_byte(job.dest_address+i)!==job.expected[i])

@@ -1,5 +1,58 @@
 # Scenario-level verification checkpoints
 
+## Burst-window qualification (2026-11-12)
+
+Current testbench manifest SHA-256:
+`648510316c892f13eab824bca945e6ae3b9e2a4d5d4f9852af6f25cc9168cd34`.
+The production RTL and implementation inputs are bound by the current
+[`dma-copy-review.tcl`](../../impl/pdma/constraints/dma-copy-review.tcl).
+The simulation-only synchronizer-latency build has a separate manifest and cannot
+be used by the synthesis/static flows.
+
+All 24 DUT tests pass at target clocks and randomized asynchronous clocks, each
+with seeds 11 and 17. The same 24 tests pass with independently injected 0/1-cycle
+synchronizer delay at seeds 23 and 31. Together: **144 positive runs, 294 scenarios,
+318 terminal checks and 219,925 checked bytes**. Throughput cases explicitly use
+their zero-delay clock profile, including a half-core variant, in every batch;
+other scenarios use the selected target/random clocks.
+All three final batches also reject all eight mutations with their intended fatal
+diagnostics and finish successfully; no timeout or launcher failure counts as a
+correct rejection.
+
+The final error checker permits only zero or the whole first page fragment in
+the read-error scenario; an ordered write error must report the exact prefix.
+It checks reported bytes and does not require an unchanged suffix. Native window
+tests control the error/receipt ordering and verify the exact frozen snapshot.
+The eighth checker mutation reports an impossible partial-fragment prefix.
+
+One intermediate regression aggregation was interrupted by editing its live
+shell script. Its logs remain separate and it is not an aggregate pass. The
+launcher now parses its complete body before execution; the current final runs
+use the stable launcher. Runner fixtures verify parallel overlap, eight negative
+diagnostics, timeout rejection and cleanup of resistant descendants.
+
+Coverage below merges only the **48 ordinary random-profile positive runs**.
+It includes no injected RTL, negative tests or new exclusions. The scenario
+covergroup reaches 100% of its declared 64 bins; this is not exhaustive feature,
+parameter or protocol-error coverage.
+
+| RTL module | Line | Condition | Branch |
+| --- | ---: | ---: | ---: |
+| DmaCopy | 100.00% | 86.21% | 100.00% |
+| CopyEngine | 88.64% | 77.14% | 76.81% |
+| CopyWindow | 97.20% | 81.95% | 95.16% |
+| CopyMemoryEndpoint | 100.00% | 84.21% | 100.00% |
+| CopyReadEndpoint | 100.00% | 80.70% | 100.00% |
+| CopyWriteEndpoint | 100.00% | 83.12% | 100.00% |
+
+Seventeen DMA native tests pass with both CC and Cranelift; ten common-cell tests
+pass with both backends. These local tests are not merged into UVM coverage.
+The W-before-AW fault case confirms actual data completion before its address
+handshake and rejects premature Fence effects. Reset scenarios retain every
+accepted write until its response, including multiple outstanding writes.
+Performance, static review, constraints and mapping limits are recorded in the
+[throughput review](../../docs/rtl/throughput-review.md).
+
 ## Testbench lifecycle cleanup (2026-11-11)
 
 Testbench manifest SHA-256:
@@ -237,5 +290,5 @@ multichannel, other-opcode or analog CDC/RDC signoff. See
 
 Concurrent task/result routing and additional DUT features need their own
 scenarios; the current software flow intentionally handles one task per channel
-at a time. Generalizing the SV record and UVM register generators into schema
-remains deferred until user review of their contract-local implementations.
+at a time. SV record and UVM register generation now use the published schema
+backends; the older contract-local generator checkpoints above are historical.

@@ -8,8 +8,10 @@ main() {
     trap pdma_stop_process EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
-    snapshot=$(realpath "${1:?Usage: cdc-custody.sh SNAPSHOT NEW_RUN}")
+    snapshot=$(realpath "${1:?Usage: cdc-custody.sh SNAPSHOT NEW_RUN [mailbox|queue]}")
     run=$(realpath -m "${2:?Supply a fresh output directory}")
+    kind=${3:-mailbox}
+    case "$kind" in mailbox) top=CdcCustodyTest ;; queue) top=CdcQueueCustodyTest ;; *) exit 2 ;; esac
     pdma_environment verification
     pdma_new_run "$run"
     (cd "$snapshot" && sha256sum --check --status snapshot.sha256)
@@ -19,7 +21,7 @@ main() {
     setsid timeout --kill-after=5s 180 "${PDMA_SIM_COMPILER:-vcs}" -full64 -sverilog \
         -timescale=1ns/1ps -f "$snapshot/sources.f" \
         "$root/verification/dma/tb/cdc_assertions.sv" \
-        "$root/verification/dma/tests/cdc_custody.sv" -top CdcCustodyTest \
+        "$root/verification/dma/tests/cdc_custody.sv" -top "$top" \
         -o "$run/simv" > compile.log 2>&1 &
     pdma_process_pid=$!
     wait "$pdma_process_pid"
@@ -45,6 +47,14 @@ main() {
                 overwrite) diagnostic=CDC_CUSTODY_OVERWRITE ;;
                 backpressure) diagnostic=CDC_CUSTODY_BACKPRESSURE ;;
             esac
+            if [[ $kind == queue ]]; then
+                case "$mode" in
+                    data) diagnostic=CDC_QUEUE_DATA ;;
+                    duplicate) diagnostic=CDC_QUEUE_UNOWNED ;;
+                    overwrite) diagnostic=CDC_QUEUE_OVERFLOW ;;
+                    backpressure) diagnostic=CDC_QUEUE_BACKPRESSURE ;;
+                esac
+            fi
             # This simulator may return zero for $fatal. Require the exact fatal
             # diagnostic and absence of success; timeout/signal exits never qualify.
             ((status==0 || status==1))

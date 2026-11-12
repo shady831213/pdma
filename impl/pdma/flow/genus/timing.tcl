@@ -33,7 +33,7 @@ dict for {clock settings} [dict get $design_profile clocks] {
 }
 set_clock_uncertainty $clock_uncertainty [all_clocks]
 set_clock_transition $transition [all_clocks]
-set cdc_paths [design_constraints::mailboxes $design_profile]
+set cdc_paths [design_constraints::crossings $design_profile]
 foreach spec [profile::ports $design_profile] {
     lassign $spec name width direction clock
     if {$name eq $clock} {continue}

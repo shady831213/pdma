@@ -18,7 +18,7 @@ main() {
     PDMA_DESIGN_PROFILE="$root/impl/pdma/tests/cdc-integration-profile.tcl" \
         bash "$root/impl/pdma/flow/genus.sh" "$run/snapshot" "$run/map"
     mkdir "$run/audit"
-    cp "$run/map/"{checks.tcl,cdc.tcl,profile.tcl,constraints-common.tcl,duplex-mailbox.tcl,design-profile.tcl} "$run/audit/"
+    cp "$run/map/"{checks.tcl,cdc.tcl,profile.tcl,constraints-common.tcl,duplex-mailbox.tcl,async-queue.tcl,design-profile.tcl} "$run/audit/"
     cp "$root/impl/pdma/tests/genus-cdc.tcl" "$run/audit/"
     export PDMA_MAPPED_DATABASE="$run/map/copy.db"
     cd "$run/audit"

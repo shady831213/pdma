@@ -1,0 +1,162 @@
+// AW, W and B advance independently, in the same request order. Admission reserves
+// all three queues atomically. ID zero imposes B order; slot is returned internally.
+module CopyWriteEndpoint (
+    clk  : input   clock                                         ,
+    rst_n: input   reset_async_low                               ,
+    port : modport CopyMemoryPort::slave                         ,
+    axi  : modport $std::axi4_if::<CopyMemory::Bus>::write_master,
+) {
+    var address_full     : logic                      ;
+    var data_full        : logic                      ;
+    var response_full    : logic                      ;
+    var address_empty    : logic                      ;
+    var data_empty       : logic                      ;
+    var response_empty   : logic                      ;
+    var address          : CopyMemory::Address        ;
+    var payload          : CopyMemory::WritePayload   ;
+    var slot             : logic                   <4>;
+    var beat             : logic                   <3>;
+    var addressed        : logic                   <5>;
+    var written          : logic                   <5>;
+    var completed        : logic                   <5>;
+    var receipt_ready    : logic                      ;
+    let accept           : logic                       = port.valid && port.ready;
+    let data_complete    : logic                       = axi.wvalid && axi.wready && axi.wlast;
+    let response_complete: logic                       = axi.bvalid && axi.bready;
+    assign port.ready   = !(address_full || data_full || response_full);
+    assign axi.awvalid  = !address_empty;
+    assign axi.awaddr   = address.address;
+    assign axi.awlen    = address.length as 8;
+    assign axi.awsize   = address.size as CopyMemory::Bus::size_t;
+    assign axi.awburst  = 2'b01 as CopyMemory::Bus::burst_t;
+    assign axi.awuser   = address.selector;
+    assign axi.awcache  = 0;
+    assign axi.awprot   = 0;
+    assign axi.awid     = 0;
+    assign axi.awlock   = 0;
+    assign axi.awqos    = 0;
+    assign axi.awregion = 0;
+    assign axi.wvalid   = !data_empty;
+    assign axi.wlast    = beat == payload.length;
+    assign axi.wuser    = 0;
+    assign axi.wdata    = if payload.size == 0 ?
+        (payload.data[7:0] as 64) << (payload.lane * 8)
+    : if payload.size == 2 ?
+        (payload.data[31:0] as 64) << (payload.lane * 8)
+    :
+        (payload.data >> ((beat as u32) * 64)) as 64
+    ;
+    assign axi.wstrb    = if payload.size == 0 ?
+        8'h01 << payload.lane
+    : if payload.size == 2 ?
+        8'h0f << payload.lane
+    :
+        8'hff
+    ;
+    assign axi.bready   = !response_empty && addressed != completed && written != completed && receipt_ready;
+    inst addresses: $std::fifo #(
+        TYPE         : CopyMemory::Address,
+        DEPTH        : 8                  ,
+        RESET_DATA_FF: false              ,
+    ) (
+        i_clk        : clk                       ,
+        i_rst        : rst_n                     ,
+        i_clear      : 0                         ,
+        o_empty      : address_empty             ,
+        o_full       : address_full              ,
+        o_almost_full: _                         ,
+        o_word_count : _                         ,
+        i_push       : accept                    ,
+        i_pop        : axi.awvalid && axi.awready,
+        o_data       : address                   ,
+        i_data       : CopyMemory::Address'{
+            address : port.request.address ,
+            selector: port.request.selector,
+            size    : port.request.size    ,
+            length  : port.request.length
+        },
+    );
+    inst data: $std::fifo #(
+        TYPE         : CopyMemory::WritePayload,
+        DEPTH        : 8                       ,
+        RESET_DATA_FF: false                   ,
+    ) (
+        i_clk        : clk          ,
+        i_rst        : rst_n        ,
+        i_clear      : 0            ,
+        o_empty      : data_empty   ,
+        o_full       : data_full    ,
+        o_almost_full: _            ,
+        o_word_count : _            ,
+        i_push       : accept       ,
+        i_pop        : data_complete,
+        o_data       : payload      ,
+        i_data       : CopyMemory::WritePayload'{
+            data  : port.request.data        ,
+            lane  : port.request.address[2:0],
+            size  : port.request.size        ,
+            length: port.request.length
+        },
+    );
+    inst responses: $std::fifo #(
+        TYPE         : logic<4>,
+        DEPTH        : 8       ,
+        RESET_DATA_FF: false   ,
+    ) (
+        i_clk        : clk              ,
+        i_rst        : rst_n            ,
+        i_clear      : 0                ,
+        o_empty      : response_empty   ,
+        o_full       : response_full    ,
+        o_almost_full: _                ,
+        o_word_count : _                ,
+        i_push       : accept           ,
+        i_pop        : response_complete,
+        i_data       : port.request.slot,
+        o_data       : slot             ,
+    );
+    inst receipt: common_cell::ReadyValidSlice #(
+        TYPE: CopyMemory::Receipt                        ,
+        MODE: common_cell::ReadyValid::SliceMode::Forward,
+    ) (
+        clk                       ,
+        rst_n                     ,
+        s_valid: response_complete,
+        s_ready: receipt_ready    ,
+        s_data : CopyMemory::Receipt'{
+            slot          : slot                                   ,
+            data          : '0                                     ,
+            failed        : (axi.bresp as 2) != 0,
+            page_fault    : axi.buser == 1 && (axi.bresp as 2) >= 2,
+            protocol_error: axi.bid != 0 || (axi.bresp as 2) == 1
+                || (axi.buser != 0 && (axi.buser != 1 || (axi.bresp as 2) <: 2))
+        },
+        m_valid : port.returned,
+        m_ready : port.accepted,
+        m_data  : port.receipt ,
+        occupied: _            ,
+    );
+    always_ff (clk, rst_n) {
+        if_reset {
+            beat      = 0;
+            addressed = 0;
+            written   = 0;
+            completed = 0;
+        } else {
+            if axi.awvalid && axi.awready {
+                addressed += 1;
+            }
+            if axi.wvalid && axi.wready {
+                if axi.wlast {
+                    beat    =  0;
+                    written += 1;
+                } else {
+                    beat += 1;
+                }
+            }
+            if response_complete {
+                completed += 1;
+            }
+        }
+    }
+}

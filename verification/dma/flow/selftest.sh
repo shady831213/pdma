@@ -62,7 +62,7 @@ if [[ -n $mutation ]]; then
         missing_completion) diagnostic=TASK_TIMEOUT ;;
         duplicate_completion) diagnostic=TASK_DUPLICATE ;;
         early_fence) diagnostic=TASK_COMPLETION ;;
-        underreported_prefix) diagnostic=TASK_ERROR_INFO ;;
+        underreported_prefix|fractional_prefix) diagnostic=TASK_ERROR_INFO ;;
     esac
     printf 'UVM_FATAL fixture [%.100s] expected mutation\n' "$diagnostic" > simulation.log
     if [[ ${FIXTURE_FATAL_TIMEOUT:-0} == 1 && $mutation == early_fence ]]; then sleep 30; fi
@@ -88,9 +88,9 @@ PDMA_CLOCK_MODE=fixed FIXTURE_CLOCK_MODE=fixed bash "$flow/regression.sh" "$fixt
 read -r active maximum < "$FIXTURE_STATE/count"
 [[ $active == 0 && $maximum == 2 ]]
 [[ $(grep -c '^PASS test=' "$evidence/parallel/results.txt") == 4 ]]
-[[ $(grep -c '^REJECTED mutation=' "$evidence/parallel/results.txt") == 7 ]]
+[[ $(grep -c '^REJECTED mutation=' "$evidence/parallel/results.txt") == 8 ]]
 cp "$FIXTURE_STATE/events" "$evidence/parallel-events.txt"
-printf 'PASS concurrency maximum=%s limit=2 active_at_end=%s positive=4 negative=7\n' "$maximum" "$active" > "$evidence/assertions.txt"
+printf 'PASS concurrency maximum=%s limit=2 active_at_end=%s positive=4 negative=8\n' "$maximum" "$active" > "$evidence/assertions.txt"
 
 PDMA_SUITE=tb-selftest PDMA_TESTS="$(cat "$flow/tb-selftests.list")" bash "$flow/regression.sh" "$fixture/build" "$evidence/tb" 1 > "$evidence/tb.log" 2>&1
 [[ $(grep -c '^PASS test=' "$evidence/tb/results.txt") == $(wc -l < "$flow/tb-selftests.list") ]]
@@ -102,9 +102,9 @@ export FIXTURE_FAIL=pdma_aligned_copy_test:1
 if bash "$flow/regression.sh" "$fixture/build" "$evidence/failure" 1 7 > "$evidence/failure.log" 2>&1; then exit 1; fi
 [[ $(grep -c '^FAIL test=' "$evidence/failure/results.txt") == 1 ]]
 [[ $(grep -c '^PASS test=' "$evidence/failure/results.txt") == 3 ]]
-[[ $(grep -c '^REJECTED mutation=' "$evidence/failure/results.txt") == 7 ]]
+[[ $(grep -c '^REJECTED mutation=' "$evidence/failure/results.txt") == 8 ]]
 unset FIXTURE_FAIL
-printf 'PASS failure aggregation failed=1 passed=3 negative=7 exit=nonzero\n' >> "$evidence/assertions.txt"
+printf 'PASS failure aggregation failed=1 passed=3 negative=8 exit=nonzero\n' >> "$evidence/assertions.txt"
 
 if FIXTURE_FATAL_TIMEOUT=1 PDMA_RUN_TIMEOUT=1 bash "$flow/regression.sh" "$fixture/build" "$evidence/fatal-timeout" 1 > "$evidence/fatal-timeout.log" 2>&1; then
     printf 'FAIL expected diagnostic followed by timeout was accepted\n' >&2; exit 1

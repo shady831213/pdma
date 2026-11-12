@@ -11,6 +11,10 @@ class pdma_negative_checker extends pdma_task_checker;
         if(mutation=="unknown_identity") result.task_id='x;
         if(mutation=="early_fence") memory.write_byte(job.fence_address,1);
         if(mutation=="underreported_prefix") result.prefix=0;
+        if(mutation=="fractional_prefix") begin
+            if(job.expected_error_prefix<=1) `uvm_fatal("MUTATION_CONFIG","No nonzero fragment to split")
+            result.prefix=job.expected_error_prefix/2;
+        end
         super.check(job,result,expected_outcome,memory,expected_code);
         if(mutation=="duplicate_completion") super.check(job,result,expected_outcome,memory,expected_code);
     endfunction

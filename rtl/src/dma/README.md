@@ -17,8 +17,9 @@ owns its configuration and cursors; the bank has no shadow channel storage.
 `RegisterAccess::leaf` computes a candidate access without committing effects.
 Only the owning module commits a validated write at the core handshake.
 The frontend delegates AW/W/AR storage to `common_cell::ReadyValidSlice` while
-retaining AXI credit, pairing and selection policy. The memory crossing also
-uses `DuplexMailbox`; there is no parallel DMA-specific CDC implementation.
+retaining AXI credit, pairing and selection policy. The sustained memory crossing
+uses `common_cell::AsyncQueue`, a standard Gray-FIFO wrapper; CDC protocols remain
+in the reusable cells rather than DMA-specific synchronization logic.
 
 `layout.veryl` is generated from contract metadata. It contains offsets,
 permissions, field masks/positions, enum values and command/event record geometry.
@@ -55,9 +56,9 @@ decoder. The register access matrix is specified in
 
 Both physical reset inputs must assert together and release synchronously to
 their respective clocks; reset synchronization belongs to the enclosing reset
-tree. CDC startup waits for both domains. Independently resetting one live domain
+tree. A released source may buffer before its peer starts. Independently resetting one live domain
 is unsupported. Software channel/DMA reset must leave the transport running.
-The memory clock domain has no implementation in this slice.
+The memory endpoint has independent read/write lanes and ordered return tracking.
 
 The register modules alone do not implement transaction drain or execution.
 `DmaCopy` supplies a first single-channel Linear Copy/Fence32/64 owner and memory endpoint;

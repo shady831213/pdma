@@ -1,69 +1,101 @@
-# Minimal Linear Copy and Fence RTL slice
+# Linear Copy and Fence RTL slice
 
-This slice makes the design, native verification and implementation assessment
-runnable before expanding to the complete DMA. It is a fixed representative
-configuration, not a product configuration matrix or a full DMA implementation.
+This is the fixed one-channel DMA-core profile, not the complete configurable DMA.
+It connects a 32-bit AXI4-Lite slave, a 64-bit ordinary memory master and three
+asynchronous clock domains. Atomic capability is disabled and AWATOP is zero.
+ARUSER/AWUSER carry the context selector; Function/PASID translation remains outside DMA.
 
 ## Hardware and ownership
 
-`DmaCopy` connects one channel, a 32-bit AXI4-Lite register slave, and a 64-bit
-memory master in three domains. The memory profile uses ordinary AXI5 reads and
-writes with AWATOP zero; the shared AXI4 signals use the standard typed interface.
-Atomic capabilities are disabled. ARUSER/AWUSER carry the full context selector;
-there is one physical channel (zero), and no Function/PASID translation in DMA.
-
 ```mermaid
 flowchart LR
-  SW[Register slave] --> RC[Register CDC]
-  RC --> REG[Existing register owners]
-  REG --> ENG[CopyEngine: accepted command, cursors, scratch]
-  ENG --> REQ[Request mailbox]
-  REQ --> AXI[Memory endpoint: one burst obligation]
-  AXI --> MEM[External memory]
-  MEM --> AXI
-  AXI --> RESP[Receipt mailbox]
-  RESP --> ENG
-  ENG -->|cursor advance and completed reset| REG
+  SW[AXI-Lite] --> CSR[Register mailbox and register owners]
+  CSR --> CMD[CopyEngine: accepted command]
+  CMD --> WIN[CopyWindow: eight retained chunks]
+  WIN --> REQ[Eight-entry request FIFO]
+  CMD --> REQ
+  REQ --> RD[Read endpoint]
+  REQ --> WR[Write endpoint]
+  RD --> MEM[External AXI memory]
+  WR --> MEM
+  MEM --> RD
+  MEM --> WR
+  RD --> MERGE[Receipt arbitration]
+  WR --> MERGE
+  MERGE --> RESP[Eight-entry receipt FIFO]
+  RESP --> WIN
+  RESP --> CMD
 ```
 
-The command ring retains the current 96-byte wire format. The core fetches the
-descriptor, accepts it once, then retains its state across all payload chunks.
-Each access has at most eight 64-bit beats and never crosses 4KiB. Aligned ranges
-use bursts; unmatched alignment and tails use byte accesses without over-reading.
-Source and destination selectors remain independent. Fence32/64 writes its
-descriptor value to an aligned 32- or 64-bit destination with its own context
-selector. It issues only after prior channel work has retired, so software may
-submit Copy followed by Fence and poll the marker to observe completion. Fence
-uses one ordinary memory write, preserves adjacent byte lanes and shares payload
-PageFault/Resume, permanent WriteError and reset-drain handling. It does not
-provide a global barrier across channels or memory agents.
-Successful commands produce no event. Other valid opcodes and SG endpoints report
-Unsupported in this slice;
-they are not implemented by an alternative software path.
+The core fetches and accepts the current 96-byte descriptor once. Copy owns an
+eight-slot window until that command completes, stops or is reset. Each chunk is
+at most 64 bytes, is bounded by both address ranges and does not cross 4KiB.
+Aligned ranges use up to eight 64-bit beats; unmatched alignment and short tails
+still use byte accesses without over-reading. Source and destination selectors
+remain independent. No next command may bypass the current accepted command.
 
-The bus endpoint captures a complete request before driving AR or independent
-AW/W. Register ingress storage uses common-cell slices; both clock crossings
-share the typed `common_cell::DuplexMailbox`. Protocol credit and drain remain
-with their respective DMA owners.
-The endpoint retains the slot until all required returns and receipt handoff. The
-core retains successfully read bytes through a failed destination write. Payload
-PageFault parks work until Resume; permanent errors stop before event publication.
-The error-event producer advances only after the entire 24-byte record is written,
-including a split at a 4KiB boundary. Publication failure latches channel fatal.
-Notifications use pending/accept, with no replay when masks are enabled later.
+| Owner | State and release boundary |
+| --- | --- |
+| `CopyEngine` | Descriptor, Fetch/Fence/error-publication state and channel lifecycle; changes command only after completion or reset |
+| `CopyWindow` | Eight source/destination/length entries, access states and retained read bytes; reuses a slot only after successful write and in-order retirement |
+| Core RAM/read offer | 8 × 512-bit 1R1W storage, one synchronous read and one write port; a separate register holds the prepared write under backpressure |
+| Request/receipt FIFOs | Eight typed entries each, registered Gray pointers and two-stage synchronization; enqueue transfers custody, not transaction completion |
+| Read endpoint | Up to eight accepted AR metadata entries, one ordered R-burst assembly and a held receipt |
+| Write endpoint | Separately advancing AW, W and B queues; admission reserves all three, and B consumes the oldest completed AW/W responsibility |
 
-Software reset closes admission in the core. It does not reset either CDC mailbox
-or the bus endpoint. An accepted access may complete during closing, including
-an AW still backpressured after W has completed. The core discards the returned
-result instead of issuing another payload access; register clear follows receipt
-consumption. Consequently reset busy cannot clear merely because the final W beat
-was sent. Physical reset must assert across all three domains and release
-synchronously to each clock at the integration boundary; arbitrary independent
-hot reset of one domain is unsupported.
+Internal slot identities accompany requests and receipts; slot zero belongs to
+serialized Fetch/Fence/event accesses and slots 1..8 to the Copy window. They are
+not architectural context IDs. External reads use AXI ID zero, as do external
+writes. AXI's ordering within each direction supplies receipt association; R and B
+may complete independently. A fair registered merger feeds the receipt FIFO.
+The request FIFO is shared: its head may backpressure later work when the selected
+AXI direction stalls. This profile does not claim independent ingress queues or
+out-of-order external response support.
 
-## Verification entry points
+The registered request FIFO, independent bus lanes and retained core window allow
+reads and writes of different chunks to overlap. A successful read can forward
+directly into available write credit while also saving its bytes for possible
+retry. A blocked handoff falls back to retained RAM. A successful head write
+receipt retires its slot at that edge; allocation may reuse it then, with the new
+request visible next cycle. Neither path waits for unrelated software work.
+The generic RAM provider does not
+guarantee its output while disabled: the write-offer register explicitly captures
+a valid synchronous read result. RAM array syntax does not promise a hard macro;
+the current implementation assessment maps the generic storage to cells.
 
-Run the native checks from `rtl` using the pinned launcher:
+## Fault, error and reset
+
+A successful read remains owned until its write succeeds. A recoverable payload
+PageFault stops new issue, drains all accepted requests and preserves every slot's
+result and needed data. `faulted` is published only after a safe park. Resume retries
+failed/unissued accesses without replaying successful writes, and finishes the
+retained window before allocating beyond it. A write fault never forces a reread
+of source bytes that software may have changed during repair.
+
+A permanent error closes new issue immediately. Its `bytes_completed` snapshot is
+the continuous successful write prefix known when the error is recognized, not a
+promise that later bytes were untouched. Later receipts do not change it. Error
+publication waits for this profile's outstanding accesses to drain; software must
+still use reset for recovery and resource reuse. See the
+[architectural contract](../../model/modeling/docs/copy-engine.md#error-records-reporting-and-discovery).
+
+Fence32/64 writes an aligned marker with its own context after prior work retires.
+It preserves adjacent lanes and supports retained write-fault recovery. Successful
+commands produce no event. Other opcodes and SG endpoints report Unsupported in
+this slice. A stopping error writes the 24-byte event, splitting at 4KiB when needed;
+producer advances only after the whole record succeeds. Reporting failure is fatal.
+Notifications retain pending/accept ownership and masks do not replay old causes.
+
+Software reset closes admission at core acceptance. It does not reset the FIFOs,
+RAM or endpoint. Every accepted internal request, including queued requests not yet
+accepted by AXI, must yield its terminal receipt. AW/W obligations cannot be
+withdrawn; completing W alone is insufficient. Clear waits for all debt, then
+invalidates retained state. Physical cold reset must assert across all three domains
+and release synchronously in each; independent hot domain reset is unsupported.
+
+## Verification and limits
+
+From `rtl`, run the pinned native tools:
 
 ```sh
 VERYL_DUT_REUSE=0 bash ../tools/rtl-flow/veryl.sh test
@@ -71,55 +103,27 @@ VERYL_DUT_REUSE=0 bash ../tools/rtl-flow/veryl.sh test --backend cranelift
 bash ../tools/rtl-flow/veryl.sh build
 ```
 
-`CopyEngineTest` drives actual configuration MMIO and memory handshakes. It checks
-an aligned copy, independent AW/W backpressure, reset while AW is offered, delayed
-B completion, and a new unaligned copy after reconfiguration. It runs with and
-without artificial memory backpressure, covers channel and DMA-wide reset, and
-reports bus cycles between payload burst completions. `CopyErrorTest` checks a stopping error and
-event publication across 4KiB. `CopyFaultTest` checks write-fault suspension and
-retained read data. `FenceTest` covers 32/64-bit markers, recoverable and permanent
-write faults, reset drain and invalid geometry. `FenceOrderTest` checks that a
-Fence waits for the prior Copy write receipt; `FenceMemoryTest` checks word lanes
-and preservation of adjacent bytes. The original register tests remain regression
-coverage, for thirteen native tests in total.
+The seventeen DMA tests cover register access, word lanes, command ordering,
+three-domain copying, W-before-AW/reset, retained faults and event publication.
+`MemoryStreamTest` requires continuous W beats with multiple requests accepted
+before any B return. `CopyWindowTest` checks a three-burst fault, an immutable
+error-prefix snapshot despite a later success, and reset waiting for the last of
+multiple receipts. Ten common-cell tests cover slices, RAMs, selection, mailbox
+startup and FIFO capacity/wrap/stalls/continuous drain. `CopyWindowReuseTest` pins
+head-slot retirement/reallocation at terminal receipt, without two idle state transitions.
+`CopyWindowForwardTest` checks simultaneous read completion/write acceptance and
+reset retaining the newly forwarded write's responsibility.
+Native clock advancement is not a metastability or MTBF proof.
 
-The test memory is an external slave and an independent byte oracle, not a second
-DMA implementation. Native clocks are advanced explicitly; this is digital CDC
-handshake testing, not metastability, arbitrary clock-ratio or RDC signoff.
+[System verification](../../verification/dma/README.md) supplies actual AXI VIP,
+independent task data/Fence oracles and passive throughput measurements. The
+[throughput review](throughput-review.md) records zero-delay steady-state and full
+command latency separately, plus CDC/RDC and mapped implementation evidence.
+Long aligned copies now sustain the external 8B/bus-cycle rate in the qualified
+profiles. Short-command startup/retirement cost and the unoptimized byte-access
+path remain visible; this is not throughput closure for all alignments/configurations.
 
-## Interpretation and next review
-
-This baseline serializes read and write bursts and uses acknowledged mailboxes.
-It exposes their round-trip cost deliberately: it does **not** satisfy the final
-no-unreasonable-throughput-loss objective. The measured interval must be compared
-with the external port capacity, not declared to be the engine's target throughput.
-Unaligned byte transfers are also a functional baseline, not an optimized datapath.
-
-Do not extend the one-entry mailbox choice to the sustained DMA data path. The
-next throughput design needs bounded asynchronous queues/stream buffers and enough
-in-flight requests, receipts and data capacity to hide CDC and bus latency. Replacing
-only the mailbox cannot remove the current engine's read/wait/write/wait serialization.
-Register configuration/status access remains a separate, lower-rate transaction
-bridge; it need not use the same transport as payload. See the
-[CDC transport decision](cdc-review.md#传输选择与-payload-reset的边界).
-
-Implementation assessments use the emitted hardware, excluding test modules,
-and bind source, compiler, constraints and library identities to each result.
-Reproducible flow scripts are tracked under `verification/dma/flow` and
-`impl/pdma/flow`; deployment inputs and raw reports remain outside Git. A mapped
-pre-layout estimate does not prove physical CDC/RDC closure or post-route timing;
-power based on synthetic activity is not workload power.
-
-Review this complete loop before adding channels, outstanding windows or more
-opcodes. Priorities for that review are resource ownership, reset obligations,
-the cost of retained state and CDC, and the measured sources of throughput loss.
-
-The [2026-11-11 loop review](minimal-loop-review.md) records target-frequency VIP
-regressions, non-ULVT Genus mapping and VC SpyGlass results. The earlier mapped
-snapshot meets the pre-layout setup target with zero margin. Subsequent
-[CDC/RDC convergence](cdc-review.md) removes redundant startup gates and resolves
-the remaining structural findings through source-bound, path-specific review.
-The updated RTL has now been remapped with scoped 0.5ns mailbox budgets and preserved
-synchronizer stages. Mapped crossing/setup checks pass; routed CDC/reset timing and
-MTBF remain open. See [constraint reuse and integration](../../impl/pdma/constraints/README.md).
-That record is not physical or complete-DMA signoff.
+Reproducible flow code and constraints are tracked; deployment, proprietary inputs
+and raw reports stay private. Mapped setup and structural CDC/RDC review do not
+close routed timing, reset recovery/removal, MTBF or workload power. Review resource
+ownership and the measured storage cost before expanding channels or command families.

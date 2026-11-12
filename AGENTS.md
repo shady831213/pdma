@@ -65,10 +65,12 @@ it does not supersede the system specification under `model/modeling/docs`.
 The DMA register-access slice has native tests: a 32/64-bit AXI4-Lite frontend,
 reg/core CDC and object-owned registers. `DmaCopy` adds a minimal one-channel
 Linear Copy and Fence32/64 slice with a fixed 32-bit register / 64-bit ordinary
-memory profile, bounded bursts, three-domain handshakes and reset drain. Software
+memory profile, eight resident burst slots, independent read/write endpoints,
+core/bus asynchronous queues, a reg/core mailbox and reset drain. Software
 can submit Copy followed by Fence and poll its memory marker for completion.
 It is not the complete
-DMA execution/atomic/multichannel implementation or throughput closure; see
+DMA execution/atomic/multichannel implementation. Aligned long-copy throughput
+has its own zero-delay qualification; other profiles remain open. See
 `docs/rtl/minimal-copy.md`. Register reset action/clear ports alone remain
 integration boundaries, not evidence of transaction drain without that owner.
 Follow `rtl/README.md` for source and verification ownership. PDMA independently
@@ -81,14 +83,15 @@ at 1GHz, register clock at 500MHz, still three asynchronous domains. ULVT is
 forbidden; qualify library selection, mapping exclusions and actual mapped-cell
 identities. Both CDC and RDC must use VC SpyGlass with PDMA-owned constraints
 and reviewed findings. The Genus and VC SpyGlass flows are implemented;
-the first mapped setup estimate meets the target with zero slack margin. The
+the current mapped setup estimate meets the target with zero slack margin. The
 redundant mailbox startup gates are removed; CDC/RDC reviewed gates accept only
-source-bound, path-specific protocol/resetless-payload findings, retaining raw
-reports. See `docs/rtl/cdc-review.md` and `docs/rtl/minimal-loop-review.md` for the
+source-bound, path-specific findings, including exact unconnected/no-clock sinks
+with disabled consumers. Group counts never substitute for endpoint proof; raw
+reports remain available. See `docs/rtl/throughput-review.md` for the current
 proof limits and physical timing/MTBF obligations. Historical DC results and
 randomized simulation do not substitute for these checks or physical signoff.
 Genus and VC share generated clock SDC from the design profile. Instance-scoped
-mailbox constraints are reusable without creating platform clocks or global cuts;
+mailbox/FIFO constraints are reusable without creating platform clocks or global cuts;
 fresh mapping validates the 0.5ns budgets and local synchronizer paths. See
 `impl/pdma/constraints/README.md`; mapped timing does not close routed timing or MTBF.
 Keep deployment, proprietary inputs and raw reports private; generic executable

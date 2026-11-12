@@ -1,20 +1,31 @@
 module pdma_lifecycle_assertions(
     input logic clk, rst_n, request, ready, returned, accepted, closing, clear, enabled, has_commands,
     input logic irq, irq_ready, irq_source, parked, resume_request,
+    input logic [3:0] request_slot, receipt_slot,
     input logic [1535:0] parked_state
 );
-    logic outstanding=0, reset_quiet=0;
+    int unsigned outstanding=0;
+    logic [15:0] owned='0;
+    logic reset_quiet=0;
     always @(posedge clk or negedge rst_n) begin
-        if(!rst_n) begin outstanding<=0; reset_quiet<=0; end
+        if(!rst_n) begin outstanding<=0; owned<='0; reset_quiet<=0; end
         else begin
-            if(request && ready) begin
-                assert(!outstanding) else $fatal(1,"DMA_DOUBLE_ACCEPT");
-                outstanding<=1;
-            end
             if(returned && accepted) begin
-                assert(outstanding) else $fatal(1,"DMA_UNOWNED_RECEIPT");
-                outstanding<=0;
+                assert(outstanding!=0 && owned[receipt_slot]) else $fatal(1,"DMA_UNOWNED_RECEIPT");
+                owned[receipt_slot]<=0;
             end
+            if(request && ready) begin
+                // Read completion can forward a write for the same live chunk
+                // at this edge. Old receipt consumption precedes new ownership.
+                assert(!owned[request_slot] || (returned && accepted && request_slot==receipt_slot))
+                    else $fatal(1,"DMA_DOUBLE_ACCEPT");
+                owned[request_slot]<=1;
+            end
+            case ({request && ready,returned && accepted})
+                2'b10: outstanding<=outstanding+1;
+                2'b01: outstanding<=outstanding-1;
+                default: ;
+            endcase
             if(clear) reset_quiet<=1;
             else if(enabled && has_commands) reset_quiet<=0;
         end

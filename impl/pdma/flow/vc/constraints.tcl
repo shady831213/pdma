@@ -24,9 +24,10 @@ dict for {clock settings} [dict get $design_profile clocks] {
 }
 # RTL CDC has no mapped register D/Q timing graph. Keep the shared transport
 # budget visible, but apply/check physical Q-to-D exceptions only in STA.
-if {[dict exists $design_profile mailboxes]} {
-    dict for {scope spec} [dict get $design_profile mailboxes] {
-        puts $report "mailbox=$scope source=[dict get $spec source] destination=[dict get $spec destination] max_delay_ns=[dict get $spec max_delay] physical_check=STA"
+foreach family {mailboxes async_queues} {
+    if {![dict exists $design_profile $family]} {continue}
+    dict for {scope spec} [dict get $design_profile $family] {
+        puts $report "$family=$scope source=[dict get $spec source] destination=[dict get $spec destination] max_delay_ns=[dict get $spec max_delay] physical_check=STA"
     }
 }
 if {[dict exists $design_profile reset_groups]} {

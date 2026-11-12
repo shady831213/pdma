@@ -10,6 +10,13 @@ virtual class pdma_error_irq_test extends pdma_base_test;
         flow_.open(job);
         inject(writing,0,(writing ? job.dest_address : job.source_address)+pdma_configuration::MEMORY_BEAT_BYTES);
         job.expected_error_prefix=platform.fault_address-(writing ? job.dest_address : job.source_address);
+        // Prefetched read failure may reach the core before preceding writes do.
+        // The preceding page fragment is exactly one bus beat: its prefix is
+        // either zero (not yet acknowledged) or that complete fragment, never
+        // an arbitrary count in between. Verify every reported byte as well.
+        // Ordered write responses retain the exact-prefix oracle; the native
+        // window test checks the precise error-recognition snapshot directly.
+        job.allow_zero_error_prefix=!writing;
         channel.write_reg(channel.registers.control_block.irq_block.mask_reg,
             (32'b1 << channel.registers.control_block.irq_block.mask_reg.event_non_empty_field.get_lsb_pos()) |
             (32'b1 << channel.registers.control_block.irq_block.mask_reg.trap_field.get_lsb_pos()));

@@ -1,5 +1,8 @@
 # 最小 DMA 闭环评审记录
 
+这是 2026-11-11 检查点的历史记录。当前 burst window/FIFO 结构和重新验证的结果
+见 [吞吐与跨域评审](throughput-review.md)，不复用下文旧快照的结论作为新 RTL 的覆盖。
+
 日期：2026-11-11。范围是现有 `DmaCopy`：单 channel、32 位寄存器端口、64 位普通
 内存端口、Linear Copy 与 Fence32/64。最初闭环没有修改 DUT RTL；后续已删除冗余
 mailbox 启动门控，并完成 [CDC/RDC 逐项处置](cdc-review.md)。没有扩展 CPU、外围

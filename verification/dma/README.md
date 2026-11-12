@@ -27,13 +27,14 @@ scenario operation through the software objects. See
 [dependencies](dependencies.md) for external inputs and adapter boundaries.
 Measured checkpoints and their coverage gaps are in [results](results.md).
 
-`tb/cdc_assertions.sv` passively binds the real mailbox ports to check retained
+`tb/cdc_assertions.sv` passively binds the real mailbox and FIFO ports to check retained
 ownership, payload, no duplicate delivery and backpressure stability. It adds no
 clock-period polling or DUT scheduling. Qualify the assertions, including corrupted
 data, duplicate delivery, premature overwrite and broken hold negative cases:
 
 ```sh
 bash verification/dma/flow/cdc-custody.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/cdc-custody"
+bash verification/dma/flow/cdc-custody.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/queue-custody" queue
 ```
 
 Some simulators return zero for `$fatal`; the negative gate requires the exact
@@ -59,10 +60,39 @@ bash verification/dma/flow/regression.sh "$PDMA_RUN_ROOT/build" "$PDMA_RUN_ROOT/
 bash verification/dma/flow/coverage.sh "$PDMA_RUN_ROOT/build" "$PDMA_RUN_ROOT/regression" "$PDMA_RUN_ROOT/coverage"
 ```
 
-Run one case with `flow/run.sh BUILD NEW_RUN TEST SEED`. The 19 independently
+Run one case with `flow/run.sh BUILD NEW_RUN TEST SEED`. The 24 independently
 selectable tests are listed in `flow/tests.list`. `PDMA_JOBS` bounds parallel runs
 (default 4); `PDMA_TESTS` optionally selects a space-separated subset.
-`PDMA_CLOCK_MODE=random|fixed` selects the clock profile for the entire batch.
+`PDMA_CLOCK_MODE=random|fixed|target` selects the ordinary clock profile. The four
+throughput tests explicitly select constant-period target or half-core clocks,
+zero responder delay, sustained READY and sufficient VIP outstanding capacity.
+Their passive callbacks measure individual payload beats and descriptor-to-Fence
+latency. The batch test prepublishes four Copy/Fence pairs while disabled, then
+enables once, so software cannot starve the measured command boundaries.
+
+For a separate simulation-only latency stress snapshot:
+
+```sh
+bash verification/dma/flow/sync-latency.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/latency-snapshot"
+```
+
+Compile/run that snapshot using the same verification flows. It adds independently
+seeded 0/1 destination-cycle sample delay per synchronizer instance, preserving
+coherent Gray vectors. It is a digital latency test, not metastability or MTBF
+qualification; implementation flows reject its simulation-only marker.
+Ordinary zero-delay tests require zero payload gaps. The instrumented build still
+requires uninterrupted reads, and bounds **total** write gaps by the configured
+sample-delay variation plus the one-cycle fair receipt-arbitration delay, with
+receiver-clock rounding. This is three bus cycles at equal clocks and five with
+core at half bus frequency, not a per-burst allowance.
+It permits a bounded initial elastic-buffer fill transient, never periodic loss;
+gap positions, read-to-write handoff range and full-task latency are all reported.
+
+The VIP memory responder returns early W-first notifications in zero time, as
+required by its API. Address-dependent write permissions and injected failure
+are applied through the actual AW-ended callback before native memory update;
+the placeholder address in an early W notification is never treated as real.
+The native VIP continues to own transaction assembly and memory effects.
 
 `PDMA_SUITE=dut` is the default. Clock period/jitter selfchecks are not instantiated
 in DUT runs; clock/reset integration lives in `env/clocks.svh`. AXI protocol checks,

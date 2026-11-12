@@ -10,7 +10,10 @@ The [minimal Linear Copy and Fence slice](../docs/rtl/minimal-copy.md) now conne
 this path to one execution owner and an ordinary AXI memory endpoint. Fence32/64
 writes a software-observable memory marker after prior channel work. It is not a
 complete DMA or a physically qualified design; the remaining command families,
-multichannel execution and throughput/physical closure still need implementation.
+multichannel execution, unaligned/full-profile throughput and physical closure
+still need implementation. The current retained burst window and asynchronous
+queues are described in the slice document; measured results are in the
+[throughput review](../docs/rtl/throughput-review.md).
 
 The first RTL phase is **DMA only**, confirmed 2026-10-29. CPU implementation,
 managed peripheral hardware, firmware execution and full subsystem integration

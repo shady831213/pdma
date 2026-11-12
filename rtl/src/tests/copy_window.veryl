@@ -1,0 +1,374 @@
+#[test(copy_window_fault_prefix_and_multi_receipt_reset)]
+module CopyWindowTest {
+    inst clk   : $tb::clock_gen #( period: 10 );
+    inst rst   : $tb::reset_gen ( clk );
+    inst memory: CopyMemoryPort;
+    var start         : logic                      ;
+    var cancel        : logic                      ;
+    var clear         : logic                      ;
+    var resume        : logic                      ;
+    var done          : logic                      ;
+    var drained       : logic                      ;
+    var parked        : logic                      ;
+    var error_code    : logic              <32>    ;
+    var error_prefix  : logic              <64>    ;
+    var error_ready   : logic                      ;
+    var protocol_error: logic                      ;
+    var reads         : CopyMemory::Request     [3];
+    var writes        : CopyMemory::Request     [3];
+    inst dut: CopyWindow (
+        clk                          ,
+        rst_n              : rst     ,
+        start                        ,
+        cancel                       ,
+        clear                        ,
+        resume                       ,
+        source             : 64'h1000,
+        destination        : 64'h2000,
+        length             : 192     ,
+        source_context     : 7       ,
+        destination_context: 9       ,
+        done                         ,
+        drained                      ,
+        parked                       ,
+        error_code                   ,
+        error_prefix                 ,
+        error_ready                  ,
+        protocol_error               ,
+        memory                       ,
+    );
+    function data_for (
+        index: input u32,
+    ) -> logic<512> {
+        var result: logic<512>;
+        result = 0;
+        for word in 0..8 {
+            result[word * 64+:64] = 64'habcdef9876540000 + index * 8 + word;
+        }
+        return result;
+    }
+    initial {
+        for scenario in 0..3 {
+            start           = 0;
+            cancel          = 0;
+            clear           = 0;
+            resume          = 0;
+            memory.ready    = 0;
+            memory.returned = 0;
+            memory.receipt  = '0;
+            rst.assert();
+            clk.next(3);
+            start = 1;
+            clk.next();
+            start        = 0;
+            memory.ready = 1;
+            for i in 0..3 {
+                for timeout in 0..20 {
+                    if memory.valid {
+                        break;
+                    }
+                    clk.next();
+                }
+                $assert(
+                    memory.valid && !memory.request.write && memory.request.address == 64'h1000 + i * 64,
+                    "WINDOW_READ_ADDRESS",
+                );
+                $assert(memory.request.selector == 7 && memory.request.length == 7, "WINDOW_READ_SHAPE");
+                reads[i] = memory.request;
+                clk.next();
+            }
+            memory.ready = 0;
+            for i in 0..3 {
+                memory.receipt      = '0;
+                memory.receipt.slot = reads[i].slot;
+                memory.receipt.data = data_for(i);
+                memory.returned     = 1;
+                $assert(memory.accepted, "OWNED_READ_RECEIPT");
+                clk.next();
+            }
+            memory.returned = 0;
+            memory.ready    = 1;
+            for i in 0..3 {
+                for timeout in 0..20 {
+                    if memory.valid {
+                        break;
+                    }
+                    clk.next();
+                }
+                $assert(
+                    memory.valid && memory.request.write && memory.request.address == 64'h2000 + i * 64,
+                    "WINDOW_WRITE_ADDRESS",
+                );
+                $assert(memory.request.selector == 9 && memory.request.data == data_for(i), "WINDOW_WRITE_DATA");
+                writes[i] = memory.request;
+                clk.next();
+            }
+            $assert(!drained && !done, "B_RESPONSES_STILL_OWNED");
+            if scenario == 2 {
+                cancel = 1;
+            }
+            for i in 0..3 {
+                if scenario == 2 && i == 2 {
+                    clk.next(20);
+                    $assert(!drained && !memory.valid, "RESET_WAITS_FOR_LAST_OF_ALL_OUTSTANDING");
+                }
+                memory.receipt            = '0;
+                memory.receipt.slot       = writes[i].slot;
+                memory.receipt.failed     = scenario != 2 && i == 1;
+                memory.receipt.page_fault = scenario == 0 && i == 1;
+                memory.returned           = 1;
+                clk.next();
+                memory.returned = 0;
+            }
+            clk.next(4);
+            $assert(drained && !protocol_error, "ALL_RESPONSES_ACCOUNTED");
+            if scenario == 0 {
+                $assert(parked && !memory.valid && error_code == 0, "SAFE_PARK_AFTER_ALL_RESPONSES");
+                resume = 1;
+                clk.next();
+                resume = 0;
+                for timeout in 0..20 {
+                    if memory.valid {
+                        break;
+                    }
+                    clk.next();
+                }
+                $assert(
+                    memory.valid && memory.request.write && memory.request.slot == writes[1].slot,
+                    "RETRY_ONLY_FAILED_WRITE",
+                );
+                $assert(memory.request.data == data_for(1), "RETAIN_READ_DATA_THROUGH_FAULT");
+                clk.next();
+                memory.receipt      = '0;
+                memory.receipt.slot = writes[1].slot;
+                memory.returned     = 1;
+                clk.next();
+                memory.returned = 0;
+                for timeout in 0..20 {
+                    $assert(!memory.valid, "NO_REPLAY_OF_SUCCESSFUL_BURSTS");
+                    if done {
+                        break;
+                    }
+                    clk.next();
+                }
+                $assert(done && !parked, "RESUMED_COMMAND_COMPLETE");
+            } else if scenario == 1 {
+                $assert(error_code == 3 && error_ready && error_prefix == 64, "ERROR_PREFIX_EXCLUDES_LATER_SUCCESS");
+                clk.next(10);
+                $assert(error_prefix == 64 && !memory.valid, "ERROR_SNAPSHOT_IMMUTABLE");
+            } else {
+                clear = 1;
+                clk.next();
+                clear  = 0;
+                cancel = 0;
+                clk.next(10);
+                $assert(drained && !memory.valid && !parked && !done, "NO_ACCESS_AFTER_RESET_CLEAR");
+            }
+        }
+        $finish();
+    }
+}
+
+#[test(copy_window_forwards_completed_read_into_available_write_credit)]
+module CopyWindowForwardTest {
+    inst clk   : $tb::clock_gen #( period: 10 );
+    inst rst   : $tb::reset_gen ( clk );
+    inst memory: CopyMemoryPort;
+    var start         : logic    ;
+    var cancel        : logic    ;
+    var clear         : logic    ;
+    var done          : logic    ;
+    var drained       : logic    ;
+    var parked        : logic    ;
+    var error_code    : logic<32>;
+    var error_prefix  : logic<64>;
+    var error_ready   : logic    ;
+    var protocol_error: logic    ;
+    var slot          : logic<4> ;
+    inst dut: CopyWindow (
+        clk                          ,
+        rst_n              : rst     ,
+        start                        ,
+        cancel                       ,
+        clear                        ,
+        resume             : 0       ,
+        source             : 64'h1000,
+        destination        : 64'h2000,
+        length             : 64      ,
+        source_context     : 7       ,
+        destination_context: 9       ,
+        done                         ,
+        drained                      ,
+        parked                       ,
+        error_code                   ,
+        error_prefix                 ,
+        error_ready                  ,
+        protocol_error               ,
+        memory                       ,
+    );
+    initial {
+        start           = 0;
+        cancel          = 0;
+        clear           = 0;
+        memory.ready    = 1;
+        memory.returned = 0;
+        memory.receipt  = '0;
+        rst.assert();
+        clk.next(3);
+        start = 1;
+        clk.next();
+        start = 0;
+        for timeout in 0..20 {
+            if memory.valid {
+                break;
+            }
+            clk.next();
+        }
+        $assert(memory.valid && !memory.request.write, "INITIAL_READ");
+        slot = memory.request.slot;
+        clk.next();
+        memory.receipt.slot = slot;
+        memory.receipt.data = 512'h12345678;
+        memory.returned     = 1;
+        $assert(
+            memory.accepted && memory.valid && memory.request.write && memory.request.slot == slot
+                && memory.request.address == 64'h2000 && memory.request.data == 512'h12345678,
+            "FORWARD_READ_TO_WRITE",
+        );
+        clk.next();
+        memory.returned = 0;
+        $assert(!drained && !done && !protocol_error, "FORWARDED_WRITE_STILL_OWNS_RECEIPT");
+        cancel = 1;
+        clk.next(4);
+        $assert(!drained && !memory.valid, "RESET_DRAINS_FORWARDED_WRITE");
+        memory.receipt      = '0;
+        memory.receipt.slot = slot;
+        memory.returned     = 1;
+        clk.next();
+        memory.returned = 0;
+        $assert(drained && !protocol_error, "FORWARDED_WRITE_ACCOUNTED_ONCE");
+        clear = 1;
+        clk.next();
+        clear  = 0;
+        cancel = 0;
+        $finish();
+    }
+}
+
+#[test(copy_window_reuses_retired_slot_without_idle_cycles)]
+module CopyWindowReuseTest {
+    inst clk   : $tb::clock_gen #( period: 10 );
+    inst rst   : $tb::reset_gen ( clk );
+    inst memory: CopyMemoryPort;
+    var start         : logic        ;
+    var cancel        : logic        ;
+    var clear         : logic        ;
+    var done          : logic        ;
+    var drained       : logic        ;
+    var parked        : logic        ;
+    var error_code    : logic<32>    ;
+    var error_prefix  : logic<64>    ;
+    var error_ready   : logic        ;
+    var protocol_error: logic        ;
+    var slots         : logic<4>  [8];
+    inst dut: CopyWindow (
+        clk                          ,
+        rst_n              : rst     ,
+        start                        ,
+        cancel                       ,
+        clear                        ,
+        resume             : 0       ,
+        source             : 64'h1000,
+        destination        : 64'h2000,
+        length             : 1024    ,
+        source_context     : 7       ,
+        destination_context: 9       ,
+        done                         ,
+        drained                      ,
+        parked                       ,
+        error_code                   ,
+        error_prefix                 ,
+        error_ready                  ,
+        protocol_error               ,
+        memory                       ,
+    );
+    initial {
+        start           = 0;
+        cancel          = 0;
+        clear           = 0;
+        memory.ready    = 1;
+        memory.returned = 0;
+        memory.receipt  = '0;
+        rst.assert();
+        clk.next(3);
+        start = 1;
+        clk.next();
+        start = 0;
+        for i in 0..8 {
+            for timeout in 0..20 {
+                if memory.valid {
+                    break;
+                }
+                clk.next();
+            }
+            $assert(
+                memory.valid && !memory.request.write && memory.request.address == 64'h1000 + i * 64,
+                "FILL_WINDOW",
+            );
+            slots[i] = memory.request.slot;
+            clk.next();
+        }
+        memory.ready = 0;
+        for i in 0..8 {
+            memory.receipt      = '0;
+            memory.receipt.slot = slots[i];
+            memory.receipt.data = i as 512;
+            memory.returned     = 1;
+            clk.next();
+        }
+        memory.returned = 0;
+        memory.ready    = 1;
+        for i in 0..8 {
+            for timeout in 0..20 {
+                if memory.valid {
+                    break;
+                }
+                clk.next();
+            }
+            $assert(memory.valid && memory.request.write && memory.request.slot == slots[i], "WRITE_WINDOW");
+            clk.next();
+        }
+        $assert(!memory.valid && !drained, "NO_REUSE_BEFORE_RECEIPT");
+        memory.receipt      = '0;
+        memory.receipt.slot = slots[0];
+        memory.returned     = 1;
+        clk.next();
+        memory.returned = 0;
+        $assert(
+            memory.valid && !memory.request.write && memory.request.address == 64'h1200 && memory.request.slot == slots[0],
+            "REUSE_AFTER_TERMINAL_RECEIPT",
+        );
+        clk.next();
+        cancel       = 1;
+        memory.ready = 0;
+        for i in 1..8 {
+            memory.receipt      = '0;
+            memory.receipt.slot = slots[i];
+            memory.returned     = 1;
+            clk.next();
+        }
+        memory.returned = 0;
+        $assert(!drained, "REUSED_SLOT_OWNS_NEW_RECEIPT");
+        memory.receipt      = '0;
+        memory.receipt.slot = slots[0];
+        memory.returned     = 1;
+        clk.next();
+        memory.returned = 0;
+        $assert(drained && !protocol_error && !memory.valid, "DRAIN_AFTER_REUSE");
+        clear = 1;
+        clk.next();
+        clear  = 0;
+        cancel = 0;
+        $finish();
+    }
+}

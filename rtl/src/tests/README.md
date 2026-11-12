@@ -17,9 +17,13 @@ The seven register and layout tests cover:
 | `DmaRegisterInterfaceTest` | Complete 32- and 64-bit AXI→CDC→owner paths, nonzero aperture base, read snapshot retention and exactly-once Resume under response backpressure |
 
 The minimal execution slice adds `CopyEngineTest`, `CopyErrorTest` and
-`CopyFaultTest`, plus `FenceTest`, `FenceOrderTest` and `FenceMemoryTest`, for
-thirteen native tests in total. Their scenarios and scope are recorded in the
-[slice description](../../../docs/rtl/minimal-copy.md#verification-entry-points).
+`CopyFaultTest`, plus `FenceTest`, `FenceOrderTest` and `FenceMemoryTest`.
+`MemoryStreamTest` checks continuous writes with delayed B responses;
+`CopyWindowTest` checks multi-burst fault/error/reset lifetime;
+`CopyWindowReuseTest` checks receipt-driven slot reuse; `CopyWindowForwardTest`
+checks direct read-to-write handoff and its reset debt. There are seventeen tests.
+Their scope is recorded in the
+[slice description](../../../docs/rtl/minimal-copy.md#verification-and-limits).
 
 Run both native CC and Cranelift backends with `VERYL_DUT_REUSE=0`, as shown in
 [the RTL README](../../README.md). These fixtures drive lifecycle and IRQ status

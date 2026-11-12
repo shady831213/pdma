@@ -2,13 +2,11 @@
 # that a path remains timed or that a global exception did not mask its budget.
 proc cdc_preserve {profile} {
     set count 0
-    if {[dict exists $profile mailboxes]} {
-        dict for {scope spec} [dict get $profile mailboxes] {
-            set cells [common_cell_cdc::synchronizers $scope \
-                [get_clocks [dict get $spec source]] [get_clocks [dict get $spec destination]]]
-            set_dont_touch $cells
-            incr count [sizeof_collection $cells]
-        }
+    foreach chain [design_constraints::synchronizer_chains $profile] {
+        lassign $chain scope clock expected
+        set cells [common_cell_cdc::synchronizer_cells [list $chain]]
+        set_dont_touch $cells
+        incr count [sizeof_collection $cells]
     }
     puts "PDMA_CDC_SYNCHRONIZERS_PRESERVED count=$count"
 }
@@ -43,7 +41,7 @@ proc cdc_status {profile} {
     puts $fd "kind\tscope\tmax_delay_ns\tworst_slack_ps"
     # Resolve after mapping without reapplying constraints: this checks that the
     # original exceptions survived synthesis and remain effective.
-    foreach path [design_constraints::mailbox_paths $profile] {
+    foreach path [design_constraints::paths $profile] {
         set scope [dict get $path scope]
         set budget [dict get $path max_delay]
         set from [dict get $path from]
@@ -51,10 +49,11 @@ proc cdc_status {profile} {
         set slack [cdc_path_status $from $to $budget cdc-path-$index.rpt]
         puts $fd "[dict get $path kind]\t$scope\t$budget\t$slack"
         if {$slack < 0} {set passed 0}
-        if {[dict get $path kind] eq "payload"} {
+        if {[dict get $path kind] in {payload fifo-data-and-pointer}} {
+            set data_name [expr {[dict get $path kind] eq "payload" ? "latched_data" : "ram"}]
             set data ""
             foreach_in_collection cell $from {
-                if {[string first "$scope/latched_data" [get_object_name $cell]] == 0} {
+                if {[string first "$scope/$data_name" [get_object_name $cell]] == 0} {
                     set data [add_to_collection $data $cell]
                 }
             }
@@ -66,22 +65,13 @@ proc cdc_status {profile} {
         }
         incr index
     }
-    if {[dict exists $profile mailboxes]} {
-        dict for {scope spec} [dict get $profile mailboxes] {
-            set source [get_clocks [dict get $spec source]]
-            set destination [get_clocks [dict get $spec destination]]
-            common_cell_cdc::synchronizers $scope $source $destination
-            foreach {direction launch capture} [list requests $source $destination responses $destination $source] {
-                foreach {name clock} [list u_s_to_d $capture u_d_to_s $launch] {
-                    set chain $scope/$direction/$name
-                    set cells [common_cell_cdc::registers $chain $clock cells]
-                    set slack [cdc_path_status $cells $cells "" cdc-stage-$stages.rpt]
-                    puts $fd "local-stage\t$chain\t-\t$slack"
-                    if {$slack < 0} {set passed 0}
-                    incr stages
-                }
-            }
-        }
+    foreach chain [design_constraints::synchronizer_chains $profile] {
+        lassign $chain scope clock expected
+        set cells [common_cell_cdc::synchronizer_cells [list $chain]]
+        set slack [cdc_path_status $cells $cells "" cdc-stage-$stages.rpt]
+        puts $fd "local-stage\t$scope\t-\t$slack"
+        if {$slack < 0} {set passed 0}
+        incr stages
     }
     close $fd
     set fd [open cdc-timing-status.json w]

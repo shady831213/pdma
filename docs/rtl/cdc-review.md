@@ -1,5 +1,9 @@
 # CDC 报告归因与电路核对
 
+本文保留 2026-11-11 mailbox 检查点的分析与证据。core/bus 已在下一轮改用 FIFO；
+当前结构、全部新报告及处置见 [2026-11-12 吞吐评审](throughput-review.md)。下文的
+15/12 数量和单 slot 证明不能作为当前数据通路的覆盖。
+
 日期：2026-11-11。本文解释 [最小闭环评审](minimal-loop-review.md) 的全部 24 条
 CDC findings，区分源码事实、先行隔离实验和最终处置。**生产 RTL 已删除 `up/live`；
 CDC 原始 15 条、RDC 原始 12 条均已逐项审阅，精确例外后的 unresolved 为 0。**

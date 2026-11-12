@@ -77,6 +77,12 @@ module FenceMemoryTest {
             axi.bvalid  = 1;
             clk.next();
             axi.bvalid = 0;
+            for timeout in 0..8 {
+                if port.returned {
+                    break;
+                }
+                clk.next();
+            }
             $assert(port.returned && !port.receipt.failed, "WORD_WRITE_RECEIPT");
             port.accepted = 1;
             clk.next();

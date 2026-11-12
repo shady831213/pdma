@@ -11,11 +11,15 @@ class pdma_configuration extends uvm_object;
     bit[31:0] ring_context=0;
     int irq_vectors[]='{17};
     int delay_max=7;
+    int write_address_delay=-1, write_data_ready_delay=-1;
+    bit memory_default_ready;
+    int memory_outstanding=1;
     bit fault_enabled, fault_write, fault_page;
     bit [63:0] fault_address;
-    int injected;
+    int injected=0;
+    int w_first_faults=0;
     bit hold_write;
-    svt_axi_slave_transaction held;
+    svt_axi_transaction held[$];
     function new(string name="configuration"); super.new(name); endfunction
     function svt_axi_system_configuration system_config(bit software_port);
         svt_axi_system_configuration c=new;
@@ -30,7 +34,7 @@ class pdma_configuration extends uvm_object;
         p.data_width=software_port ? REGISTER_DATA_BITS : MEMORY_DATA_BITS;
         p.id_width=1;
         p.wysiwyg_enable=1;
-        p.num_outstanding_xact=1;
+        p.num_outstanding_xact=software_port ? 1 : memory_outstanding;
         p.transaction_coverage_enable=1;
         p.per_clock_cycle_signal_checks_enable=1;
         if(software_port) begin
@@ -38,7 +42,8 @@ class pdma_configuration extends uvm_object;
         end else begin
             p.addr_user_width=32; p.data_user_width=2; p.resp_user_width=2;
             p.awuser_enable=1; p.aruser_enable=1; p.ruser_enable=1; p.buser_enable=1;
-            p.default_awready=0; p.default_arready=0; p.default_wready=0;
+            p.default_awready=memory_default_ready;
+            p.default_arready=memory_default_ready; p.default_wready=memory_default_ready;
             p.read_data_reordering_depth=1; p.write_resp_reordering_depth=1;
             c.set_addr_range(0,0,64'hffff_ffff_ffff_ffff);
         end

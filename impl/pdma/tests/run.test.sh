@@ -29,4 +29,9 @@ if (pdma_impl_prepare "$out/source with spaces" "$out/success") > "$out/reuse.lo
     printf 'Stale run accepted\n' >&2; exit 1
 fi
 (cd "$out/success" && sha256sum --check --status artifacts.sha256)
+printf '{}\n' > "$out/source with spaces/simulation-only.json"
+if (pdma_impl_prepare "$out/source with spaces" "$out/instrumented") > "$out/instrumented.log" 2>&1; then
+    printf 'Simulation-only snapshot accepted for implementation\n' >&2; exit 1
+fi
+grep -Fxq 'Simulation-only instrumentation cannot qualify implementation' "$out/instrumented.log"
 printf 'PDMA_IMPLEMENTATION_RUN_TEST_PASS\n'

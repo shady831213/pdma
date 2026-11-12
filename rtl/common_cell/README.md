@@ -12,7 +12,7 @@ Imported sources and tests come from
 The matching [generic RAM providers](https://github.com/shady831213/pcie_modeling/tree/67989b3ebbdc8466e79ded2c65ad64c0da5585b0/rtl/tech_cell/generic)
 live separately under `../tech_cell/generic`. `upstream.sha256` records the imported
 files relative to `rtl`. The original cells and tests are unchanged. The README
-is PDMA-specific; `DuplexMailbox` and its test are additions extracted from PDMA.
+is PDMA-specific; `DuplexMailbox`, `AsyncQueue` and their tests are PDMA additions.
 Updates must be deliberate, with provenance and regression results; there is no
 automatic synchronization or dependency on an external checkout.
 The instance-scoped `constraints/duplex_mailbox.tcl` is also a PDMA addition;
@@ -24,8 +24,9 @@ it owns no platform clocks, global clock groups, external IO budgets or reset po
 | --- | --- | --- |
 | `ReadyValidSlice` | Typed single-clock Bypass/Forward/Reverse/Full transport | RegisterFrontend AW/W/AR holding registers use Forward |
 | `BoundedIndex`, `RoundRobin` | Pure bounded selection; ownership/cursor remain with caller | Available for later multi-channel composition |
-| `Ram1RW`, `Ram1R1W`, `Ram1R1WAsync` | Typed RAM ports and provider contracts; optional same-clock forwarding | Provider-independent storage building blocks; not forced into current scratch |
-| `DuplexMailbox` | Two typed acknowledged CDC mailboxes with independent release and bounded custody | Register and memory request/receipt crossings |
+| `Ram1RW`, `Ram1R1W`, `Ram1R1WAsync` | Typed RAM ports and provider contracts; optional same-clock forwarding | Copy's retained data uses 1R1W storage |
+| `DuplexMailbox` | Two typed acknowledged CDC mailboxes with independent release and bounded custody | Low-rate register requests/replies |
+| `AsyncQueue` | Typed ready/valid wrapper over the standard Gray-pointer FIFO | Core/bus request and receipt queues |
 
 Slice modes have capacity/empty latency of 0/0 (Bypass), 1/1 (Forward), 1/0
 (Reverse), and 2/1 (Full), with unstalled rate one beat per clock. Reset clears
@@ -33,8 +34,10 @@ custody, not a protocol obligation; invalid payload values are unspecified. The
 consumer owns credit until its actual protocol completion, so the register
 frontend still prevents replacement before the matching AXI response is consumed.
 
-RAM providers have synchronous reads, no content reset and bit masks. Dimensions
-and addresses must be valid. Same-address read/write collisions are excluded
+RAM providers have synchronous reads, no content reset and bit masks. An idle
+output need not retain the last read value; a consumer holding a result under
+backpressure must capture it. Dimensions and addresses must be valid.
+Same-address read/write collisions are excluded
 unless the same-clock wrapper explicitly enables full-write forwarding; partial
 mask collisions are not enabled by that option. The asynchronous RAM wrapper is
 dual-clock storage, not an asynchronous FIFO or a clock-domain ownership protocol.
@@ -49,6 +52,15 @@ message while its peer is still reset; delivery waits for that peer to run, and
 the sender retains the message until acknowledgement. Independent warm reset is
 not supported. Do not drive these reset ports with a software channel reset. Owners close admission
 and drain obligations before clearing their own state.
+
+`AsyncQueue #(TYPE, DEPTH)` has independent source/destination clocks, resets and
+ready/valid ports. DEPTH must be a power of two and at least four. It uses the pinned
+standard FIFO's registered Gray pointers and two synchronizer stages. The queue owns
+ordered entries, not transaction lifecycle. Its cold-reset contract matches the
+mailbox's; software cancellation drains, rather than resets, its transport.
+`constraints/async_queue.tcl` bounds both pointer directions and stored-data paths;
+preserve synchronizer stages and keep their local paths normally timed. Physical
+skew/delay and MTBF qualification remain integration responsibilities.
 
 Use the [reusable timing API](../../impl/pdma/constraints/README.md) for synthesis
 and integration. It accepts the mailbox instance, actual clock objects and an

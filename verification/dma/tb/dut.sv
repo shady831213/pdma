@@ -11,14 +11,15 @@ module pdma_vip_dut(svt_axi_if host_bus, svt_axi_if memory_bus, pdma_control_if 
         .clk(control.core_clk),.rst_n(control.core_rst_n),
         .request(dut.requests.valid),.ready(dut.requests.ready),
         .returned(dut.requests.returned),.accepted(dut.requests.accepted),
+        .request_slot(dut.requests.request.slot),.receipt_slot(dut.requests.receipt.slot),
         .closing(dut.engine.shutdown),.clear(dut.clear),
         .enabled(dut.configurations[0].enable),.has_commands(dut.commands[0].producer!=dut.commands[0].consumer),
         .irq(control.irq),.irq_ready(control.irq_ready),
         .irq_source(control.fatal || dut.statuses[0].error || dut.statuses[0].fatal!=0 ||
             dut.statuses[0].trap || dut.events[0].producer!=dut.events[0].consumer),
         .parked(dut.statuses[0].faulted),.resume_request(dut.actions[0].resume_request),
-        .parked_state({dut.engine.descriptor,dut.engine.source_address,dut.engine.destination_address,
-            dut.engine.remaining,dut.engine.committed,dut.engine.scratch})
+        .parked_state({dut.engine.descriptor,dut.engine.copy.next_source,dut.engine.copy.next_destination,
+            dut.engine.copy.remaining,dut.engine.copy.committed,dut.engine.fence_data})
     );
     assign cfg.awaddr=host_bus.master_if[0].awaddr;
     assign cfg.awprot=host_bus.master_if[0].awprot;

@@ -8,3 +8,13 @@ source = "common_cell"
 dependencies = []
 
 [projects.properties]
+
+[[projects]]
+name = "tech_cell_generic"
+source = "tech_cell/generic"
+
+[projects.properties]
+
+[[projects.dependencies]]
+name = "common_cell"
+source = "common_cell"

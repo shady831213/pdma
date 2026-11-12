@@ -1,0 +1,97 @@
+// ID-zero reads may be outstanding together. Ordered R bursts consume the
+// metadata FIFO; only the final beat publishes a complete internal receipt.
+module CopyReadEndpoint (
+    clk  : input   clock                                        ,
+    rst_n: input   reset_async_low                              ,
+    port : modport CopyMemoryPort::slave                        ,
+    axi  : modport $std::axi4_if::<CopyMemory::Bus>::read_master,
+) {
+    var full         : logic                     ;
+    var empty        : logic                     ;
+    var head         : CopyMemory::ReadTracker   ;
+    var beat         : logic                  <3>;
+    var accumulated  : CopyMemory::Receipt       ;
+    var next_result  : CopyMemory::Receipt       ;
+    var receipt_ready: logic                     ;
+    let terminal     : logic                      = axi.rvalid && axi.rready && axi.rlast;
+    assign axi.arvalid  = port.valid && !full;
+    assign port.ready   = axi.arready && !full;
+    assign axi.araddr   = port.request.address;
+    assign axi.arlen    = port.request.length as 8;
+    assign axi.arsize   = port.request.size as CopyMemory::Bus::size_t;
+    assign axi.arburst  = 2'b01 as CopyMemory::Bus::burst_t;
+    assign axi.aruser   = port.request.selector;
+    assign axi.arcache  = 0;
+    assign axi.arprot   = 0;
+    assign axi.arid     = 0;
+    assign axi.arlock   = 0;
+    assign axi.arqos    = 0;
+    assign axi.arregion = 0;
+    assign axi.rready   = !empty && (!axi.rlast || receipt_ready);
+    inst pending: $std::fifo #(
+        TYPE         : CopyMemory::ReadTracker,
+        DEPTH        : 8                      ,
+        RESET_DATA_FF: false                  ,
+    ) (
+        i_clk        : clk                       ,
+        i_rst        : rst_n                     ,
+        i_clear      : 0                         ,
+        o_empty      : empty                     ,
+        o_full       : full                      ,
+        o_almost_full: _                         ,
+        o_word_count : _                         ,
+        i_push       : axi.arvalid && axi.arready,
+        i_data       : CopyMemory::ReadTracker'{
+            slot  : port.request.slot        ,
+            lane  : port.request.address[2:0],
+            size  : port.request.size        ,
+            length: port.request.length
+        },
+        i_pop : terminal,
+        o_data: head    ,
+    );
+    always_comb {
+        next_result      = accumulated;
+        next_result.slot = head.slot;
+        if head.size == 0 {
+            next_result.data = ((axi.rdata >> (head.lane * 8)) as 8) as 512;
+        } else {
+            next_result.data[beat * 64+:64] = axi.rdata;
+        }
+        if (axi.rresp as 2) != 0 {
+            next_result.failed     = 1;
+            next_result.page_fault = (!accumulated.failed || accumulated.page_fault) && axi.ruser == 1
+                && (axi.rresp as 2) >= 2;
+        }
+        next_result.protocol_error = accumulated.protocol_error || axi.rid != 0 || axi.rlast != (beat == head.length)
+            || (axi.rresp as 2) == 1 || (axi.ruser != 0 && (axi.ruser != 1 || (axi.rresp as 2) <: 2));
+    }
+    inst receipt: common_cell::ReadyValidSlice #(
+        TYPE: CopyMemory::Receipt                        ,
+        MODE: common_cell::ReadyValid::SliceMode::Forward,
+    ) (
+        clk                    ,
+        rst_n                  ,
+        s_valid : terminal     ,
+        s_ready : receipt_ready,
+        s_data  : next_result  ,
+        m_valid : port.returned,
+        m_ready : port.accepted,
+        m_data  : port.receipt ,
+        occupied: _            ,
+    );
+    always_ff (clk, rst_n) {
+        if_reset {
+            accumulated = '0;
+            beat        = 0;
+        } else if axi.rvalid && axi.rready {
+            if axi.rlast {
+                accumulated = '0;
+                beat        = 0;
+            } else {
+                accumulated =  next_result;
+                beat        += 1;
+            }
+        }
+    }
+}

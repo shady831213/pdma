@@ -1,6 +1,6 @@
 # PDMA Copy Engine RTL 架构设计输入
 
-状态：微架构设计草案，2026-11-06 更新。寄存器访问和最小 Linear Copy/Fence32/64 切片已有实现，
+状态：微架构设计草案，2026-11-12 更新。寄存器访问和最小 Linear Copy/Fence32/64 切片已有实现，
 完整 DMA、参数范围和性能目标仍需收敛。
 本文区分已经确认的目标、已有体系结构约定和
 尚待评审的微架构选择；不宣称完整 Copy Engine RTL 已实现或已经满足时序。规范入口仍是
@@ -299,11 +299,11 @@ VIP，也不能用 DUT 自己报告的值生成同一项检查的 expected。
 
 | 项目 | 已形成的草案 | 仍需落实的门槛 |
 | --- | --- | --- |
-| 寄存器 | 32/64 位前端、reg/core CDC、对象自有存储及七项原生测试已实现 | 连接真实执行、IRQ/lifecycle owner；现有 action/clear 端口不代表排空已实现 |
+| 寄存器 | 32/64 位前端、reg/core CDC、对象自有存储及七项原生测试；32 位最小切片已连接执行、IRQ/lifecycle owner | 扩展配置仍须连接对应事务 owner，不能把 action/clear 端口本身当作排空证明 |
 | AXI5 | slot 责任、ID 生命周期、原子映射、reason 编码 | 精确协议 profile、参数组合、VIP 检查与返回异常测试 |
-| Reset/CDC | 请求接收前计债、Close/Drain/Open、通知/timer 归属 | VC SpyGlass CDC/RDC、实际初始化和同拍断言，以及跨域物理约束 |
-| 数据通路 | owner/阶段接口、任务和事务分层、软件重叠义务及 prefix 快照建议 | 正式记录错误进度保证并验证实际返回交错 |
-| 性能/PPA | 外部参考吞吐、容量下界、覆盖维度 | 具体 clock ratio、资源档位、真实库/PVT 和测量结果 |
+| Reset/CDC | 请求接收前计债、Close/Drain/Open；最小切片已有 VC SpyGlass 审阅、实际初始化和同拍断言、跨域约束 | 扩展并发 scope 后重新验证；当前映射不代替物理 CDC/reset 签核 |
+| 数据通路 | owner/阶段接口、任务和事务分层、软件重叠义务及已确认的错误时刻 prefix 快照 | 持续扩展并验证实际返回交错 |
+| 性能/PPA | 最小切片已有 burst window、异步 FIFO 和 zero-delay 数据，见吞吐评审 | 其它对齐/参数档位、完整功能与后端物理签核 |
 
 不要把已经形成设计建议写成已经完成实现验证。尚未闭合的数据通路优化，不阻塞
 其它已明确对象的独立设计，但也不能据此宣称可以直接冻结完整高吞吐执行 engine。
@@ -313,22 +313,25 @@ reset；这是验证顺序建议，不删除其余 DMA 命令。managed 模式�
 CPU/外围/子系统实现与资格验证在 DMA 收敛后另行开展。
 目录、原生 Veryl manifest 和寄存器切片已有设计源文件及可执行测试，见
 [RTL 入口](../../rtl/README.md)。[最小 Copy 切片](minimal-copy.md) 接入了一个有界
-普通内存端点和执行/reset owner；完整 AXI5 atomic、多 channel 和高吞吐路径仍未实现。
+普通内存端点和执行/reset owner，已加入有界 burst window、读写重叠与异步队列；
+完整 AXI5 atomic、多 channel 和全部配置/对齐方式的吞吐闭合仍未实现。
 局部测试通过不能代替完整 DMA、CDC/RDC 或物理实现验证。
 
 ## 后续执行顺序
 
 2026-11-11 联合评审确定：当前最小切片的闭环及实例化时序约束完成后，下一轮先处理
 core↔bus 的吞吐流水组织，以及随结构调整而来的 CDC/时序约束复核，再继续扩展功能。
-保留低请求率寄存器桥；持续 DMA 通路评估有界异步 FIFO、在途事务、数据/回执容量
-和读写重叠，不能只替换 mailbox 而继续逐 burst 串行等待。
+该迭代的结构与资格记录见 [最小切片](minimal-copy.md) 和
+[吞吐评审](throughput-review.md)。
+本轮保留低请求率寄存器桥；持续 DMA 通路已采用有界异步 FIFO、八个在途 burst
+slot、保留数据和回执容量，以及读写重叠，没有继续逐 burst 串行等待。
 
 这一轮必须证明没有不合理的周期性 bubble。参考
 [pcie_modeling](https://github.com/shady831213/pcie_modeling) 的实际 Veryl 测试与 UVM
 zero-delay testcase 构建方式：局部测试验证连续 valid/ready 与存储交接；系统场景
 在合法的最小外部延迟和持续供给下检查完整通路。量化每类空泡的原因，不把内部资源
 配置不足或反复重启控制流程自动解释为合理开销。详细验收要求见
-[验证要求](../../verification/dma/requirements.md#planned-throughput-and-bubble-qualification)。
+[验证要求](../../verification/dma/requirements.md#throughput-and-bubble-qualification)。
 
 约束复核保留当前原则：异步通路有绝对延迟预算，同步链级间及同步后汇聚逻辑保持
 正常本域时序；只有硬件明确允许 N 周期后采样的路径才讨论 multicycle，并核对 hold。
@@ -340,7 +343,7 @@ zero-delay testcase 构建方式：局部测试验证连续 valid/ready 与存�
 1. **落实事务与资源微架构。** 在内存接口、数据通路、reset 草案中明确模块接口和
    状态 owner，画出 core/bus 跨域请求、返回及 credit 通路。为 slot/ID、buffer、
    parked channel 列出分配/释放条件、RAM 端口和容量预算；定出首个验证配置及
-   参数合法性约束。把 error prefix 的建议与正式规范逐项对齐，涉及外部行为的
+   参数合法性约束。error prefix 已于 2026-11-12 与正式规范对齐；其它涉及外部行为的
    改动先补合同和模型边界测试。产物应足够直接实现端点，不能只保留概念状态图。
 2. **实现内存事务端点及排空。** 先贯通普通读写、请求/回执 CDC、有界 credit 和
    AXI ID 关联；用真实握手测试 AW/W 独立背压、返回交错、错误、关闭和 outstanding

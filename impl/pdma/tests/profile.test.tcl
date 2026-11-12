@@ -25,6 +25,12 @@ foreach {field value} {source unknown destination reg_clk max_delay 0 max_delay 
     lappend variants $changed
 }
 set index 0
+foreach {field value} {depth 3 depth 0 max_delay 0 max_delay 2 destination unknown} {
+    set changed $base
+    dict set changed async_queues request_crossing [dict create source core_clk destination bus_clk max_delay 0.5 depth 8]
+    dict set changed async_queues request_crossing $field $value
+    lappend variants $changed
+}
 foreach variant $variants {
     set path [file join $directory invalid-$index.tcl]
     set fd [open $path w]

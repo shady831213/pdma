@@ -7,7 +7,8 @@ technology/electrical budgets belong to the integrating platform.
 | File | Role |
 | --- | --- |
 | `rtl/common_cell/constraints/duplex_mailbox.tcl` | Reusable instance-scoped handshake timing API; no clock creation or global exceptions |
-| `dma-copy.tcl` | Standalone Copy profile: port ownership, clocks, reset contract, mailbox instances and maximum delays |
+| `rtl/common_cell/constraints/async_queue.tcl` | Reusable FIFO data/Gray-pointer budgets and synchronizer-chain metadata |
+| `dma-copy.tcl` | Standalone Copy profile: port ownership, clocks, reset contract, mailbox/FIFO instances, depths and maximum delays |
 | `flow/constraints-common.tcl` | Shared standalone clock-SDC generation and profile traversal |
 | `flow/genus/timing.tcl`, `flow/genus/cdc.tcl` | Physical object binding, electrical constraints, mapped timing/structure audit |
 | `flow/vc/constraints.tcl` | RTL clock/reset/interface intent and structural-analysis setup |
@@ -26,11 +27,14 @@ that unit to ns; an integrator must establish its own consistent units and budge
 ```tcl
 # PDMA_RTL_ROOT is supplied by the integration build, not hard-coded here.
 source $PDMA_RTL_ROOT/common_cell/constraints/duplex_mailbox.tcl
+source $PDMA_RTL_ROOT/common_cell/constraints/async_queue.tcl
 
 common_cell_cdc::duplex_mailbox soc/dma0/csr/crossing \
     [get_clocks cfg_clock] [get_clocks dma_clock] $register_crossing_budget
-common_cell_cdc::duplex_mailbox soc/dma0/crossing \
+common_cell_cdc::async_queue soc/dma0/request_crossing \
     [get_clocks dma_clock] [get_clocks memory_clock] $memory_crossing_budget
+common_cell_cdc::async_queue soc/dma0/response_crossing \
+    [get_clocks memory_clock] [get_clocks dma_clock] $memory_crossing_budget
 ```
 
 The script defines procedures only; sourcing it does not modify the design.
@@ -50,19 +54,25 @@ qualification, which are not supplied by an SDC maximum-delay constraint.
 
 ```tcl
 # Genus adapter, after technology mapping and before subsequent optimization:
-set sync_cells [common_cell_cdc::synchronizers soc/dma0/crossing \
-    [get_clocks dma_clock] [get_clocks memory_clock]]
+set sync_cells [common_cell_cdc::synchronizers soc/dma0/csr/crossing \
+    [get_clocks cfg_clock] [get_clocks dma_clock]]
 set_dont_touch $sync_cells
+set chains [common_cell_cdc::async_queue_chains soc/dma0/request_crossing \
+    [get_clocks dma_clock] [get_clocks memory_clock] 8]
+set_dont_touch [common_cell_cdc::synchronizer_cells $chains]
+# Repeat for the response queue with its reversed clocks and actual depth.
 ```
 
 Integration must preserve these logical instance boundaries or provide an audited
 binding for its transformed hierarchy. Do not silently broaden a failed selector
 to the entire chip. After mapping, re-resolve with `duplex_paths` to inspect the
-actual path sets; do not retain stale tool collections across netlist transforms.
+actual path sets (`async_queue_paths` for a FIFO); do not retain stale tool
+collections across netlist transforms. Cell-owned helpers define their private
+synchronizer hierarchy; application adapters do not duplicate those paths.
 
 ## Timing contract
 
-The current profile specifies 0.5ns for each mailbox, in both directions. This is
+The current profile specifies 0.5ns for mailbox and FIFO crossings in both directions. This is
 half the fastest 1ns local period. Source payload and request state are registered
 together; the request traverses two destination synchronizer stages before local
 qualified capture. The budget conservatively leaves time for payload arrival
@@ -86,6 +96,14 @@ paths, verifies the budget shown in the native report and checks native slack.
 It separately checks all local synchronizer stage paths remain timed without the
 cross-domain exception. Pre-layout estimates still omit routed parasitics, clock
 tree effects, reset recovery/removal signoff and analog MTBF qualification.
+
+For `AsyncQueue`, registered Gray pointers change by one count per accepted push
+or pop. The absolute crossing budget is below the faster clock period, bounding
+both propagation and Gray-bus skew; pointer synchronizers are preserved and their
+local stage paths remain timed. The data bank stays owned until the synchronized
+read pointer releases its row. The audit separately checks actual data-bank paths,
+not only pointer paths. Queue depth must match the instantiated power-of-two depth;
+the synchronizer-width check rejects an incorrect profile declaration.
 
 A CDC structural waiver is not an STA false-path. Reconvergent control logic
 after synchronization remains ordinary local-clock logic and keeps its single-cycle
@@ -130,8 +148,9 @@ wrapper inside an SoC that already owns them. Reuse the cell API above instead.
 bash impl/pdma/tests/genus-cdc.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/cdc-integration"
 ```
 
-The real mapped test has two nested IP instances on the same clocks, with separate
-0.5ns and 0.7ns budgets. It checks isolation, timed local synchronizer stages, a
-missing instance, an impossible 0.001ns budget and an overriding false-path.
+The real mapped test has a mailbox and FIFO pair in two nested IP instances on
+the same clocks, with separate 0.5ns and 0.7ns budgets. It checks isolation, timed
+local synchronizer stages, missing instances, wrong FIFO depth, impossible 0.001ns
+budgets for both transport types and an overriding false-path.
 The production DMA mapping has its own audit; the small test does not substitute
 for that result. Commercial raw reports and library details stay outside Git.

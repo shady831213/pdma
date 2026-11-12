@@ -68,9 +68,9 @@ module CopyTestMemory (
             observed[3] = (64'd13 << 32) | 11;
             observed[4] = 64'h200;
             observed[8] = 64'h300;
-            // A second identical command lets reset interrupt a fresh transfer.
+            // A single-burst second command isolates W-before-AW reset behavior.
             observed[13] = 64'h5678;
-            observed[14] = 128;
+            observed[14] = 64;
             observed[15] = (64'd13 << 32) | 11;
             observed[16] = 64'h200;
             observed[20] = 64'h300;

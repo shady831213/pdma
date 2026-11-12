@@ -91,9 +91,10 @@ fixture verifies this is not blanket exclusion of resetless storage. CDC and RDC
 retain raw and unresolved reports; unresolved errors or warnings return failure.
 See [reset/CDC obligations](../../docs/rtl/reset-cdc.md#vc-spyglass-cdcrdc-检查门槛).
 
-The reviewed Copy profile removes redundant mailbox startup gates. Its remaining
-3 protocol reconvergences and 12 resetless-payload setup warnings have explicit
-[path-by-path conclusions](../../docs/rtl/cdc-review.md). Select them deliberately:
+The Copy profile retains the register mailbox and uses FIFOs for memory traffic.
+Gray-pointer decode, independent protocol credits, resetless payloads and exact
+unused sinks are reviewed separately in the
+[throughput review](../../docs/rtl/throughput-review.md). Select that review deliberately:
 
 ```sh
 PDMA_STATIC_REVIEW="$PWD/impl/pdma/constraints/dma-copy-review.tcl" \
@@ -104,21 +105,25 @@ The same policy supports `rdc`. Raw findings are reported before exceptions;
 `reviewed.rpt`, `unresolved.rpt` and `finding-counts.txt` distinguish the results.
 The success marker is `PDMA_STATIC_REVIEWED`, never a claim of raw zero findings.
 Exact emitted RTL, source manifest, profile, constraints, analysis configuration
-and tool identities must match, including the shared constraint sources. Each entry must match one distinct finding by
-native fields; unknown findings still fail. A changed source/configuration needs
+and tool identities must match, including shared constraints and the review engine.
+Each ordinary entry matches one distinct finding by native fields. Only a proven
+unconnected, no-clock sink may group reset-source paths at that exact endpoint;
+the source identity, sink fields and expected distinct-match count are checked.
+This rule cannot cover a register or primary output. Unknown findings still fail.
+A changed source/configuration needs
 a fresh review, not an automatically refreshed digest. No policy is selected by
 default. These structural exceptions do not waive physical timing or MTBF.
 
 `cdc-formal` additionally runs the tool's data-hold, data-loss and convergence
 properties, with a 60-second limit per property and the ordinary overall timeout.
 Inconclusive properties remain findings. `tests/mailbox.sh DUT_SNAPSHOT NEW_PROOF`
-uses the same mode on the actual memory mailbox and payload types, with free
+uses the same mode on the actual register mailbox and payload types, with free
 interface inputs, to separate cell invariants from whole-DMA proof complexity.
 It retains the raw structural verdict; proven properties do not silently create
 waivers. Formal clock/reset assumptions remain explicit in its selected profile.
-The current whole-DUT run still has one inconclusive datahold property; it remains
-a failure in `cdc-formal`, while the isolated exact mailbox proof passes. No
-inconclusive/formal-error tag appears in the reviewed structural policy.
+An earlier whole-DUT snapshot had one inconclusive datahold property. That result
+is not coverage of the new FIFO/window design; no whole-DMA formal completion is
+claimed. No inconclusive/formal-error tag is accepted by the structural review.
 
 Tool-sensitivity checks use an independent two-clock fixture: a synchronized
 control passes CDC, direct unsynchronized control fails, independent-reset

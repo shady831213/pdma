@@ -8,7 +8,9 @@ return [dict create top pdma_rtl_DmaCopy clocks {
     cold {reg_rst_n core_rst_n bus_rst_n}
 } mailboxes {
     csr/crossing {source reg_clk destination core_clk max_delay 0.5}
-    crossing {source core_clk destination bus_clk max_delay 0.5}
+} async_queues {
+    request_crossing {source core_clk destination bus_clk max_delay 0.5 depth 8}
+    response_crossing {source bus_clk destination core_clk max_delay 0.5 depth 8}
 } ports {
     reg_clk {
         input {

@@ -1,0 +1,46 @@
+#[test(async_queue_capacity_order_stalls_wrap_and_continuous_drain)]
+module AsyncQueueTest {
+    inst s_clk: $tb::clock_gen #(period: 10);
+    inst d_clk: $tb::clock_gen #(period: 14);
+    inst s_rst: $tb::reset_gen (clk: s_clk);
+    inst d_rst: $tb::reset_gen (clk: d_clk);
+    var s_valid: 's logic;
+    var s_ready: 's logic;
+    var s_data: 's logic<193>;
+    var d_valid: 'd logic;
+    var d_ready: 'd logic;
+    var d_data: 'd logic<193>;
+    inst dut: common_cell::AsyncQueue #(
+        TYPE: logic<193>, DEPTH: 16,
+    ) (
+        s_clk, s_rst_n: s_rst, s_valid, s_ready, s_data,
+        d_clk, d_rst_n: d_rst, d_valid, d_ready, d_data,
+    );
+    initial {
+        s_valid=0; d_ready=0; s_data=0;
+        s_rst.assert(); d_rst.assert();
+        for round in 0..3 {
+            // Fill the whole capacity while the consumer is stopped.
+            s_clk.next(8);
+            for i in 0..16 {
+                $assert(s_ready, "QUEUE_CAPACITY");
+                s_valid=1; s_data=(193'd1 << 192) | (round*16+i);
+                s_clk.next();
+            }
+            s_valid=0;
+            $assert(!s_ready, "QUEUE_FULL");
+            s_clk.next(3); d_clk.next(10);
+            $assert(d_valid && d_data==((193'd1 << 192) | (round*16)), "HELD_HEAD");
+            d_clk.next(3);
+            d_ready=1;
+            for i in 0..16 {
+                $assert(d_valid, "CONTINUOUS_DRAIN_NO_BUBBLE");
+                $assert(d_data==((193'd1 << 192) | (round*16+i)), "QUEUE_IDENTITY");
+                d_clk.next();
+            }
+            d_ready=0; d_clk.next(3);
+            $assert(!d_valid, "NO_DUPLICATE");
+        }
+        $finish();
+    }
+}

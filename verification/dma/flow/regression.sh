@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+main() {
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 source "$root/tools/rtl-flow/environment.sh"
 build=$(realpath "${1:?Usage: regression.sh BUILD NEW_RUN [SEEDS...]}")
@@ -86,7 +87,7 @@ for test_name in "${tests[@]}"; do
     for seed in "${seeds[@]}"; do launch "$test_name" "$seed" "$run/$test_name/seed-$seed" '' ''; done
 done
 if [[ $suite == dut ]]; then
-    for mutation in data identity unknown_identity missing_completion duplicate_completion early_fence underreported_prefix; do
+    for mutation in data identity unknown_identity missing_completion duplicate_completion early_fence underreported_prefix fractional_prefix; do
         mutation_test=pdma_aligned_copy_test
         case "$mutation" in
             data) diagnostic=TASK_DATA ;;
@@ -94,7 +95,8 @@ if [[ $suite == dut ]]; then
             missing_completion) diagnostic=TASK_TIMEOUT ;;
             duplicate_completion) diagnostic=TASK_DUPLICATE ;;
             early_fence) diagnostic=TASK_COMPLETION; mutation_test=pdma_read_error_irq_test ;;
-            underreported_prefix) diagnostic=TASK_ERROR_INFO; mutation_test=pdma_read_error_irq_test ;;
+            underreported_prefix) diagnostic=TASK_ERROR_INFO; mutation_test=pdma_write_error_irq_test ;;
+            fractional_prefix) diagnostic=TASK_ERROR_INFO; mutation_test=pdma_read_error_irq_test ;;
         esac
         launch "$mutation_test" 1 "$run/negative-$mutation" "$diagnostic" "$mutation"
     done
@@ -102,3 +104,5 @@ fi
 while ((head<tail)); do collect; done
 if ((failed)); then printf 'PDMA_REGRESSION_FAILED\n'; exit 1; fi
 printf 'PDMA_REGRESSION_COMPLETE\n'
+}
+{ main "$@"; exit $?; }

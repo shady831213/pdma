@@ -1,8 +1,9 @@
-// First executable profile: 64-bit ordinary AXI5 transfers, one bounded burst in flight.
+// First executable profile: 64-bit ordinary AXI5 transfers, bounded bursts.
 // AXI5 AWATOP is zero; atomic capabilities remain disabled. USER carries ContextId.
 pub package CopyMemory {
     alias package Bus = $std::axi4_pkg::<64, 8, 1, 32, 1, 2, 32, 2>;
     struct Request {
+        slot    : logic<4>  ,
         write   : logic     ,
         address : logic<64> ,
         selector: logic<32> ,
@@ -11,10 +12,31 @@ pub package CopyMemory {
         data    : logic<512>,
     }
     struct Receipt {
+        slot          : logic<4>  ,
         data          : logic<512>,
         failed        : logic     ,
         page_fault    : logic     ,
         protocol_error: logic     ,
+    }
+    // Internal receipt identity is independent of the external AXI ID. Requests
+    // within each AXI direction use ID zero and responses therefore stay ordered.
+    struct Address {
+        address : logic<64>,
+        selector: logic<32>,
+        size    : logic<3> ,
+        length  : logic<3> ,
+    }
+    struct ReadTracker {
+        slot  : logic<4>,
+        lane  : logic<3>,
+        size  : logic<3>,
+        length: logic<3>,
+    }
+    struct WritePayload {
+        data  : logic<512>,
+        lane  : logic<3>  ,
+        size  : logic<3>  ,
+        length: logic<3>  ,
     }
 }
 pub interface CopyMemoryPort {

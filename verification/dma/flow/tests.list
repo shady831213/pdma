@@ -3,6 +3,7 @@ pdma_random_copy_test
 pdma_read_fault_test
 pdma_write_fault_test
 pdma_fence_fault_test
+pdma_w_first_fault_test
 pdma_read_error_irq_test
 pdma_write_error_irq_test
 pdma_channel_reset_test
@@ -17,3 +18,7 @@ pdma_irq_enable_no_replay_test
 pdma_ring_wrap_test
 pdma_event_boundary_test
 pdma_register_model_test
+pdma_zero_delay_long_test
+pdma_zero_delay_short_test
+pdma_zero_delay_batch_test
+pdma_zero_delay_ratio_test

@@ -26,7 +26,7 @@ software never substitutes mirrored values for a real hardware read.
 | Reset while accepted memory access is outstanding | `single_channel/harness/lifecycle` | Channel and global reset with suspended VIP B response; reset busy stays set until response is released; no later chunk write; fresh copy after reset |
 | Notification acceptance versus software dispatch | `single_channel/hardware/tests.rs` | Backpressure at IRQ output; exactly one accepted notification dispatched through jarvisuk IRQ service to the channel's own handler; channel zero uses vector 17; ISR reads cause through VIP MMIO; stopping errors bypass routine masks; enable never replays |
 | Three asynchronous domains | RTL-specific | Independently randomized periods, phases and bounded jitter; cold reset released on each domain's own edge |
-| Checker sensitivity | TB selftest | Corrupt payload (`TASK_DATA`), wrong or unknown identity (`TASK_IDENTITY`), suppress completion (`TASK_TIMEOUT`), duplicate completion (`TASK_DUPLICATE`), publish an early Fence during IRQ error (`TASK_COMPLETION`), or understate progress (`TASK_ERROR_INFO`); require the corresponding fatal diagnostic |
+| Checker sensitivity | TB selftest | Corrupt payload (`TASK_DATA`), wrong or unknown identity (`TASK_IDENTITY`), suppress completion (`TASK_TIMEOUT`), duplicate completion (`TASK_DUPLICATE`), publish an early Fence during IRQ error (`TASK_COMPLETION`), understate ordered-write progress or report an impossible partial read-error prefix (`TASK_ERROR_INFO`); require the corresponding fatal diagnostic |
 
 These are scenario translations, not assertions that RTL must follow the Rust
 model's tick sequence. Scenarios orchestrate task flows; software channel and IRQ
@@ -40,7 +40,13 @@ owns separate software, IRQ-handler and checker instances; the current DUT has
 only one channel, so this organization does not establish multichannel coverage.
 The checker derives expected bytes and identity from submitted software inputs.
 Directed error scenarios derive the expected committed prefix from the injected
-failure address, independently of the event's reported count. Fault/error checks
+failure address, independently of the event's reported count. In the read-error
+case, the first valid page fragment is one complete bus beat: its write may or
+may not finish before the later read error, so only zero or that whole fragment
+is permitted. The ordered write-error case requires the exact preceding prefix.
+Native window tests control receipt ordering and check the exact error-time
+snapshot. No error test assumes that bytes beyond the prefix remain unchanged.
+Fault/error checks
 read Fence storage even when the result arrived through the interrupt handler.
 Passive subscribers receive channel-tagged scenario outcomes for coverage and
 submission-to-observation latency. They neither inspect payload transactions nor
@@ -48,8 +54,8 @@ own task resources. Polling rejects missing completion; the checker rejects
 duplicate terminal results, data and identity mismatches. Memory storage is one
 `svt_mem` instance, shared by the VIP's native responder and a jarvisuk
 `jvs_memory_model` adapter. jarvisuk owns allocation/block access, not a shadow
-bus executor. Failed writes may have affected memory; replay checks must not
-assume transactional rollback.
+bus executor. Permanent failed writes may have affected memory. A repairable
+PageFault write, in contrast, must have no effects from that failed access before replay.
 
 Fault injection is a platform response policy. Payload SLVERR plus USER=1 means
 recoverable PageFault; other errors stop. This does not model page tables or PCIe.
@@ -68,7 +74,12 @@ functional and code coverage. A pass marker alone is insufficient: reject UVM
 errors/fatals, timeouts, missing test completion and vacuous activity. Coverage
 reports combine only successful seeds, excluding checker mutation runs.
 
-## Planned throughput and bubble qualification
+## Throughput and bubble qualification
+
+The current eight-slot window and asynchronous request/receipt queues are measured
+in [the throughput review](../../docs/rtl/throughput-review.md). The requirements
+below remain acceptance criteria for further configurations, not a declaration
+that every alignment, width and clock ratio is closed.
 
 Agreed on 2026-11-11 for the next iteration; these cases are not yet implemented
 or counted as passed coverage. Reference the existing Veryl tests and UVM zero-delay
@@ -136,7 +147,7 @@ when the signal stays high. Scenario coverage samples completed observations; th
 memory responder and IRQ service block on transactions. Software MMIO polling and
 cycle-based timeouts retain their behavioral meaning.
 
-`PDMA_SUITE=dut` is the default regression suite, including the seven checker
+`PDMA_SUITE=dut` is the default regression suite, including the eight checker
 mutation cases. `PDMA_SUITE=tb-selftest` selects the independent cases listed in
 `flow/tb-selftests.list`; they do not run DMA task flows or contribute DUT coverage.
 The coverage flow rejects that suite. The same bounded parallel runner and

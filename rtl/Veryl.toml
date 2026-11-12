@@ -8,6 +8,7 @@ target = {type = "directory", path = "target"}
 
 [dependencies]
 common_cell = {path = "common_cell"}
+tech_cell_generic = {path = "tech_cell/generic"}
 
 [test]
 seed = 20261028

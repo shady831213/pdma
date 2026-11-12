@@ -324,6 +324,22 @@ is invalid: no success event exists. Error info contains `bytes_completed`, the
 committed Copy/Fill prefix; word operations report zero on pre-effect failure.
 Atomic mismatch is not an event. Command decode failure is CommandRead fatal.
 
+The prefix is frozen when hardware recognizes the stopping error. It counts only
+the contiguous logical bytes whose writes have already completed successfully;
+issuing write data is not sufficient. A later successful write cannot bridge an
+unknown or failed earlier access, and subsequent receipts do not change the event.
+Bytes beyond this prefix are not guaranteed unchanged: accesses already issued
+within the same command may still complete. The field is diagnostic information,
+not a retry cursor. No successor command may pass the stopped command, and reset
+must drain all accepted accesses before software can reclaim their resources.
+
+The functional model's sequential memory accesses are one implementation of this
+contract. RTL may split a model chunk into bounded bursts and pipeline accesses.
+Error-prefix values need not match across different access granularities and
+completion schedules, but each implementation must satisfy the same prefix and
+cleanup guarantees. Tests must not promote the model's unchanged suffix into an
+architectural guarantee for pipelined RTL.
+
 **HW-CE-12.** `irq_cause` exposes current event non-empty, sticky Trap, sticky
 command-error stop and channel fatal. The two routine masks cover event non-empty
 edge and Trap. Error/fatal bypass those masks; `irq_enable` gates all channel

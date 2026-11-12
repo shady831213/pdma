@@ -52,16 +52,26 @@ proc common_cell_cdc::duplex_mailbox {scope source destination budget} {
     apply_paths $paths
     return $paths
 }
-proc common_cell_cdc::synchronizers {scope source destination} {
-    set result ""
+proc common_cell_cdc::duplex_chains {scope source destination} {
+    set result {}
     set prefix [expr {$scope eq "" ? "" : "[string trimright $scope /]/"}]
     foreach {direction launch capture} [list requests $source $destination responses $destination $source] {
         foreach {name clock} [list u_s_to_d $capture u_d_to_s $launch] {
-            set cells [registers $prefix$direction/$name $clock cells]
-            # DuplexMailbox fixes one control bit and two stages in each chain.
-            if {[sizeof_collection $cells] != 2} {error "CDC_SYNC_SHAPE: $prefix$direction/$name"}
-            set result [add_to_collection $result $cells]
+            lappend result [list $prefix$direction/$name $clock 2]
         }
     }
     return $result
+}
+proc common_cell_cdc::synchronizer_cells {chains} {
+    set result ""
+    foreach chain $chains {
+        lassign $chain scope clock expected
+        set cells [registers $scope $clock cells]
+        if {[sizeof_collection $cells]!=$expected} {error "CDC_SYNC_SHAPE: $scope"}
+        set result [add_to_collection $result $cells]
+    }
+    return $result
+}
+proc common_cell_cdc::synchronizers {scope source destination} {
+    return [synchronizer_cells [duplex_chains $scope $source $destination]]
 }

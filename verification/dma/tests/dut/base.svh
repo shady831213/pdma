@@ -13,7 +13,7 @@ virtual class pdma_base_test extends uvm_test;
         clocks.select_mode(clock_mode);
         if($value$plusargs("checker_mutation=%s",mutation)) begin
             if(!(mutation inside {"data","identity","unknown_identity","missing_completion","duplicate_completion",
-                "early_fence","underreported_prefix"}))
+                "early_fence","underreported_prefix","fractional_prefix"}))
                 `uvm_fatal("MUTATION_CONFIG","Unknown mutation")
             pdma_task_checker::type_id::set_type_override(pdma_negative_checker::get_type());
             if(mutation=="missing_completion") pdma_task_flow::type_id::set_type_override(pdma_missing_fence::get_type());
@@ -24,6 +24,7 @@ virtual class pdma_base_test extends uvm_test;
     endfunction
     function pdma_task settings(int requested_length=64,bit varied=0);
         pdma_task job=new;
+        if(requested_length>job.max_length) job.max_length=requested_length;
         if(!job.randomize() with {
             local::requested_length==0 || length==local::requested_length;
             if(!local::varied) {source_lane==0; dest_lane==0; cross_page==0;}

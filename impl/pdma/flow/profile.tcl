@@ -33,16 +33,23 @@ proc profile::read {path} {
             }
         }
     }
-    if {[dict exists $result mailboxes]} {
-        dict for {instance spec} [dict get $result mailboxes] {
+    foreach family {mailboxes async_queues} {
+        if {![dict exists $result $family]} {continue}
+        dict for {instance spec} [dict get $result $family] {
             set source [dict get $spec source]
             set destination [dict get $spec destination]
             set budget [dict get $spec max_delay]
             if {$instance eq "" || ![dict exists $clocks $source] || ![dict exists $clocks $destination] ||
-                $source eq $destination} {error "PDMA_PROFILE: invalid mailbox scope or clocks"}
+                $source eq $destination} {error "PDMA_PROFILE: invalid crossing scope or clocks"}
             set limit [expr {min([dict get $clocks $source period],[dict get $clocks $destination period])}]
             if {![string is double -strict $budget] || !($budget > 0 && $budget <= $limit)} {
-                error "PDMA_PROFILE: mailbox budget must fit within both clock periods"
+                error "PDMA_PROFILE: crossing budget must fit within both clock periods"
+            }
+            if {$family eq "async_queues"} {
+                set depth [dict get $spec depth]
+                if {![string is integer -strict $depth] || $depth < 4 || ($depth & ($depth-1))!=0} {
+                    error "PDMA_PROFILE: asynchronous queue depth must be a power of two >=4"
+                }
             }
         }
     }

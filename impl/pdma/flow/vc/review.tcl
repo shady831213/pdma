@@ -8,10 +8,25 @@ proc static_review::apply {check} {
         error "PDMA_REVIEW_STALE: source, tool or constraints changed; review again"
     }
     set selected {}
+    set groups {}
     set index 0
     foreach entry [dict get $policy findings] {
         if {$check ni [dict get $entry checks]} {continue}
         set tag [dict get $entry tag]
+        set expected_count 1
+        if {[dict exists $entry expected_count]} {
+            set expected_count [dict get $entry expected_count]
+            # Only proven dead sinks may group multiple reset-source paths. A
+            # register, output or ordinary CDC waiver must remain one-to-one.
+            set fields [dict get $entry fields]
+            if {![string is integer -strict $expected_count] || $expected_count<1 ||
+                $check ne "rdc" || $tag ne "RDC_CORRUPT_OBSERVED" ||
+                [dict get $fields DestObjectType] ne "unconnected" ||
+                [dict get $fields DestClockInfoList:DestClockInfo:ClockName] ne "'no-clock'" ||
+                ![dict exists $fields DestObject]} {
+                error "PDMA_REVIEW_GROUP: only an exact unconnected sink may group source paths"
+            }
+        }
         set matches {}
         foreach id [report_$check -severity {fatal error warning} -tag $tag -id_list] {
             set match 1
@@ -21,9 +36,13 @@ proc static_review::apply {check} {
             }
             if {$match} {lappend matches $id}
         }
-        if {[llength $matches] != 1 || [lindex $matches 0] in $selected} {
-            error "PDMA_REVIEW_MISMATCH: entry $index must match exactly one distinct finding"
+        if {[llength $matches] != $expected_count} {
+            error "PDMA_REVIEW_MISMATCH: entry $index requires $expected_count distinct findings"
         }
+        foreach id $matches {
+            if {$id in $selected} {error "PDMA_REVIEW_MISMATCH: overlapping review entries"}
+        }
+        lappend groups $matches
         lappend selected {*}$matches
         incr index
     }
@@ -33,8 +52,11 @@ proc static_review::apply {check} {
     set index 0
     foreach entry [dict get $policy findings] {
         if {$check ni [dict get $entry checks]} {continue}
-        waive_$check -add pdma_review_$index -id [lindex $selected $index] \
-            -comment [dict get $entry reason]
+        set subindex 0
+        foreach id [lindex $groups $index] {
+            waive_$check -add pdma_review_${index}_$subindex -id $id -comment [dict get $entry reason]
+            incr subindex
+        }
         incr index
     }
     report_$check -only_waived -verbose -limit 0 -file reviewed.rpt

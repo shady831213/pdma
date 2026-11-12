@@ -14,8 +14,9 @@ class pdma_task extends uvm_object;
     rand int unsigned length, source_lane, dest_lane, source_offset, dest_offset;
     rand bit cross_page, fence_wide;
     rand bit[31:0] fence_context, source_context, dest_context;
+    int unsigned max_length=257;
     constraint geometry {
-        length inside {[1:257]}; source_lane inside {[0:7]}; dest_lane inside {[0:7]};
+        length inside {[1:max_length]}; source_lane inside {[0:7]}; dest_lane inside {[0:7]};
         source_offset inside {[0:31]}; dest_offset inside {[0:31]};
     }
     pdma_buffer source_buffer, dest_buffer, fence_buffer;
@@ -26,6 +27,7 @@ class pdma_task extends uvm_object;
     bit terminal_checked;
     bit expect_payload_unchanged;
     longint unsigned expected_error_prefix;
+    bit allow_zero_error_prefix=0;
     realtime submitted_at;
     function new(string name="task"); super.new(name); fence_wide=1; endfunction
     function longint unsigned fence_value(); return id; endfunction

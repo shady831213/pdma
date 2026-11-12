@@ -150,16 +150,16 @@ WAW。源/目的虚拟区间不相交、ContextId 不同均不是“实际存储
 
 ### Error 的 prefix：报告快照，不是重试位置
 
-2026-10-29 收敛建议：保留字段和 error/reset 机制，把 `Event.info.bytes_completed`
-明确为 **本次 event 固化时已确认成功的连续逻辑前缀**。不是成功字节总数，也不是
+2026-11-12 已确认：保留字段和 error/reset 机制，把 `Event.info.bytes_completed`
+明确为 **确认 stopping error 时已确认成功的连续逻辑前缀**。不是成功字节总数，也不是
 最高成功地址。源/目的 SG 分段不同，prefix 仍按 command 的逻辑字节流定义。
 
-在 event 快照时刻 t，P 满足 `[0,P)` 的所有目的字节均已有成功的完整访问结果；若
+在错误确认的快照时刻 t，P 满足 `[0,P)` 的所有目的字节均已有成功的完整访问结果；若
 某位置未知或失败，不能跨过去增长 P。成功回执可以乱序到达，但只能从前缀头向前
 退休连续成功项。一个有错误响应的 write burst 不能凭 WSTRB/WLAST 计入已确认字节。
 
 例如三笔逻辑写 U0=[0,4)、U1=[4,8)、U2=[8,12)：U2 和 U0 成功，U1 错误，则
-P=4，即使已经写成功的总量是8。若固化 event 时 U0 还没返回，即便后来成功，event
+P=4，即使已经写成功的总量是8。若确认错误时 U0 还没返回，即便后来成功，event
 中的 P 也仍是0；发布后不回写这个 record。它不承诺 `[P,length)` 从未被修改。
 
 这不是凭空免除 cleanup。现有
@@ -168,7 +168,9 @@ P=4，即使已经写成功的总量是8。若固化 event 时 U0 还没返回�
 [reset contract](../../model/modeling/docs/reset.md#interrupting-context-maintenance)
 要求已承诺外部事务继续排空。因此建议的 RTL 解释保留现有恢复路径：停止错误后软件
 走 reset，等待真实完成，再决定如何处理目标；不能拿 P 当作 DSA-style 重提的起点。
-这是需要补入正式规范的明确化草案，尚未改写当前 schema 描述或模型测试。
+这已补入正式 [copy-engine 规范](../../model/modeling/docs/copy-engine.md#error-records-reporting-and-discovery)。
+模型仅在 write 成功后递增计数，错误时构造固定 event，算法已经符合，不为模拟 RTL
+并发而改变模型的访问方式或削弱现有测试。
 
 硬件检测永久错误时先关闭本 channel 的新数据请求，保留 error origin/command ID，
 由 channel 固化一次 event。此前已经接受的请求仍可能结束，error-event 写本身是
@@ -240,7 +242,7 @@ slot/return/atomic profile、buffer/credit 资源及关闭账本，再实现内�
 不是此前置条件；不以外围、CPU 或完整子系统作为当前验收条件，也不减少 DMA
 原有 opcode 和维护语义。
 
-重叠访问合同已明确；在高速 Copy 发射优化前，还要把已提出的 event prefix 快照规则
-写入正式规范和对应验证场景；通过现有 Rust tests 或工具 smoke 都不能替代这些工作。
+重叠访问和 event prefix 快照合同已明确；高速 Copy 发射仍需对应的 RTL 验证场景，
+通过现有 Rust tests 或工具 smoke 都不能替代这些工作。
 409 个有界抽象返回顺序（1..4 项、所有非空 fault 子集及返回排列）已用来检查前缀
 推进和恢复时不重放成功写的账目规则；这只是设计演算，不是 RTL 或模型测试通过。

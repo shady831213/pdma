@@ -1,0 +1,88 @@
+#[test(memory_endpoint_write_stream_and_delayed_responses)]
+module MemoryStreamTest {
+    inst clk : $tb::clock_gen #( period: 10 );
+    inst rst : $tb::reset_gen ( clk );
+    inst port: CopyMemoryPort;
+    inst axi : $std::axi4_if::<CopyMemory::Bus>;
+    inst dut: CopyMemoryEndpoint (
+        clk       ,
+        rst_n: rst,
+        port      ,
+        axi       ,
+    );
+    var offered  : u32;
+    var addresses: u32;
+    var beats    : u32;
+    var first    : u32;
+    var last     : u32;
+    var replies  : u32;
+    var returned : u32;
+    initial {
+        port.valid    = 0;
+        port.accepted = 1;
+        port.request  = '0;
+        axi.arready   = 1;
+        axi.rvalid    = 0;
+        axi.rdata     = 0;
+        axi.rlast     = 0;
+        axi.rid       = 0;
+        axi.ruser     = 0;
+        axi.rresp     = 0 as CopyMemory::Bus::resp_t;
+        axi.awready   = 1;
+        axi.wready    = 1;
+        axi.bvalid    = 0;
+        axi.bid       = 0;
+        axi.buser     = 0;
+        axi.bresp     = 0 as CopyMemory::Bus::resp_t;
+        offered       = 0;
+        addresses     = 0;
+        beats         = 0;
+        first         = 0;
+        last          = 0;
+        replies       = 0;
+        returned      = 0;
+        rst.assert();
+        clk.next(3);
+        for cycle in 0..100 {
+            port.valid           = offered <: 4;
+            port.request.write   = 1;
+            port.request.slot    = (offered + 1) as 4;
+            port.request.address = 64'h1000 + offered * 64;
+            port.request.size    = 3;
+            port.request.length  = 7;
+            for word in 0..8 {
+                port.request.data[word * 64+:64] = 64'hfedcba9876540000 + offered * 8 + word;
+            }
+            if port.valid && port.ready {
+                offered += 1;
+            }
+            if axi.awvalid && axi.awready {
+                $assert(axi.awaddr == 64'h1000 + addresses * 64 && axi.awlen == 7, "STREAM_ADDRESS_ORDER");
+                addresses += 1;
+            }
+            if axi.wvalid && axi.wready {
+                $assert(axi.wdata == 64'hfedcba9876540000 + beats && axi.wstrb == '1, "STREAM_DATA_ORDER");
+                $assert(axi.wlast == (beats % 8 == 7), "STREAM_BURST_END");
+                if beats == 0 {
+                    first = cycle;
+                }
+                last  =  cycle;
+                beats += 1;
+            }
+            // Delayed B cannot serialize the next command's address/data lanes.
+            axi.bvalid = beats == 32 && addresses == 4 && replies <: 4;
+            if axi.bvalid && axi.bready {
+                replies += 1;
+            }
+            if port.returned {
+                $assert(!port.receipt.failed && !port.receipt.protocol_error, "STREAM_RECEIPT");
+                returned += 1;
+            }
+            clk.next();
+        }
+        $assert(offered == 4 && addresses == 4 && beats == 32, "MULTIPLE_WRITES_BEFORE_FIRST_B");
+        $assert(last - first == 31, "CONTINUOUS_WRITE_BEATS");
+        $assert(replies == 4 && returned == 4, "EXACTLY_ONE_RECEIPT_PER_REQUEST");
+        $finish();
+    }
+}

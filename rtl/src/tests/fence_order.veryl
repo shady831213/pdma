@@ -3,13 +3,14 @@ module FenceOrderTest {
     inst clk   : $tb::clock_gen #( period: 10 );
     inst rst   : $tb::reset_gen ( clk );
     inst memory: CopyMemoryPort;
-    var command        : RegisterState::Ring         ;
-    var configuration  : RegisterState::ChannelConfig;
-    var status         : RegisterState::ChannelStatus;
-    var command_advance: logic                       ;
-    var event_advance  : logic                       ;
-    var clear          : logic                       ;
-    var internal_fatal : logic                       ;
+    var command        : RegisterState::Ring            ;
+    var configuration  : RegisterState::ChannelConfig   ;
+    var status         : RegisterState::ChannelStatus   ;
+    var command_advance: logic                          ;
+    var event_advance  : logic                          ;
+    var clear          : logic                          ;
+    var internal_fatal : logic                          ;
+    var held_slot      : logic                       <4>;
     inst dut: CopyEngine (
         clk                 ,
         rst_n          : rst,
@@ -77,12 +78,16 @@ module FenceOrderTest {
                     clk.next();
                 }
                 $assert(memory.valid && !memory.request.write && memory.request.address == 64'h200, "COPY_READ");
+                held_slot = memory.request.slot;
                 clk.next();
                 memory.receipt      = '0;
+                memory.receipt.slot = held_slot;
                 memory.receipt.data = 64'habcdef;
+                memory.ready        = 0;
                 memory.returned     = 1;
                 clk.next();
                 memory.returned = 0;
+                memory.ready    = 1;
             }
             for timeout in 0..10 {
                 if memory.valid {
@@ -100,13 +105,15 @@ module FenceOrderTest {
                     "COMPLETION_WORD",
                 );
             }
+            held_slot = memory.request.slot;
             clk.next();
             for delay in 0..20 {
                 $assert(!memory.valid && !command_advance, "NO_SUCCESSOR_BEFORE_WRITE_RECEIPT");
                 clk.next();
             }
-            memory.receipt  = '0;
-            memory.returned = 1;
+            memory.receipt      = '0;
+            memory.receipt.slot = held_slot;
+            memory.returned     = 1;
             clk.next();
             memory.returned = 0;
         }

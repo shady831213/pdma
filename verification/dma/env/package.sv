@@ -1,0 +1,28 @@
+`include "uvm_macros.svh"
+package pdma_vip_pkg;
+    timeunit 1ns; timeprecision 1ps;
+    import uvm_pkg::*;
+    import svt_uvm_pkg::*;
+    import svt_mem_uvm_pkg::*;
+    import svt_axi_uvm_pkg::*;
+    import jvs_pkg::*;
+    import pdma_contract_records::*;
+    import pdma_uvm_regs::*;
+    `include "env/configuration.svh"
+    `include "env/clocks.svh"
+    `include "env/memory/memory_backing.svh"
+    `include "env/memory/memory_policy.svh"
+    `include "env/memory/buffer_allocation.svh"
+    `include "env/result.svh"
+    `include "env/software/task.svh"
+    `include "env/coverage/observation.svh"
+    `include "env/software/channel_driver.svh"
+    `include "env/software/irq_handler.svh"
+    `include "env/irq/irq_monitor.svh"
+    `include "env/memory/memory_response.svh"
+    `include "env/checking/task_checker.svh"
+    `include "env/coverage/performance.svh"
+    `include "env/coverage/scenario_coverage.svh"
+    `include "env/flow/task_flow.svh"
+    `include "env/environment.svh"
+endpackage

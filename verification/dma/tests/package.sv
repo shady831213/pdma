@@ -1,0 +1,29 @@
+`include "uvm_macros.svh"
+package pdma_tests_pkg;
+    timeunit 1ns; timeprecision 1ps;
+    import uvm_pkg::*;
+    import svt_uvm_pkg::*;
+    import svt_mem_uvm_pkg::*;
+    import svt_axi_uvm_pkg::*;
+    import jvs_pkg::*;
+    import pdma_contract_records::*;
+    import pdma_uvm_regs::*;
+    import pdma_vip_pkg::*;
+    `include "tests/tb_selftest/mutation.svh"
+    `include "tests/dut/base.svh"
+    `include "tests/dut/copy.svh"
+    `include "tests/dut/throughput.svh"
+    `include "tests/dut/fault.svh"
+    `include "tests/dut/error.svh"
+    `include "tests/dut/reset.svh"
+    `include "tests/dut/descriptor.svh"
+    `include "tests/dut/fatal.svh"
+    `include "tests/dut/irq.svh"
+    `include "tests/dut/ring.svh"
+    `include "tests/dut/event.svh"
+    `include "tests/dut/registers.svh"
+    `include "tests/tb_selftest/fixture.svh"
+    `include "tests/tb_selftest/interrupt_wait.svh"
+    `include "tests/tb_selftest/reset_scope.svh"
+    `include "tests/tb_selftest/clock_checks.svh"
+endpackage

@@ -21,7 +21,11 @@ pdma_new_run() {
 pdma_check_log() {
     local log=$1 marker=$2
     grep -Fxq "$marker" "$log" || return 1
-    if grep -Eq '^Error[: -]|^Fatal:|^UVM_(ERROR|FATAL)[[:space:]].*@|UVM_(ERROR|FATAL)[[:space:]]*:[[:space:]]*[1-9]|Assertion.*failed' "$log"; then
+    if pdma_log_has_errors "$log"; then
         return 1
     fi
+}
+
+pdma_log_has_errors() {
+    grep -Eq '^Error[: -]|^Fatal:|^UVM_(ERROR|FATAL)[[:space:]].*@|UVM_(ERROR|FATAL)[[:space:]]*:[[:space:]]*[1-9]|Assertion.*failed' "$1"
 }

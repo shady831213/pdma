@@ -7,12 +7,13 @@ deployment or process configuration is included.
 
 Keeping providers separate lets consumers select a later technology implementation
 through the existing generic module interface. `common_cell` does not depend on
-this project; its tests select these providers explicitly. The DMA does not yet
-instantiate these RAMs, and generic synthesis does not imply SRAM-macro PPA.
+this project; consumers and the common-cell tests select these providers explicitly.
+Generic synthesis does not imply SRAM-macro PPA.
 
-From this directory, run:
+Use the integrating project's qualified compiler with generic module parameter
+support. From this package directory, run:
 
 ```sh
-VERYL_DUT_REUSE=0 bash ../../../tools/rtl-flow/veryl.sh test
-VERYL_DUT_REUSE=0 bash ../../../tools/rtl-flow/veryl.sh test --backend cranelift
+VERYL_DUT_REUSE=0 veryl test
+VERYL_DUT_REUSE=0 veryl test --backend cranelift
 ```

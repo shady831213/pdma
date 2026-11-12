@@ -65,7 +65,7 @@ but those cases did not cover a wide struct assigned in an `always_comb` block.
 The Copy slice exposed adjacent-field corruption in that case; the member-width
 fix is restored and `smoke/src/struct_neighbors.veryl` retains its failing input.
 Run all compiler smoke tests on both native backends after any pin change.
-Run `node --test tools/rtl-flow/veryl.test.mjs` from the repository root to check
+Run `node --test tools/rtl-flow/tests/veryl_test.mjs` from the repository root to check
 launcher cache selection and rejection of modified patches or installed binaries.
 These tests use temporary fixtures and clean them up automatically.
 
@@ -80,7 +80,7 @@ Generated packages use `#[fmt(skip)]` so formatter alignment does not change the
 generator's deterministic output. Handwritten RTL uses normal Veryl formatting.
 
 `bash tools/rtl-flow/sv-layout.sh --write|--check` handles the plain-SV counterpart
-at `verification/dma/tb/register_layout.sv`. Its generator uses schema's optional
+at `verification/dma/tb/generated/register_layout.sv`. Its generator uses schema's optional
 `export-sv` backend and preserves 64-bit layout parameters. `records.sh` also uses
 that feature for byte-record types; `registers.sh` uses `export-uvm-regs` for RAL.
 The three outputs serve independent consumers and do not require each other.
@@ -92,7 +92,8 @@ regressions and downstream positive/negative tests. Never fix a compiler defect
 by hand-editing generated SystemVerilog or weakening a DUT assertion.
 
 Design-specific testbench and implementation logic belong in `verification/dma`
-and `impl/pdma`. Their reproducible flows and generic constraints are tracked;
+and `impl/dma`. Generic implementation adapters are under `implementation/`;
+[package resources](ip/README.md) use native Veryl dependency metadata. Their flows are tracked;
 see [flow configuration](flows.md). Keep machine-local settings in a private
 deployment file, tool artifacts in local run directories, and credentials/license
 details out of tracked files. A future shared tool repository should replace this

@@ -6,6 +6,7 @@ snapshot=$(realpath "${1:?Usage: sync-latency.sh SNAPSHOT NEW_SIMULATION_SNAPSHO
 output=$(realpath -m "${2:?Supply a fresh snapshot directory}")
 (cd "$snapshot" && sha256sum --check --status snapshot.sha256)
 pdma_new_run "$output"
+python3 "$root/tools/rtl-flow/ip/bundle.py" copy "$snapshot" "$output"
 python3 - "$snapshot" "$output" "$root/verification/dma/tests/sync_latency.sv" <<'PY'
 import hashlib,json,shutil,sys
 from pathlib import Path
@@ -24,6 +25,9 @@ for name in ['compiler.txt','design.sha256']:shutil.copyfile(source/name,output/
  'not_qualified_for':'synthesis, static closure, analog metastability or MTBF'
 },indent=2)+'\n')
 PY
-(cd "$output" && sha256sum ./*.sv sources.f compiler.txt design.sha256 simulation-only.json > snapshot.sha256)
+(cd "$output" && {
+    sha256sum ./*.sv sources.f compiler.txt design.sha256 simulation-only.json ip-manifest.*
+    find ip -type f -print0 | sort -z | xargs -0 -r sha256sum
+} > snapshot.sha256)
 (cd "$snapshot" && sha256sum --check --status snapshot.sha256)
 printf 'PDMA_LATENCY_SNAPSHOT_COMPLETE\n'

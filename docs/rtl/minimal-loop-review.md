@@ -71,7 +71,7 @@ MTBF 或 CDC payload 路径的物理签核。现有串行 burst/mailbox 数据�
 | 集成范围与门槛负例 | 同时钟两实例的 0.5/0.7ns 预算互不覆盖；缺失实例、0.001ns 过紧预算、遮蔽路径的 false-path 均被拒绝 |
 
 完整输入与报告保存在本地忽略目录；这不是布局布线、hold/reset 或 MTBF 签核。
-集成接口与复用边界见 [约束说明](../../impl/pdma/constraints/README.md)。
+集成接口与复用边界见 [约束说明](../../docs/rtl/constraints.md)。
 
 ## 首轮 CDC/RDC 结果与解释
 
@@ -124,5 +124,5 @@ VC SpyGlass 使用实际 DUT 与 common cells。端口位宽、方向、clock/re
 - 初次综合虽然产生了报告，但 launcher 的收尾读取受到编辑影响；该次未作为通过
   证据。修正后已完成新运行并保存完整身份和退出记录。
 
-重现入口见 [实现检查](../../impl/pdma/README.md)；原始证据保存在忽略目录中，
+重现入口见 [实现检查](../../impl/dma/README.md)；原始证据保存在忽略目录中，
 不向公开仓库上传商业工具日志、库内容或部署信息。

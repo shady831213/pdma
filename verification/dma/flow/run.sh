@@ -33,12 +33,9 @@ main() {
         -l simulation.log "$@")
     printf '%q ' "${command[@]}" > invocation.txt
     printf '\n' >> invocation.txt
-    setsid timeout --kill-after=5s "${PDMA_RUN_TIMEOUT:-180}" "${command[@]}" > console.log 2>&1 &
-    pdma_process_pid=$!
     status=0
-    wait "$pdma_process_pid" || status=$?
+    pdma_execute "${PDMA_RUN_TIMEOUT:-180}" console.log "${command[@]}" || status=$?
     printf 'simulation_exit=%s\n' "$status" > status.txt
-    pdma_stop_process
     if [[ $status != 0 ]] || ! pdma_check_log simulation.log "PDMA_VIP_PASS test=$test_name"; then
         printf 'PDMA_VIP_RUN_FAILED test=%s seed=%s\n' "$test_name" "$seed" >&2
         exit 1

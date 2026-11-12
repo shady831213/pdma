@@ -3,11 +3,16 @@
 The first phase owns a DMA-only DUT testbench, VCS/UVM/VIP integration and
 DMA scenarios. CPU, peripheral RTL and complete subsystem scenarios are deferred.
 `tests/minimal_copy.sv` directly exercises emitted RTL with continuously running
-register/core/bus clocks, real MMIO, independent memory handshakes, Copy data
-checks and reset during a delayed write. Compile it with the native generated
-hardware filelist and top `MinimalCopyTest`; successful execution prints
+register/core/bus clocks, real MMIO, independent memory handshakes, Copy/Fence64
+completion and reset during a delayed write. It constructs descriptors with the
+generated record package. Compile that package and the native generated
+hardware filelist with top `MinimalCopyTest`; successful execution prints
 `PDMA_MINIMAL_SV_PASS`. The bench uses generated package names and layout constants.
 It is a bounded independent smoke oracle, not full protocol VIP coverage.
+Normal completion comes from Fence storage. Reset checks retained W-before-AW
+work, busy while B is withheld, no successor Fence, no traffic after reset finishes,
+and a fresh Copy/Fence afterwards. It does not assume exactly one outstanding burst
+or use a write counter as a software completion signal.
 The reproducible simulator flows are in `flow/`. Deployment configuration and
 raw logs stay outside version control.
 
@@ -27,9 +32,20 @@ scenario operation through the software objects. See
 [dependencies](dependencies.md) for external inputs and adapter boundaries.
 Measured checkpoints and their coverage gaps are in [results](results.md).
 
-`tb/cdc_assertions.sv` passively binds the real mailbox and FIFO ports to check retained
+`env/package.sv` owns reusable environment classes and includes no scenarios.
+`tests/package.sv` owns DUT scenarios and TB selftests; `tb/top.sv` imports both.
+Generated contract packages live under `tb/generated/`, assembly and checker binds
+remain under `tb/`, and DMA lifecycle assertions live under `checkers/`.
+The software task owns payload/Fence allocation and descriptor construction;
+observed results and passive coverage observations have their own data types.
+The root `tests/*.sv` files are standalone oracles/instrumentation, not UVM
+scenario includes; `tb/vip.f` explicitly selects the environment and scenario packages.
+
+`tb/bindings.sv` binds package-owned passive checkers to real mailbox and FIFO ports to check retained
 ownership, payload, no duplicate delivery and backpressure stability. It adds no
-clock-period polling or DUT scheduling. Qualify the assertions, including corrupted
+clock-period polling or DUT scheduling. Definitions are loaded from `common_cell`'s
+declared snapshot resources, never from an independently selected source checkout.
+`tests/cdc_custody.sv` qualifies these actual bindings, including corrupted
 data, duplicate delivery, premature overwrite and broken hold negative cases:
 
 ```sh
@@ -117,8 +133,8 @@ output is rejected. The regression also runs deliberately corrupted
 observations and requires the exact checker diagnostic: `data` / `TASK_DATA`,
 `identity` and `unknown_identity` / `TASK_IDENTITY`, `missing_completion` / `TASK_TIMEOUT`, and
 `duplicate_completion` / `TASK_DUPLICATE`, early Fence publication during an IRQ
-error / `TASK_COMPLETION`, and understated error progress / `TASK_ERROR_INFO`.
-The latter two run against the directed error test. It does not count these negative tests
+error / `TASK_COMPLETION`, and understated or impossible fractional error progress /
+`TASK_ERROR_INFO`. The latter cases run against directed error tests. It does not count these negative tests
 as DUT failures or include them in coverage.
 Timeouts and signal exits remain failures even if a negative run printed its
 expected diagnostic. Coverage reports are emitted as text summaries with all
@@ -127,14 +143,14 @@ remain available for detailed reporting. The installed report tool crashes in
 the detailed-report path for this suite, while summary reporting succeeds with
 the identical full input set; this is not a metric or bin exclusion.
 
-`tb/contract_records.sv` is generated directly from the contract's schema through
+`tb/generated/contract_records.sv` is generated directly from the contract's schema through
 the public export API. Typed byte images, field accessors, enum values, sizes and
 alignments replace handwritten descriptor offsets. Regenerate with
 `bash tools/rtl-flow/records.sh --write`; use `--check` for reproducibility.
 Rust codec fixtures independently check Copy/Fence images and Event decoding in
 SystemVerilog.
 
-`tb/register_model.sv` is the generated UVM register model. Regenerate with
+`tb/generated/register_model.sv` is the generated UVM register model. Regenerate with
 `bash tools/rtl-flow/registers.sh --write` and verify with `--check`. Its generator
 selects the DMA roots in contract's `src/bin/uvm_regs`; its renderer is the optional
 schema `UvmRegisterBackend`. SV record rendering likewise uses schema's builtin
@@ -142,7 +158,7 @@ schema `UvmRegisterBackend`. SV record rendering likewise uses schema's builtin
 The backends are supplied by registry schema 0.3.0, with no local override;
 see the model [schema review record](../../model/modeling/docs/schema-export-review.md).
 
-`tb/register_layout.sv` is the separate plain-SV register metadata package set,
+`tb/generated/register_layout.sv` is the separate plain-SV register metadata package set,
 with no UVM dependency. Generate/check it with `bash tools/rtl-flow/sv-layout.sh
 --write` / `--check`. It exposes the same symbolic layouts and fixed register facts
 as the Veryl packages for consumers that use SV directly. It contains no register
@@ -176,7 +192,7 @@ inline alternatives contribute case-qualified enum and bit metadata.
 `flow/schema.sh NEW_RUN TOP PASS_MARKER SOURCE...` compiles and runs a standalone
 generated-package oracle using the same deployment configuration. For the RAL
 oracle, select top `pdma_uvm_regs_metadata`, marker `RAL_METADATA_PASS`, and sources
-`tb/register_model.sv` and the contract's `tests/uvm_regs_metadata.sv`. It checks
+`tb/generated/register_model.sv` and the contract's `tests/uvm_regs_metadata.sv`. It checks
 enum constants, relocated maps, 32/64-bit buses and parameterized banks. The SV
 schema's `sv_records` test can retain its standalone oracle with
 `SCHEMA_SV_INLINE_FIXTURE`; its top and marker are `inline_union_metadata` and

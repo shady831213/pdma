@@ -7,6 +7,11 @@ copies of the engine. Channel state and stage-local state must have explicit own
 Function ownership, managed access windows and context-table resolution belong
 to the deferred sibling `hw_components` directory.
 
+`copy.veryl` is the top-level assembly and `layout.veryl` is generated contract
+metadata. `registers/`, `execution/` and `memory/` group the three actual hardware
+responsibilities; source directories do not create additional Veryl namespaces
+or synthesized wrappers. Module and instance names remain independent of paths.
+
 ## Implemented register path
 
 `DmaRegisterInterface` assembles `RegisterFrontend` → `common_cell::DuplexMailbox` →

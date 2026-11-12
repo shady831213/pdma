@@ -3,7 +3,7 @@
 日期：2026-11-12。范围仍是单 channel、32-bit AXI-Lite、64-bit 普通内存的
 Linear Copy/Fence 切片。没有扩展 CPU、外围、firmware、多 channel、SG 或 atomic RTL。
 结构见 [minimal-copy](minimal-copy.md)；本记录区分体系结构约定、实际测量和签核边界。
-最终结构检查绑定 [`dma-copy-review.tcl`](../../impl/pdma/constraints/dma-copy-review.tcl)
+最终结构检查绑定 [`dma-copy-review.tcl`](../../impl/dma/reviews/copy.tcl)
 中的生成 RTL、实际编译输入、约束、分析/审阅程序和工具身份。
 
 ## 所有权与交接

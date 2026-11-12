@@ -133,7 +133,7 @@ engine 在发射 phase 检查 `memory.ready`，在等待 phase 检查 `memory.re
   13 项原生测试通过，两个 native backend 均覆盖。
 - 目标频率与随机异步时钟各 19 个完整 DUT 场景通过。再在 8 条同步链分别注入
   0/1 个接收周期延迟，19 个场景通过；三组各 7 个任务 checker 负例正确拒绝。
-- `tb/cdc_assertions.sv` 绑定两组实际 mailbox，检查接受到交付之间的数据快照、
+- 当时的 `tb/cdc_assertions.sv` 绑定两组实际 mailbox，检查接受到交付之间的数据快照、
   单 slot 所有权、重复交付和背压保持；原有生命周期断言检查 reset 期间不新发射、
   无主回执及排空前不得 clear。这些检查观察真实端口，不推动 DUT，也不复制其 phase。
 - 断言资格测试的正常传输通过，数据损坏、重复交付、提前覆盖和破坏背压保持四个
@@ -143,7 +143,7 @@ engine 在发射 phase 检查 `memory.ready`，在等待 phase 检查 `memory.re
   增强形式检查的 3 项 datahold、9 项 dataloss 通过，仍有 1 项 datahold 超时；
   **此项仍为 inconclusive，未加入例外，也未把整机 formal 模式改成通过。**
 
-[`dma-copy-review.tcl`](../../impl/pdma/constraints/dma-copy-review.tcl) 明列 C1–C3
+[`dma-copy-review.tcl`](../../impl/dma/reviews/copy.tcl) 明列 C1–C3
 和 R1/R2 的具体目的地、reset 或完整同步 qualifier 集合。例外绑定生成 RTL、源码
 manifest、设计 profile、约束、分析配置及工具身份。逐项必须恰好匹配一个 finding；
 任何身份变更、缺项或路径变化都要求重新审核。未匹配的额外报告仍使检查失败。
@@ -277,7 +277,7 @@ Genus 的重新综合验证了 8 组跨域路径、4 组具体 payload 路径和
 共享 profile 与生成的 `clocks.sdc` 被 Genus 和 VC 共同使用；物理路径约束限定于
 调用方给出的 IP 实例，独立顶层才创建时钟及全局关系。双实例测试使用同一组时钟、
 不同预算，确认没有互相覆盖，并拒绝缺失实例、过紧预算和遮蔽路径的 false-path。
-接口、预算推导和集成义务见 [可复用约束说明](../../impl/pdma/constraints/README.md)。
+接口、预算推导和集成义务见 [可复用约束说明](../../docs/rtl/constraints.md)。
 
 还应检查同步链的技术映射、保持/布局约束与目标频率下的 MTBF。Veryl 的泛型
 synchronizer 参数提供替换同步实现的接口；`STAGES=2` 本身不是 1GHz 的可靠性证明。

@@ -8,7 +8,7 @@ option is public; machine deployment details are not.
 The implementation baseline requires Genus at the approved per-domain
 frequencies and a non-ULVT library policy. CDC and RDC require VC SpyGlass.
 The adapters and their qualification entries are described in
-[implementation checks](../../impl/pdma/README.md). Reusable launcher,
+[implementation checks](../../impl/dma/README.md). Reusable launcher,
 constraint and report-check code belongs here or in the design flow directories;
 only deployment and proprietary inputs remain private.
 
@@ -24,7 +24,6 @@ directory; no particular machine path is required.
 | `PDMA_SIM_COMPILER` | Simulator compiler executable; defaults to `vcs` |
 | `PDMA_GENUS_TOOL` | Genus executable; defaults to `genus` |
 | `PDMA_STATIC_TOOL` | VC SpyGlass executable; defaults to `vc_static_shell` |
-| `PDMA_SYNTH_TOOL` | Historical DC launcher executable; defaults to `dc_shell` |
 | `PDMA_COVERAGE_TOOL` | Coverage executable; defaults to `urg` |
 | `PDMA_TECH_CONFIG` | Private technology/library and timing-budget Tcl file |
 | `PDMA_DESIGN_PROFILE` | Optional top/clock/port profile; defaults to the DMA Copy slice |
@@ -39,9 +38,9 @@ Generate SystemVerilog on a machine that supports the pinned Veryl binary:
 ```sh
 bash tools/rtl-flow/snapshot.sh "$PDMA_RUN_ROOT/snapshot"
 bash verification/dma/flow/smoke.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/smoke"
-bash impl/pdma/flow/genus.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/synthesis"
-bash impl/pdma/flow/crossings.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/cdc" cdc
-bash impl/pdma/flow/crossings.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/rdc" rdc
+bash impl/dma/flow/genus.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/synthesis"
+bash impl/dma/flow/crossings.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/cdc" cdc
+bash impl/dma/flow/crossings.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/rdc" rdc
 ```
 
 Run the commercial-tool stages on the configured execution host, locally or
@@ -51,7 +50,15 @@ input hashes and output logs; timeouts and nonzero tool exits are failures.
 Changing source requires a new snapshot/build. The directed smoke and UVM/VIP
 regression are separate surfaces; neither substitutes for native unit tests.
 
-`bash tools/rtl-flow/flow.test.sh` checks log failure detection and stale-output
+The `impl/dma/flow` entries select the DMA profile and delegate to generic adapters
+under `tools/rtl-flow/implementation`. Direct callers of those adapters must set
+`PDMA_DESIGN_PROFILE`. Package contracts come from the supplied snapshot, never
+from a guessed source-tree/cache path. See [package resources](ip/README.md).
+Compile, simulation, coverage and implementation commands share owned process-group
+execution and teardown; cancellation stops descendants before returning. Log checks
+reject native failures even if a success marker was printed earlier.
+
+`bash tools/rtl-flow/tests/environment_test.sh` checks log failure detection and stale-output
 rejection without requiring commercial tools. Temporary selftest fixtures are
 removed on exit. Keep full tool output, waves and library manifests local;
 publish only deliberately reviewed results without deployment information.

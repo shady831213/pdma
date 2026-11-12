@@ -15,26 +15,21 @@ main() {
     pdma_environment verification
     pdma_new_run "$run"
     (cd "$snapshot" && sha256sum --check --status snapshot.sha256)
+    custody=$(python3 "$root/tools/rtl-flow/ip/bundle.py" locate "$snapshot" common_cell verification/cdc_custody.sv)
     cd "$run"
-    sha256sum "$root/verification/dma/tb/cdc_assertions.sv" \
+    sha256sum "$custody" "$root/verification/dma/tb/bindings.sv" \
         "$root/verification/dma/tests/cdc_custody.sv" > inputs.sha256
-    setsid timeout --kill-after=5s 180 "${PDMA_SIM_COMPILER:-vcs}" -full64 -sverilog \
+    pdma_execute 180 compile.log "${PDMA_SIM_COMPILER:-vcs}" -full64 -sverilog \
         -timescale=1ns/1ps -f "$snapshot/sources.f" \
-        "$root/verification/dma/tb/cdc_assertions.sv" \
+        "$custody" "$root/verification/dma/tb/bindings.sv" \
         "$root/verification/dma/tests/cdc_custody.sv" -top "$top" \
-        -o "$run/simv" > compile.log 2>&1 &
-    pdma_process_pid=$!
-    wait "$pdma_process_pid"
-    pdma_stop_process
+        -o "$run/simv"
     : > results.txt
     for mode in positive data duplicate overwrite backpressure; do
         set --
         [[ $mode == positive ]] || set -- "+mutation=$mode"
-        setsid timeout --kill-after=5s 30 "$run/simv" "$@" > "$mode.log" 2>&1 &
-        pdma_process_pid=$!
         status=0
-        wait "$pdma_process_pid" || status=$?
-        pdma_stop_process
+        pdma_execute 30 "$mode.log" "$run/simv" "$@" || status=$?
         printf 'simulation_exit=%s\n' "$status" > "$mode.status"
         if [[ $mode == positive ]]; then
             ((status==0))

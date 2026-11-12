@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
 # Owned-group teardown follows pcie_modeling's QTest runner contract.
+pdma_execute() {
+    local seconds=$1 output=$2 status=0
+    shift 2
+    setsid timeout --kill-after=5s "$seconds" "$@" > "$output" 2>&1 &
+    pdma_process_pid=$!
+    wait "$pdma_process_pid" || status=$?
+    pdma_stop_process || status=2
+    return "$status"
+}
+
 pdma_group_alive() {
     local group=$1 pgid state
     while read -r pgid state; do

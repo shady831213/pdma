@@ -3,6 +3,7 @@ module pdma_vip_top;
     import uvm_pkg::*;
     import svt_axi_uvm_pkg::*;
     import pdma_vip_pkg::*;
+    import pdma_tests_pkg::*;
     wire reg_clk,core_clk,bus_clk;
     pdma_control_if control(reg_clk,core_clk,bus_clk);
     pdma_clock_domain #(.NAME("reg")) reg_domain(.clock(reg_clk),.reset_n(control.reg_rst_n),.rst_process());

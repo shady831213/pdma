@@ -3,6 +3,8 @@
 Place Veryl native tests here, grouped by the hardware block they exercise.
 Keep stimulus, clock/reset control, independent expectations and assertions visible
 in each test. Shared support must not become a second hardware executor.
+`registers/` covers access, storage and the CSR bridge; `execution/` covers command
+ownership and the burst window; `memory/` covers endpoint transfers and streaming.
 
 The seven register and layout tests cover:
 

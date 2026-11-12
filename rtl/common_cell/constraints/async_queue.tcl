@@ -1,7 +1,7 @@
 # AsyncQueue uses registered Gray pointers and stable FIFO rows. Bound both pointer
 # directions and the stored-data crossing within the faster clock's period. This
 # also bounds Gray bus skew; no asynchronous setup/hold promise is inferred.
-# Source duplex_mailbox.tcl first for the shared collection and path application helpers.
+# Source ip.tcl for this package's complete constraint API.
 proc common_cell_cdc::async_queue_paths {scope source destination budget} {
     if {[get_object_name $source] eq [get_object_name $destination]} {
         error "CDC_CLOCK: FIFO clocks must differ"
@@ -13,8 +13,12 @@ proc common_cell_cdc::async_queue_paths {scope source destination budget} {
     set paths {}
     foreach pair [list [list $source $destination fifo-data-and-pointer] [list $destination $source fifo-credit]] {
         lassign $pair launch capture kind
-        lappend paths [dict create scope $scope kind $kind source $launch destination $capture \
+        set path [dict create scope $scope kind $kind source $launch destination $capture \
             from [registers $scope $launch cells] to [registers $scope $capture cells] max_delay $budget]
+        if {$kind eq "fifo-data-and-pointer"} {
+            dict set path payload [payload_registers [dict get $path from] $scope/ram]
+        }
+        lappend paths $path
     }
     return $paths
 }

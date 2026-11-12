@@ -55,7 +55,7 @@ Do not restore their compatibility interfaces without a user request.
 ## Scope and retained material
 
 The executable model is under `model/modeling`; read its `AGENTS.md` for model work.
-RTL preparation is under `rtl`, `verification/dma`, `impl/pdma` and `tools/rtl-flow`.
+RTL preparation is under `rtl`, `verification/dma`, `impl/dma` and `tools/rtl-flow`.
 The first RTL phase is DMA only (confirmed 2026-10-29). CPU, peripheral
 hw-components, firmware execution and subsystem integration wait until DMA RTL
 converges. Keep their future interface boundaries, but do not implement them or
@@ -93,9 +93,14 @@ randomized simulation do not substitute for these checks or physical signoff.
 Genus and VC share generated clock SDC from the design profile. Instance-scoped
 mailbox/FIFO constraints are reusable without creating platform clocks or global cuts;
 fresh mapping validates the 0.5ns budgets and local synchronizer paths. See
-`impl/pdma/constraints/README.md`; mapped timing does not close routed timing or MTBF.
+`docs/rtl/constraints.md`; mapped timing does not close routed timing or MTBF.
 Keep deployment, proprietary inputs and raw reports private; generic executable
 flows and design constraints belong in the repository.
+Veryl metadata v2 resolves package-owned constraint/checker resources into the
+immutable RTL snapshot. Generic implementation adapters live under
+`tools/rtl-flow/implementation`; `impl/dma` owns profiles and explicitly selected
+source-bound reviews. Never load current workspace IP scripts to qualify an old
+snapshot, and never apply waivers merely because a package is a dependency.
 The model's Cargo workspace contains the core `contract`, `dma` and `host` crates, the
 managed MVP's `hw-components` and `firmware`, shared PDMA `software`, system scenarios,
 and six reusable building blocks:

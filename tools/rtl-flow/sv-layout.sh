@@ -8,4 +8,4 @@ fi
 CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-4}" cargo run --locked --quiet \
     --manifest-path "$root/model/modeling/Cargo.toml" \
     -p pdma-model-contract --features export-sv --bin pdma-sv-layout -- \
-    "$1" "$root/verification/dma/tb/register_layout.sv"
+    "$1" "$root/verification/dma/tb/generated/register_layout.sv"

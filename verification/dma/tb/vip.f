@@ -15,11 +15,12 @@ ${SVT_COMMON_HOME}/sverilog/include/svt_svc.uvm.pkg
 ${SVT_AMBA_HOME}/sverilog/include/svt_axi.uvm.pkg
 -f ${JVSUK_HOME}/etc/jvs.f
 tb/control_if.sv
-tb/contract_records.sv
-tb/register_model.sv
-tb/package.sv
+tb/generated/contract_records.sv
+tb/generated/register_model.sv
+env/package.sv
+tests/package.sv
 tb/clock_domain.sv
-tb/assertions.sv
-tb/cdc_assertions.sv
+checkers/lifecycle.sv
+tb/bindings.sv
 tb/dut.sv
 tb/top.sv

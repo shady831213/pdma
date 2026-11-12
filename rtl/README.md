@@ -14,6 +14,8 @@ multichannel execution, unaligned/full-profile throughput and physical closure
 still need implementation. The current retained burst window and asynchronous
 queues are described in the slice document; measured results are in the
 [throughput review](../docs/rtl/throughput-review.md).
+The subsequent [organization review](../docs/rtl/organization-review.md) records
+source ownership, package resource loading and flow/test cleanup.
 
 The first RTL phase is **DMA only**, confirmed 2026-10-29. CPU implementation,
 managed peripheral hardware, firmware execution and full subsystem integration
@@ -34,13 +36,16 @@ The [next implementation steps](../docs/rtl/architecture.md#后续执行顺序)
 start with concrete transaction resources and reset drain, then a two-channel
 functional slice. The implementation target is now 12nm/Genus without ULVT,
 core/bus 1GHz and reg 500MHz, with separate VC SpyGlass CDC/RDC checks; see
-[implementation checks](../impl/pdma/README.md).
+[implementation checks](../impl/dma/README.md).
 
 ## Source ownership
 
 | Path | Contents |
 | --- | --- |
 | `src/dma/` | DMA channels, shared execution, register behavior and bus endpoints |
+| `src/dma/registers/` | Register frontend, CDC integration and object-owned register state |
+| `src/dma/execution/` | Command owner and its retained burst window |
+| `src/dma/memory/` | Internal memory interface and independent read/write endpoints |
 | `src/hw_components/` | Deferred placeholder for managed peripheral hardware; outside the first RTL phase |
 | `src/tests/` | Native Veryl block tests and their local support |
 | `common_cell/` | Protocol-independent reusable cells and separate native tests |
@@ -74,11 +79,22 @@ VERYL_DUT_REUSE=0 bash ../tools/rtl-flow/veryl.sh test --backend cranelift
 See [DMA register ownership and integration](src/dma/README.md) and
 [test coverage](src/tests/README.md) before wiring another owner.
 
+Common-cell tests use the same qualified compiler, selected by this workspace
+rather than by the reusable library. From the repository root:
+
+```sh
+cd rtl/common_cell/tests
+VERYL_DUT_REUSE=0 bash ../../../tools/rtl-flow/veryl.sh test
+VERYL_DUT_REUSE=0 bash ../../../tools/rtl-flow/veryl.sh test --backend cranelift
+```
+
 ## Verification and implementation
 
 Use native Veryl tests for local state transitions and interfaces. DMA-level
 VCS/UVM/VIP verification belongs in [verification/dma](../verification/dma/README.md).
-Synthesis, SDC and CDC/RDC work belongs in [impl/pdma](../impl/pdma/README.md).
+Design-specific implementation profiles and reviews belong in [impl/dma](../impl/dma/README.md);
+generic tool adapters live in `tools/rtl-flow/implementation`. Reusable cell
+constraints/checkers are declared by their Veryl package and travel in snapshots.
 Model scenarios remain executable software/hardware semantic references, not
 cycle-accurate golden traces.
 Initial testbenches drive DMA ports directly and supply memory/fault/timer/IRQ

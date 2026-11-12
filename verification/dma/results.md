@@ -1,11 +1,76 @@
 # Scenario-level verification checkpoints
 
+## Reusable-cell boundary cleanup (2026-11-12)
+
+Testbench manifest SHA-256:
+`0bc3503373ff97828293b02efd259063022a491ef193fcaffe4d8f1242e91ded`.
+Passive checker names now belong to `common_cell`; DMA still owns the bindings.
+Library documentation and constraint examples no longer prescribe DMA usage.
+
+- Mailbox and FIFO binding qualifications each pass their positive case and reject
+  all four injected violations with the expected diagnostics.
+- Focused random-clock regression passes aligned/long Copy, read/write PageFault,
+  channel reset and DMA reset at seed 11, and rejects all eight checker mutations.
+- All nine package-resource tests pass. The 95 generated hardware declarations
+  match the previous checkpoint; executable package constraint Tcl is unchanged.
+- Fresh native CDC/RDC field comparisons are identical to the previous checkpoint.
+  The stale review is rejected before rebinding. Final checks report 40/40/0 CDC
+  and 1363/1363/0 RDC raw/reviewed/unresolved findings, without changing review rules.
+
+This is focused qualification of naming/documentation changes. The complete
+regression and synthesis results below retain their original input identities;
+no new synthesis or physical-signoff result is claimed by this cleanup.
+
+## Ownership and package-flow cleanup (2026-11-12)
+
+Final testbench manifest SHA-256:
+`3b383f6a9906f525d3b0bb11aefbb2e8f008d96256dd1bd3944a1c14a1bdeacb`.
+See the [organization review](../../docs/rtl/organization-review.md) for findings,
+responsibilities and the failing-before smoke correction.
+
+- Target and random clocks each pass all 24 DUT tests at seeds 11/17; the separately
+  instrumented latency snapshot passes all 24 at seeds 23/31. Each final batch
+  rejects all eight checker mutations: **144 positive runs, 294 scenarios,
+  318 terminal checks and 219,925 checked bytes**.
+- All 17 DMA and 10 common-cell native tests pass with CC and Cranelift. The five
+  TB selftests pass at seeds 11/17. Resource transport has nine passing tests;
+  profile validation rejects 16 invalid configurations. Tool-cache integrity,
+  log failure detection, runner failure aggregation and process cleanup tests pass.
+- All four generated outputs are current. Six generator CLI/oracle-preparation
+  tests, C layout checking and the native RAL and Rust-codec/SV oracles pass.
+- The retained standalone SV smoke failed first on the obsolete one-outstanding
+  reset assertion. Its final Copy/Fence, drain and post-reset traffic checks pass.
+  Mailbox and FIFO binding qualifications each pass their positive case and four
+  corruption/custody negatives.
+- Native CDC/RDC fields are identical to the previous reviewed checkpoint: 40 and
+  1363 findings, all explicitly reviewed, zero unresolved. The old identity was
+  rejected before rebinding; all seven review-policy tests pass. Static sensitivity
+  tests and the current register-mailbox formal boundary also pass.
+- Fresh mapped integration passes instance isolation, wrong-depth, missing-path,
+  impossible-budget and masked-path checks. The full mapping passes the original
+  frequency targets with **0ps worst setup slack**, no ULVT, 74,120 instances and
+  302 references. Cell area remains 32,267.907 in library units; all 40 synchronizer
+  FFs are preserved. Eight crossing groups, four payload checks and eight local
+  chains pass, with minimum crossing/local slack 211.3ps/820.6ps. Tightening the
+  restored mapping's core clock is correctly rejected.
+
+Only the 48 ordinary random-clock positive runs enter the final coverage merge.
+The declared scenario bins remain 64/64; module line/condition/branch coverage and
+the zero-delay results are identical to the burst-window checkpoint below. Long
+aligned payload remains 8B/bus-cycle with no gaps and 2160 descriptor-to-Fence
+cycles; short, batched and half-core results remain 120, 519 and 2200 cycles.
+There are no new metric exclusions or weakened timeout/diagnostic gates.
+
+This qualifies the refactored organization and flows for the same minimal profile.
+It does not add physical routing, hold/reset recovery/removal, MTBF, workload-power
+or full DMA feature signoff.
+
 ## Burst-window qualification (2026-11-12)
 
 Current testbench manifest SHA-256:
 `648510316c892f13eab824bca945e6ae3b9e2a4d5d4f9852af6f25cc9168cd34`.
 The production RTL and implementation inputs are bound by the current
-[`dma-copy-review.tcl`](../../impl/pdma/constraints/dma-copy-review.tcl).
+[`dma-copy-review.tcl`](../../impl/dma/reviews/copy.tcl).
 The simulation-only synchronizer-latency build has a separate manifest and cannot
 be used by the synthesis/static flows.
 

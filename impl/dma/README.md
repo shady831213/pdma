@@ -10,7 +10,7 @@ are private inputs; target frequency is not a timing-closure claim.
 
 | Location | Responsibility |
 | --- | --- |
-| `impl/dma/profiles/copy.tcl` | Fixed top, clocks, port ownership, RAM inventory and coordinated cold-reset assertion |
+| `impl/dma/profiles/copy.tcl` | Top parameters, clocks, port ownership, RAM inventory and coordinated cold-reset assertion |
 | `impl/dma/flow/` | DMA entrypoints selecting the profile before delegating to generic adapters |
 | `tools/rtl-flow/implementation/profile.tcl` | Tool-independent profile validation and traversal |
 | `tools/rtl-flow/implementation/constraints-common.tcl` | Standalone clock SDC and provider/instance traversal |
@@ -20,9 +20,13 @@ are private inputs; target frequency is not a timing-closure claim.
 | `tools/rtl-flow/implementation/genus/` | Genus units, mapping/library policy, constraints, reports and setup gate |
 | `tools/rtl-flow/implementation/memory-model.tcl` | Shared capacitance-only RAM boundary library serialization |
 | `tools/rtl-flow/implementation/vc/` | VC SpyGlass constraint translation, CDC/RDC analysis and unresolved-finding gate |
-| `impl/dma/reviews/copy.tcl` | Explicit, source-bound dispositions for the fixed Copy slice; never a generic block waiver |
+| `impl/dma/reviews/copy.tcl`, `copy-8.tcl` | Explicit source-bound dispositions for 2 and 8 channels respectively; never generic block waivers |
 | `impl/dma/tests/{genus,vc}/` | Backend-specific qualification fixtures; profile/runner tests remain directly under `tests/` |
 
+The Copy profile accepts `PDMA_CHANNEL_COUNT=1..8` (default 2), including every
+non-power-of-two count. Parameters, IRQ widths and RAM geometry are resolved
+before tool launch into an immutable `design-profile.tcl`; the source profile
+is retained separately. A later environment change cannot reinterpret a run.
 The profile describes the actual emitted boundary. A new top can select its own
 profile through `PDMA_DESIGN_PROFILE`; it must account for every port. Adapters
 fail on missing ports, unexpected bits/directions or incomplete coverage. Genus
@@ -38,7 +42,7 @@ owns clock creation, while the reusable cell API touches only the named instance
 The profile's optional `memories` inventory names RAM provider instances, port
 contracts, dimensions and clocks. Synthesis defaults to `PDMA_MEMORY_MODE=control-budget`;
 `generic` retains standard-cell array mapping. The Copy profile excludes one
-8x512-bit RAM in budget mode; standard-library FIFO storage remains synthesized.
+`(8 * CHANNEL_COUNT)` x 512-bit RAM in budget mode; standard-library FIFO storage remains synthesized.
 See [RAM boundary accounting](../../docs/rtl/memory-budget.md) for the generated
 library, exact binding checks and the distinction between logical area and
 unqualified SRAM cost. Ordinary RTL allows automatic ungrouping and boundary
@@ -161,6 +165,10 @@ deliberately tightens the core period to reject negative slack. It does not chan
 the design target or producer artifacts. Timed-out or interrupted implementation
 and simulation jobs tear down their own process groups; failed runs retain their
 input and result records.
+Select the matching review with `PDMA_STATIC_REVIEW`; the 8-channel review also
+requires `PDMA_CHANNEL_COUNT=8`. A different count or source identity is rejected.
+The review tests accept the same explicit policy override.
+
 The review tests use the real unchanged DUT to reject stale identity, a changed
 endpoint and an omitted disposition; missing coverage cannot become a pass.
 

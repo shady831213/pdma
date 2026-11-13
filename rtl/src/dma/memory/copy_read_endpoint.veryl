@@ -20,7 +20,8 @@ module CopyReadEndpoint (
     assign axi.arlen    = port.request.length as 8;
     assign axi.arsize   = port.request.size as CopyMemory::Bus::size_t;
     assign axi.arburst  = 2'b01 as CopyMemory::Bus::burst_t;
-    assign axi.aruser   = port.request.selector;
+    assign axi.aruser   = (port.request.selector as CopyMemory::USER_BITS)
+        | ((port.request.tag.channel as CopyMemory::USER_BITS) << CopyMemory::CONTEXT_BITS);
     assign axi.arcache  = 0;
     assign axi.arprot   = 0;
     assign axi.arid     = 0;
@@ -42,7 +43,7 @@ module CopyReadEndpoint (
         o_word_count : _                         ,
         i_push       : axi.arvalid && axi.arready,
         i_data       : CopyMemory::ReadTracker'{
-            slot  : port.request.slot        ,
+            tag   : port.request.tag         ,
             lane  : port.request.address[2:0],
             size  : port.request.size        ,
             length: port.request.length
@@ -51,8 +52,8 @@ module CopyReadEndpoint (
         o_data: head    ,
     );
     always_comb {
-        next_result      = accumulated;
-        next_result.slot = head.slot;
+        next_result     = accumulated;
+        next_result.tag = head.tag;
         if head.size == 0 {
             next_result.data = ((axi.rdata >> (head.lane * 8)) as 8) as 512;
         } else {

@@ -3,9 +3,13 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 source "$root/tools/rtl-flow/environment.sh"
 source "$root/tools/rtl-flow/implementation/run.sh"
-export PDMA_DESIGN_PROFILE="$root/impl/dma/profiles/copy.tcl"
 out=$(realpath -m "${1:?Supply a fresh test evidence directory}")
 pdma_new_run "$out"
+export PDMA_DESIGN_PROFILE="$out/profile.tcl"
+cat > "$PDMA_DESIGN_PROFILE" <<'TCL'
+return [dict create top fixture clocks {clk {period 1 reset rst_n}} ports {} parameters [dict create COUNT $::env(PDMA_CHANNEL_COUNT)]]
+TCL
+export PDMA_CHANNEL_COUNT=3
 mkdir "$out/source with spaces"
 printf 'fixture\n' > "$out/source with spaces/design.sv"
 printf '%s\n' "$out/source with spaces/design.sv" > "$out/source with spaces/sources.f"
@@ -14,6 +18,9 @@ for mode in success tool-failure timeout changed-input; do
     status=0
     (
         pdma_impl_prepare "$out/source with spaces" "$out/$mode"
+        # Verify frozen settings remain unchanged after the selecting env changes.
+        export PDMA_CHANNEL_COUNT=7
+        grep -Fq 'parameters {COUNT 3}' "$pdma_output/design-profile.tcl"
         pdma_impl_capture adapter=test "case=$mode"
         case "$mode" in
             tool-failure) pdma_impl_execute 10 bash -c 'exit 7' || exit $? ;;

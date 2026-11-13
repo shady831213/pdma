@@ -63,13 +63,14 @@ make their register redesign prerequisites for this phase.
 `docs/rtl/architecture.md` records confirmed inputs and unresolved design choices;
 it does not supersede the system specification under `model/modeling/docs`.
 The DMA register-access slice has native tests: a 32/64-bit AXI4-Lite frontend,
-reg/core CDC and object-owned registers. `DmaCopy` adds a minimal one-channel
-Linear Copy and Fence32/64 slice with a fixed 32-bit register / 64-bit ordinary
-memory profile, eight resident burst slots, independent read/write endpoints,
+reg/core CDC and object-owned registers. `DmaCopy` implements configurable 1..8 physical channels with one shared
+Linear Copy and Fence32/64 engine, a fixed 32-bit register / 64-bit ordinary
+memory profile, eight reserved burst rows per channel, independent read/write endpoints,
 core/bus asynchronous queues, a reg/core mailbox and reset drain. Software
 can submit Copy followed by Fence and poll its memory marker for completion.
 It is not the complete
-DMA execution/atomic/multichannel implementation. Aligned long-copy throughput
+DMA execution/atomic/full-bus-profile implementation. Multichannel qualification
+is in progress; see `docs/rtl/multichannel.md`. Aligned long-copy throughput
 has its own zero-delay qualification; other profiles remain open. See
 `docs/rtl/minimal-copy.md`. Register reset action/clear ports alone remain
 integration boundaries, not evidence of transaction drain without that owner.
@@ -83,8 +84,8 @@ at 1GHz, register clock at 500MHz, still three asynchronous domains. ULVT is
 forbidden; qualify library selection, mapping exclusions and actual mapped-cell
 identities. Both CDC and RDC must use VC SpyGlass with PDMA-owned constraints
 and reviewed findings. The Genus and VC SpyGlass flows are implemented;
-the current control-budget logic setup estimate meets the target with zero slack
-margin; SRAM area/power and intrinsic timing remain excluded and unqualified. The
+the prior single-channel control-budget logic setup estimate meets the target
+with zero slack margin; the new multichannel mapping remains under qualification; SRAM area/power and intrinsic timing remain excluded and unqualified. The
 redundant mailbox startup gates are removed; CDC/RDC reviewed gates accept only
 source-bound, path-specific findings, including exact unconnected/no-clock sinks
 with disabled consumers. Group counts never substitute for endpoint proof; raw
@@ -103,8 +104,9 @@ immutable RTL snapshot. Generic implementation adapters live under
 source-bound reviews. Never load current workspace IP scripts to qualify an old
 snapshot, and never apply waivers merely because a package is a dependency.
 The 2026-11-13 synthesis flow defaults to `PDMA_MEMORY_MODE=control-budget`:
-one 8x512-bit Copy RAM provider is bound to a generated capacitance-only Liberty
-leaf. `generic` retains standard-cell array synthesis; FIFO storage remains
+one `(8 * CHANNEL_COUNT)` x 512-bit Copy RAM provider is bound to a generated
+capacitance-only Liberty leaf. The development flow defaults to 2 channels; 8 is
+the final qualification target. Every count in 1..8 is supported. `generic` retains standard-cell array synthesis; FIFO storage remains
 synthesized in both modes. Never treat the placeholder's zero area or boundary
 delay as a physical SRAM property. Ordinary RTL uses `auto_ungroup=both` and
 `boundary_opto=true`, without retiming; RAM leaves and synchronizers retain their
@@ -275,6 +277,9 @@ decisions. HSA is a semantic reference; AQL compatibility is not a current goal.
   see `tools/rtl-flow/flows.md`. Do not move reusable flow code out merely because
   it invokes a commercial tool.
   Check the staged diff against this restriction before each commit.
+- Launch long tool jobs in detached tmux sessions; persist invocation, logs and
+  exit status under ignored `.omo` or `.run` state so interactive shells and Codex
+  do not own their lifetime. Keep short status queries separate from job execution.
 - Use `GIT_MASTER=1` before every git command.
 - Use short English commit messages matching repository history.
 

@@ -21,7 +21,21 @@ pdma_impl_prepare() {
         printf 'return {}\n' > "$pdma_output/ip-manifest.tcl" || return
         mkdir "$pdma_output/ip" || return
     fi
-    cp "${PDMA_DESIGN_PROFILE:?Supply the integrating design profile}" "$pdma_output/design-profile.tcl" || return
+    cp "${PDMA_DESIGN_PROFILE:?Supply the integrating design profile}" "$pdma_output/design-profile-source.tcl" || return
+    # Resolve environment-selected parameters before tool launch. Both source and
+    # resolved values are immutable inputs; replay never depends on a later env.
+    (cd "$pdma_output" && tclsh <<'TCL'
+if {[catch {
+source ip.tcl
+rtl_ip::load ip-manifest.tcl
+source profile.tcl
+set resolved [profile::read design-profile-source.tcl]
+set fd [open design-profile.tcl w]
+puts $fd [list return $resolved]
+close $fd
+} reason]} {puts stderr $reason; exit 2}
+TCL
+    ) || return
     cp "${BASH_SOURCE[1]}" "$pdma_output/launcher.sh" || return
     cp "$root/tools/rtl-flow/implementation/run.sh" "$pdma_output/flow-run.sh" || return
     cp "$root/tools/rtl-flow/environment.sh" "$pdma_output/flow-environment.sh" || return

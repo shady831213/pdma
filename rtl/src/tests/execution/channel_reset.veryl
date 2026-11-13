@@ -1,0 +1,102 @@
+#[test(channel_reset_does_not_wait_for_peer_metadata)]
+module ChannelResetTest {
+    const CHANNEL_COUNT: u32 = 3;
+    inst clk   : $tb::clock_gen #( period: 10 );
+    inst rst   : $tb::reset_gen ( clk );
+    inst memory: CopyMemoryPort;
+    var commands     : RegisterState::Ring                          [CHANNEL_COUNT];
+    var configuration: RegisterState::ChannelConfig                 [CHANNEL_COUNT];
+    var actions      : RegisterState::ChannelActions                [CHANNEL_COUNT];
+    var status       : RegisterState::ChannelStatus                 [CHANNEL_COUNT];
+    var clear        : logic                        <CHANNEL_COUNT>                ;
+    var advance      : logic                        <CHANNEL_COUNT>                ;
+    var event_advance: logic                        <CHANNEL_COUNT>                ;
+    var reset_all    : logic                                                       ;
+    var fatal        : logic                                                       ;
+    var tag          : CopyMemory::Tag                                             ;
+    inst dut: CopyEngine #(
+        CHANNEL_COUNT  ,
+    ) (
+        clk                            ,
+        rst_n          : rst           ,
+        command        : commands      ,
+        events         : '{default: '0},
+        configuration                  ,
+        actions                        ,
+        reset_all      : reset_all     ,
+        global_blocked : 0             ,
+        global_clear   : 0             ,
+        fatal_in       : fatal         ,
+        event_geometry : 0             ,
+        event_ready    : 0             ,
+        status                         ,
+        clear                          ,
+        command_advance: advance       ,
+        event_advance                  ,
+        internal_fatal : fatal         ,
+        memory                         ,
+    );
+    initial {
+        reset_all       = 0;
+        commands        = '{default: '0};
+        configuration   = '{default: '0};
+        actions         = '{default: '0};
+        memory.ready    = 1;
+        memory.returned = 0;
+        memory.receipt  = '0;
+        rst.assert();
+        clk.next(3);
+        commands[2]             = RegisterState::Ring'{base: 64'h2000, capacity: 4, producer: 1, consumer: 0};
+        configuration[2].enable = 1;
+        for timeout in 0..20 {
+            if memory.valid {
+                break;
+            }
+            clk.next();
+        }
+        $assert(memory.valid && memory.request.tag.channel == 2, "LAST_CHANNEL_GRANTED");
+        tag = memory.request.tag;
+        clk.next();
+        // B's accepted fetch has no response yet. A is independently resettable.
+        configuration[2].enable  = 0;
+        actions[0].reset_request = 1;
+        clk.next();
+        actions[0].reset_request = 0;
+        for timeout in 0..20 {
+            if clear[0] {
+                break;
+            }
+            clk.next();
+        }
+        $assert(clear[0] && !clear[2] && advance == 0, "IDLE_RESET_INDEPENDENT_OF_DISABLED_PEER");
+        // A new global request coincides with A's old cleanup acknowledgement.
+        // The new scope must still receive an acknowledgement after acceptance.
+        reset_all = 1;
+        clk.next();
+        reset_all = 0;
+        $assert(clear[0] && status[0].resetting, "NEW_GLOBAL_RESET_NOT_LOST_AT_OLD_CLEAR");
+        clk.next();
+        actions[2].reset_request = 1;
+        clk.next();
+        actions[2].reset_request = 0;
+        for delay in 0..20 {
+            $assert(status[2].resetting && !clear[2] && !memory.valid, "OWNER_RESET_RETAINS_METADATA_DEBT");
+            clk.next();
+        }
+        memory.receipt.tag    = tag;
+        memory.receipt.failed = 1;
+        memory.returned       = 1;
+        $assert(memory.accepted, "CLOSING_OWNER_CONSUMES_RETURN");
+        clk.next();
+        memory.returned = 0;
+        for timeout in 0..20 {
+            if clear[2] {
+                break;
+            }
+            clk.next();
+        }
+        $assert(clear[2] && !clear[0] && !fatal && event_advance == 0, "ONLY_DRAINED_OWNER_CLEARS");
+        clk.next();
+        $assert(!status[2].resetting && status[2].fatal == 0, "RESET_RELEASED");
+    }
+}

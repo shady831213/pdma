@@ -12,7 +12,7 @@ trap 'exit 143' TERM
 snapshot=$(realpath "${1:?Usage: review.sh SNAPSHOT NEW_RUN}")
 out=$(realpath -m "${2:?Supply a fresh output directory}")
 pdma_new_run "$out"
-policy="$root/impl/dma/reviews/copy.tcl"
+policy="${PDMA_STATIC_REVIEW:-$root/impl/dma/reviews/copy.tcl}"
 tclsh /dev/stdin "$policy" "$out" <<'TCL'
 lassign $argv source out
 set original [source $source]

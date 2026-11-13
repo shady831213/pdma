@@ -25,18 +25,20 @@ module CopyEngineTest {
     var completed_writes: 'bus       logic<32>      ;
     var observed        : 'bus       logic<64> [128];
     inst dut: DmaCopy (
-        reg_clk             ,
-        reg_rst_n : reg_rst ,
-        core_clk            ,
-        core_rst_n: core_rst,
-        bus_clk             ,
-        bus_rst_n : bus_rst ,
-        cfg                 ,
-        memory              ,
-        awatop    : atop    ,
-        irq                 ,
-        irq_ready : 1       ,
-        fatal               ,
+        fatal_irq      : _       ,
+        fatal_irq_ready: 1       ,
+        reg_clk                  ,
+        reg_rst_n      : reg_rst ,
+        core_clk                 ,
+        core_rst_n     : core_rst,
+        bus_clk                  ,
+        bus_rst_n      : bus_rst ,
+        cfg                      ,
+        memory                   ,
+        awatop         : atop    ,
+        irq                      ,
+        irq_ready      : 1       ,
+        fatal                    ,
     );
     inst ram: CopyTestMemory (
         clk             : bus_clk,

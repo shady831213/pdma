@@ -11,7 +11,12 @@ proc run {} {
     source profile.tcl
     set design_profile [profile::read design-profile.tcl]
     analyze -format sverilog -vcs "-f $env(PDMA_FILELIST) +define+SYNTHESIS"
-    elaborate [dict get $design_profile top]
+    set parameters {}
+    if {[dict exists $design_profile parameters]} {
+        dict for {name value} [dict get $design_profile parameters] {lappend parameters "$name=$value"}
+    }
+    if {[llength $parameters]} {elaborate [dict get $design_profile top] -parameters [join $parameters ,]} \
+    else {elaborate [dict get $design_profile top]}
     source constraints.tcl
     if {$check eq "rdc"} {
         # Follow resetless storage to observable consumers, including primary

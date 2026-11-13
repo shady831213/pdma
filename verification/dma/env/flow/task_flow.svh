@@ -2,6 +2,7 @@ class pdma_task_flow extends uvm_object;
     `uvm_object_utils(pdma_task_flow)
     pdma_task job;
     pdma_channel channel;
+    pdma_device device;
     pdma_task_checker checker_;
     pdma_memory memory;
     jvs_memory_allocator allocator;
@@ -58,7 +59,8 @@ class pdma_task_flow extends uvm_object;
     endtask
     task cancel(bit global_scope=0);
         pdma_result result=new;
-        channel.finish_reset(global_scope);
+        if(global_scope) device.finish_reset();
+        else channel.finish_reset();
         result.channel_id=channel.channel_id; result.task_id=job.id; result.outcome=TASK_RESET;
         checker_.check(job,result,TASK_RESET,memory);
         publish_observation(TASK_RESET);

@@ -1,604 +1,113 @@
-# Reviewed 2026-11-12. See docs/rtl/throughput-review.md for source-level proofs.
-# Exact source/tool/configuration binding; never refresh automatically to bypass findings.
-# Grouped entries cover only proven unconnected/no-clock sinks, not observable corruption.
-set identity [dict create rtl 50884dc504854859af1248f930dc0a3d66404498cc0775a2c7bdded10f2a4f38 design 50bbc810c058d2730d10fa9ed1fd6d60a317d1187fd0f8515b0d01a72245fa7c profile be9f20fbad61b93499b6cfaf8200118e1cb117ba6d6e2e6e8bc98ef9139c50af constraints 4c38bd7504c7999478537470f796714fb58d42d34314bb8c64655b2f757ce8b3 common a05a0076d4fe8453b85384bffaea67a7cd89d6853b235cf0fff97c1082b46c65 analysis 7ba41da8456af8db425ac0107e59a42e09290536f3ae5de7cb1a2232c041f324 tool aec2fec538b2a0e09d2c9aa7cf17f060d8f3dc1436fa1384fe212e2faaf37761]
+# Reviewed 2-channel Copy/Fence profile; see docs/rtl/multichannel.md.
+# Exact source/tool/configuration binding. Re-review before changing identity.
+# Source-class proof retained only after exact native-field comparison.
+set identity {rtl 9db54dd2c789ee903ce3ef16f753d9b8400296111fed2a073508ebb43807bc02 design f5945cded57ce22b9687e1ade13e9e6b1656319d004b8766ee5c7452372cb907 profile eb7a7b7a731f54e569b520b9d46b8b5ab6b729cd173eb2627433e3b8ae39e792 constraints 4c38bd7504c7999478537470f796714fb58d42d34314bb8c64655b2f757ce8b3 common 0af1d54e45e9fb2463cb4b120395b9b4514ab3df5916afb4b46bd604846f5679 analysis ab20f7903deeabb8756aff6cc128ac39149bcc3e8cdda66e2156ae1678028046 tool aec2fec538b2a0e09d2c9aa7cf17f060d8f3dc1436fa1384fe212e2faaf37761}
 set findings {}
-lappend findings [dict create \
-    checks [list {cdc}] tag {CDC_COHERENCY_RECONV_COMB} \
-    reason {G1: registered one-step Gray pointers through two stages; bounded crossing delay below the source period; local stages remain normally timed.} \
-    fields [dict create \
-        {ConvergencePoint} [list {request_crossing/queue/u_s_gray2bin/g_base.bot_red[0]}] \
-        {ConvControlPathList:ConvergingControlPath:SyncOutput} [list {request_crossing/queue/u_synchronizer_rp/g[3].rg/Q[1]} {request_crossing/queue/u_synchronizer_rp/g[2].rg/Q[1]} {request_crossing/queue/u_synchronizer_rp/g[1].rg/Q[1]} {request_crossing/queue/u_synchronizer_rp/g[0].rg/Q[1]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc}] tag {CDC_COHERENCY_RECONV_COMB} \
-    reason {G1: registered one-step Gray pointers through two stages; bounded crossing delay below the source period; local stages remain normally timed.} \
-    fields [dict create \
-        {ConvergencePoint} [list {response_crossing/queue/u_d_gray2bin/g_base.bot_red[0]}] \
-        {ConvControlPathList:ConvergingControlPath:SyncOutput} [list {response_crossing/queue/u_synchronizer_wp/g[3].rg/Q[1]} {response_crossing/queue/u_synchronizer_wp/g[2].rg/Q[1]} {response_crossing/queue/u_synchronizer_wp/g[1].rg/Q[1]} {response_crossing/queue/u_synchronizer_wp/g[0].rg/Q[1]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc}] tag {CDC_COHERENCY_RECONV_COMB} \
-    reason {G1: registered one-step Gray pointers through two stages; bounded crossing delay below the source period; local stages remain normally timed.} \
-    fields [dict create \
-        {ConvergencePoint} [list {request_crossing/queue/u_d_gray2bin/g_base.bot_red[0]}] \
-        {ConvControlPathList:ConvergingControlPath:SyncOutput} [list {request_crossing/queue/u_synchronizer_wp/g[3].rg/Q[1]} {request_crossing/queue/u_synchronizer_wp/g[2].rg/Q[1]} {request_crossing/queue/u_synchronizer_wp/g[1].rg/Q[1]} {request_crossing/queue/u_synchronizer_wp/g[0].rg/Q[1]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc}] tag {CDC_COHERENCY_RECONV_COMB} \
-    reason {G1: registered one-step Gray pointers through two stages; bounded crossing delay below the source period; local stages remain normally timed.} \
-    fields [dict create \
-        {ConvergencePoint} [list {response_crossing/queue/u_s_gray2bin/g_base.bot_red[0]}] \
-        {ConvControlPathList:ConvergingControlPath:SyncOutput} [list {response_crossing/queue/u_synchronizer_rp/g[3].rg/Q[1]} {response_crossing/queue/u_synchronizer_rp/g[2].rg/Q[1]} {response_crossing/queue/u_synchronizer_rp/g[1].rg/Q[1]} {response_crossing/queue/u_synchronizer_rp/g[0].rg/Q[1]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc}] tag {CDC_COHERENCY_RECONV_SEQ} \
-    reason {C1: independent request/receipt/control credits need no simultaneous arrival; valid custody, per-slot debt and reset Close prevent overwrite or early reuse.} \
-    fields [dict create \
-        {ConvergencePoint} [list {csr/crossing/requests/g_dst_side.valid/D}] \
-        {ConvControlPathList:ConvergingControlPath:SyncOutput} [list {csr/crossing/requests/u_s_to_d/g[0].rg/Q[1]} {csr/crossing/responses/u_d_to_s/g[0].rg/Q[1]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc}] tag {CDC_COHERENCY_RECONV_SEQ} \
-    reason {C1: independent request/receipt/control credits need no simultaneous arrival; valid custody, per-slot debt and reset Close prevent overwrite or early reuse.} \
-    fields [dict create \
-        {ConvergencePoint} [list {endpoint/reader/pending/u_controller/update_state}] \
-        {ConvControlPathList:ConvergingControlPath:SyncOutput} [list {request_crossing/queue/u_synchronizer_wp/g[3].rg/Q[1]} {request_crossing/queue/u_synchronizer_wp/g[2].rg/Q[1]} {request_crossing/queue/u_synchronizer_wp/g[1].rg/Q[1]} {request_crossing/queue/u_synchronizer_wp/g[0].rg/Q[1]} {response_crossing/queue/u_synchronizer_rp/g[3].rg/Q[1]} {response_crossing/queue/u_synchronizer_rp/g[2].rg/Q[1]} {response_crossing/queue/u_synchronizer_rp/g[1].rg/Q[1]} {response_crossing/queue/u_synchronizer_rp/g[0].rg/Q[1]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc}] tag {CDC_COHERENCY_ASYNCSRCS_RECONV_SEQ} \
-    reason {C1: independent request/receipt/control credits need no simultaneous arrival; valid custody, per-slot debt and reset Close prevent overwrite or early reuse.} \
-    fields [dict create \
-        {ConvergencePoint} [list {request_crossing/queue/word_count[3]}] \
-        {ConvControlPathList:ConvergingControlPath:SyncOutput} [list {csr/crossing/requests/u_s_to_d/g[0].rg/Q[1]} {csr/crossing/responses/u_d_to_s/g[0].rg/Q[1]} {request_crossing/queue/u_synchronizer_rp/g[3].rg/Q[1]} {request_crossing/queue/u_synchronizer_rp/g[2].rg/Q[1]} {request_crossing/queue/u_synchronizer_rp/g[1].rg/Q[1]} {request_crossing/queue/u_synchronizer_rp/g[0].rg/Q[1]} {response_crossing/queue/u_synchronizer_wp/g[3].rg/Q[1]} {response_crossing/queue/u_synchronizer_wp/g[2].rg/Q[1]} {response_crossing/queue/u_synchronizer_wp/g[1].rg/Q[1]} {response_crossing/queue/u_synchronizer_wp/g[0].rg/Q[1]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list {engine/copy/chunks[0].source[0:63]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list {engine/copy/chunks[3].source[0:63]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list {engine/copy/chunks[2].source[0:63]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list {engine/copy/chunks[6].destination[0:63]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list engine/copy/chunks\[4\].length\{ {[0]} {,[3:6]} \}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list {engine/copy/chunks[6].source[0:63]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list engine/copy/chunks\[5\].length\{ {[0]} {,[3:6]} \}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list {engine/copy/chunks[7].source[0:63]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list {engine/copy/chunks[3].destination[0:63]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list engine/copy/chunks\[3\].length\{ {[0]} {,[3:6]} \}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list {engine/copy/chunks[4].source[0:63]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list {engine/copy/chunks[1].source[0:63]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list engine/copy/chunks\[6\].length\{ {[0]} {,[3:6]} \}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list {engine/copy/chunks[0].destination[0:63]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list engine/copy/chunks\[2\].length\{ {[0]} {,[3:6]} \}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list {engine/copy/chunks[5].destination[0:63]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list {engine/copy/chunks[4].destination[0:63]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list {engine/copy/chunks[5].source[0:63]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list engine/copy/chunks\[1\].length\{ {[0]} {,[3:6]} \}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list engine/copy/chunks\[7\].length\{ {[0]} {,[3:6]} \}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list engine/copy/chunks\[0\].length\{ {[0]} {,[3:6]} \}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list {engine/copy/chunks[1].destination[0:63]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list {engine/copy/chunks[7].destination[0:63]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list {engine/copy/chunks[2].destination[0:63]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list {engine/copy/buffers/raw_read.data[511:0]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {core_rst_n}] \
-        {NonResetInstance} [list request_crossing/queue/ram\{ {[0:7][618:518]} {,[0:7][516:0]} \}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {reg_rst_n}] \
-        {NonResetInstance} [list {csr/frontend/aw_storage/g_forward.data.address[31:0]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {reg_rst_n}] \
-        {NonResetInstance} [list {csr/frontend/aw_storage/g_forward.data.identity[0]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {reg_rst_n}] \
-        {NonResetInstance} [list {csr/frontend/w_storage/g_forward.data.data[31:0]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {reg_rst_n}] \
-        {NonResetInstance} [list {csr/frontend/w_storage/g_forward.data.strobe[3:0]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {reg_rst_n}] \
-        {NonResetInstance} [list {csr/frontend/ar_storage/g_forward.data.address[31:0]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {SETUP_RESET_DRIVING_NON_ASYNC_PIN} \
-    reason {R1: coordinated cold reset invalidates slots and queue custody; fresh data precedes valid; software reset drains without resetting transport.} \
-    fields [dict create \
-        {ResetName} [list {reg_rst_n}] \
-        {NonResetInstance} [list {csr/frontend/ar_storage/g_forward.data.identity[0]}] \
-    ]]
-lappend findings [dict create \
-    checks [list {cdc} {rdc}] tag {INTEGRITY_RESET_ASYNC_AND_SYNC_USAGE} \
-    reason {R2: reset-controlled RAM read enable changes invalid data, not state reset semantics; prepared-valid resets and captures only a completed synchronous read.} \
-    fields [dict create \
-        {ResetObject} [list {core_rst_n}] \
-        {Instance1} [list {irq}] \
-        {Instance2} [list {engine/copy/buffers/u_ram/read_port.data[0]}] \
-        {ResetType1} [list {Asynchronous}] \
-        {ResetType2} [list {synchronously}] \
-    ]]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/reader/pending/u_controller/i_data.lane[2:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {bus_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 41]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/reader/pending/u_controller/i_data.lane[2:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 54]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/reader/pending/u_controller/i_data.length[2:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {bus_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 41]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/reader/pending/u_controller/i_data.length[2:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 53]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/reader/pending/u_controller/i_data.size[0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 1]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/reader/pending/u_controller/i_data.size[1:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {bus_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 41]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/reader/pending/u_controller/i_data.size[1:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 53]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/reader/pending/u_controller/i_data.slot[3:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {bus_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 41]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/reader/pending/u_controller/i_data.slot[3:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 53]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/addresses/u_controller/i_data.address[63:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {bus_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 41]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/addresses/u_controller/i_data.address[63:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 54]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/addresses/u_controller/i_data.length[2:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {bus_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 41]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/addresses/u_controller/i_data.length[2:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 53]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/addresses/u_controller/i_data.selector[31:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {bus_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 41]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/addresses/u_controller/i_data.selector[31:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 54]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/addresses/u_controller/i_data.size[0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 1]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/addresses/u_controller/i_data.size[1:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {bus_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 41]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/addresses/u_controller/i_data.size[1:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 53]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/data/u_controller/i_data.data[191:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 1]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/data/u_controller/i_data.data[511:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {bus_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 43]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/data/u_controller/i_data.data[511:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 54]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/data/u_controller/i_data.data[63:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 1]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/data/u_controller/i_data.data[7:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 1]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list endpoint/writer/data/u_controller/i_data.data\{ {[66:64]} {,[58:56]} {,[50:48]} {,[42:40]} {,[34:32]} {,[26:24]} {,[18:16]} {,[10:8]} {,[2:0]} \}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 1]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/data/u_controller/i_data.lane[2:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {bus_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 41]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/data/u_controller/i_data.lane[2:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 54]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/data/u_controller/i_data.length[2:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {bus_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 41]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/data/u_controller/i_data.length[2:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 53]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/data/u_controller/i_data.size[0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 1]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/data/u_controller/i_data.size[1:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {bus_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 41]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/data/u_controller/i_data.size[1:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 53]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/responses/u_controller/i_data[3:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {bus_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 41]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {endpoint/writer/responses/u_controller/i_data[3:0]}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 53]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {engine/copy/buffers/collision}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {bus_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 41]
-lappend findings [dict create \
-    checks [list {rdc}] tag {RDC_CORRUPT_OBSERVED} \
-    reason {D1: exact unconnected/no-clock sink. FIFO controller i_data is unused with MATCH_COUNT_WIDTH=0; RAM collision is unused with FORWARD_NEW_DATA=false. No sequential or output consumer. Count is coverage only.} \
-    fields [dict create \
-        {DestObject} [list {engine/copy/buffers/collision}] \
-        {DestObjectType} [list {unconnected}] \
-        {RdcSourceResets:ResetName} [list {core_rst_n}] \
-        {DestClockInfoList:DestClockInfo:ClockName} [list {'no-clock'}] \
-    ] expected_count 53]
+lappend findings {checks cdc tag CDC_COHERENCY_RECONV_COMB fields {ConvergencePoint {request_crossing/queue/u_s_gray2bin/g_base.bot_red[0]} ConvControlPathList:ConvergingControlPath:SyncOutput {request_crossing/queue/u_synchronizer_rp/g[3].rg/Q[1] request_crossing/queue/u_synchronizer_rp/g[2].rg/Q[1] request_crossing/queue/u_synchronizer_rp/g[1].rg/Q[1] request_crossing/queue/u_synchronizer_rp/g[0].rg/Q[1]}} reason {G1: registered one-step Gray pointers; two synchronization stages and bounded crossing/skew below the source period. Local stages retain ordinary timing.}}
+lappend findings {checks cdc tag CDC_COHERENCY_RECONV_COMB fields {ConvergencePoint {response_crossing/queue/u_d_gray2bin/g_base.bot_red[0]} ConvControlPathList:ConvergingControlPath:SyncOutput {response_crossing/queue/u_synchronizer_wp/g[3].rg/Q[1] response_crossing/queue/u_synchronizer_wp/g[2].rg/Q[1] response_crossing/queue/u_synchronizer_wp/g[1].rg/Q[1] response_crossing/queue/u_synchronizer_wp/g[0].rg/Q[1]}} reason {G1: registered one-step Gray pointers; two synchronization stages and bounded crossing/skew below the source period. Local stages retain ordinary timing.}}
+lappend findings {checks cdc tag CDC_COHERENCY_RECONV_COMB fields {ConvergencePoint {response_crossing/queue/u_s_gray2bin/g_base.bot_red[0]} ConvControlPathList:ConvergingControlPath:SyncOutput {response_crossing/queue/u_synchronizer_rp/g[3].rg/Q[1] response_crossing/queue/u_synchronizer_rp/g[2].rg/Q[1] response_crossing/queue/u_synchronizer_rp/g[1].rg/Q[1] response_crossing/queue/u_synchronizer_rp/g[0].rg/Q[1]}} reason {G1: registered one-step Gray pointers; two synchronization stages and bounded crossing/skew below the source period. Local stages retain ordinary timing.}}
+lappend findings {checks cdc tag CDC_COHERENCY_RECONV_COMB fields {ConvergencePoint {request_crossing/queue/u_d_gray2bin/g_base.bot_red[0]} ConvControlPathList:ConvergingControlPath:SyncOutput {request_crossing/queue/u_synchronizer_wp/g[3].rg/Q[1] request_crossing/queue/u_synchronizer_wp/g[2].rg/Q[1] request_crossing/queue/u_synchronizer_wp/g[1].rg/Q[1] request_crossing/queue/u_synchronizer_wp/g[0].rg/Q[1]}} reason {G1: registered one-step Gray pointers; two synchronization stages and bounded crossing/skew below the source period. Local stages retain ordinary timing.}}
+lappend findings {checks cdc tag CDC_COHERENCY_RECONV_SEQ fields {ConvergencePoint csr/crossing/requests/g_dst_side.valid/D ConvControlPathList:ConvergingControlPath:SyncOutput {csr/crossing/requests/u_s_to_d/g[0].rg/Q[1] csr/crossing/responses/u_d_to_s/g[0].rg/Q[1]}} reason {G2: independent local enqueue/dequeue/control credits may arrive at different times. Custody is held by the complete mailbox/FIFO protocol; tagged per-channel debt, not simultaneous synchronized transitions, governs reset completion.}}
+lappend findings {checks cdc tag CDC_COHERENCY_RECONV_SEQ fields {ConvergencePoint endpoint/reader/pending/u_controller/update_state ConvControlPathList:ConvergingControlPath:SyncOutput {request_crossing/queue/u_synchronizer_wp/g[3].rg/Q[1] request_crossing/queue/u_synchronizer_wp/g[2].rg/Q[1] request_crossing/queue/u_synchronizer_wp/g[1].rg/Q[1] request_crossing/queue/u_synchronizer_wp/g[0].rg/Q[1] response_crossing/queue/u_synchronizer_rp/g[3].rg/Q[1] response_crossing/queue/u_synchronizer_rp/g[2].rg/Q[1] response_crossing/queue/u_synchronizer_rp/g[1].rg/Q[1] response_crossing/queue/u_synchronizer_rp/g[0].rg/Q[1]}} reason {G2: independent local enqueue/dequeue/control credits may arrive at different times. Custody is held by the complete mailbox/FIFO protocol; tagged per-channel debt, not simultaneous synchronized transitions, governs reset completion.}}
+lappend findings {checks cdc tag CDC_COHERENCY_ASYNCSRCS_RECONV_SEQ fields {ConvergencePoint {request_crossing/queue/word_count[3]} ConvControlPathList:ConvergingControlPath:SyncOutput {csr/crossing/requests/u_s_to_d/g[0].rg/Q[1] csr/crossing/responses/u_d_to_s/g[0].rg/Q[1] request_crossing/queue/u_synchronizer_rp/g[3].rg/Q[1] request_crossing/queue/u_synchronizer_rp/g[2].rg/Q[1] request_crossing/queue/u_synchronizer_rp/g[1].rg/Q[1] request_crossing/queue/u_synchronizer_rp/g[0].rg/Q[1] response_crossing/queue/u_synchronizer_wp/g[3].rg/Q[1] response_crossing/queue/u_synchronizer_wp/g[2].rg/Q[1] response_crossing/queue/u_synchronizer_wp/g[1].rg/Q[1] response_crossing/queue/u_synchronizer_wp/g[0].rg/Q[1]}} reason {G2: independent local enqueue/dequeue/control credits may arrive at different times. Custody is held by the complete mailbox/FIFO protocol; tagged per-channel debt, not simultaneous synchronized transitions, governs reset completion.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName reg_rst_n NonResetInstance {csr/frontend/aw_storage/g_forward.data.address[31:0]}} reason {D1: reset clears slice valid/occupied, not payload contents; no consumer accepts payload until a fresh handshake establishes validity.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName reg_rst_n NonResetInstance {csr/frontend/aw_storage/g_forward.data.identity[0]}} reason {D1: reset clears slice valid/occupied, not payload contents; no consumer accepts payload until a fresh handshake establishes validity.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName reg_rst_n NonResetInstance {csr/frontend/w_storage/g_forward.data.data[31:0]}} reason {D1: reset clears slice valid/occupied, not payload contents; no consumer accepts payload until a fresh handshake establishes validity.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName reg_rst_n NonResetInstance {csr/frontend/w_storage/g_forward.data.strobe[3:0]}} reason {D1: reset clears slice valid/occupied, not payload contents; no consumer accepts payload until a fresh handshake establishes validity.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName reg_rst_n NonResetInstance {csr/frontend/ar_storage/g_forward.data.address[31:0]}} reason {D1: reset clears slice valid/occupied, not payload contents; no consumer accepts payload until a fresh handshake establishes validity.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName reg_rst_n NonResetInstance {csr/frontend/ar_storage/g_forward.data.identity[0]}} reason {D1: reset clears slice valid/occupied, not payload contents; no consumer accepts payload until a fresh handshake establishes validity.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[0].source[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[3].source[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[2].source[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[6].destination[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[10].destination[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[13].length{ [0] ,[3:6] }}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[15].source[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[4].length{ [0] ,[3:6] }}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[13].destination[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[6].source[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[8].source[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[8].length{ [0] ,[3:6] }}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[8].destination[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[5].length{ [0] ,[3:6] }}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[11].length{ [0] ,[3:6] }}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[7].source[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[12].length{ [0] ,[3:6] }}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[3].destination[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[13].source[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[9].destination[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[3].length{ [0] ,[3:6] }}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[4].source[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[1].source[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[12].source[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[15].length{ [0] ,[3:6] }}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[9].length{ [0] ,[3:6] }}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[6].length{ [0] ,[3:6] }}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[0].destination[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[14].destination[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[2].length{ [0] ,[3:6] }}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[10].length{ [0] ,[3:6] }}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[9].source[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[12].destination[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[11].source[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[14].length{ [0] ,[3:6] }}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[5].destination[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[4].destination[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[5].source[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[10].source[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[1].length{ [0] ,[3:6] }}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[7].length{ [0] ,[3:6] }}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[0].length{ [0] ,[3:6] }}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[15].destination[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[1].destination[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[7].destination[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[14].source[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[2].destination[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/chunks[11].destination[0:63]}} reason {D2: cold/channel reset clears per-channel active and slot states. Allocation writes every chunk field before Read becomes valid; no stale row can issue.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/prepared_data[511:0]}} reason {D3: payload RAM/cache contents are resetless. Successful reads establish row validity; only qualified RAM reads establish the tagged prepared-write cache. Clearing one owner cannot invalidate or reuse another owner's row.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/buffers/raw_read.data[511:0]}} reason {D3: payload RAM/cache contents are resetless. Successful reads establish row validity; only qualified RAM reads establish the tagged prepared-write cache. Clearing one owner cannot invalidate or reuse another owner's row.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {engine/copy/buffers/u_ram/words[0:15][511:0]}} reason {D3: payload RAM/cache contents are resetless. Successful reads establish row validity; only qualified RAM reads establish the tagged prepared-write cache. Clearing one owner cannot invalidate or reuse another owner's row.}}
+lappend findings {checks {cdc rdc} tag SETUP_RESET_DRIVING_NON_ASYNC_PIN fields {ResetName core_rst_n NonResetInstance {request_crossing/queue/ram{ [0:7][621:518] ,[0:7][516:0] }}} reason {D4: async FIFO payload has no content reset. Coordinated cold reset clears pointers; complete held-row custody covers channel and slot tags with payload before destination acceptance. No hot domain reset is supported.}}
+lappend findings {checks {cdc rdc} tag INTEGRITY_RESET_ASYNC_AND_SYNC_USAGE fields {ResetObject core_rst_n Instance1 {irq[0]} Instance2 {engine/copy/buffers/u_ram/read_port.data[0]} ResetType1 Asynchronous ResetType2 synchronously} reason {D5: reset-controlled qualified read enable affects resetless RAM output only while invalid; payload consumers require the registered loading/prepared validity. Reset release remains synchronized per domain.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 41 fields {DestObject {engine/eligible/OUT[1:0]} DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R2: this exact two-channel elaborated intermediate has zero native flat fanout and no endpoints. Live choice/selected nets have positive fanout. It is not the live arbitration consumer; no other count or endpoint inherits this exception.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 74 fields {DestObject {engine/eligible/OUT[1:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R2: this exact two-channel elaborated intermediate has zero native flat fanout and no endpoints. Live choice/selected nets have positive fanout. It is not the live arbitration consumer; no other count or endpoint inherits this exception.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 41 fields {DestObject engine/copy/buffers/collision DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 74 fields {DestObject engine/copy/buffers/collision DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 41 fields {DestObject {endpoint/writer/responses/u_controller/i_data.channel[2:0]} DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 74 fields {DestObject {endpoint/writer/responses/u_controller/i_data.channel[2:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 41 fields {DestObject {endpoint/writer/responses/u_controller/i_data.slot[3:0]} DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 74 fields {DestObject {endpoint/writer/responses/u_controller/i_data.slot[3:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 41 fields {DestObject {endpoint/reader/pending/u_controller/i_data.tag.channel[2:0]} DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 74 fields {DestObject {endpoint/reader/pending/u_controller/i_data.tag.channel[2:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 41 fields {DestObject {endpoint/reader/pending/u_controller/i_data.tag.slot[3:0]} DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 74 fields {DestObject {endpoint/reader/pending/u_controller/i_data.tag.slot[3:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 41 fields {DestObject {endpoint/reader/pending/u_controller/i_data.lane[2:0]} DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 76 fields {DestObject {endpoint/reader/pending/u_controller/i_data.lane[2:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 41 fields {DestObject {endpoint/reader/pending/u_controller/i_data.size[1:0]} DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 74 fields {DestObject {endpoint/reader/pending/u_controller/i_data.size[1:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 2 fields {DestObject {endpoint/reader/pending/u_controller/i_data.size[0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 41 fields {DestObject {endpoint/reader/pending/u_controller/i_data.length[2:0]} DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 74 fields {DestObject {endpoint/reader/pending/u_controller/i_data.length[2:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 41 fields {DestObject {endpoint/writer/addresses/u_controller/i_data.channel[2:0]} DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 74 fields {DestObject {endpoint/writer/addresses/u_controller/i_data.channel[2:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 41 fields {DestObject {endpoint/writer/addresses/u_controller/i_data.address[63:0]} DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 76 fields {DestObject {endpoint/writer/addresses/u_controller/i_data.address[63:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 41 fields {DestObject {endpoint/writer/addresses/u_controller/i_data.selector[31:0]} DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 76 fields {DestObject {endpoint/writer/addresses/u_controller/i_data.selector[31:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 41 fields {DestObject {endpoint/writer/addresses/u_controller/i_data.size[1:0]} DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 74 fields {DestObject {endpoint/writer/addresses/u_controller/i_data.size[1:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 2 fields {DestObject {endpoint/writer/addresses/u_controller/i_data.size[0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 41 fields {DestObject {endpoint/writer/addresses/u_controller/i_data.length[2:0]} DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 74 fields {DestObject {endpoint/writer/addresses/u_controller/i_data.length[2:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 43 fields {DestObject {endpoint/writer/data/u_controller/i_data.data[511:0]} DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 76 fields {DestObject {endpoint/writer/data/u_controller/i_data.data[511:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 2 fields {DestObject {endpoint/writer/data/u_controller/i_data.data[191:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 2 fields {DestObject {endpoint/writer/data/u_controller/i_data.data[95:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 41 fields {DestObject {endpoint/writer/data/u_controller/i_data.lane[2:0]} DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 76 fields {DestObject {endpoint/writer/data/u_controller/i_data.lane[2:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 41 fields {DestObject {endpoint/writer/data/u_controller/i_data.size[1:0]} DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 74 fields {DestObject {endpoint/writer/data/u_controller/i_data.size[1:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 41 fields {DestObject {endpoint/writer/data/u_controller/i_data.length[2:0]} DestObjectType unconnected RdcSourceResets:ResetName bus_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 74 fields {DestObject {endpoint/writer/data/u_controller/i_data.length[2:0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
+lappend findings {checks rdc tag RDC_CORRUPT_OBSERVED expected_count 2 fields {DestObject {endpoint/writer/data/u_controller/i_data.size[0]} DestObjectType unconnected RdcSourceResets:ResetName core_rst_n DestClockInfoList:DestClockInfo:ClockName 'no-clock'} reason {R1: this exact unconnected/no-clock sink is in disabled FIFO data-match or RAM forwarding logic; actual stored payload has a different consumer path. Source reset and count are retained as coverage checks, not as the safety proof.}}
 return [dict create identity $identity findings $findings]

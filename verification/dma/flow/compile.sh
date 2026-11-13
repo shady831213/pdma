@@ -10,6 +10,8 @@ main() {
     trap 'exit 143' TERM
     snapshot=$(realpath "${1:?Usage: compile.sh SNAPSHOT NEW_BUILD}")
     build=$(realpath -m "${2:?Usage: compile.sh SNAPSHOT NEW_BUILD}")
+    channels=${PDMA_CHANNEL_COUNT:-2}
+    [[ $channels =~ ^[1-8]$ ]] || { printf 'PDMA_CHANNEL_COUNT must be in 1..8\n' >&2; exit 2; }
     pdma_environment verification
     : "${SVT_COMMON_HOME:?Configure the VIP common installation}"
     : "${SVT_AMBA_HOME:?Configure the AXI VIP installation}"
@@ -17,6 +19,7 @@ main() {
     : "${DESIGNWARE_HOME:?Configure the VIP installation root}"
     export JVSUK_HOME SVT_COMMON_HOME SVT_AMBA_HOME
     pdma_new_run "$build"
+    printf 'channel_count=%s\n' "$channels" > "$build/configuration.txt"
     bash "$root/verification/dma/flow/prepare-jarvisuk.sh" "$JVSUK_HOME" "$build/jarvisuk"
     export JVSUK_HOME="$build/jarvisuk"
     (cd "$snapshot" && sha256sum --check --status snapshot.sha256)
@@ -31,9 +34,10 @@ main() {
         "$root/tools/rtl-flow/ip/bundle.py" \
         "$root/verification/dma/flow/prepare-jarvisuk.sh" \
         "$root/verification/dma/dependencies/jarvisuk.lock.json" \
-        "$snapshot/snapshot.sha256" > "$build/flow.sha256"
+        "$snapshot/snapshot.sha256" "$build/configuration.txt" > "$build/flow.sha256"
     pdma_execute "${PDMA_COMPILE_TIMEOUT:-1200}" "$build/console.log" "${PDMA_SIM_COMPILER:-vcs}" \
         -full64 -sverilog -ntb_opts uvm-1.2 -timescale=1ns/1ps -j4 \
+        "+define+PDMA_CHANNEL_COUNT=$channels" \
         "+define+DESIGNWARE_INCDIR=$DESIGNWARE_HOME" \
         -cm line+cond+tgl+branch -cm_dir "$build/coverage.vdb" \
         -f "$snapshot/sources.f" "$custody" -f tb/vip.f -top pdma_vip_top \

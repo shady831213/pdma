@@ -1,328 +1,388 @@
-// Command owner: Fetch, Decode, Fence and error publication. CopyWindow owns payload progress.
-// This initial engine implements Linear Copy and Fence; other valid opcodes stop with an event.
-pub module CopyEngine (
-    clk            : input   clock                        ,
-    rst_n          : input   reset_async_low              ,
-    command        : input   RegisterState::Ring          ,
-    events         : input   RegisterState::Ring          ,
-    configuration  : input   RegisterState::ChannelConfig ,
-    actions        : input   RegisterState::ChannelActions,
-    reset_all      : input   logic                        ,
-    fatal_in       : input   logic                        ,
-    event_geometry : input   logic                        ,
-    event_ready    : input   logic                        ,
-    status         : output  RegisterState::ChannelStatus ,
-    clear          : output  logic                        ,
-    command_advance: output  logic                        ,
-    event_advance  : output  logic                        ,
-    internal_fatal : output  logic                        ,
-    memory         : modport CopyMemoryPort::master       ,
+// One shared command/datapath over channel-owned contexts. Returns and reset
+// acknowledgements update their resource owners even after a closing grant yields.
+pub module CopyEngine #(
+    param CHANNEL_COUNT: u32 = 1,
+) (
+    clk            : input   clock                                                       ,
+    rst_n          : input   reset_async_low                                             ,
+    command        : input   RegisterState::Ring                          [CHANNEL_COUNT],
+    events         : input   RegisterState::Ring                          [CHANNEL_COUNT],
+    configuration  : input   RegisterState::ChannelConfig                 [CHANNEL_COUNT],
+    actions        : input   RegisterState::ChannelActions                [CHANNEL_COUNT],
+    reset_all      : input   logic                                                       ,
+    global_blocked : input   logic                                                       ,
+    global_clear   : input   logic                                                       ,
+    fatal_in       : input   logic                                                       ,
+    event_geometry : input   logic                        <CHANNEL_COUNT>                ,
+    event_ready    : input   logic                        <CHANNEL_COUNT>                ,
+    status         : output  RegisterState::ChannelStatus                 [CHANNEL_COUNT],
+    clear          : output  logic                        <CHANNEL_COUNT>                ,
+    command_advance: output  logic                        <CHANNEL_COUNT>                ,
+    event_advance  : output  logic                        <CHANNEL_COUNT>                ,
+    internal_fatal : output  logic                                                       ,
+    memory         : modport CopyMemoryPort::master                                      ,
 ) {
-    enum Phase: logic<4> {
-        Idle,
-        Fetch,
-        FetchReturn,
-        Decode,
-        Copy,
-        FenceWrite,
-        FenceReturn,
-        ParkFence,
-        Publish,
-        PublishReturn,
-        Stopped,
-    }
-    var phase             : Phase     ;
-    var closing           : logic     ;
-    var descriptor        : logic<768>;
-    var fetched           : logic<7>  ;
-    var descriptor_address: logic<64> ;
-    var fence_address     : logic<64> ;
-    var error_prefix      : logic<64> ;
-    var fence_data        : logic<512>;
-    var error_code        : logic<32> ;
-    var stopped           : logic     ;
-    var channel_fatal     : logic<32> ;
-    var bug               : logic     ;
-    var fetch_amount      : logic<7>  ;
-    var event_offset      : logic<5>  ;
-    var event_amount      : logic<5>  ;
-    var copy_drained      : logic     ;
-    let shutdown          : logic      = closing || actions.reset_request || reset_all;
-    let waiting           : logic      = phase == Phase::FetchReturn || phase == Phase::FenceReturn || phase
-        == Phase::PublishReturn || (phase == Phase::Copy && !copy_drained);
-    let source_sum        : logic<65>  = (descriptor[319:256] as 65) + (descriptor[383:320] as 65);
-    let destination_sum   : logic<65>  = (descriptor[575:512] as 65) + (descriptor[639:576] as 65);
-    let source_end        : logic<65>  = source_sum + (descriptor[191:128] as 65);
-    let destination_end   : logic<65>  = destination_sum + (descriptor[191:128] as 65);
-    let fence             : logic      = descriptor[7:0] == 6;
-    let fence_bytes       : logic<7>   = if descriptor[255:224] == 0 ? 4 : 8;
-    let fence_end         : logic<65>  = (descriptor[191:128] as 65) + (fence_bytes as 65);
-    let fetch_address     : logic<64>  = descriptor_address + fetched;
-    let descriptor_start  : logic<65>  = (command.base as 65) + ((command.consumer & (command.capacity - 1)) as 65)
-        * CommandLayout::EXTENT;
-    let descriptor_end    : logic<65>  = descriptor_start + CommandLayout::EXTENT;
-    let event_start       : logic<65>  = (events.base as 65) + ((events.producer & (events.capacity - 1)) as 65)
-        * EventLayout::EXTENT;
-    let event_end         : logic<65>  = event_start + EventLayout::EXTENT;
-    let event_address     : logic<64>  = (event_start as 64) + event_offset;
-    inst control: CopyMemoryPort;
+    var contexts           : CommandState::Context                           [CHANNEL_COUNT];
+    var closing            : logic                <CHANNEL_COUNT>                           ;
+    var shutdown           : logic                <CHANNEL_COUNT>                           ;
+    var locked             : logic                                                          ;
+    var owner              : CopyMemory::Channel                                            ;
+    var cursor             : CopyMemory::Channel                                            ;
+    var eligible           : logic                <CopyMemory::MAX_CHANNELS>                ;
+    var choice             : logic                <CopyMemory::MAX_CHANNELS>                ;
+    var selected           : CopyMemory::Channel                                            ;
+    var selected_valid     : logic                                                          ;
+    var bug                : logic                                                          ;
+    var next               : CommandState::Context                                          ;
+    var release_owner      : logic                                                          ;
+    let current            : CommandState::Context                                           = contexts[selected];
+    let descriptor         : logic                <768>                                      = current.descriptor;
+    let fence_data         : logic                <512>                                      = descriptor[319:256] as 512;
+    let source_sum         : logic                <65>                                       = (descriptor[319:256] as 65)
+        + (descriptor[383:320] as 65);
+    let destination_sum    : logic                <65>                                       = (descriptor[575:512] as 65)
+        + (descriptor[639:576] as 65);
+    let source_end         : logic                <65>                                       = source_sum
+        + (descriptor[191:128] as 65);
+    let destination_end    : logic                <65>                                       = destination_sum
+        + (descriptor[191:128] as 65);
+    let fence              : logic                                                           = descriptor[7:0] == 6;
+    let fence_bytes        : logic                <7>                                        = if descriptor[255:224]
+        == 0 ?
+        4
+    :
+        8
+    ;
+    let fence_end          : logic                <65>                                       = (descriptor[191:128] as 65)
+        + (fence_bytes as 65);
+    let descriptor_start   : logic                <65>                                       = (command[selected].base as 65)
+        + ((command[selected].consumer & (command[selected].capacity - 1)) as 65) * CommandLayout::EXTENT;
+    let descriptor_end     : logic                <65>                                       = descriptor_start
+        + CommandLayout::EXTENT;
+    let fetch_address      : logic                <64>                                       = (descriptor_start as 64)
+        + current.fetched;
+    let event_start        : logic                <65>                                       = (events[selected].base as 65)
+        + ((events[selected].producer & (events[selected].capacity - 1)) as 65) * EventLayout::EXTENT;
+    let event_end          : logic                <65>                                       = event_start
+        + EventLayout::EXTENT;
+    let event_address      : logic                <64>                                       = (event_start as 64)
+        + current.event_offset;
+    let owner_return       : logic                                                           = memory.returned
+        && memory.accepted && memory.receipt.tag.channel == selected;
+    let control_return     : logic                                                           = owner_return
+        && memory.receipt.tag.slot == 0;
+    let protocol_failure   : logic                                                           = memory.returned
+        && memory.receipt.protocol_error;
+    let globally_stopped   : logic                                                           = fatal_in
+        || protocol_failure || global_blocked;
+    var fetch_amount       : logic                <7>                                       ;
+    var event_amount       : logic                <5>                                       ;
+    var copy_start         : logic                <CHANNEL_COUNT>                           ;
+    var copy_cancel        : logic                <CHANNEL_COUNT>                           ;
+    var copy_done          : logic                <CHANNEL_COUNT>                           ;
+    var copy_drained       : logic                <CHANNEL_COUNT>                           ;
+    var copy_parked        : logic                <CHANNEL_COUNT>                           ;
+    var copy_error         : logic                <32>                       [CHANNEL_COUNT];
+    var copy_prefix        : logic                <64>                       [CHANNEL_COUNT];
+    var copy_error_ready   : logic                <CHANNEL_COUNT>                           ;
+    var copy_protocol_error: logic                <CHANNEL_COUNT>                           ;
+    var resumes            : logic                <CHANNEL_COUNT>                           ;
     inst payload: CopyMemoryPort;
-    var copy_start         : logic    ;
-    var copy_done          : logic    ;
-    var copy_parked        : logic    ;
-    var copy_error         : logic<32>;
-    var copy_prefix        : logic<64>;
-    var copy_error_ready   : logic    ;
-    var copy_protocol_error: logic    ;
-    let copying            : logic     = phase == Phase::Copy;
-    assign memory.valid     = if copying ? payload.valid : control.valid;
-    assign memory.request   = if copying ? payload.request : control.request;
-    assign memory.accepted  = if copying ? payload.accepted : control.accepted;
-    assign control.ready    = memory.ready && !copying;
-    assign payload.ready    = memory.ready && copying;
-    assign control.returned = memory.returned && !copying;
-    assign payload.returned = memory.returned && copying;
-    assign control.receipt  = memory.receipt;
+    let copying: logic = selected_valid && current.phase == CommandState::Phase::Copy;
+    assign payload.ready    = memory.ready && copying && configuration[selected].enable && !globally_stopped;
+    assign payload.returned = memory.returned && memory.receipt.tag.slot != 0;
     assign payload.receipt  = memory.receipt;
-    inst copy: CopyWindow (
-        clk                                        ,
-        rst_n                                      ,
-        start              : copy_start            ,
-        cancel             : shutdown || fatal_in,
-        clear                                      ,
-        resume             : actions.resume_request,
-        source             : source_sum as 64      ,
-        destination        : destination_sum as 64 ,
-        length             : descriptor[191:128]   ,
-        source_context     : descriptor[223:192]   ,
-        destination_context: descriptor[255:224]   ,
-        done               : copy_done             ,
-        drained            : copy_drained          ,
-        parked             : copy_parked           ,
-        error_code         : copy_error            ,
-        error_prefix       : copy_prefix           ,
-        error_ready        : copy_error_ready      ,
-        protocol_error     : copy_protocol_error   ,
-        memory             : payload               ,
+    inst copy: CopyWindow #(
+        CHANNEL_COUNT  ,
+    ) (
+        clk                                       ,
+        rst_n                                     ,
+        selected                                  ,
+        selected_valid     : copying              ,
+        start              : copy_start           ,
+        cancel             : copy_cancel          ,
+        clear                                     ,
+        resume             : resumes              ,
+        source             : source_sum as 64     ,
+        destination        : destination_sum as 64,
+        length             : descriptor[191:128]  ,
+        source_context     : descriptor[223:192]  ,
+        destination_context: descriptor[255:224]  ,
+        done               : copy_done            ,
+        drained            : copy_drained         ,
+        parked             : copy_parked          ,
+        error_code         : copy_error           ,
+        error_prefix       : copy_prefix          ,
+        error_ready        : copy_error_ready     ,
+        protocol_error     : copy_protocol_error  ,
+        memory             : payload              ,
     );
-    assign internal_fatal   = bug;
-    assign status           = RegisterState::ChannelStatus'{
-        resetting: closing                                                           ,
-        fatal    : channel_fatal                                                     ,
-        faulted  : phase == Phase::ParkFence || (phase == Phase::Copy && copy_parked),
-        error    : stopped || (phase == Phase::Copy && copy_error != 0),
-        trap     : 0                                                                 ,
-    };
-    assign clear            = closing && !waiting;
-    assign command_advance  = phase == Phase::Decode && !shutdown && descriptor[7:0] <= 8 && descriptor[15:10] == 0;
-    assign event_advance    = phase == Phase::PublishReturn && control.returned && !control.receipt.failed
-        && !control.receipt.protocol_error && !shutdown && event_offset + event_amount == EventLayout::EXTENT;
-    assign control.accepted = waiting && phase != Phase::Copy;
+    assign internal_fatal = bug;
     always_comb {
-        fetch_amount = if fetched <= 32 ? 64 : (96 - fetched) as 7;
+        eligible = 0;
+        for channel in 0..CHANNEL_COUNT {
+            shutdown[channel]    = closing[channel] || actions[channel].reset_request || reset_all;
+            copy_cancel[channel] = shutdown[channel] || fatal_in || protocol_failure;
+            resumes[channel]     = actions[channel].resume_request;
+            clear[channel]       = closing[channel] && !CommandState::waiting(contexts[channel].phase)
+                && copy_drained[channel];
+            status[channel]      = RegisterState::ChannelStatus'{
+                resetting           : closing[channel]       ,
+                fatal               : contexts[channel].fatal,
+                faulted             : contexts[channel].phase == CommandState::Phase::ParkFence
+                    || (contexts[channel].phase == CommandState::Phase::Copy && copy_parked[channel]),
+                error: contexts[channel].stopped
+                    || (contexts[channel].phase == CommandState::Phase::Copy && copy_error[channel] != 0),
+                trap             : 0                                                                                                              ,
+            };
+            eligible[channel] = !globally_stopped && !shutdown[channel] && configuration[channel].enable
+                && !contexts[channel].stopped && contexts[channel].fatal == 0
+                && ((contexts[channel].phase == CommandState::Phase::Idle && command[channel].producer
+                        != command[channel].consumer)
+                    || (contexts[channel].phase == CommandState::Phase::Copy && !copy_parked[channel])
+                    || contexts[channel].phase == CommandState::Phase::FenceWrite);
+        }
+        choice          = common_cell::RoundRobin::<CopyMemory::MAX_CHANNELS>::select(eligible, cursor);
+        selected        = if locked ?
+            owner
+        :
+            common_cell::BoundedIndex::<CopyMemory::MAX_CHANNELS>::encode_onehot(choice)
+        ;
+        selected_valid  = locked || (|choice);
+        memory.accepted = 0;
+        if memory.returned && (memory.receipt.tag.channel as u32) <: CHANNEL_COUNT {
+            memory.accepted = if memory.receipt.tag.slot == 0 ?
+                CommandState::waiting(contexts[memory.receipt.tag.channel].phase)
+            :
+                payload.accepted
+            ;
+        }
+        command_advance = 0;
+        event_advance   = 0;
+        if selected_valid && !shutdown[selected] && !globally_stopped {
+            command_advance[selected] = configuration[selected].enable && current.phase == CommandState::Phase::Decode
+                && descriptor[7:0] <= 8 && descriptor[15:10] == 0;
+            event_advance[selected]   = current.phase == CommandState::Phase::PublishReturn && control_return
+                && !memory.receipt.failed && !memory.receipt.protocol_error && current.event_offset + event_amount
+                == EventLayout::EXTENT;
+        }
+    }
+    always_comb {
+        fetch_amount = if current.fetched <= 32 ? 64 : (96 - current.fetched) as 7;
         if fetch_amount >: 4096 - (fetch_address[11:0] as u32) {
             fetch_amount = (4096 - (fetch_address[11:0] as u32)) as 7;
         }
-        event_amount = (EventLayout::EXTENT - event_offset) as 5;
+        event_amount = (EventLayout::EXTENT - current.event_offset) as 5;
         if event_amount >: 4096 - (event_address[11:0] as u32) {
             event_amount = (4096 - (event_address[11:0] as u32)) as 5;
         }
-        control.request = CopyMemory::Request'{
-            slot           : 0                                                    ,
-            write          : phase == Phase::FenceWrite || phase == Phase::Publish,
-            address        : fence_address                                        ,
-            selector       : descriptor[223:192]                                  ,
-            size           : if fence_bytes == 4 ? 2 : 3,
-            length         : 0                                                    ,
-            data           : fence_data                                           ,
+        memory.request = CopyMemory::Request'{
+            tag           : CopyMemory::Tag'{channel: selected, slot: 0},
+            write         : current.phase == CommandState::Phase::FenceWrite || current.phase
+                == CommandState::Phase::Publish,
+            address : descriptor[191:128]                                                                              ,
+            selector: descriptor[223:192]                                                                              ,
+            size    : if fence_bytes == 4 ? 2 : 3,
+            length  : 0                                                                                                ,
+            data    : fence_data                                                                                       ,
         };
-        if phase == Phase::Fetch {
-            control.request.address  = fetch_address;
-            control.request.selector = configuration.ring_context;
-            control.request.size     = 3;
-            control.request.length   = ((fetch_amount >> 3) - 1) as 3;
+        if current.phase == CommandState::Phase::Fetch {
+            memory.request.address  = fetch_address;
+            memory.request.selector = configuration[selected].ring_context;
+            memory.request.size     = 3;
+            memory.request.length   = ((fetch_amount >> 3) - 1) as 3;
         }
-        if phase == Phase::Publish {
-            control.request.address  = event_address;
-            control.request.selector = configuration.ring_context;
-            control.request.size     = 3;
-            control.request.length   = ((event_amount >> 3) - 1) as 3;
-            control.request.data     = ((descriptor[127:64] as 512) | ((error_code as 512) << 64)
-                    | ((error_prefix as 512) << 128)) >> (event_offset * 8);
+        if current.phase == CommandState::Phase::Publish {
+            memory.request.address  = event_address;
+            memory.request.selector = configuration[selected].ring_context;
+            memory.request.size     = 3;
+            memory.request.length   = ((event_amount >> 3) - 1) as 3;
+            memory.request.data     = ((descriptor[127:64] as 512) | ((current.error_code as 512) << 64)
+                    | ((current.error_prefix as 512) << 128)) >> (current.event_offset * 8);
         }
-        control.valid = !shutdown && !fatal_in
-            && (phase == Phase::Fetch || phase == Phase::FenceWrite
-                || (phase == Phase::Publish && event_geometry && event_ready && !event_end[64]));
+        memory.valid = selected_valid && configuration[selected].enable && !shutdown[selected] && !globally_stopped
+            && (current.phase == CommandState::Phase::Fetch || current.phase == CommandState::Phase::FenceWrite
+                || (current.phase == CommandState::Phase::Publish && event_geometry[selected] && event_ready[selected]
+                    && !event_end[64]));
+        if copying {
+            memory.request = payload.request;
+            memory.valid   = payload.valid && configuration[selected].enable && !globally_stopped;
+        }
+    }
+    always_comb {
+        next = current;
+        if shutdown[selected] {
+            if !CommandState::waiting(current.phase) || control_return {
+                next.phase = CommandState::Phase::Idle;
+            }
+        } else if control_return && memory.receipt.protocol_error {
+            next.phase = CommandState::Phase::Stopped;
+        } else {
+            case current.phase {
+                CommandState::Phase::Idle       : if selected_valid && !globally_stopped {
+                    next.fetched      = 0;
+                    next.descriptor   = 0;
+                    next.error_prefix = 0;
+                    next.event_offset = 0;
+                    if descriptor_end[64] {
+                        next.fatal = ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD as 32;
+                        next.phase = CommandState::Phase::Stopped;
+                    } else {
+                        next.phase = CommandState::Phase::Fetch;
+                    }
+                }
+                CommandState::Phase::Fetch      : if memory.valid && memory.ready {
+                    next.phase = CommandState::Phase::FetchReturn;
+                }
+                CommandState::Phase::FetchReturn: if control_return {
+                    if memory.receipt.failed {
+                        next.fatal = ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD as 32;
+                        next.phase = CommandState::Phase::Stopped;
+                    } else {
+                        next.descriptor = descriptor | ((memory.receipt.data as 768) << (current.fetched * 8));
+                        if current.fetched + fetch_amount == 96 {
+                            next.phase = CommandState::Phase::Decode;
+                        } else {
+                            next.fetched = current.fetched + fetch_amount;
+                            next.phase   = CommandState::Phase::Fetch;
+                        }
+                    }
+                }
+                CommandState::Phase::Decode     : if !globally_stopped && configuration[selected].enable {
+                    if descriptor[7:0] >: 8 || descriptor[15:10] != 0 {
+                        next.fatal = ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD as 32;
+                        next.phase = CommandState::Phase::Stopped;
+                    } else if fence {
+                        if descriptor[255:224] >: 1 {
+                            next.fatal = ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD as 32;
+                            next.phase = CommandState::Phase::Stopped;
+                        } else if descriptor[129:128] != 0 || (fence_bytes == 8 && descriptor[130]) || fence_end[64] {
+                            next.error_code = 7;
+                            next.stopped    = 1;
+                            next.phase      = CommandState::Phase::Publish;
+                        } else {
+                            next.phase = CommandState::Phase::FenceWrite;
+                        }
+                    } else if descriptor[7:0] != 0 || descriptor[9:8] != 0 {
+                        next.error_code = 6;
+                        next.stopped    = 1;
+                        next.phase      = CommandState::Phase::Publish;
+                    } else if descriptor[191:128] == 0 {
+                        next.phase = CommandState::Phase::Idle;
+                    } else if source_sum[64] || destination_sum[64] || source_end[64] || destination_end[64] {
+                        next.error_code = 1;
+                        next.stopped    = 1;
+                        next.phase      = CommandState::Phase::Publish;
+                    } else {
+                        next.phase = CommandState::Phase::Copy;
+                    }
+                }
+                CommandState::Phase::Copy       : {
+                    if copy_protocol_error[selected] && copy_drained[selected] {
+                        next.phase = CommandState::Phase::Stopped;
+                    } else if copy_error[selected] != 0 && copy_error_ready[selected] && copy_drained[selected] {
+                        next.error_prefix = copy_prefix[selected];
+                        next.error_code   = copy_error[selected];
+                        next.stopped      = 1;
+                        next.phase        = CommandState::Phase::Publish;
+                    } else if copy_done[selected] {
+                        next.phase = CommandState::Phase::Idle;
+                    }
+                }
+                CommandState::Phase::FenceWrite : if memory.valid && memory.ready {
+                    next.phase = CommandState::Phase::FenceReturn;
+                }
+                CommandState::Phase::FenceReturn: if control_return {
+                    if memory.receipt.failed {
+                        if memory.receipt.page_fault {
+                            next.phase = CommandState::Phase::ParkFence;
+                        } else {
+                            next.error_code = 3;
+                            next.stopped    = 1;
+                            next.phase      = CommandState::Phase::Publish;
+                        }
+                    } else {
+                        next.phase = CommandState::Phase::Idle;
+                    }
+                }
+                CommandState::Phase::ParkFence  : {}
+                CommandState::Phase::Publish: {
+                    if !event_geometry[selected] || event_end[64] {
+                        next.fatal = ChannelRecoveryLayout::FATAL_CODE_EVENTCONFIGURATION as 32;
+                        next.phase = CommandState::Phase::Stopped;
+                    } else if !event_ready[selected] {
+                        next.fatal = ChannelRecoveryLayout::FATAL_CODE_EVENTFULL as 32;
+                        next.phase = CommandState::Phase::Stopped;
+                    } else if memory.valid && memory.ready {
+                        next.phase = CommandState::Phase::PublishReturn;
+                    }
+                }
+                CommandState::Phase::PublishReturn: if control_return {
+                    if memory.receipt.failed {
+                        next.fatal = ChannelRecoveryLayout::FATAL_CODE_EVENTWRITE as 32;
+                        next.phase = CommandState::Phase::Stopped;
+                    } else if current.event_offset + event_amount == EventLayout::EXTENT {
+                        next.phase = CommandState::Phase::Stopped;
+                    } else {
+                        next.event_offset = current.event_offset + event_amount;
+                        next.phase        = CommandState::Phase::Publish;
+                    }
+                }
+                CommandState::Phase::Stopped      : {}
+            }
+        }
+        release_owner = shutdown[selected] || globally_stopped || next.phase == CommandState::Phase::Idle || next.phase
+            == CommandState::Phase::Stopped || next.phase == CommandState::Phase::ParkFence
+            || (current.phase == CommandState::Phase::Copy && copy_parked[selected]);
     }
     always_ff (clk, rst_n) {
         if_reset {
-            phase              = Phase::Idle;
-            closing            = 0;
-            descriptor         = 0;
-            fetched            = 0;
-            descriptor_address = 0;
-            fence_address      = 0;
-            error_prefix       = 0;
-            fence_data         = 0;
-            error_code         = 0;
-            stopped            = 0;
-            channel_fatal      = 0;
-            bug                = 0;
-            event_offset       = 0;
-            copy_start         = 0;
+            locked     = 0;
+            owner      = 0;
+            cursor     = 0;
+            bug        = 0;
+            contexts   = '{default: CommandState::EMPTY};
+            closing    = 0;
+            copy_start = 0;
         } else {
             copy_start = 0;
-            if actions.reset_request || reset_all {
-                closing = 1;
+            if global_clear {
+                bug = 0;
+            } else if protocol_failure || (|copy_protocol_error) {
+                bug = 1;
             }
-            if clear {
-                closing       = 0;
-                phase         = Phase::Idle;
-                descriptor    = 0;
-                fetched       = 0;
-                error_prefix  = 0;
-                fence_data    = 0;
-                stopped       = 0;
-                channel_fatal = 0;
-                event_offset  = 0;
-                // Device fatal is cleared only by the DMA-wide lifecycle owner.
-                if reset_all {
-                    bug = 0;
+            if selected_valid {
+                if !locked {
+                    owner  = selected;
+                    cursor = if (selected as u32) + 1 >= CHANNEL_COUNT ? 0 : selected + 1;
                 }
-            } else if shutdown {
-                if phase == Phase::Copy {
-                    if copy_drained {
-                        phase = Phase::Idle;
-                    }
-                } else if !waiting || control.returned {
-                    phase = Phase::Idle;
+                locked = !release_owner;
+            }
+            for channel in 0..CHANNEL_COUNT {
+                if actions[channel].reset_request || reset_all {
+                    closing[channel] = 1;
                 }
-            } else if waiting && control.returned && control.receipt.protocol_error {
-                bug   = 1;
-                phase = Phase::Stopped;
-            } else {
-                case phase {
-                    Phase::Idle       : if configuration.enable && !fatal_in && !stopped && channel_fatal == 0
-                        && command.producer != command.consumer {
-                        descriptor_address = descriptor_start as 64;
-                        fetched            = 0;
-                        descriptor         = 0;
-                        error_prefix       = 0;
-                        event_offset       = 0;
-                        if descriptor_end[64] {
-                            channel_fatal = ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD as 32;
-                            phase         = Phase::Stopped;
-                        } else {
-                            phase = Phase::Fetch;
-                        }
+                if clear[channel] {
+                    contexts[channel] = CommandState::EMPTY;
+                    // A new reset scope wins over the old cleanup acknowledgement.
+                    // Global collection starts at this edge and must still see
+                    // this owner's acknowledgement on the following cycle.
+                    closing[channel] = actions[channel].reset_request || reset_all;
+                } else if selected_valid && selected == channel {
+                    contexts[channel] = next;
+                    if current.phase == CommandState::Phase::Decode && next.phase == CommandState::Phase::Copy
+                        && !shutdown[channel] && !globally_stopped {
+                        copy_start[channel] = 1;
                     }
-                    Phase::Fetch      : if control.ready && control.valid {
-                        phase = Phase::FetchReturn;
-                    }
-                    Phase::FetchReturn: if control.returned {
-                        if control.receipt.failed {
-                            channel_fatal = ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD as 32;
-                            phase         = Phase::Stopped;
-                        } else {
-                            descriptor = descriptor | ((control.receipt.data as 768) << (fetched * 8));
-                            if fetched + fetch_amount == 96 {
-                                phase = Phase::Decode;
-                            } else {
-                                fetched += fetch_amount;
-                                phase   =  Phase::Fetch;
-                            }
-                        }
-                    }
-                    Phase::Decode     : {
-                        if descriptor[7:0] >: 8 || descriptor[15:10] != 0 {
-                            channel_fatal = ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD as 32;
-                            phase         = Phase::Stopped;
-                        } else if fence {
-                            if descriptor[255:224] >: 1 {
-                                channel_fatal = ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD as 32;
-                                phase         = Phase::Stopped;
-                            } else if descriptor[129:128] != 0 || (fence_bytes == 8 && descriptor[130])
-                                || fence_end[64] {
-                                error_code = 7;
-                                stopped    = 1;
-                                phase      = Phase::Publish;
-                            } else {
-                                fence_address = descriptor[191:128];
-                                fence_data    = descriptor[319:256] as 512;
-                                phase         = Phase::FenceWrite;
-                            }
-                        } else if descriptor[7:0] != 0 || descriptor[9:8] != 0 {
-                            error_code = 6;
-                            stopped    = 1;
-                            phase      = Phase::Publish;
-                        } else if descriptor[191:128] == 0 {
-                            phase = Phase::Idle;
-                        } else if source_sum[64] || destination_sum[64] || source_end[64] || destination_end[64] {
-                            error_code = 1;
-                            stopped    = 1;
-                            phase      = Phase::Publish;
-                        } else {
-                            phase      = Phase::Copy;
-                            copy_start = 1;
-                        }
-                    }
-                    Phase::Copy: {
-                        if copy_protocol_error {
-                            bug = 1;
-                        }
-                        if copy_protocol_error && copy_drained {
-                            phase = Phase::Stopped;
-                        } else if copy_error != 0 && copy_error_ready && copy_drained {
-                            error_prefix = copy_prefix;
-                            error_code   = copy_error;
-                            stopped      = 1;
-                            phase        = Phase::Publish;
-                        } else if copy_done {
-                            phase = Phase::Idle;
-                        }
-                    }
-                    Phase::FenceWrite : if control.ready && control.valid {
-                        phase = Phase::FenceReturn;
-                    }
-                    Phase::FenceReturn: if control.returned {
-                        if control.receipt.failed {
-                            if control.receipt.page_fault {
-                                phase = Phase::ParkFence;
-                            } else {
-                                error_code = 3;
-                                stopped    = 1;
-                                phase      = Phase::Publish;
-                            }
-                        } else {
-                            phase = Phase::Idle;
-                        }
-                    }
-                    Phase::ParkFence  : if actions.resume_request {
-                        phase = Phase::FenceWrite;
-                    }
-                    Phase::Publish    : {
-                        if !event_geometry || event_end[64] {
-                            channel_fatal = ChannelRecoveryLayout::FATAL_CODE_EVENTCONFIGURATION as 32;
-                            phase         = Phase::Stopped;
-                        } else if !event_ready {
-                            channel_fatal = ChannelRecoveryLayout::FATAL_CODE_EVENTFULL as 32;
-                            phase         = Phase::Stopped;
-                        } else if control.valid && control.ready {
-                            phase = Phase::PublishReturn;
-                        }
-                    }
-                    Phase::PublishReturn: if control.returned {
-                        if control.receipt.failed {
-                            channel_fatal = ChannelRecoveryLayout::FATAL_CODE_EVENTWRITE as 32;
-                            phase         = Phase::Stopped;
-                        } else if event_offset + event_amount == EventLayout::EXTENT {
-                            phase = Phase::Stopped;
-                        } else {
-                            event_offset += event_amount;
-                            phase        =  Phase::Publish;
-                        }
-                    }
-                    Phase::Stopped      : {}
+                } else if memory.returned && memory.accepted && memory.receipt.tag.slot == 0
+                    && memory.receipt.tag.channel == channel {
+                    // Only closing/fatal owners can have a control return after
+                    // yielding. The terminal receipt discharges that obligation.
+                    contexts[channel].phase = CommandState::Phase::Idle;
+                }
+                if contexts[channel].phase == CommandState::Phase::ParkFence && actions[channel].resume_request
+                    && !shutdown[channel] && !clear[channel] {
+                    contexts[channel].phase = CommandState::Phase::FenceWrite;
                 }
             }
         }

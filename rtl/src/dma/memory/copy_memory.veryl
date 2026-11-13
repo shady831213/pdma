@@ -1,9 +1,21 @@
 // First executable profile: 64-bit ordinary AXI5 transfers, bounded bursts.
-// AXI5 AWATOP is zero; atomic capabilities remain disabled. USER carries ContextId.
+// AXI5 AWATOP is zero; atomic capabilities remain disabled.
+// Address USER is {channel, ContextId}; neither field is a platform identity.
 pub package CopyMemory {
-    alias package Bus = $std::axi4_pkg::<64, 8, 1, 32, 1, 2, 32, 2>;
+    const MAX_CHANNELS: u32                 = 8;
+    const CHANNEL_BITS: u32                 = $clog2(MAX_CHANNELS);
+    const CONTEXT_BITS: u32                 = 32;
+    const USER_BITS   : u32                 = CONTEXT_BITS + CHANNEL_BITS;
+    type Channel      = logic<CHANNEL_BITS>;
+    alias package Bus = $std::axi4_pkg::<64, 8, 1, USER_BITS, 1, 2, USER_BITS, 2>;
+    // This fixed transport encoding covers the supported maximum. Eligibility
+    // and wrap use the instantiated channel count, not the tag's binary modulus.
+    struct Tag {
+        channel: Channel   ,
+        slot   : logic  <4>,
+    }
     struct Request {
-        slot    : logic<4>  ,
+        tag     : Tag       ,
         write   : logic     ,
         address : logic<64> ,
         selector: logic<32> ,
@@ -12,7 +24,7 @@ pub package CopyMemory {
         data    : logic<512>,
     }
     struct Receipt {
-        slot          : logic<4>  ,
+        tag           : Tag       ,
         data          : logic<512>,
         failed        : logic     ,
         page_fault    : logic     ,
@@ -21,13 +33,14 @@ pub package CopyMemory {
     // Internal receipt identity is independent of the external AXI ID. Requests
     // within each AXI direction use ID zero and responses therefore stay ordered.
     struct Address {
-        address : logic<64>,
-        selector: logic<32>,
-        size    : logic<3> ,
-        length  : logic<3> ,
+        channel : Channel    ,
+        address : logic  <64>,
+        selector: logic  <32>,
+        size    : logic  <3> ,
+        length  : logic  <3> ,
     }
     struct ReadTracker {
-        slot  : logic<4>,
+        tag   : Tag     ,
         lane  : logic<3>,
         size  : logic<3>,
         length: logic<3>,

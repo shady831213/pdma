@@ -12,7 +12,9 @@ class pdma_env extends uvm_env;
     jvs_irq_vir_sequencer interrupts;
     pdma_notification notification;
     pdma_channel channels[];
+    pdma_device device;
     pdma_irq_handler handlers[];
+    pdma_device_irq_handler device_handler;
     pdma_task_checker checkers[];
     pdma_scenario_coverage coverage_;
     uvm_analysis_port#(pdma_observation) observations;
@@ -28,8 +30,8 @@ class pdma_env extends uvm_env;
             `uvm_fatal("CONTROL_BINDING","Missing test control interface")
         if(!uvm_config_db#(pdma_configuration)::get(this,"","cfg",cfg))
             `uvm_fatal("ENV_CONFIG","Missing test-owned platform configuration")
-        if(cfg.channel_count!=1 || cfg.irq_vectors.size()!=cfg.channel_count)
-            `uvm_fatal("DUT_PROFILE","This RTL profile implements one channel")
+        if(cfg.channel_count!=`PDMA_CHANNEL_COUNT || !(cfg.channel_count inside {[1:8]}) || cfg.irq_vectors.size()!=cfg.channel_count)
+            `uvm_fatal("DUT_PROFILE","Configuration must match the elaborated channel count in 1..8")
         uvm_config_db#(pdma_configuration)::set(this,"memory_bus.slave[0].sequencer","behavior",cfg);
         host_cfg=cfg.system_config(1);
         uvm_config_db#(svt_axi_system_configuration)::set(this,"host_bus","cfg",host_cfg);
@@ -63,7 +65,10 @@ class pdma_env extends uvm_env;
             checkers[i]=pdma_task_checker::type_id::create($sformatf("channel_%0d_checker",i));
             checkers[i].channel_id=i;
         end
-        notification.channels=channels;
+        notification.channels=channels; notification.device_vector=cfg.device_irq_vector;
+        device=new; device.cfg=cfg; device.registers=registers.admin_block.control_block; device.channels=channels;
+        device_handler=new("device_fatal_handler"); device_handler.device=device;
+        device_handler.vector=cfg.device_irq_vector;
         coverage_=pdma_scenario_coverage::type_id::create("coverage",this);
     endfunction
     virtual function void connect_phase(uvm_phase phase);
@@ -76,6 +81,7 @@ class pdma_env extends uvm_env;
     virtual task configure_phase(uvm_phase phase);
         phase.raise_objection(this);
         foreach(channels[i]) interrupts.register_irq(channels[i].vector,handlers[i]);
+        interrupts.register_irq(cfg.device_irq_vector,device_handler);
         phase.drop_objection(this);
     endtask
     virtual task main_phase(uvm_phase phase);
@@ -84,7 +90,7 @@ class pdma_env extends uvm_env;
     function pdma_task_flow task_flow(int channel_id=0);
         pdma_task_flow flow_=pdma_task_flow::type_id::create("task_flow");
         if(channel_id>=channels.size()) `uvm_fatal("CHANNEL_CONFIG","Requested an unimplemented channel")
-        flow_.channel=channels[channel_id]; flow_.checker_=checkers[channel_id];
+        flow_.device=device; flow_.channel=channels[channel_id]; flow_.checker_=checkers[channel_id];
         flow_.memory=memory; flow_.allocator=allocator; flow_.observations=observations;
         return flow_;
     endfunction

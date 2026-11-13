@@ -8,7 +8,7 @@ class pdma_memory_policy extends svt_axi_port_monitor_callback;
     function void apply_access(svt_axi_transaction item);
         bit writing=item.xact_type==svt_axi_transaction::WRITE;
         bit inject;
-        memory.assert_access(item.addr,item.burst_length*(1<<item.burst_size),item.addr_user,writing);
+        memory.assert_access(item.addr,item.burst_length*(1<<item.burst_size),item.addr_user[31:0],writing,item.addr_user[34:32]);
         inject=behavior.fault_enabled && item.addr==behavior.fault_address && writing==behavior.fault_write;
         if(inject) behavior.injected++;
         if(inject && writing && item.data_status==svt_sequence_item::ACCEPT) behavior.w_first_faults++;

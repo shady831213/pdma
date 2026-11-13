@@ -38,6 +38,7 @@ virtual class pdma_base_test extends uvm_test;
     pure virtual task run_scenario();
     virtual task main_phase(uvm_phase phase);
         phase.raise_objection(this);
+        env.device.enable_notifications();
         foreach(env.channels[i]) env.channels[i].setup();
         run_scenario();
         foreach(env.channels[i]) env.channels[i].teardown();
@@ -51,9 +52,15 @@ virtual class pdma_base_test extends uvm_test;
     endfunction
     virtual function void report_phase(uvm_phase phase);
         uvm_report_server reports=uvm_report_server::get_server();
+        int checked_tasks=0;
+        longint unsigned checked_bytes=0;
+        foreach(env.checkers[i]) begin
+            checked_tasks+=env.checkers[i].checked_tasks;
+            checked_bytes+=env.checkers[i].checked_bytes;
+        end
         if(cases==expected_cases && reports.get_severity_count(UVM_ERROR)==0 && reports.get_severity_count(UVM_FATAL)==0) begin
             `uvm_info("TEST_RESULT",$sformatf("test=%s scenarios=%0d checked_tasks=%0d checked_bytes=%0d",get_type_name(),cases,
-                env.checkers[0].checked_tasks,env.checkers[0].checked_bytes),UVM_NONE)
+                checked_tasks,checked_bytes),UVM_NONE)
             $display("PDMA_VIP_PASS test=%s",get_type_name());
         end else `uvm_fatal("TEST_FAILED","Incomplete or failing test")
     endfunction

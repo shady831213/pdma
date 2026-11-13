@@ -19,8 +19,11 @@ geometry and clock domains. Shared serialization, binding and audits live in
 Veryl providers; there is no replacement simulation model or generated RTL stub.
 
 The current inventory is the Copy window's `engine/copy/buffers/u_ram`:
-8 rows of 512 bits, one synchronous read and one write port on `core_clk`, with
-bit write masks and no content reset. Its logical capacity is **4096 bits/512B**.
+`8 * CHANNEL_COUNT` rows of 512 bits, one synchronous read and one write port on
+`core_clk`, with bit write masks and no content reset. The logical reservation is
+512B per channel: 1KiB at the development count of 2 and 4KiB at the maximum of 8.
+The previous single-channel qualification remains a 512B checkpoint; it does not
+qualify the larger configurations.
 Same-address collisions retain the common-cell contract; the budget model does
 not add forwarding or qualify a physical macro's collision behavior.
 

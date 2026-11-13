@@ -14,7 +14,7 @@ module CopyWriteEndpoint (
     var response_empty   : logic                      ;
     var address          : CopyMemory::Address        ;
     var payload          : CopyMemory::WritePayload   ;
-    var slot             : logic                   <4>;
+    var tag              : CopyMemory::Tag            ;
     var beat             : logic                   <3>;
     var addressed        : logic                   <5>;
     var written          : logic                   <5>;
@@ -29,7 +29,8 @@ module CopyWriteEndpoint (
     assign axi.awlen    = address.length as 8;
     assign axi.awsize   = address.size as CopyMemory::Bus::size_t;
     assign axi.awburst  = 2'b01 as CopyMemory::Bus::burst_t;
-    assign axi.awuser   = address.selector;
+    assign axi.awuser   = (address.selector as CopyMemory::USER_BITS)
+        | ((address.channel as CopyMemory::USER_BITS) << CopyMemory::CONTEXT_BITS);
     assign axi.awcache  = 0;
     assign axi.awprot   = 0;
     assign axi.awid     = 0;
@@ -70,9 +71,10 @@ module CopyWriteEndpoint (
         i_pop        : axi.awvalid && axi.awready,
         o_data       : address                   ,
         i_data       : CopyMemory::Address'{
-            address : port.request.address ,
-            selector: port.request.selector,
-            size    : port.request.size    ,
+            channel : port.request.tag.channel,
+            address : port.request.address    ,
+            selector: port.request.selector   ,
+            size    : port.request.size       ,
             length  : port.request.length
         },
     );
@@ -99,9 +101,9 @@ module CopyWriteEndpoint (
         },
     );
     inst responses: $std::fifo #(
-        TYPE         : logic<4>,
-        DEPTH        : 8       ,
-        RESET_DATA_FF: false   ,
+        TYPE         : CopyMemory::Tag,
+        DEPTH        : 8              ,
+        RESET_DATA_FF: false          ,
     ) (
         i_clk        : clk              ,
         i_rst        : rst_n            ,
@@ -112,8 +114,8 @@ module CopyWriteEndpoint (
         o_word_count : _                ,
         i_push       : accept           ,
         i_pop        : response_complete,
-        i_data       : port.request.slot,
-        o_data       : slot             ,
+        i_data       : port.request.tag ,
+        o_data       : tag              ,
     );
     inst receipt: common_cell::ReadyValidSlice #(
         TYPE: CopyMemory::Receipt                        ,
@@ -124,7 +126,7 @@ module CopyWriteEndpoint (
         s_valid: response_complete,
         s_ready: receipt_ready    ,
         s_data : CopyMemory::Receipt'{
-            slot          : slot                                   ,
+            tag           : tag                                    ,
             data          : '0                                     ,
             failed        : (axi.bresp as 2) != 0,
             page_fault    : axi.buser == 1 && (axi.bresp as 2) >= 2,

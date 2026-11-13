@@ -44,12 +44,12 @@ module MemoryStreamTest {
         rst.assert();
         clk.next(3);
         for cycle in 0..100 {
-            port.valid           = offered <: 4;
-            port.request.write   = 1;
-            port.request.slot    = (offered + 1) as 4;
-            port.request.address = 64'h1000 + offered * 64;
-            port.request.size    = 3;
-            port.request.length  = 7;
+            port.valid            = offered <: 4;
+            port.request.write    = 1;
+            port.request.tag.slot = (offered + 1) as 4;
+            port.request.address  = 64'h1000 + offered * 64;
+            port.request.size     = 3;
+            port.request.length   = 7;
             for word in 0..8 {
                 port.request.data[word * 64+:64] = 64'hfedcba9876540000 + offered * 8 + word;
             }

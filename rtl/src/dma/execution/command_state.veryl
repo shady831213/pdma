@@ -1,0 +1,41 @@
+// Channel-owned accepted-command state; combinational execution is shared.
+pub package CommandState {
+    enum Phase: logic<4> {
+        Idle,
+        Fetch,
+        FetchReturn,
+        Decode,
+        Copy,
+        FenceWrite,
+        FenceReturn,
+        ParkFence,
+        Publish,
+        PublishReturn,
+        Stopped,
+    }
+    struct Context {
+        phase       : Phase     ,
+        descriptor  : logic<768>,
+        fetched     : logic<7>  ,
+        error_prefix: logic<64> ,
+        error_code  : logic<32> ,
+        stopped     : logic     ,
+        fatal       : logic<32> ,
+        event_offset: logic<5>  ,
+    }
+    const EMPTY       : Context = Context'{
+        phase       : Phase::Idle,
+        descriptor  : 0          ,
+        fetched     : 0          ,
+        error_prefix: 0          ,
+        error_code  : 0          ,
+        stopped     : 0          ,
+        fatal       : 0          ,
+        event_offset: 0          ,
+    };
+    function waiting (
+        phase: input Phase,
+    ) -> logic {
+        return phase == Phase::FetchReturn || phase == Phase::FenceReturn || phase == Phase::PublishReturn;
+    }
+}

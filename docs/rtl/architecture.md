@@ -265,11 +265,13 @@ Intel DSA 将 WQ、engine 和 group 区分配置，并通过能力提供最大�
 直接解释为执行单元数，也不能把 PASID 标识空间大小当作物理 context table 深度。
 来源：[DSA User Guide，3.2.5](https://cdrdv2-public.intel.com/759709/353216-004-intel-data-streaming-accelerator-user-guide.pdf)。
 
-建议先用下列点作资源/验证扫描，**它们不是已承诺的最大规格**：
+2026-11-13 确认：下一版 RTL 以 `CHANNEL_COUNT` 参数支持 1–8 的所有整数，首版资格
+上限定为 8 channel；这不是修改模型或 contract 的永久上限。当前已实现的完整
+Copy/Fence 切片仍为单 channel。其余维度继续按下表开展资源与验证扫描：
 
 | 维度 | 设计与验证候选 |
 | --- | --- |
-| channel 数 C | 1、2、3、8、16；3 覆盖非二次幂索引/仲裁，后续依面积时序决定更大规模 |
+| channel 数 C | 2 用于日常开发、仿真和综合；1 保留回归，4 作中间扩展检查，8 必须最终收敛；3/5/6/7 检查非二次幂索引、仲裁与生命周期 |
 | context 数 K | 外围阶段再评估；本阶段 DMA 只保留 32 位 selector 和已有维护语义，不实例化 K 项表 |
 | master data width | 按协议档位建参数合法性矩阵，优先测窄、中、宽代表点，再覆盖承诺的全部档位 |
 | slave data width | 32 与 64，执行相同的软件场景和提交语义检查 |
@@ -282,6 +284,18 @@ parked channel 取决于实际分配与容量保证，不能由模型里的一�
 外围的 K 项授权表留到后续。
 参数能展开不等于
 该规模已获得功能或时序支持。generic RAM 的综合结果不能冒称已经绑定 SRAM 宏的 PPA。
+
+2-channel 配置用于缩短开发反馈周期，不能替代 8-channel 的验收。最终必须在 8-channel
+配置完成混合业务、独立 reset、park/resume、共享资源压力、随机时钟/背压、吞吐、
+CDC/RDC 和综合时序检查；按配置独立记录结果，不能只证明最大配置能展开。
+
+slot/buffer 的所有权、容量保证和释放条件应落实既有模型的语义。当前模型每 channel
+保存 accepted command、游标和必要的读数据，park 释放共享执行占用；它没有 RTL 的
+八 burst 并发窗口或一个可配置的全局 buffer 池。RTL 可以选择不同的物理存储组织，
+但必须兑现保留数据不被覆盖、旧责任退出前不复用，以及健康 peer 的推进要求。
+共享池若会引入原模型没有的资源饥饿或改变可观察的 admission/reset 行为，应先明确
+系统合同并补模型边界测试，不能只在 RTL 中悄悄改变语义。无需把 RAM 端口、逐拍
+时序或每个物理 slot 原样复制进功能模型。
 
 ## 验证衔接与编码前剩余决定
 

@@ -22,6 +22,11 @@ handler objects under `env/software/` own software operations. Scenarios under
 `tests/dut/` orchestrate task flows under `env/flow/`. Each task flow explicitly
 invokes its checker under `env/checking/` before releasing buffers. Successful
 tasks observe Fence completion; error/cancellation cleanup waits for reset drain.
+The software device driver owns global reset and the device notification mask;
+channel reconfiguration cannot change that mask. After global busy clears, it
+invalidates every channel's software cursors/configuration state while retaining
+ring allocations. A fresh task can then reconfigure any channel. Channel reset
+updates only its own software state, after its own hardware acknowledgement.
 Channels own persistent command/event rings; tasks separately allocate source,
 destination and Fence buffers. Ring storage is released only at channel teardown.
 Passive observations feed coverage and performance
@@ -62,9 +67,12 @@ Software submits Copy followed by Fence32/64 and polls the real memory marker fo
 successful completion. Destination equality is a checker result, never a
 completion signal. Fault, error and fatal results come from software-visible
 registers and error events. Each channel has separate software, IRQ-handler and
-checker instances. The current DUT implements only channel zero; its IRQ vector
-is deliberately 17 to exercise vector-to-channel mapping without equating the
-two identities. This organization does not claim multichannel DUT coverage.
+checker instances. `PDMA_CHANNEL_COUNT=1..8` selects elaboration (default 2 for
+iteration). IRQ vectors start at 17 and are distinct from channel IDs; device
+fatal uses its own vector and handler. The memory oracle checks both the channel
+sideband and context against task/ring allocations. Compile a separate immutable
+binary for each channel count. The final qualification must include 8, with
+intermediate non-power-of-two counts checked for index/reset/ownership behavior.
 
 After configuring the local environment described in
 [the flow guide](../../tools/rtl-flow/flows.md):
@@ -76,10 +84,10 @@ bash verification/dma/flow/regression.sh "$PDMA_RUN_ROOT/build" "$PDMA_RUN_ROOT/
 bash verification/dma/flow/coverage.sh "$PDMA_RUN_ROOT/build" "$PDMA_RUN_ROOT/regression" "$PDMA_RUN_ROOT/coverage"
 ```
 
-Run one case with `flow/run.sh BUILD NEW_RUN TEST SEED`. The 24 independently
+Run one case with `flow/run.sh BUILD NEW_RUN TEST SEED`. The independently
 selectable tests are listed in `flow/tests.list`. `PDMA_JOBS` bounds parallel runs
 (default 4); `PDMA_TESTS` optionally selects a space-separated subset.
-`PDMA_CLOCK_MODE=random|fixed|target` selects the ordinary clock profile. The four
+`PDMA_CLOCK_MODE=random|fixed|target` selects the ordinary clock profile. The
 throughput tests explicitly select constant-period target or half-core clocks,
 zero responder delay, sustained READY and sufficient VIP outstanding capacity.
 Their passive callbacks measure individual payload beats and descriptor-to-Fence

@@ -30,9 +30,9 @@ class pdma_task extends uvm_object;
         source_address=source_buffer.address; dest_address=dest_buffer.address; fence_address=fence_buffer.address;
         source_base=source_address-source_offset;
         expected=new[length]; initial_data=new[length];
-        memory.permit(source_buffer.allocation.get_s_addr(),source_address,length,source_context,0);
-        memory.permit(dest_buffer.allocation.get_s_addr(),dest_address,length,dest_context,1);
-        memory.permit(fence_buffer.allocation.get_s_addr(),fence_address,fence_bytes(),fence_context,1);
+        memory.permit(source_buffer.allocation.get_s_addr(),source_address,length,source_context,0,channel_id);
+        memory.permit(dest_buffer.allocation.get_s_addr(),dest_address,length,dest_context,1,channel_id);
+        memory.permit(fence_buffer.allocation.get_s_addr(),fence_address,fence_bytes(),fence_context,1,channel_id);
         foreach(expected[i]) begin
             expected[i]=$urandom; initial_data[i]=~expected[i];
             memory.write_byte(source_address+i,expected[i]); memory.write_byte(dest_address+i,initial_data[i]);

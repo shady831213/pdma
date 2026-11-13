@@ -13,6 +13,7 @@ mod local;
 mod memory;
 mod peers;
 mod resume;
+mod retention;
 mod tail;
 mod termination;
 

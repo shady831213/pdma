@@ -3,6 +3,13 @@ namespace eval profile {}
 proc profile::read {path} {
     set result [source $path]
     dict get $result top
+    if {[dict exists $result parameters]} {
+        dict for {name value} [dict get $result parameters] {
+            if {![regexp {^[A-Za-z_][A-Za-z0-9_]*$} $name] || ![string is integer -strict $value]} {
+                error "PDMA_PROFILE: invalid integer parameter"
+            }
+        }
+    }
     set clocks [dict get $result clocks]
     if {![dict size $clocks]} {error "PDMA_PROFILE: no clocks"}
     dict for {clock settings} $clocks {

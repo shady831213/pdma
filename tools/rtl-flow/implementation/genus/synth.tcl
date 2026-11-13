@@ -36,7 +36,12 @@ proc run {} {
     close $fd
     read_hdl -language sv -define SYNTHESIS $files
     genus_memory::blackbox
-    elaborate [dict get $design_profile top]
+    set parameters {}
+    if {[dict exists $design_profile parameters]} {
+        dict for {name value} [dict get $design_profile parameters] {lappend parameters [list $name $value]}
+    }
+    if {[llength $parameters]} {elaborate -parameters $parameters [dict get $design_profile top]} \
+    else {elaborate [dict get $design_profile top]}
     check_errors elaborate
     genus_memory::bind
     set_db [get_db modules] .boundary_opto true

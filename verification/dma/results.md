@@ -1,5 +1,54 @@
 # Scenario-level verification checkpoints
 
+## 2026-11-13 multichannel checkpoint
+
+The shared Copy/Fence implementation supports every integer channel count in 1..8.
+This checkpoint is ready for source review, but **implementation qualification is
+not complete**: 2/8-channel mapping is still running, and the aggregate coverage
+report has not been accepted. See [ownership and lifecycle](../../docs/rtl/multichannel.md).
+
+| Channel count | Positive DUT runs | Rejected checker mutations |
+| --- | ---: | ---: |
+| 1 | 31 | 8 |
+| 2 | 31 | 8 |
+| 3, 4, 5, 6, 7 (each) | 18 | 8 |
+| 8 | 248 (31 tests, eight seeds) | 8 |
+
+The 400 positive runs use independent task/Fence oracles, channel/context memory
+permissions and per-channel lifecycle assertions. Tests cover peer progress while
+owners are parked, retained write data after source changes, independent reset,
+IRQ routing and post-global-reset reconfiguration. Eight-channel synchronizer
+latency stress adds 18 positive runs and eight rejected mutations; five TB selftests
+also pass. Native tests pass 20/20 with both compiler backends. The model's 26
+page-fault tests and strict DMA Clippy check pass, including the 1..8 retention
+characterization; production model behavior was not changed.
+
+Ordinary zero-delay throughput remains 8 B/bus cycle on both read and write data
+channels, with zero payload bubbles in the short, long, batch, clock-ratio and
+multichannel cases. This is simulation throughput for the selected 64-bit profile;
+it is not a claim that the new maximum configuration meets physical timing.
+
+Three review findings have failing-first evidence and fixes: a new global reset
+must win over an old channel-clear acknowledgement at the same edge; global reset
+must invalidate all software channel configuration state; channel reconfiguration
+must not modify the device notification mask. Global register operations now have
+a device-level software owner, while channels retain their rings and local reset.
+
+Fresh source-bound gates pass at 2 channels (CDC 66, RDC 2151) and 8 channels
+(CDC 210, RDC 4076), with zero unresolved findings. Seven native review-gate checks
+accept the exact reviewed input and reject stale identities, wrong/missing endpoints,
+missing coverage, invalid grouping and wrong counts. Raw reports remain available;
+review counts alone do not establish safety. No physical CDC/MTBF/reset signoff is
+claimed.
+
+The installed coverage tool fails while merging the complete 248-run input set
+(`URG-LTFF`), including with explicit 64-bit execution. The singled-out database
+loads successfully by itself. The complete input set has not been reduced or
+reported as a successful merge. Investigation of merge behavior, final mapped
+results and remaining physical-budget checks are the next work items. SRAM
+area/power and intrinsic timing remain excluded from control-budget synthesis.
+
+
 ## Reusable-cell boundary cleanup (2026-11-12)
 
 Testbench manifest SHA-256:

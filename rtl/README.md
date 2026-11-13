@@ -10,7 +10,7 @@ The [minimal Linear Copy and Fence slice](../docs/rtl/minimal-copy.md) now conne
 this path to one execution owner and an ordinary AXI memory endpoint. Fence32/64
 writes a software-observable memory marker after prior channel work. It is not a
 complete DMA or a physically qualified design; the remaining command families,
-multichannel execution, unaligned/full-profile throughput and physical closure
+multichannel qualification, unaligned/full-profile throughput and physical closure
 still need implementation. The current retained burst window and asynchronous
 queues are described in the slice document; measured results are in the
 [throughput review](../docs/rtl/throughput-review.md).
@@ -33,8 +33,8 @@ The related [memory interface](../docs/rtl/memory-interface.md),
 [datapath](../docs/rtl/datapath.md) and [reset/CDC](../docs/rtl/reset-cdc.md) drafts
 define transaction ownership and identify correctness constraints on pipelining.
 The [next implementation steps](../docs/rtl/architecture.md#后续执行顺序)
-start with concrete transaction resources and reset drain, then a two-channel
-functional slice. The implementation target is now 12nm/Genus without ULVT,
+now cover the [1..8 channel shared engine](../docs/rtl/multichannel.md),
+including the full eight-channel qualification. The implementation target is now 12nm/Genus without ULVT,
 core/bus 1GHz and reg 500MHz, with separate VC SpyGlass CDC/RDC checks; see
 [implementation checks](../impl/dma/README.md).
 Synthesis now uses an explicit [RAM boundary budget](../docs/rtl/memory-budget.md)

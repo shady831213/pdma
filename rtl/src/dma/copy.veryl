@@ -1,108 +1,131 @@
-// Fixed first-slice profile. Atomic capability is off; wider/multichannel profiles follow.
-pub module DmaCopy (
-    reg_clk   : input   'registers clock                                                          ,
-    reg_rst_n : input   'registers reset_async_low                                                ,
-    core_clk  : input   'core      clock                                                          ,
-    core_rst_n: input   'core      reset_async_low                                                ,
-    bus_clk   : input   'bus       clock                                                          ,
-    bus_rst_n : input   'bus       reset_async_low                                                ,
-    cfg       : modport 'registers $std::axi4_lite_if::<$std::axi4_lite_pkg::<32, 4, 1>>::slave   ,
-    memory    : modport 'bus       $std::axi4_if::<CopyMemory::Bus>::master                       ,
-    awatop    : output  'bus       logic                                                       <6>,
-    irq       : output  'core      logic                                                          ,
-    irq_ready : input   'core      logic                                                          ,
-    fatal     : output  'core      logic                                                          ,
+// Shared Copy/Fence execution with independent channel state and notifications.
+pub module DmaCopy #(
+    param CHANNEL_COUNT: u32 = 1,
+) (
+    reg_clk        : input   'registers clock                                                                      ,
+    reg_rst_n      : input   'registers reset_async_low                                                            ,
+    core_clk       : input   'core      clock                                                                      ,
+    core_rst_n     : input   'core      reset_async_low                                                            ,
+    bus_clk        : input   'bus       clock                                                                      ,
+    bus_rst_n      : input   'bus       reset_async_low                                                            ,
+    cfg            : modport 'registers $std::axi4_lite_if::<$std::axi4_lite_pkg::<32, 4, 1>>::slave               ,
+    memory         : modport 'bus       $std::axi4_if::<CopyMemory::Bus>::master                                   ,
+    awatop         : output  'bus       logic                                                       <6>            ,
+    irq            : output  'core      logic                                                       <CHANNEL_COUNT>,
+    irq_ready      : input   'core      logic                                                       <CHANNEL_COUNT>,
+    fatal_irq      : output  'core      logic                                                                      ,
+    fatal_irq_ready: input   'core      logic                                                                      ,
+    fatal          : output  'core      logic                                                                      ,
 ) {
-    var commands          : 'core RegisterState::Ring           [1];
-    var events            : 'core RegisterState::Ring           [1];
-    var configurations    : 'core RegisterState::ChannelConfig  [1];
-    var actions           : 'core RegisterState::ChannelActions [1];
-    var statuses          : 'core RegisterState::ChannelStatus  [1];
-    var clear             : 'core logic                            ;
-    var command_advance   : 'core logic                            ;
-    var event_advance     : 'core logic                            ;
-    var event_ready       : 'core logic                            ;
-    var event_geometry    : 'core logic                            ;
-    var global_request    : 'core logic                            ;
-    var global_busy       : 'core logic                            ;
-    var global_irq_enable : 'core logic                            ;
-    var internal_fatal    : 'core logic                            ;
-    var fatal_seen        : 'core logic                            ;
-    var channel_fatal_seen: 'core logic                            ;
-    let channel_failed    : 'core logic                             = statuses[0].fatal != 0;
+    var commands          : 'core RegisterState::Ring                          [CHANNEL_COUNT];
+    var events            : 'core RegisterState::Ring                          [CHANNEL_COUNT];
+    var configurations    : 'core RegisterState::ChannelConfig                 [CHANNEL_COUNT];
+    var actions           : 'core RegisterState::ChannelActions                [CHANNEL_COUNT];
+    var statuses          : 'core RegisterState::ChannelStatus                 [CHANNEL_COUNT];
+    var clear             : 'core logic                        <CHANNEL_COUNT>                ;
+    var command_advance   : 'core logic                        <CHANNEL_COUNT>                ;
+    var event_advance     : 'core logic                        <CHANNEL_COUNT>                ;
+    var event_ready       : 'core logic                        <CHANNEL_COUNT>                ;
+    var event_geometry    : 'core logic                        <CHANNEL_COUNT>                ;
+    var global_request    : 'core logic                                                       ;
+    var global_pending    : 'core logic                        <CHANNEL_COUNT>                ;
+    var global_irq_enable : 'core logic                                                       ;
+    var internal_fatal    : 'core logic                                                       ;
+    var fatal_seen        : 'core logic                                                       ;
+    var channel_fatal_seen: 'core logic                        <CHANNEL_COUNT>                ;
+    let global_busy       : 'core logic                                                        = |global_pending;
+    let global_start      : 'core logic                                                        = global_request
+        && !global_busy;
+    let global_clear      : 'core logic                                                        = global_busy
+        && (global_pending & ~clear) == 0;
     inst requests    : 'core CopyMemoryPort;
     inst transactions: 'bus  CopyMemoryPort;
     assign awatop = 0;
     assign fatal  = internal_fatal;
-    // Notification is retained until accepted. Enabling later never replays a cause.
+    // Notifications are retained until accepted. Enabling never replays a cause.
+    // Device-fatal delivery is independent of every channel's enable/reset.
     always_ff (core_clk, core_rst_n) {
         if_reset {
             irq                = 0;
+            fatal_irq          = 0;
             fatal_seen         = 0;
             channel_fatal_seen = 0;
         } else {
-            fatal_seen         = fatal;
-            channel_fatal_seen = channel_failed;
-            if irq_ready || clear {
-                irq = 0;
+            fatal_seen = fatal;
+            if fatal_irq_ready || global_clear {
+                fatal_irq = 0;
             }
-            if global_irq_enable
-                && ((fatal && !fatal_seen)
-                    || (configurations[0].irq_enable && ((channel_failed && !channel_fatal_seen) || event_advance))) {
-                irq = 1;
+            if global_irq_enable && fatal && !fatal_seen {
+                fatal_irq = 1;
+            }
+            for channel in 0..CHANNEL_COUNT {
+                channel_fatal_seen[channel] = statuses[channel].fatal != 0;
+                if irq_ready[channel] || clear[channel] {
+                    irq[channel] = 0;
+                }
+                if !clear[channel] && configurations[channel].irq_enable
+                    && ((statuses[channel].fatal != 0 && !channel_fatal_seen[channel]) || event_advance[channel]) {
+                    irq[channel] = 1;
+                }
             }
         }
     }
     always_ff (core_clk, core_rst_n) {
         if_reset {
-            global_busy = 0;
-        } else if global_request {
-            global_busy = 1;
-        } else if clear {
-            global_busy = 0;
+            global_pending = 0;
+        } else if global_start {
+            global_pending = '1;
+        } else {
+            global_pending &= ~clear;
         }
     }
-    inst csr: DmaRegisterInterface::<$std::axi4_lite_pkg::<32, 4, 1>> (
-        reg_clk                                    ,
-        reg_rst_n                                  ,
-        core_clk                                   ,
-        core_rst_n                                 ,
-        axi                  : cfg                 ,
-        global_reset_busy    : global_busy         ,
-        global_fatal         : fatal               ,
-        global_clear         : clear && global_busy,
-        global_reset_request : global_request      ,
-        global_irq_enable                          ,
-        clear_channels       : clear               ,
-        maintenance          : 0                   ,
-        command_advance                            ,
-        event_advance                              ,
-        command_advance_ready: _                   ,
-        event_advance_ready  : event_ready         ,
-        event_geometry                             ,
-        statuses                                   ,
-        commands                                   ,
-        events                                     ,
-        configurations                             ,
-        actions                                    ,
+    inst csr: DmaRegisterInterface::<$std::axi4_lite_pkg::<32, 4, 1>> #(
+        CHANNEL_COUNT  ,
+    ) (
+        reg_clk                              ,
+        reg_rst_n                            ,
+        core_clk                             ,
+        core_rst_n                           ,
+        axi                  : cfg           ,
+        global_reset_busy    : global_busy   ,
+        global_fatal         : fatal         ,
+        global_clear                         ,
+        global_reset_request : global_request,
+        global_irq_enable                    ,
+        clear_channels       : clear         ,
+        maintenance          : 0             ,
+        command_advance                      ,
+        event_advance                        ,
+        command_advance_ready: _             ,
+        event_advance_ready  : event_ready   ,
+        event_geometry                       ,
+        statuses                             ,
+        commands                             ,
+        events                               ,
+        configurations                       ,
+        actions                              ,
     );
-    inst engine: CopyEngine (
-        clk            : core_clk                     ,
-        rst_n          : core_rst_n                   ,
-        command        : commands[0]                  ,
-        events         : events[0]                    ,
-        configuration  : configurations[0]            ,
-        actions        : actions[0]                   ,
-        reset_all      : global_request || global_busy,
-        fatal_in       : fatal                        ,
-        event_geometry                                ,
-        event_ready                                   ,
-        status         : statuses[0]                  ,
-        clear                                         ,
-        command_advance                               ,
-        event_advance                                 ,
-        internal_fatal                                ,
-        memory         : requests                     ,
+    inst engine: CopyEngine #(
+        CHANNEL_COUNT  ,
+    ) (
+        clk            : core_clk                   ,
+        rst_n          : core_rst_n                 ,
+        command        : commands                   ,
+        events                                      ,
+        configuration  : configurations             ,
+        actions                                     ,
+        reset_all      : global_start               ,
+        global_blocked : global_busy || global_start,
+        global_clear                                ,
+        fatal_in       : fatal                      ,
+        event_geometry                              ,
+        event_ready                                 ,
+        status         : statuses                   ,
+        clear                                       ,
+        command_advance                             ,
+        event_advance                               ,
+        internal_fatal                              ,
+        memory         : requests                   ,
     );
     inst request_crossing: common_cell::AsyncQueue #(
         TYPE : CopyMemory::Request,

@@ -2,7 +2,7 @@ module pdma_lifecycle_assertions(
     input logic clk, rst_n, request, ready, returned, accepted, closing, clear, enabled, has_commands,
     input logic irq, irq_ready, irq_source, parked, resume_request,
     input logic [3:0] request_slot, receipt_slot,
-    input logic [1535:0] parked_state
+    input logic [1023:0] parked_state
 );
     int unsigned outstanding=0;
     logic [15:0] owned='0;

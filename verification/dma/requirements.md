@@ -76,6 +76,29 @@ reports combine only successful seeds, excluding checker mutation runs.
 
 ## Throughput and bubble qualification
 
+### Planned multichannel qualification
+
+The next RTL slice targets every integer channel count from one through eight, with eight as the
+initial supported maximum. This is planned coverage; the implemented DUT above
+remains single-channel. Use two channels for routine development, simulation and
+synthesis. Retain one-channel regressions and a four-channel scaling check.
+Final acceptance requires the eight-channel configuration to close functional
+and mixed-traffic scenarios, independent reset, retained-fault resume, shared
+resource pressure, randomized clocks/backpressure, throughput, CDC/RDC and
+synthesis timing. Smaller configurations or elaboration alone cannot substitute.
+Counts 3/5/6/7 also require functional, index-wrap, arbitration and independent
+reset checks; they are not inferred to work from the power-of-two configurations.
+
+Resource checks follow the model's ownership and progress contract: parked read
+data stays intact; reset does not release resources while old work can still use
+them; unrelated healthy channels retain progress when their external accesses can
+complete. A shared pool must not silently weaken those guarantees. New observable
+admission/capacity behavior requires explicit specification and model tests before
+RTL qualification. Tests compare task effects and lifecycle guarantees, not equal
+physical slot counts, chunk boundaries or cycle traces between model and RTL.
+
+### Datapath measurements
+
 The current eight-slot window and asynchronous request/receipt queues are measured
 in [the throughput review](../../docs/rtl/throughput-review.md). The requirements
 below remain acceptance criteria for further configurations, not a declaration

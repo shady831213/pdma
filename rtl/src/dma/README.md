@@ -66,8 +66,11 @@ is unsupported. Software channel/DMA reset must leave the transport running.
 The memory endpoint has independent read/write lanes and ordered return tracking.
 
 The register modules alone do not implement transaction drain or execution.
-`DmaCopy` supplies a first single-channel Linear Copy/Fence32/64 owner and memory endpoint;
+`DmaCopy` supplies one shared Linear Copy/Fence32/64 engine for 1..8 channels and
+a shared memory endpoint;
 see the [slice boundaries](../../../docs/rtl/minimal-copy.md). Its software reset
-closes admission and consumes all accepted memory receipts before register clear.
+closes the target channel's admission and consumes its accepted memory receipts
+before register clear. Global reset collects all channels' cleanup. See
+[multichannel ownership](../../../docs/rtl/multichannel.md).
 Native tests verify digital handshake/state behavior; bundled-data CDC constraints
 and CDC/RDC/timing signoff remain required.

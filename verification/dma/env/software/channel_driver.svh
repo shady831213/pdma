@@ -1,17 +1,15 @@
-class pdma_channel extends uvm_object;
+class pdma_channel extends pdma_register_access;
     int unsigned channel_id, vector, producer;
     longint unsigned next_id=1;
     pdma_memory memory;
     virtual pdma_control_if control;
     ChannelBlock registers;
     ChannelAdmin admin;
-    DmaControl dma_control;
     mailbox#(pdma_result) interrupts=new;
     int unsigned delivered;
     longint unsigned command_address, event_address;
     jvs_memory_acc_block command_allocation, event_allocation;
     jvs_memory_allocator allocator;
-    pdma_configuration cfg;
     int unsigned event_consumer;
     semaphore producer_lock=new(1), event_lock=new(1);
     bit configured;
@@ -20,37 +18,16 @@ class pdma_channel extends uvm_object;
         channel_id=index; vector=irq_vector;
         registers=root.channels_block[index];
         admin=root.admin_block.channels_block[index];
-        dma_control=root.admin_block.control_block;
     endfunction
-    task write_reg(uvm_reg register_,uvm_reg_data_t value);
-        uvm_status_e status;
-        register_.write(status,value,UVM_FRONTDOOR);
-        if(status!=UVM_IS_OK)
-            `uvm_fatal("MMIO_RESPONSE",$sformatf("Rejected register write: %s",register_.get_full_name()))
-    endtask
-    task read_reg(uvm_reg register_,output uvm_reg_data_t value);
-        uvm_status_e status;
-        register_.read(status,value,UVM_FRONTDOOR);
-        if(status!=UVM_IS_OK)
-            `uvm_fatal("MMIO_RESPONSE",$sformatf("Rejected register read: %s",register_.get_full_name()))
-    endtask
-    task await_reg(uvm_reg register_,uvm_reg_data_t mask,uvm_reg_data_t expected);
-        uvm_reg_data_t value;
-        for(int n=0;n<cfg.poll_limit;n++) begin
-            read_reg(register_,value);
-            if((value & mask)==expected) return;
-        end
-        `uvm_fatal("TASK_TIMEOUT",$sformatf("channel=%0d register=%s expected=%h observed=%h",channel_id,register_.get_full_name(),expected,value))
-    endtask
     task setup();
         allocator.malloc(command_allocation,cfg.command_capacity*COMMAND_SIZE,
-            e_alignment'($clog2(COMMAND_ALIGNMENT)),cfg.command_ring_address);
+            e_alignment'($clog2(COMMAND_ALIGNMENT)),channel_id==0 ? cfg.command_ring_address : `JVS_MEM_NULL);
         allocator.malloc(event_allocation,cfg.event_capacity*EVENT_SIZE,
-            e_alignment'($clog2(EVENT_ALIGNMENT)),cfg.event_ring_address);
+            e_alignment'($clog2(EVENT_ALIGNMENT)),channel_id==0 ? cfg.event_ring_address : `JVS_MEM_NULL);
         if(command_allocation==null || event_allocation==null) `uvm_fatal("RING_ALLOCATION","Channel ring allocation failed")
         command_address=command_allocation.get_s_addr(); event_address=event_allocation.get_s_addr();
-        memory.permit(command_address,command_address,cfg.command_capacity*COMMAND_SIZE,cfg.ring_context,0);
-        memory.permit(event_address,event_address,cfg.event_capacity*EVENT_SIZE,cfg.ring_context,1);
+        memory.permit(command_address,command_address,cfg.command_capacity*COMMAND_SIZE,cfg.ring_context,0,channel_id);
+        memory.permit(event_address,event_address,cfg.event_capacity*EVENT_SIZE,cfg.ring_context,1,channel_id);
         configure();
     endtask
     task configure();
@@ -60,7 +37,6 @@ class pdma_channel extends uvm_object;
         write_reg(registers.event_block.base_reg,event_address);
         write_reg(registers.event_block.capacity_reg,cfg.event_capacity);
         write_reg(registers.control_block.config_block.ring_context_reg,cfg.ring_context);
-        write_reg(dma_control.irq_enable_reg,1<<dma_control.irq_enable_reg.enabled_field.get_lsb_pos());
         write_reg(registers.control_block.irq_block.enable_reg,
             1<<registers.control_block.irq_block.enable_reg.enabled_field.get_lsb_pos());
         write_reg(registers.control_block.config_block.enable_reg,
@@ -115,14 +91,16 @@ class pdma_channel extends uvm_object;
         end
         event_lock.put();
     endtask
-    task request_reset(bit global_scope=0);
-        Reset reset_reg=global_scope ? dma_control.reset_reg : admin.reset_reg;
-        write_reg(reset_reg,1<<reset_reg.request_field.get_lsb_pos());
+    task request_reset();
+        write_reg(admin.reset_reg,1<<admin.reset_reg.request_field.get_lsb_pos());
     endtask
-    task finish_reset(bit global_scope=0);
-        Reset reset_reg=global_scope ? dma_control.reset_reg : admin.reset_reg;
-        await_reg(reset_reg,1<<reset_reg.request_field.get_lsb_pos(),0);
+    // Called only after this owner's reset or a completed device-wide reset.
+    function void invalidate_after_reset();
         producer=0; event_consumer=0; configured=0;
+    endfunction
+    task finish_reset();
+        await_reg(admin.reset_reg,1<<admin.reset_reg.request_field.get_lsb_pos(),0);
+        invalidate_after_reset();
     endtask
     task resume_task();
         write_reg(registers.control_block.recovery_block.resume_reg,

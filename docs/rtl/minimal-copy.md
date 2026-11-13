@@ -1,17 +1,21 @@
 # Linear Copy and Fence RTL slice
 
-This is the fixed one-channel DMA-core profile, not the complete configurable DMA.
+This DMA-core slice implements one shared Linear Copy/Fence engine with an
+instance-configured channel count in 1..8. Other command families and bus-width
+profiles are not the complete configurable DMA; multichannel qualification is
+tracked in [the multichannel design](multichannel.md).
 It connects a 32-bit AXI4-Lite slave, a 64-bit ordinary memory master and three
 asynchronous clock domains. Atomic capability is disabled and AWATOP is zero.
-ARUSER/AWUSER carry the context selector; Function/PASID translation remains outside DMA.
+ARUSER/AWUSER are 35 bits: channel in bits 34:32 and the full context selector in
+bits 31:0; Function/PASID translation remains outside DMA.
 
 ## Hardware and ownership
 
 ```mermaid
 flowchart LR
   SW[AXI-Lite] --> CSR[Register mailbox and register owners]
-  CSR --> CMD[CopyEngine: accepted command]
-  CMD --> WIN[CopyWindow: eight retained chunks]
+  CSR --> CMD[CopyEngine: channel contexts and shared execution]
+  CMD --> WIN[CopyWindow: eight retained chunks per channel]
   WIN --> REQ[Eight-entry request FIFO]
   CMD --> REQ
   REQ --> RD[Read endpoint]
@@ -32,18 +36,19 @@ eight-slot window until that command completes, stops or is reset. Each chunk is
 at most 64 bytes, is bounded by both address ranges and does not cross 4KiB.
 Aligned ranges use up to eight 64-bit beats; unmatched alignment and short tails
 still use byte accesses without over-reading. Source and destination selectors
-remain independent. No next command may bypass the current accepted command.
+remain independent. No successor in the same channel may bypass its accepted command. A safely parked
+channel yields shared execution to an eligible peer.
 
 | Owner | State and release boundary |
 | --- | --- |
-| `CopyEngine` | Descriptor, Fetch/Fence/error-publication state and channel lifecycle; changes command only after completion or reset |
-| `CopyWindow` | Eight source/destination/length entries, access states and retained read bytes; reuses a slot only after successful write and in-order retirement |
-| Core RAM/read offer | 8 × 512-bit 1R1W storage, one synchronous read and one write port; a separate register holds the prepared write under backpressure |
+| `CopyEngine` | One descriptor/lifecycle context per channel, one round-robin selected shared Fetch/Fence/error-publication datapath |
+| `CopyWindow` | Eight source/destination/length entries per channel, access states and retained read bytes; reuses a slot only after successful write and in-order retirement |
+| Core RAM/read offer | `(8 * CHANNEL_COUNT)` × 512-bit shared 1R1W storage, one synchronous read and one write port; a separate register holds the prepared write under backpressure |
 | Request/receipt FIFOs | Eight typed entries each, registered Gray pointers and two-stage synchronization; enqueue transfers custody, not transaction completion |
 | Read endpoint | Up to eight accepted AR metadata entries, one ordered R-burst assembly and a held receipt |
 | Write endpoint | Separately advancing AW, W and B queues; admission reserves all three, and B consumes the oldest completed AW/W responsibility |
 
-Internal slot identities accompany requests and receipts; slot zero belongs to
+Internal channel/slot identities accompany requests and receipts; slot zero belongs to
 serialized Fetch/Fence/event accesses and slots 1..8 to the Copy window. They are
 not architectural context IDs. External reads use AXI ID zero, as do external
 writes. AXI's ordering within each direction supplies receipt association; R and B
@@ -86,13 +91,16 @@ It preserves adjacent lanes and supports retained write-fault recovery. Successf
 commands produce no event. Other opcodes and SG endpoints report Unsupported in
 this slice. A stopping error writes the 24-byte event, splitting at 4KiB when needed;
 producer advances only after the whole record succeeds. Reporting failure is fatal.
-Notifications retain pending/accept ownership and masks do not replay old causes.
+Each channel and the DMA-wide fatal source have independent pending/accept
+notification ports. A channel mask is independent of the global-fatal mask;
+neither replays old causes.
 
 Software reset closes admission at core acceptance. It does not reset the FIFOs,
 RAM or endpoint. Every accepted internal request, including queued requests not yet
 accepted by AXI, must yield its terminal receipt. AW/W obligations cannot be
-withdrawn; completing W alone is insufficient. Clear waits for all debt, then
-invalidates retained state. Physical cold reset must assert across all three domains
+withdrawn; completing W alone is insufficient. A channel's clear waits for its own debt, then
+invalidates only its retained state. Global reset collects every channel's clear
+before completion; it never repeatedly restarts an already-cleared channel. Physical cold reset must assert across all three domains
 and release synchronously in each; independent hot domain reset is unsupported.
 
 ## Verification and limits
@@ -105,7 +113,7 @@ VERYL_DUT_REUSE=0 bash ../tools/rtl-flow/veryl.sh test --backend cranelift
 bash ../tools/rtl-flow/veryl.sh build
 ```
 
-The seventeen DMA tests cover register access, word lanes, command ordering,
+The native DMA tests cover register access, word lanes, command ordering,
 three-domain copying, W-before-AW/reset, retained faults and event publication.
 `MemoryStreamTest` requires continuous W beats with multiple requests accepted
 before any B return. `CopyWindowTest` checks a three-burst fault, an immutable
@@ -115,6 +123,8 @@ startup and FIFO capacity/wrap/stalls/continuous drain. `CopyWindowReuseTest` pi
 head-slot retirement/reallocation at terminal receipt, without two idle state transitions.
 `CopyWindowForwardTest` checks simultaneous read completion/write acceptance and
 reset retaining the newly forwarded write's responsibility.
+The multichannel fixtures additionally check eight retained faulted owners/peer
+progress and an idle reset while a different disabled owner retains metadata debt.
 Native clock advancement is not a metastability or MTBF proof.
 
 [System verification](../../verification/dma/README.md) supplies actual AXI VIP,

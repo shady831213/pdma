@@ -1,26 +1,31 @@
-// Eight resident burst-sized chunks. Every slot keeps its source data until B
-// succeeds; fault recovery never rereads a successfully read, unwritten chunk.
-// This window belongs to one accepted command, not to the AXI transaction IDs.
-module CopyWindow (
-    clk                : input   clock                     ,
-    rst_n              : input   reset_async_low           ,
-    start              : input   logic                     ,
-    cancel             : input   logic                     ,
-    clear              : input   logic                     ,
-    resume             : input   logic                     ,
-    source             : input   logic                 <64>,
-    destination        : input   logic                 <64>,
-    length             : input   logic                 <64>,
-    source_context     : input   logic                 <32>,
-    destination_context: input   logic                 <32>,
-    done               : output  logic                     ,
-    drained            : output  logic                     ,
-    parked             : output  logic                     ,
-    error_code         : output  logic                 <32>,
-    error_prefix       : output  logic                 <64>,
-    error_ready        : output  logic                     ,
-    protocol_error     : output  logic                     ,
-    memory             : modport CopyMemoryPort::master    ,
+// Banked retained burst state; one shared issue/read/forward datapath.
+// Every channel has eight reserved rows, so parked work cannot consume a peer's
+// storage. Tags retain ownership across shared queues and reset drain.
+module CopyWindow #(
+    param CHANNEL_COUNT: u32 = 1                        ,
+    const ROW_BITS     : u32 = $clog2(CHANNEL_COUNT * 8),
+) (
+    clk                : input   clock                                                ,
+    rst_n              : input   reset_async_low                                      ,
+    selected           : input   CopyMemory::Channel                                  ,
+    selected_valid     : input   logic                                                ,
+    start              : input   logic                 <CHANNEL_COUNT>                ,
+    cancel             : input   logic                 <CHANNEL_COUNT>                ,
+    clear              : input   logic                 <CHANNEL_COUNT>                ,
+    resume             : input   logic                 <CHANNEL_COUNT>                ,
+    source             : input   logic                 <64>                           ,
+    destination        : input   logic                 <64>                           ,
+    length             : input   logic                 <64>                           ,
+    source_context     : input   logic                 <32>                           ,
+    destination_context: input   logic                 <32>                           ,
+    done               : output  logic                 <CHANNEL_COUNT>                ,
+    drained            : output  logic                 <CHANNEL_COUNT>                ,
+    parked             : output  logic                 <CHANNEL_COUNT>                ,
+    error_code         : output  logic                 <32>            [CHANNEL_COUNT],
+    error_prefix       : output  logic                 <64>            [CHANNEL_COUNT],
+    error_ready        : output  logic                 <CHANNEL_COUNT>                ,
+    protocol_error     : output  logic                 <CHANNEL_COUNT>                ,
+    memory             : modport CopyMemoryPort::master                               ,
 ) {
     enum State: logic<3> {
         Free,
@@ -35,121 +40,203 @@ module CopyWindow (
         destination: logic<64>,
         length     : logic<7> ,
     }
-    var states           : State      [8];
-    var chunks           : Chunk      [8];
-    var active           : logic         ;
-    var frozen           : logic         ;
-    var recovering       : logic         ;
-    var debt             : logic<4>      ;
-    var head             : logic<3>      ;
-    var tail             : logic<3>      ;
-    var next_source      : logic<64>     ;
-    var next_destination : logic<64>     ;
-    var remaining        : logic<64>     ;
-    var committed        : logic<64>     ;
-    var available        : logic<8>      ;
-    var readable         : logic<8>      ;
-    var writable         : logic<8>      ;
-    var completed        : logic<8>      ;
-    var read_choice      : logic<8>      ;
-    var write_choice     : logic<8>      ;
-    var read_slot        : logic<3>      ;
-    var write_slot       : logic<3>      ;
-    var prepared         : logic         ;
-    var loading          : logic         ;
-    var prepared_data    : logic<512>    ;
-    var prepared_slot    : logic<3>      ;
-    var portion          : logic<7>      ;
-    var amount           : logic<7>      ;
-    var failure_successes: logic<8>      ;
-    var failure_head     : logic<3>      ;
-    let returned_slot    : logic<3>       = (memory.receipt.slot - 1) as 3;
-    let receiving        : logic          = memory.returned && memory.accepted;
-    let stop_issue       : logic          = cancel || frozen || error_code != 0 || protocol_error
-        || (receiving && (memory.receipt.failed || memory.receipt.protocol_error));
-    let forward_read     : logic          = receiving && !stop_issue && !prepared && !loading && writable == 0
-        && memory.receipt.slot != 0 && memory.receipt.slot <= 8 && states[returned_slot] == State::Reading;
-    var selected_slot    : logic<3>      ;
-    let retire           : logic          = active && !stop_issue
-        && (states[head] == State::Done
-            || (receiving && states[head] == State::Writing && memory.receipt.slot == (head as 4) + 1));
-    let allocate         : logic          = active && !stop_issue && !recovering && remaining != 0
-        && (states[tail] == State::Free || (retire && tail == head));
-    let sending          : logic          = memory.valid && memory.ready;
-    assign drained = debt == 0;
-    assign parked  = active && frozen && drained && !loading && error_code == 0 && !protocol_error;
-    assign done    = active && remaining == 0 && (&available) && drained && !frozen && error_code == 0
-        && !protocol_error;
+    var states               : State                              [CHANNEL_COUNT * 8];
+    var chunks               : Chunk                              [CHANNEL_COUNT * 8];
+    var active               : logic              <CHANNEL_COUNT>                    ;
+    var frozen               : logic              <CHANNEL_COUNT>                    ;
+    var recovering           : logic              <CHANNEL_COUNT>                    ;
+    var debt                 : logic              <4>             [CHANNEL_COUNT]    ;
+    var head                 : logic              <3>             [CHANNEL_COUNT]    ;
+    var tail                 : logic              <3>             [CHANNEL_COUNT]    ;
+    var next_source          : logic              <64>            [CHANNEL_COUNT]    ;
+    var next_destination     : logic              <64>            [CHANNEL_COUNT]    ;
+    var remaining            : logic              <64>            [CHANNEL_COUNT]    ;
+    var committed            : logic              <64>            [CHANNEL_COUNT]    ;
+    var failure_successes    : logic              <8>             [CHANNEL_COUNT]    ;
+    var failure_head         : logic              <3>             [CHANNEL_COUNT]    ;
+    var all_free             : logic              <CHANNEL_COUNT>                    ;
+    var readable             : logic              <8>                                ;
+    var writable             : logic              <8>                                ;
+    var returned_completed   : logic              <8>                                ;
+    var read_choice          : logic              <8>                                ;
+    var write_choice         : logic              <8>                                ;
+    var read_slot            : logic              <3>                                ;
+    var write_slot           : logic              <3>                                ;
+    var prepared             : logic                                                 ;
+    var loading              : logic                                                 ;
+    var prepared_data        : logic              <512>                              ;
+    var prepared_slot        : logic              <3>                                ;
+    var cache_owner          : CopyMemory::Channel                                   ;
+    var portion              : logic              <7>                                ;
+    var amount               : logic              <7>                                ;
+    var selected_slot        : logic              <3>                                ;
+    let base                 : logic              <ROW_BITS>                          = (selected as ROW_BITS) << 3;
+    let return_owner_valid   : logic                                                  = (memory.receipt.tag.channel as u32)
+        <: CHANNEL_COUNT;
+    let return_channel       : CopyMemory::Channel                                    = if return_owner_valid ?
+        memory.receipt.tag.channel
+    :
+        0
+    ;
+    let returned_slot        : logic              <3>                                 = (memory.receipt.tag.slot
+        - 1) as 3;
+    let return_row           : logic              <ROW_BITS>                          = ((return_channel as ROW_BITS)
+            << 3) | (returned_slot as ROW_BITS);
+    let receiving            : logic                                                  = memory.returned
+        && memory.accepted;
+    let selected_failure     : logic                                                  = receiving && return_channel
+        == selected && (memory.receipt.failed || memory.receipt.protocol_error);
+    let stop_issue           : logic                                                  = !selected_valid
+        || cancel[selected] || frozen[selected] || error_code[selected] != 0 || protocol_error[selected]
+        || selected_failure;
+    let cache_current        : logic                                                  = cache_owner == selected;
+    let usable_prepared      : logic                                                  = prepared && cache_current;
+    let stale_cache          : logic                                                  = (prepared || loading)
+        && !cache_current;
+    let returned_usable      : logic                                                  = return_owner_valid
+        && memory.receipt.tag.slot != 0 && memory.receipt.tag.slot <= 8;
+    let forward_read         : logic                                                  = receiving && returned_usable
+        && return_channel == selected && !stop_issue && !prepared && !loading && writable == 0 && states[return_row]
+        == State::Reading;
+    let head_row             : logic              <ROW_BITS>                          = base
+        | (head[selected] as ROW_BITS);
+    let tail_row             : logic              <ROW_BITS>                          = base
+        | (tail[selected] as ROW_BITS);
+    let retire               : logic                                                  = active[selected] && !stop_issue
+        && (states[head_row] == State::Done
+            || (receiving && return_channel == selected && states[head_row] == State::Writing && memory.receipt.tag.slot
+                == (head[selected] as 4) + 1));
+    let allocate             : logic                                                  = active[selected] && !stop_issue
+        && !recovering[selected] && remaining[selected] != 0
+        && (states[tail_row] == State::Free || (retire && tail[selected] == head[selected]));
+    let sending              : logic                                                  = memory.valid && memory.ready;
+    let allocated_source     : logic              <64>                                = next_source[selected] + amount;
+    let allocated_destination: logic              <64>                                = next_destination[selected]
+        + amount;
+    let allocated_remaining  : logic              <64>                                = remaining[selected] - amount;
+    let retired_prefix       : logic              <64>                                = committed[selected]
+        + chunks[head_row].length;
+    let failure_row          : logic              <ROW_BITS>                          = base
+        | (failure_head[selected] as ROW_BITS);
+    let extended_error_prefix: logic              <64>                                = error_prefix[selected]
+        + chunks[failure_row].length;
     always_comb {
-        for i in 0..8 {
-            available[i] = states[i] == State::Free;
-            readable[i]  = states[i] == State::Read;
-            writable[i]  = states[i] == State::Write;
-            completed[i] = states[i] == State::Done;
-        }
-        read_choice  = common_cell::RoundRobin::<8>::select(readable, head);
-        write_choice = common_cell::RoundRobin::<8>::select(writable, head);
-        read_slot    = 0;
-        write_slot   = 0;
-        for i in 0..8 {
-            if read_choice[i] {
-                read_slot = i as 3;
+        all_free = '1;
+        for channel in 0..CHANNEL_COUNT {
+            for slot in 0..8 {
+                all_free[channel] &= states[channel * 8 + slot] == State::Free;
             }
-            if write_choice[i] {
-                write_slot = i as 3;
+            drained[channel] = debt[channel] == 0;
+            parked[channel]  = active[channel] && frozen[channel] && drained[channel]
+                && !(loading && cache_owner == channel) && error_code[channel] == 0 && !protocol_error[channel];
+            done[channel]    = active[channel] && remaining[channel] == 0 && all_free[channel] && drained[channel]
+                && !frozen[channel] && error_code[channel] == 0 && !protocol_error[channel];
+        }
+        returned_completed = 0;
+        for slot in 0..8 {
+            readable[slot] = states[base + slot] == State::Read;
+            writable[slot] = states[base + slot] == State::Write;
+            if return_owner_valid {
+                returned_completed[slot] = states[(return_channel as u32) * 8 + slot] == State::Done;
             }
         }
-        portion = if remaining >= 64 ? 64 : remaining as 7;
-        if portion >: 4096 - (next_source[11:0] as u32) {
-            portion = (4096 - (next_source[11:0] as u32)) as 7;
+        read_choice  = common_cell::RoundRobin::<8>::select(readable, head[selected]);
+        write_choice = common_cell::RoundRobin::<8>::select(writable, head[selected]);
+        read_slot    = common_cell::BoundedIndex::<8>::encode_onehot(read_choice);
+        write_slot   = common_cell::BoundedIndex::<8>::encode_onehot(write_choice);
+        portion      = if remaining[selected] >= 64 ? 64 : remaining[selected] as 7;
+        if portion >: 4096 - (next_source[selected][11:0] as u32) {
+            portion = (4096 - (next_source[selected][11:0] as u32)) as 7;
         }
-        if portion >: 4096 - (next_destination[11:0] as u32) {
-            portion = (4096 - (next_destination[11:0] as u32)) as 7;
+        if portion >: 4096 - (next_destination[selected][11:0] as u32) {
+            portion = (4096 - (next_destination[selected][11:0] as u32)) as 7;
         }
-        amount = if next_source[2:0] == 0 && next_destination[2:0] == 0 && portion >= 8 ? portion & 7'h78 : 1;
+        amount          = if next_source[selected][2:0] == 0 && next_destination[selected][2:0] == 0 && portion >= 8 ?
+            portion & 7'h78
+        :
+            1
+        ;
+        memory.accepted = 0;
+        if memory.returned && return_owner_valid {
+            memory.accepted = active[return_channel] && debt[return_channel] != 0;
+        }
     }
-    inst buffer_read : common_cell::RamReadPort #( ADDR_WIDTH: 3, WIDTH: 512 );
-    inst buffer_write: common_cell::RamWritePort #( ADDR_WIDTH: 3, WIDTH: 512 );
+    inst buffer_read : common_cell::RamReadPort #( ADDR_WIDTH: ROW_BITS, WIDTH: 512 );
+    inst buffer_write: common_cell::RamWritePort #( ADDR_WIDTH: ROW_BITS, WIDTH: 512 );
     inst buffers: common_cell::Ram1R1W::<tech_cell_generic::Ram1R1W> #(
-        DEPTH: 8  ,
-        WIDTH: 512,
+        DEPTH: CHANNEL_COUNT * 8,
+        WIDTH: 512              ,
     ) (
         clk                     ,
         read_port : buffer_read ,
         write_port: buffer_write,
     );
-    assign buffer_read.enable   = active && !stop_issue && !prepared && !loading && (|write_choice);
-    assign buffer_read.address  = write_slot;
-    assign buffer_write.enable  = receiving && states[returned_slot] == State::Reading && !memory.receipt.failed
-        && !memory.receipt.protocol_error;
-    assign buffer_write.address = returned_slot;
+    assign buffer_read.enable   = active[selected] && !stop_issue && !prepared && !loading && !stale_cache
+        && (|write_choice);
+    assign buffer_read.address  = base | (write_slot as ROW_BITS);
+    assign buffer_write.enable  = receiving && returned_usable && states[return_row] == State::Reading
+        && !memory.receipt.failed && !memory.receipt.protocol_error && !cancel[return_channel];
+    assign buffer_write.address = return_row;
     assign buffer_write.data    = memory.receipt.data;
     assign buffer_write.mask    = '1;
     always_comb {
-        selected_slot           = if prepared ? prepared_slot : if forward_read ? returned_slot : read_slot;
+        selected_slot           = if usable_prepared ? prepared_slot : if forward_read ? returned_slot : read_slot;
         memory.request          = '0;
-        memory.request.slot     = (selected_slot as 4) + 1;
-        memory.request.write    = prepared || forward_read;
+        memory.request.tag      = CopyMemory::Tag'{channel: selected, slot: (selected_slot as 4) + 1};
+        memory.request.write    = usable_prepared || forward_read;
         memory.request.address  = if memory.request.write ?
-            chunks[selected_slot].destination
+            chunks[base | (selected_slot as ROW_BITS)].destination
         :
-            chunks[selected_slot].source
+            chunks[base | (selected_slot as ROW_BITS)].source
         ;
         memory.request.selector = if memory.request.write ? destination_context : source_context;
         memory.request.data     = if forward_read ? memory.receipt.data : prepared_data;
-        memory.request.size     = if chunks[selected_slot].length == 1 ? 0 : 3;
-        memory.request.length   = if memory.request.size == 0 ? 0 : ((chunks[selected_slot].length >> 3) - 1) as 3;
-        memory.valid            = active && !stop_issue && (prepared || forward_read || (|read_choice));
-        memory.accepted         = active && debt != 0;
+        memory.request.size     = if chunks[base | (selected_slot as ROW_BITS)].length == 1 ? 0 : 3;
+        memory.request.length   = if memory.request.size == 0 ?
+            0
+        :
+            ((chunks[base | (selected_slot as ROW_BITS)].length >> 3) - 1) as 3
+        ;
+        memory.valid            = active[selected] && !stop_issue && !stale_cache
+            && (usable_prepared || forward_read || (|read_choice));
     }
-    // One write port from completed R, one synchronous read port feeding a held
-    // write offer. No speculative buffer reuse before its successful B receipt.
+    // One return writes one reserved row. One selected owner reads one row.
+    // Prepared data is an execution cache; the authoritative bytes remain in RAM.
     always_ff (clk) {
-        if loading {
+        if loading && !cancel[cache_owner] && !clear[cache_owner] {
             prepared_data = buffer_read.data;
         }
         if allocate {
-            chunks[tail] = Chunk'{source: next_source, destination: next_destination, length: amount};
+            chunks[tail_row] = Chunk'{
+                source          : next_source[selected]     ,
+                destination     : next_destination[selected],
+                length          : amount
+            };
+        }
+    }
+    always_ff (clk, rst_n) {
+        if_reset {
+            prepared      = 0;
+            loading       = 0;
+            prepared_slot = 0;
+            cache_owner   = 0;
+        } else if !selected_valid || stale_cache
+            || ((prepared || loading) && (clear[cache_owner] || cancel[cache_owner])) || start[selected] {
+            prepared = 0;
+            loading  = 0;
+        } else {
+            if buffer_read.enable {
+                loading       = 1;
+                prepared_slot = write_slot;
+                cache_owner   = selected;
+            }
+            if loading {
+                loading  = 0;
+                prepared = 1;
+            }
+            if sending && usable_prepared {
+                prepared = 0;
+            }
         }
     }
     always_ff (clk, rst_n) {
@@ -157,122 +244,121 @@ module CopyWindow (
             active            = 0;
             frozen            = 0;
             recovering        = 0;
-            debt              = 0;
-            head              = 0;
-            tail              = 0;
-            next_source       = 0;
-            next_destination  = 0;
-            remaining         = 0;
-            committed         = 0;
-            prepared          = 0;
-            loading           = 0;
-            prepared_slot     = 0;
-            error_code        = 0;
-            error_prefix      = 0;
             error_ready       = 0;
             protocol_error    = 0;
-            failure_successes = 0;
-            failure_head      = 0;
-            states            = '{default: State::Free};
-        } else if clear || start {
-            active            = start && !clear;
-            frozen            = 0;
-            recovering        = 0;
-            debt              = 0;
-            head              = 0;
-            tail              = 0;
-            next_source       = source;
-            next_destination  = destination;
-            remaining         = length;
-            committed         = 0;
-            prepared          = 0;
-            loading           = 0;
-            error_code        = 0;
-            error_prefix      = 0;
-            error_ready       = 0;
-            protocol_error    = 0;
-            failure_successes = 0;
-            failure_head      = 0;
+            debt              = '{default: 0};
+            head              = '{default: 0};
+            tail              = '{default: 0};
+            next_source       = '{default: 0};
+            next_destination  = '{default: 0};
+            remaining         = '{default: 0};
+            committed         = '{default: 0};
+            error_code        = '{default: 0};
+            error_prefix      = '{default: 0};
+            failure_successes = '{default: 0};
+            failure_head      = '{default: 0};
             states            = '{default: State::Free};
         } else {
-            if done {
-                active = 0;
-            }
-            if parked && resume && !cancel {
-                frozen     = 0;
-                recovering = 1;
-            }
-            if recovering && (&available) {
-                recovering = 0;
-            }
-            if buffer_read.enable {
-                loading       = 1;
-                prepared_slot = write_slot;
-            }
-            if loading {
-                loading  = 0;
-                prepared = 1;
-            }
-            if sending {
-                if prepared {
-                    states[prepared_slot] = State::Writing;
-                    prepared              = 0;
-                } else if !forward_read {
-                    states[read_slot] = State::Reading;
-                }
-            }
-            case {sending, receiving} {
-                2'b10  : debt += 1;
-                2'b01  : debt -= 1;
-                default: {}
-            }
-            if receiving {
-                if memory.receipt.slot == 0 || memory.receipt.slot >: 8
-                    || !(states[returned_slot] == State::Reading || states[returned_slot] == State::Writing)
-                    || memory.receipt.protocol_error {
-                    protocol_error = 1;
-                } else if memory.receipt.failed {
-                    states[returned_slot] = if states[returned_slot] == State::Reading ? State::Read : State::Write;
-                    if memory.receipt.page_fault {
-                        frozen = 1;
-                    } else if error_code == 0 {
-                        error_code        = if states[returned_slot] == State::Reading ? 2 : 3;
-                        failure_successes = completed;
-                        failure_head      = head;
-                        error_prefix      = committed;
+            for channel in 0..CHANNEL_COUNT {
+                if clear[channel] || (start[channel] && !cancel[channel]) {
+                    active[channel]            = start[channel] && !clear[channel];
+                    frozen[channel]            = 0;
+                    recovering[channel]        = 0;
+                    debt[channel]              = 0;
+                    head[channel]              = 0;
+                    tail[channel]              = 0;
+                    next_source[channel]       = source;
+                    next_destination[channel]  = destination;
+                    remaining[channel]         = length;
+                    committed[channel]         = 0;
+                    error_code[channel]        = 0;
+                    error_prefix[channel]      = 0;
+                    error_ready[channel]       = 0;
+                    protocol_error[channel]    = 0;
+                    failure_successes[channel] = 0;
+                    failure_head[channel]      = 0;
+                    for slot in 0..8 {
+                        states[channel * 8 + slot] = State::Free;
                     }
                 } else {
-                    states[returned_slot] = if states[returned_slot] == State::Reading ?
-                        (if forward_read && sending ? State::Writing : State::Write)
-                    :
-                        State::Done
-                    ;
-                }
-            }
-            // A successful head receipt releases ownership on this edge. Reuse
-            // may install new metadata on that same edge; its request is visible
-            // next cycle. Later/out-of-order successes still retire through Done.
-            if retire {
-                committed    += chunks[head].length;
-                states[head] =  State::Free;
-                head         += 1;
-            }
-            if allocate {
-                states[tail]     =  State::Read;
-                tail             += 1;
-                next_source      += amount;
-                next_destination += amount;
-                remaining        -= amount;
-            }
-            // Error publication may follow drain. Its prefix only uses successes
-            // captured at error recognition, never later completion receipts.
-            if error_code != 0 && !error_ready {
-                if failure_successes[failure_head] {
-                    error_prefix                    += chunks[failure_head].length;
-                    failure_successes[failure_head] =  0;
-                    failure_head                    += 1;
-                } else {
-                    error_ready = 1;
+                    if done[channel] {
+                        active[channel] = 0;
+                    }
+                    if parked[channel] && resume[channel] && !cancel[channel] {
+                        frozen[channel]     = 0;
+                        recovering[channel] = 1;
+                    }
+                    if recovering[channel] && all_free[channel] {
+                        recovering[channel] = 0;
+                    }
+                    case {sending && selected == channel, receiving && return_channel == channel} {
+                        2'b10  : debt[channel] += 1;
+                        2'b01  : debt[channel] -= 1;
+                        default: {}
+                    }
+                    if selected_valid && selected == channel {
+                        if sending {
+                            if usable_prepared {
+                                states[base | (prepared_slot as ROW_BITS)] = State::Writing;
+                            } else if !forward_read {
+                                states[base | (read_slot as ROW_BITS)] = State::Reading;
+                            }
+                        }
+                        if retire {
+                            committed[channel] =  retired_prefix;
+                            states[head_row]   =  State::Free;
+                            head[channel]      += 1;
+                        }
+                        if allocate {
+                            states[tail_row]          =  State::Read;
+                            tail[channel]             += 1;
+                            next_source[channel]      =  allocated_source;
+                            next_destination[channel] =  allocated_destination;
+                            remaining[channel]        =  allocated_remaining;
+                        }
+                        if error_code[channel] != 0 && !error_ready[channel] {
+                            if failure_successes[channel][failure_head[channel]] {
+                                error_prefix[channel]                             =  extended_error_prefix;
+                                failure_successes[channel][failure_head[channel]] =  0;
+                                failure_head[channel]                             += 1;
+                            } else {
+                                error_ready[channel] = 1;
+                            }
+                        }
+                    }
+                    if receiving && return_channel == channel {
+                        if !returned_usable
+                            || !(states[return_row] == State::Reading || states[return_row] == State::Writing)
+                            || memory.receipt.protocol_error {
+                            protocol_error[channel] = 1;
+                        } else if memory.receipt.failed {
+                            states[return_row] = if states[return_row] == State::Reading ? State::Read : State::Write;
+                            if !cancel[channel] {
+                                if memory.receipt.page_fault {
+                                    frozen[channel] = 1;
+                                } else if error_code[channel] == 0 {
+                                    error_code[channel]        = if states[return_row] == State::Reading ? 2 : 3;
+                                    failure_successes[channel] = returned_completed;
+                                    failure_head[channel]      = head[channel];
+                                    error_prefix[channel]      = committed[channel];
+                                }
+                            }
+                        } else {
+                            states[return_row] = if states[return_row] == State::Reading ?
+                                (if forward_read && sending ? State::Writing : State::Write)
+                            :
+                                State::Done
+                            ;
+                        }
+                    }
+                    // Retirement/reuse must win over marking the successful head
+                    // receipt Done; both decisions used the same pre-edge owner.
+                    if selected_valid && selected == channel && retire {
+                        states[head_row] = State::Free;
+                    }
+                    if selected_valid && selected == channel && allocate {
+                        states[tail_row] = State::Read;
+                    }
                 }
             }
         }

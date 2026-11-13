@@ -3,32 +3,34 @@ module CopyFaultTest {
     inst clk   : $tb::clock_gen #( period: 10 );
     inst rst   : $tb::reset_gen ( clk );
     inst memory: CopyMemoryPort;
-    var command        : RegisterState::Ring             ;
-    var configuration  : RegisterState::ChannelConfig    ;
-    var actions        : RegisterState::ChannelActions   ;
-    var status         : RegisterState::ChannelStatus    ;
-    var command_advance: logic                           ;
-    var event_advance  : logic                           ;
-    var clear          : logic                           ;
-    var internal_fatal : logic                           ;
-    var held_slot      : logic                        <4>;
+    var command        : RegisterState::Ring                 ;
+    var configuration  : RegisterState::ChannelConfig        ;
+    var actions        : RegisterState::ChannelActions       ;
+    var status         : RegisterState::ChannelStatus     [1];
+    var command_advance: logic                               ;
+    var event_advance  : logic                               ;
+    var clear          : logic                               ;
+    var internal_fatal : logic                               ;
+    var held_slot      : logic                        <4>    ;
     inst dut: CopyEngine (
-        clk                 ,
-        rst_n          : rst,
-        command             ,
-        events         : '0 ,
-        configuration       ,
-        actions             ,
-        reset_all      : 0  ,
-        fatal_in       : 0  ,
-        event_geometry : 0  ,
-        event_ready    : 0  ,
-        status              ,
-        clear               ,
-        command_advance     ,
-        event_advance       ,
-        internal_fatal      ,
-        memory              ,
+        global_blocked : 0               ,
+        global_clear   : 0               ,
+        clk                              ,
+        rst_n          : rst             ,
+        command        : '{command},
+        events         : '{'0},
+        configuration  : '{configuration},
+        actions        : '{actions},
+        reset_all      : 0               ,
+        fatal_in       : 0               ,
+        event_geometry : 0               ,
+        event_ready    : 0               ,
+        status                           ,
+        clear                            ,
+        command_advance                  ,
+        event_advance                    ,
+        internal_fatal                   ,
+        memory                           ,
     );
     initial {
         command         = RegisterState::Ring'{base: 0, capacity: 2, producer: 1, consumer: 0};
@@ -69,11 +71,11 @@ module CopyFaultTest {
             clk.next();
         }
         $assert(memory.valid && !memory.request.write && memory.request.address == 64'h200, "PAYLOAD_READ");
-        held_slot = memory.request.slot;
+        held_slot = memory.request.tag.slot;
         clk.next();
-        memory.receipt      = '0;
-        memory.receipt.slot = held_slot;
-        memory.receipt.data = 64'h123456789abcdef0;
+        memory.receipt          = '0;
+        memory.receipt.tag.slot = held_slot;
+        memory.receipt.data     = 64'h123456789abcdef0;
         // Hold the request side while returning R; this case checks the retained
         // RAM path. CopyWindowForwardTest separately checks same-cycle forwarding.
         memory.ready    = 0;
@@ -88,17 +90,17 @@ module CopyFaultTest {
             clk.next();
         }
         $assert(memory.valid && memory.request.write && memory.request.address == 64'h300, "PAYLOAD_WRITE");
-        held_slot = memory.request.slot;
+        held_slot = memory.request.tag.slot;
         clk.next();
         memory.receipt            = '0;
-        memory.receipt.slot       = held_slot;
+        memory.receipt.tag.slot   = held_slot;
         memory.receipt.failed     = 1;
         memory.receipt.page_fault = 1;
         memory.returned           = 1;
         clk.next();
         memory.returned = 0;
         clk.next(3);
-        $assert(status.faulted && !status.error && !event_advance && !internal_fatal, "FAULT_IS_NOT_ERROR");
+        $assert(status[0].faulted && !status[0].error && !event_advance && !internal_fatal, "FAULT_IS_NOT_ERROR");
         $assert(!memory.valid, "PARKED_UNTIL_SOFTWARE_RESUME");
         // The repair may have changed source memory. No new read is permitted.
         memory.receipt.data    = '1;
@@ -114,13 +116,16 @@ module CopyFaultTest {
         $assert(memory.valid && memory.request.write, "RESUME_RETRIES_WRITE_ONLY");
         $assert(memory.request.data[63:0] == 64'h123456789abcdef0, "RETAIN_SUCCESSFUL_READ");
         clk.next();
-        memory.receipt      = '0;
-        memory.receipt.slot = held_slot;
-        memory.returned     = 1;
+        memory.receipt          = '0;
+        memory.receipt.tag.slot = held_slot;
+        memory.returned         = 1;
         clk.next();
         memory.returned = 0;
         clk.next(3);
-        $assert(!memory.valid && !status.faulted && !status.error && !event_advance, "RETIRED_WITHOUT_SUCCESS_EVENT");
+        $assert(
+            !memory.valid && !status[0].faulted && !status[0].error && !event_advance,
+            "RETIRED_WITHOUT_SUCCESS_EVENT",
+        );
         $finish();
     }
 }

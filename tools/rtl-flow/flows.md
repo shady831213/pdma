@@ -26,6 +26,7 @@ directory; no particular machine path is required.
 | `PDMA_STATIC_TOOL` | VC SpyGlass executable; defaults to `vc_static_shell` |
 | `PDMA_COVERAGE_TOOL` | Coverage executable; defaults to `urg` |
 | `PDMA_TECH_CONFIG` | Private technology/library and timing-budget Tcl file |
+| `PDMA_CHANNEL_COUNT` | DMA/VIP elaboration count in 1..8, default 2; compile a separate binary and qualify the final 8-channel profile |
 | `PDMA_DESIGN_PROFILE` | Optional top/clock/port profile; defaults to the DMA Copy slice |
 | `PDMA_STATIC_REVIEW` | Optional explicit source-bound CDC/RDC review policy; default raw findings remain failures |
 | `PDMA_SYNTH_STAGE` | Genus `prepare` or default `map`; preparation alone is not synthesis qualification |

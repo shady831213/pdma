@@ -1,26 +1,38 @@
 module pdma_vip_dut(svt_axi_if host_bus, svt_axi_if memory_bus, pdma_control_if control);
     __std___axi4_lite_if____std___axi4_lite_pkg__32__4__1 cfg();
-    __std___axi4_if____std___axi4_pkg__64__8__1__32__1__2__32__2 memory();
-    pdma_rtl_DmaCopy dut(
+    __std___axi4_if____std___axi4_pkg__64__8__1__pdma_rtl_CopyMemory_USER_BITS__1__2__pdma_rtl_CopyMemory_USER_BITS__2 memory();
+    pdma_rtl_DmaCopy #(.CHANNEL_COUNT(`PDMA_CHANNEL_COUNT)) dut(
         .reg_clk(control.reg_clk), .core_clk(control.core_clk), .bus_clk(control.bus_clk),
         .reg_rst_n(control.reg_rst_n), .core_rst_n(control.core_rst_n), .bus_rst_n(control.bus_rst_n),
         .cfg(cfg), .memory(memory), .awatop(control.awatop),
-        .irq(control.irq), .irq_ready(control.irq_ready), .fatal(control.fatal)
+        .irq(control.irq), .irq_ready(control.irq_ready), .fatal(control.fatal),
+        .fatal_irq(control.fatal_irq), .fatal_irq_ready(control.fatal_irq_ready)
     );
-    pdma_lifecycle_assertions lifecycle(
-        .clk(control.core_clk),.rst_n(control.core_rst_n),
-        .request(dut.requests.valid),.ready(dut.requests.ready),
-        .returned(dut.requests.returned),.accepted(dut.requests.accepted),
-        .request_slot(dut.requests.request.slot),.receipt_slot(dut.requests.receipt.slot),
-        .closing(dut.engine.shutdown),.clear(dut.clear),
-        .enabled(dut.configurations[0].enable),.has_commands(dut.commands[0].producer!=dut.commands[0].consumer),
-        .irq(control.irq),.irq_ready(control.irq_ready),
-        .irq_source(control.fatal || dut.statuses[0].error || dut.statuses[0].fatal!=0 ||
-            dut.statuses[0].trap || dut.events[0].producer!=dut.events[0].consumer),
-        .parked(dut.statuses[0].faulted),.resume_request(dut.actions[0].resume_request),
-        .parked_state({dut.engine.descriptor,dut.engine.copy.next_source,dut.engine.copy.next_destination,
-            dut.engine.copy.remaining,dut.engine.copy.committed,dut.engine.fence_data})
-    );
+    for(genvar c=0;c<`PDMA_CHANNEL_COUNT;c++) begin: channels
+        pdma_lifecycle_assertions lifecycle(
+            .clk(control.core_clk),.rst_n(control.core_rst_n),
+            .request(dut.requests.valid && dut.requests.request.tag.channel==c),.ready(dut.requests.ready),
+            .returned(dut.requests.returned && dut.requests.receipt.tag.channel==c),.accepted(dut.requests.accepted),
+            .request_slot(dut.requests.request.tag.slot),.receipt_slot(dut.requests.receipt.tag.slot),
+            .closing(dut.engine.shutdown[c]),.clear(dut.clear[c]),
+            .enabled(dut.configurations[c].enable),.has_commands(dut.commands[c].producer!=dut.commands[c].consumer),
+            .irq(control.irq[c]),.irq_ready(control.irq_ready[c]),
+            .irq_source(dut.statuses[c].error || dut.statuses[c].fatal!=0 ||
+                dut.statuses[c].trap || dut.events[c].producer!=dut.events[c].consumer),
+            .parked(dut.statuses[c].faulted),.resume_request(dut.actions[c].resume_request),
+            .parked_state({dut.engine.contexts[c].descriptor,dut.engine.copy.next_source[c],dut.engine.copy.next_destination[c],
+                dut.engine.copy.remaining[c],dut.engine.copy.committed[c]})
+        );
+    end
+    assert property(@(posedge control.core_clk) disable iff(!control.core_rst_n)
+        dut.requests.valid |-> dut.requests.request.tag.channel<`PDMA_CHANNEL_COUNT)
+        else $fatal(1,"DMA_INVALID_REQUEST_OWNER");
+    assert property(@(posedge control.core_clk) disable iff(!control.core_rst_n)
+        dut.requests.returned |-> dut.requests.receipt.tag.channel<`PDMA_CHANNEL_COUNT)
+        else $fatal(1,"DMA_INVALID_RECEIPT_OWNER");
+    assert property(@(posedge control.core_clk) disable iff(!control.core_rst_n)
+        control.fatal_irq && !control.fatal_irq_ready && !dut.global_clear |=> control.fatal_irq || dut.global_clear)
+        else $fatal(1,"DMA_FATAL_NOTIFICATION_DROPPED");
     assign cfg.awaddr=host_bus.master_if[0].awaddr;
     assign cfg.awprot=host_bus.master_if[0].awprot;
     assign cfg.awvalid=host_bus.master_if[0].awvalid;

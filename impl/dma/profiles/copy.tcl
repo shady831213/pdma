@@ -1,6 +1,9 @@
-# Design-owned fixed profile; shared by synthesis and CDC/RDC adapters.
+# Design-owned elaboration profile; shared by synthesis and CDC/RDC adapters.
 # Clock periods are ns. Interface members retain their emitted SV names.
-return [dict create top pdma_rtl_DmaCopy clocks {
+set channels 2
+if {[info exists ::env(PDMA_CHANNEL_COUNT)]} {set channels $::env(PDMA_CHANNEL_COUNT)}
+if {![regexp {^[1-8]$} $channels]} {error "PDMA_PROFILE: CHANNEL_COUNT must be in 1..8"}
+set result [dict create top pdma_rtl_DmaCopy clocks {
     reg_clk {period 2 reset reg_rst_n}
     core_clk {period 1 reset core_rst_n}
     bus_clk {period 1 reset bus_rst_n}
@@ -38,11 +41,17 @@ return [dict create top pdma_rtl_DmaCopy clocks {
             awatop 6
             memory.awid 1 memory.awaddr 64 memory.awlen 8 memory.awsize 3
             memory.awburst 2 memory.awlock 1 memory.awcache 4 memory.awprot 3
-            memory.awqos 4 memory.awregion 4 memory.awuser 32 memory.awvalid 1
+            memory.awqos 4 memory.awregion 4 memory.awuser 35 memory.awvalid 1
             memory.wdata 64 memory.wstrb 8 memory.wlast 1 memory.wuser 1 memory.wvalid 1
             memory.bready 1 memory.arid 1 memory.araddr 64 memory.arlen 8 memory.arsize 3
             memory.arburst 2 memory.arlock 1 memory.arcache 4 memory.arprot 3
-            memory.arqos 4 memory.arregion 4 memory.aruser 32 memory.arvalid 1 memory.rready 1
+            memory.arqos 4 memory.arregion 4 memory.aruser 35 memory.arvalid 1 memory.rready 1
         }
     }
 }]
+
+dict set result parameters CHANNEL_COUNT $channels
+dict set result memories copy_buffer depth [expr {8*$channels}]
+dict set result ports core_clk input [dict create irq_ready $channels fatal_irq_ready 1]
+dict set result ports core_clk output [dict create irq $channels fatal 1 fatal_irq 1]
+return $result

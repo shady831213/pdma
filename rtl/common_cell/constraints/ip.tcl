@@ -30,6 +30,7 @@ proc common_cell_cdc::describe {scope source destination spec} {
     return [dict create paths $paths chains $chains]
 }
 return [dict create \
+    set_source_names [namespace current]::common_cell_cdc::set_source_names \
     validate [namespace current]::common_cell_cdc::validate \
     describe [namespace current]::common_cell_cdc::describe \
     synchronizer_cells [namespace current]::common_cell_cdc::synchronizer_cells]

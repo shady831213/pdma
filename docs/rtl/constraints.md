@@ -23,7 +23,7 @@ versions, and the profile applies contracts once per actual instance. See the
 
 ## Integrating an instance
 
-The application API accepts a literal hierarchy path and the integration's actual
+The application API accepts a literal RTL instance path and the integration's actual
 clock collections. The budget uses the active SDC time unit. Standalone flows set
 that unit to ns; an integrator must establish its own consistent units and budget.
 
@@ -49,8 +49,9 @@ Empty bindings and invalid clock/budget arguments fail.
 For the present `DuplexMailbox`, each direction uses a fixed two-stage control
 synchronizer. The `synchronizers` query returns those registers and rejects a
 different shape. The integrating synthesis/implementation flow must retain their
-sequential structure and timing; the Genus adapter disables retiming, preserves
-hierarchy, then applies `set_dont_touch` to these mapped registers before `syn_opt`.
+sequential structure and timing; the Genus adapter disables retiming and applies
+`set_dont_touch` to these mapped registers before `syn_opt`. Ordinary RTL remains
+eligible for automatic ungrouping and boundary optimization.
 This is independent of technology-specific synchronizer-cell selection and MTBF
 qualification, which are not supplied by an SDC maximum-delay constraint.
 
@@ -65,9 +66,12 @@ set_dont_touch [common_cell_cdc::synchronizer_cells $chains]
 # Repeat for the response queue with its reversed clocks and actual depth.
 ```
 
-Integration must preserve these logical instance boundaries or provide an audited
-binding for its transformed hierarchy. Do not silently broaden a failed selector
-to the entire chip. After mapping, re-resolve with `duplex_paths` to inspect the
+Integration must preserve an unambiguous association between the configured RTL
+scope and its physical registers. Genus supplies native `original_name` values
+through the package's optional `set_source_names` resolver, so removed hierarchy
+does not require guessed flattened names or forced physical partitions. Do not
+silently broaden a failed selector to the entire chip. After mapping, re-resolve
+with `duplex_paths` to inspect the
 actual path sets (`async_queue_paths` for a FIFO); do not retain stale tool
 collections across netlist transforms. Cell-owned helpers define their private
 synchronizer hierarchy; application adapters do not duplicate those paths.

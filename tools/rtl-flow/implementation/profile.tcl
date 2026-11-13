@@ -49,6 +49,36 @@ proc profile::read {path} {
             }
         }
     }
+    memories $result
+    return $result
+}
+proc profile::memories {profile} {
+    if {![dict exists $profile memories]} {return {}}
+    set result [dict get $profile memories]
+    set instances {}
+    set providers {}
+    dict for {role spec} $result {
+        if {![regexp {^[A-Za-z_][A-Za-z0-9_]*$} $role]} {error "PDMA_PROFILE: invalid memory role"}
+        set instance [dict get $spec instance]
+        set provider [dict get $spec provider]
+        set kind [dict get $spec kind]
+        if {![regexp {^[A-Za-z_][A-Za-z0-9_./]*$} $instance] || $instance in $instances} {
+            error "PDMA_PROFILE: invalid or duplicate memory instance"
+        }
+        lappend instances $instance
+        if {![regexp {^[A-Za-z_][A-Za-z0-9_]*$} $provider] || $kind ni {Ram1RW Ram1R1W}} {
+            error "PDMA_PROFILE: invalid memory provider contract"
+        }
+        if {[dict exists $providers $provider] && [dict get $providers $provider] ne $kind} {
+            error "PDMA_PROFILE: inconsistent memory provider contract"
+        }
+        dict set providers $provider $kind
+        foreach field {depth width} {
+            set value [dict get $spec $field]
+            if {![string is integer -strict $value] || $value < 1} {error "PDMA_PROFILE: invalid memory geometry"}
+        }
+        if {![dict exists $profile clocks [dict get $spec clock]]} {error "PDMA_PROFILE: unknown memory clock"}
+    }
     return $result
 }
 proc profile::ports {profile} {

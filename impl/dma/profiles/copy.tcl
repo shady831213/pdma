@@ -6,6 +6,11 @@ return [dict create top pdma_rtl_DmaCopy clocks {
     bus_clk {period 1 reset bus_rst_n}
 } reset_groups {
     cold {reg_rst_n core_rst_n bus_rst_n}
+} memories {
+    copy_buffer {
+        instance engine/copy/buffers/u_ram provider tech_cell_generic_Ram1R1W
+        kind Ram1R1W depth 8 width 512 clock core_clk
+    }
 } crossings {
     csr/crossing {provider common_cell cell DuplexMailbox source reg_clk destination core_clk max_delay 0.5}
     request_crossing {provider common_cell cell AsyncQueue source core_clk destination bus_clk max_delay 0.5 depth 8}

@@ -37,6 +37,10 @@ start with concrete transaction resources and reset drain, then a two-channel
 functional slice. The implementation target is now 12nm/Genus without ULVT,
 core/bus 1GHz and reg 500MHz, with separate VC SpyGlass CDC/RDC checks; see
 [implementation checks](../impl/dma/README.md).
+Synthesis now uses an explicit [RAM boundary budget](../docs/rtl/memory-budget.md)
+by default, with ordinary RTL ungrouping and boundary optimization enabled.
+The [qualification record](../docs/rtl/memory-budget-review.md) distinguishes
+mapped logic from excluded SRAM cost; the generic array mode remains available.
 
 ## Source ownership
 

@@ -79,6 +79,11 @@ For direct timing integration, source `constraints/ip.tcl` and invoke
 path, the actual source/destination clock collections and a maximum-delay budget
 in the active SDC units. Loading the entry defines functions only. Apply/check
 those constraints separately from structural CDC review; no waiver is inherited.
+An integration that optimizes away hierarchy may call
+`common_cell_cdc::set_source_names` with a resolver returning the native source
+names of a current physical object. This supplements normal object-name lookup;
+tool-specific queries stay with that adapter. Object collections must be freshly
+resolved after synthesis, not saved across mapping.
 
 Device-specific decoding, resource ownership, fault recovery and lifecycle policy
 belong to consumers. Repeated application syntax alone does not justify adding a

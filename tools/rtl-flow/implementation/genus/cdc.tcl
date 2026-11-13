@@ -1,6 +1,12 @@
 # Native mapped-path qualification. Merely emitting an SDC command is not proof
 # that a path remains timed or that a global exception did not mask its budget.
+proc genus_source_names {object} {
+    # Genus retains these RTL origins when ungroup changes the mapped name.
+    # Query the current object each time; never reuse pre-map object collections.
+    return [get_db $object .original_name]
+}
 proc cdc_preserve {profile} {
+    rtl_ip::configure_names genus_source_names
     set count 0
     foreach chain [design_constraints::synchronizer_chains $profile] {
         lassign [dict get $chain chain] scope clock expected
@@ -33,6 +39,7 @@ proc cdc_path_status {from to budget file} {
     return $slack
 }
 proc cdc_status {profile} {
+    rtl_ip::configure_names genus_source_names
     set index 0
     set payloads 0
     set stages 0

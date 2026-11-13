@@ -83,7 +83,8 @@ at 1GHz, register clock at 500MHz, still three asynchronous domains. ULVT is
 forbidden; qualify library selection, mapping exclusions and actual mapped-cell
 identities. Both CDC and RDC must use VC SpyGlass with PDMA-owned constraints
 and reviewed findings. The Genus and VC SpyGlass flows are implemented;
-the current mapped setup estimate meets the target with zero slack margin. The
+the current control-budget logic setup estimate meets the target with zero slack
+margin; SRAM area/power and intrinsic timing remain excluded and unqualified. The
 redundant mailbox startup gates are removed; CDC/RDC reviewed gates accept only
 source-bound, path-specific findings, including exact unconnected/no-clock sinks
 with disabled consumers. Group counts never substitute for endpoint proof; raw
@@ -101,6 +102,15 @@ immutable RTL snapshot. Generic implementation adapters live under
 `tools/rtl-flow/implementation`; `impl/dma` owns profiles and explicitly selected
 source-bound reviews. Never load current workspace IP scripts to qualify an old
 snapshot, and never apply waivers merely because a package is a dependency.
+The 2026-11-13 synthesis flow defaults to `PDMA_MEMORY_MODE=control-budget`:
+one 8x512-bit Copy RAM provider is bound to a generated capacitance-only Liberty
+leaf. `generic` retains standard-cell array synthesis; FIFO storage remains
+synthesized in both modes. Never treat the placeholder's zero area or boundary
+delay as a physical SRAM property. Ordinary RTL uses `auto_ungroup=both` and
+`boundary_opto=true`, without retiming; RAM leaves and synchronizers retain their
+specific protection. Genus resolves package-owned CDC scopes using native RTL
+origins after hierarchy optimization, with fresh collections and unchanged path
+budgets. See `docs/rtl/memory-budget.md` and `docs/rtl/memory-budget-review.md`.
 The model's Cargo workspace contains the core `contract`, `dma` and `host` crates, the
 managed MVP's `hw-components` and `firmware`, shared PDMA `software`, system scenarios,
 and six reusable building blocks:

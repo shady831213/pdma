@@ -42,6 +42,7 @@ can coexist. Only an explicit integration binding invokes a provider.
 | `validate` | binding dictionary | Validate component-specific parameters without accessing a tool database |
 | `describe` | instance path, source clock, destination clock, binding dictionary | `paths` and `chains` belonging to this exact instance |
 | `synchronizer_cells` | list of chains | Actual synchronizer register collection, checking expected structure |
+| `set_source_names` (optional) | resolver command | Supply native RTL-origin names for current physical objects after optimization |
 
 A path supplies `scope`, `kind`, `source`, `destination`, `from`, `to` and
 `max_delay`. An optional `payload` collection identifies the actual held-data
@@ -50,6 +51,12 @@ The provider owns private hierarchy, payload selection and synchronizer shape;
 the generic adapter neither guesses names nor special-cases FIFO/handshake types.
 Descriptions resolve native collections again after mapping, never retaining stale
 objects across netlist transformations.
+The optional name resolver returns a list of source names for one current object.
+The tool adapter supplies it with `rtl_ip::configure_names`; the package keeps
+ordinary object-name lookup when none is supplied. It does not retain hierarchy,
+create an exception or grant review approval. Genus uses its native `original_name`
+attribute instead of guessing flattened names; other adapters keep their own
+object query mechanisms.
 
 The integration profile supplies clocks, reset groups, interface ownership and
 explicit `crossings`, for example:

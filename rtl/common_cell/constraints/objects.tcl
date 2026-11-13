@@ -1,9 +1,22 @@
 # Physical object selection shared by common-cell constraint providers.
-namespace eval common_cell_cdc {}
+namespace eval common_cell_cdc {variable source_names {}}
+# A tool adapter may supply native RTL-origin names after hierarchy optimization.
+# Standalone SDC consumers keep ordinary object-name lookup by default.
+proc common_cell_cdc::set_source_names {resolver} {
+    variable source_names
+    set source_names $resolver
+}
+proc common_cell_cdc::matches {object prefix} {
+    variable source_names
+    set names [list [get_object_name $object]]
+    if {[llength $source_names]} {lappend names {*}[{*}$source_names $object]}
+    foreach name $names {if {[string first $prefix $name] == 0} {return 1}}
+    return 0
+}
 proc common_cell_cdc::payload_registers {registers prefix} {
     set result ""
     foreach_in_collection cell $registers {
-        if {[string first $prefix [get_object_name $cell]] == 0} {
+        if {[matches $cell $prefix]} {
             set result [add_to_collection $result $cell]
         }
     }
@@ -16,7 +29,7 @@ proc common_cell_cdc::registers {scope clock kind} {
     set selected ""
     foreach_in_collection object $all {
         # Literal hierarchy boundary: chip/block0 must not select chip/block01.
-        if {[string first "${scope}/" [get_object_name $object]] == 0} {
+        if {[matches $object "${scope}/"]} {
             set selected [add_to_collection $selected $object]
         }
     }

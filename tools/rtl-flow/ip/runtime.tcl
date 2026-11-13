@@ -29,3 +29,11 @@ proc rtl_ip::invoke {provider method args} {
     }
     return [uplevel #0 [list {*}[dict get $providers $provider $method] {*}$args]]
 }
+# Optional native object-origin service. A dependency still applies no constraint
+# or waiver; this only supplies names used to resolve its declared physical scope.
+proc rtl_ip::configure_names {resolver} {
+    variable providers
+    dict for {provider exports} $providers {
+        if {[dict exists $exports set_source_names]} {invoke $provider set_source_names $resolver}
+    }
+}

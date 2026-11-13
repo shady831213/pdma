@@ -39,6 +39,14 @@ foreach {field value} {provider absent cell UnknownCell} {
     dict set changed crossings request_crossing $field $value
     lappend variants $changed
 }
+foreach {field value} {depth 0 width -1 clock unknown kind RamAsync provider bad-name instance */ram} {
+    set changed $base
+    dict set changed memories copy_buffer $field $value
+    lappend variants $changed
+}
+set changed $base
+dict set changed memories duplicate [dict get $base memories copy_buffer]
+lappend variants $changed
 foreach variant $variants {
     set path [file join $directory invalid-$index.tcl]
     set fd [open $path w]

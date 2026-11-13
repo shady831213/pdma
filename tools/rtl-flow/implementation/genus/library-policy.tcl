@@ -32,7 +32,7 @@ proc library_policy::prepare {approved} {
     }
     puts "PDMA_LIBRARY_POLICY_PREPARED blocked=$blocked"
 }
-proc library_policy::audit {approved} {
+proc library_policy::audit {approved {memory_cells {}}} {
     set instances [get_db insts]
     if {![llength $instances]} {error "PDMA_LIBRARY_POLICY: no mapped instances"}
     set rows {}
@@ -41,7 +41,9 @@ proc library_policy::audit {approved} {
         if {[llength $cells] != 1} {error "PDMA_LIBRARY_POLICY: unresolved mapped reference"}
         set identity [identity $cells]
         require_non_ulvt $identity
-        if {[lindex $identity 0] ni $approved} {error "PDMA_LIBRARY_POLICY: unapproved mapped reference"}
+        if {[lindex $identity 0] ni $approved && $cells ni $memory_cells} {
+            error "PDMA_LIBRARY_POLICY: unapproved mapped reference"
+        }
         dict set rows $identity 1
     }
     set fd [open library-policy.tsv w]

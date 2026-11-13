@@ -10,9 +10,13 @@ main() {
     pdma_environment synthesis
     pdma_new_run "$run"
     cp "$root/tools/rtl-flow/implementation/genus/checks.tcl" "$root/impl/dma/tests/genus/genus-timing.tcl" "$run/"
+    cp "$mapped/"{profile.tcl,memory-model.tcl,memory.tcl,memory-report.tcl,design-profile.tcl,ip.tcl,ip-manifest.tcl} "$run/"
+    cp -R "$mapped/ip" "$run/"
+    export PDMA_MEMORY_MODE=$(sed -n 's/^memory=//p' "$mapped/settings.txt")
     export PDMA_MAPPED_DATABASE="$mapped/copy.db"
     cd "$run"
     sha256sum *.tcl "$PDMA_MAPPED_DATABASE" > inputs.sha256
+    find ip -type f -print0 | sort -z | xargs -0 -r sha256sum >> inputs.sha256
     pdma_process_pid=
     trap pdma_stop_process EXIT
     trap 'exit 130' INT

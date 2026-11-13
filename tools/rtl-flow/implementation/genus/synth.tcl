@@ -5,12 +5,16 @@ proc run {} {
     global time_unit capacitance_unit clock_uncertainty transition io_min io_max output_load
     source library-policy.tcl
     source config.tcl
+    source memory-model.tcl
+    source memory.tcl
+    source memory-report.tcl
     source ip.tcl
     rtl_ip::load ip-manifest.tcl
     source profile.tcl
     set design_profile [profile::read design-profile.tcl]
+    genus_memory::configure $design_profile $env(PDMA_MEMORY_MODE)
     set_db max_cpus_per_server 4
-    set_db auto_ungroup none
+    set_db auto_ungroup both
     set_db syn_generic_effort medium
     set_db syn_map_effort high
     set_db syn_opt_effort high
@@ -19,7 +23,7 @@ proc run {} {
     set fd [open technology.sha256 w]
     foreach library $target_libraries {puts $fd [exec sha256sum $library]}
     close $fd
-    read_libs $target_libraries
+    read_libs [concat $target_libraries [genus_memory::library]]
     check_errors read_library
     library_policy::prepare $approved_standard_cell_libraries
     set library [get_db libraries -if [list .base_name == $operating_library]]
@@ -31,12 +35,28 @@ proc run {} {
     set files [split [string trim [read $fd]] \n]
     close $fd
     read_hdl -language sv -define SYNTHESIS $files
+    genus_memory::blackbox
     elaborate [dict get $design_profile top]
     check_errors elaborate
-    set_db [get_db modules] .boundary_opto strict_no
+    genus_memory::bind
+    set_db [get_db modules] .boundary_opto true
     set_db [get_db current_design] .retime false
+    set checked 0
+    foreach module [get_db modules] {
+        if {[get_db $module .arch_filename] in $files} {
+            if {[get_db $module .boundary_opto] ne "true"} {error "PDMA_BOUNDARY_POLICY: module opt disabled"}
+            incr checked
+        }
+    }
+    # A top containing only directly bound RAM leaves has no remaining RTL
+    # submodules; there are then no hierarchical boundaries to audit.
+    if {[get_db auto_ungroup] ne "both" || [get_db [get_db current_design] .retime]} {
+        error "PDMA_BOUNDARY_POLICY: ungroup/retiming configuration"
+    }
+    puts "PDMA_BOUNDARY_POLICY_PASS native_modules=$checked auto_ungroup=both boundary_opto=true retime=false"
     source timing.tcl
     source cdc.tcl
+    genus_memory::prepare
     check_errors constraints
     write_sdc > applied.sdc
     if {$env(PDMA_SYNTH_STAGE) eq "prepare"} {
@@ -58,7 +78,8 @@ proc run {} {
     }
     close $timings
     write_db -all_root_attributes copy.db
-    library_policy::audit $approved_standard_cell_libraries
+    set memory_cells [genus_memory::report]
+    library_policy::audit $approved_standard_cell_libraries $memory_cells
     check_timing_intent -verbose > timing-coverage.rpt
     report_area > area.rpt
     report_qor > qor.rpt
@@ -76,7 +97,7 @@ proc run {} {
     check_errors reports
     exec sha256sum --check --status technology.sha256
     puts PDMA_GENUS_REPORTS_COMPLETE
-    if {![timing_status] || !$cdc_pass} {
+    if {![timing_status [genus_memory::clock_pins]] || !$cdc_pass} {
         puts PDMA_GENUS_SETUP_TARGET_NOT_MET
         return 3
     }

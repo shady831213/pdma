@@ -29,6 +29,7 @@ directory; no particular machine path is required.
 | `PDMA_DESIGN_PROFILE` | Optional top/clock/port profile; defaults to the DMA Copy slice |
 | `PDMA_STATIC_REVIEW` | Optional explicit source-bound CDC/RDC review policy; default raw findings remain failures |
 | `PDMA_SYNTH_STAGE` | Genus `prepare` or default `map`; preparation alone is not synthesis qualification |
+| `PDMA_MEMORY_MODE` | Default `control-budget` binds inventoried RAM boundaries; `generic` maps behavioral arrays to standard cells |
 | `SVT_COMMON_HOME`, `SVT_AMBA_HOME`, `DESIGNWARE_HOME` | Installed AXI VIP |
 | `JVSUK_HOME` | jarvisuk source checkout |
 | `PDMA_COMPILE_TIMEOUT`, `PDMA_RUN_TIMEOUT`, `PDMA_SYNTH_TIMEOUT`, `PDMA_STATIC_TIMEOUT`, `PDMA_COVERAGE_TIMEOUT` | Wall-clock limits in seconds |

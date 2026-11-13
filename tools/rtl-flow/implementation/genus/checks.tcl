@@ -3,12 +3,24 @@ proc check_errors {stage} {
     set errors [get_db messages -if {.severity == Error && .count > 0}]
     if {[llength $errors]} {error "PDMA_GENUS_ERRORS after $stage: [get_db $errors .name]"}
 }
-proc timing_status {} {
+proc timing_status {{accounting_clocks {}}} {
     set fd [open timing-coverage.rpt r]
     set coverage [read $fd]
     close $fd
-    if {![regexp {Total:\s+([0-9]+)} $coverage -> count] || $count != 0} {
+    if {![regexp {Total:\s+([0-9]+)} $coverage -> count]} {
         error "PDMA_TIMING_COVERAGE: inspect timing-coverage.rpt"
+    }
+    if {$count != 0} {
+        # Arc-free RAM accounting leaves do not define sequential timing arcs.
+        # Permit only their exact, inventory/clock-checked clock pins in this
+        # single diagnostic class. Counts alone never authorize an exception.
+        set observed [regexp -all -inline -line {^pin:[^\r\n]+} $coverage]
+        if {$count != [llength $accounting_clocks] ||
+            ![regexp -line {^ Sequential data pins driven by a clock signal\s+([0-9]+)\s*$} $coverage -> clock_data] ||
+            $clock_data != $count || [lsort $observed] ne [lsort $accounting_clocks]} {
+            error "PDMA_TIMING_COVERAGE: inspect timing-coverage.rpt"
+        }
+        puts "PDMA_TIMING_ACCOUNTING_CLOCKS count=$count (exact RAM pins only)"
     }
     set paths [report_timing -max_paths 1 -collection]
     if {[sizeof_collection $paths] != 1} {error "PDMA_TIMING_COVERAGE: missing critical path"}

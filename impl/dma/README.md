@@ -10,7 +10,7 @@ are private inputs; target frequency is not a timing-closure claim.
 
 | Location | Responsibility |
 | --- | --- |
-| `impl/dma/profiles/copy.tcl` | Fixed top, clock periods, port widths/directions/owners and coordinated cold-reset assertion |
+| `impl/dma/profiles/copy.tcl` | Fixed top, clocks, port ownership, RAM inventory and coordinated cold-reset assertion |
 | `impl/dma/flow/` | DMA entrypoints selecting the profile before delegating to generic adapters |
 | `tools/rtl-flow/implementation/profile.tcl` | Tool-independent profile validation and traversal |
 | `tools/rtl-flow/implementation/constraints-common.tcl` | Standalone clock SDC and provider/instance traversal |
@@ -18,6 +18,7 @@ are private inputs; target frequency is not a timing-closure claim.
 | `tools/rtl-flow/implementation/run.sh` | Fresh run ownership, copied snapshot resources, hashes and failure receipts |
 | `tools/rtl-flow/process.sh` | Shared owned-process-group teardown for simulation and implementation |
 | `tools/rtl-flow/implementation/genus/` | Genus units, mapping/library policy, constraints, reports and setup gate |
+| `tools/rtl-flow/implementation/memory-model.tcl` | Shared capacitance-only RAM boundary library serialization |
 | `tools/rtl-flow/implementation/vc/` | VC SpyGlass constraint translation, CDC/RDC analysis and unresolved-finding gate |
 | `impl/dma/reviews/copy.tcl` | Explicit, source-bound dispositions for the fixed Copy slice; never a generic block waiver |
 | `impl/dma/tests/{genus,vc}/` | Backend-specific qualification fixtures; profile/runner tests remain directly under `tests/` |
@@ -33,6 +34,15 @@ maximum propagation budget and their two actual domains. Package resources come
 from the immutable snapshot, not the current source tree or a guessed cache path.
 See [integration and constraint reuse](../../docs/rtl/constraints.md): the standalone wrapper
 owns clock creation, while the reusable cell API touches only the named instance.
+
+The profile's optional `memories` inventory names RAM provider instances, port
+contracts, dimensions and clocks. Synthesis defaults to `PDMA_MEMORY_MODE=control-budget`;
+`generic` retains standard-cell array mapping. The Copy profile excludes one
+8x512-bit RAM in budget mode; standard-library FIFO storage remains synthesized.
+See [RAM boundary accounting](../../docs/rtl/memory-budget.md) for the generated
+library, exact binding checks and the distinction between logical area and
+unqualified SRAM cost. Ordinary RTL allows automatic ungrouping and boundary
+optimization; RAM leaves and synchronizers retain their separate protection.
 
 Generate an immutable source snapshot, then invoke the desired tool adapter:
 
@@ -137,6 +147,9 @@ before analysis. They establish flow sensitivity, not DMA correctness:
 bash impl/dma/tests/run.test.sh "$PDMA_RUN_ROOT/runner-tests"
 tclsh impl/dma/tests/profile.test.tcl "$PDMA_RUN_ROOT/profile-tests" "$PDMA_RUN_ROOT/snapshot"
 bash impl/dma/tests/genus/genus-policy.sh "$PDMA_RUN_ROOT/policy-tests"
+bash impl/dma/tests/genus/memory.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/memory-tests"
+bash impl/dma/tests/genus/memory.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/memory-minimum-tests" minimum
+bash impl/dma/tests/genus/mapped-memory.sh "$PDMA_RUN_ROOT/map" "$PDMA_RUN_ROOT/memory-audit"
 bash impl/dma/tests/genus/genus-timing.sh "$PDMA_RUN_ROOT/map" "$PDMA_RUN_ROOT/timing-test"
 bash impl/dma/tests/genus/genus-cdc.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/cdc-integration"
 bash impl/dma/tests/vc/crossings.sh "$PDMA_RUN_ROOT/static-tests"

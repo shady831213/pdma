@@ -60,8 +60,10 @@ receipt retires its slot at that edge; allocation may reuse it then, with the ne
 request visible next cycle. Neither path waits for unrelated software work.
 The generic RAM provider does not
 guarantee its output while disabled: the write-offer register explicitly captures
-a valid synchronous read result. RAM array syntax does not promise a hard macro;
-the current implementation assessment maps the generic storage to cells.
+a valid synchronous read result. RAM array syntax does not promise a hard macro.
+Synthesis defaults to an explicit [RAM boundary budget](memory-budget.md) for the
+Copy buffer, with real SRAM area and intrinsic timing excluded. Generic mode maps
+that array to standard cells; FIFO storage remains synthesized in both modes.
 
 ## Fault, error and reset
 

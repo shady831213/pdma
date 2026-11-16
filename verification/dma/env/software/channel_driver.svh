@@ -57,7 +57,7 @@ class pdma_channel extends pdma_register_access;
         read_reg(registers.command_block.consumer_reg,consumer);
         if(producer-consumer+(publish_fence ? 2 : 1)>cfg.command_capacity)
             `uvm_fatal("COMMAND_RING_FULL","No command ring capacity for task")
-        publish_record(job.copy_record(),producer);
+        publish_record(job.command_record(),producer);
         if(publish_fence) publish_record(job.fence_record(),producer+1);
         job.submitted_at=$realtime;
         producer+=publish_fence ? 2 : 1;

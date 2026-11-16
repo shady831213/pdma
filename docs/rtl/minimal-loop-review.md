@@ -19,7 +19,7 @@ mailbox 启动门控，并完成 [CDC/RDC 逐项处置](cdc-review.md)。没有�
 | 随机异步时钟，19 tests × 2 seeds | 38 PASS；7 个 checker 负例全部被拒绝 |
 | 目标频率 TB 自检，5 tests × 2 seeds | 10 PASS；仅自检实例做周期检查 |
 | 共享进程清理逻辑后的真实 channel-reset 场景 | PASS |
-| 场景功能覆盖 | 已声明的 64 个 bins 全覆盖；不是全部未来功能覆盖 |
+| 场景功能覆盖 | 已声明场景组覆盖率 100%；不是全部未来功能覆盖 |
 
 目标频率回归的 DUT 模块覆盖率：
 

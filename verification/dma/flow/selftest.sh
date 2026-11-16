@@ -74,6 +74,9 @@ if [[ ${FIXTURE_FAIL:-} == "$test_name:$seed" ]]; then
 fi
 if [[ ${FIXTURE_WRONG_MARKER:-0} == 1 ]]; then test_name=pdma_wrong_test; fi
 printf 'PDMA_VIP_PASS test=%s\n' "$test_name" > simulation.log
+mkdir -p "$coverage/snps/coverage/db/testdata/run"
+printf '<test><srctest cmdline="%s" seed="%s"/></test>\n' "$test_name" "$seed" \
+    > "$coverage/snps/coverage/db/testdata/run/siminfo.xml"
 SIM
 chmod +x "$fixture/build/simv"
 (cd "$fixture/build" && sha256sum simv > executable.sha256)
@@ -125,21 +128,42 @@ if PDMA_CLOCK_MODE=invalid bash "$flow/regression.sh" "$fixture/build" "$evidenc
 printf 'PASS explicit fixed-clock profile and invalid mode rejection\n' >> "$evidence/assertions.txt"
 
 cat > "$fixture/urg" <<'URG'
-#!/usr/bin/env bash
-set -euo pipefail
-while (($#)); do
-    if [[ $1 == -report ]]; then shift; mkdir -p "$1"; printf 'fixture coverage report\n' > "$1/dashboard.txt"; fi
-    shift
-done
+#!/usr/bin/env python3
+# Launcher/input-selection fixture only; native merge semantics are tested with URG.
+from pathlib import Path
+import sys
+import xml.etree.ElementTree as ET
+args=sys.argv[1:]
+start=args.index('-dir')+1
+end=args.index('-dbname')
+merged=ET.Element('test')
+for directory in args[start:end]:
+    for path in Path(directory).glob('snps/coverage/db/testdata/*/siminfo.xml'):
+        for source in ET.parse(path).iter('srctest'):
+            merged.append(source)
+database=Path(args[end+1]).parent.with_suffix('.vdb')
+metadata=database/'snps/coverage/db/testdata/all/test.xml'
+metadata.parent.mkdir(parents=True)
+ET.ElementTree(merged).write(metadata)
+if '-report' in args:
+    report=Path(args[args.index('-report')+1])
+    report.mkdir()
+    (report/'dashboard.txt').write_text('fixture coverage report\n')
 URG
 chmod +x "$fixture/urg"
 if PDMA_COVERAGE_TOOL="$fixture/urg" bash "$flow/coverage.sh" "$fixture/build" "$evidence/tb" "$evidence/tb-coverage" > "$evidence/tb-coverage.log" 2>&1; then exit 1; fi
 [[ ! -e $evidence/tb-coverage ]]
 printf 'PASS TB selftest coverage excluded from DUT reports\n' >> "$evidence/suite-assertions.txt"
 PDMA_COVERAGE_TOOL="$fixture/urg" bash "$flow/coverage.sh" "$fixture/build" "$evidence/failure" "$evidence/coverage" > "$evidence/coverage.log" 2>&1
-[[ $(wc -l < "$evidence/coverage/databases.list") == 4 ]]
+[[ $(wc -l < "$evidence/coverage/databases.list") == 3 ]]
 ! grep -Eq '/negative-|/pdma_aligned_copy_test/seed-1/' "$evidence/coverage/databases.list"
-printf 'PASS coverage includes build+3 passed cases, excludes failed and negative cases\n' >> "$evidence/assertions.txt"
+python3 - "$evidence/coverage/merge-result.json" <<'PY'
+import json,sys
+result=json.load(open(sys.argv[1]))
+assert result['complete'] and result['source_records']==3
+assert len(result['input_fingerprints'])==4 # design plus three selected simulations
+PY
+printf 'PASS coverage retains design+3 passed cases, excludes failed and negative cases\n' >> "$evidence/assertions.txt"
 
 FIXTURE_CANCEL=1 bash "$flow/regression.sh" "$fixture/build" "$evidence/cancel" 1 7 > "$evidence/cancel.log" 2>&1 &
 regression_pid=$!
@@ -159,7 +183,7 @@ while read -r pid; do
     [[ -z $state || $state == Z* ]]
     printf 'pid=%s state=%s\n' "$pid" "${state:-exited}" >> "$evidence/cancel-observed.txt"
 done < "$evidence/cancel-pids.txt"
-ps -eo pid=,pgid=,stat= > "$evidence/cancel-processes.txt"
+ps -e -o pid= -o pgid= -o stat= > "$evidence/cancel-processes.txt"
 while read -r group; do
     if awk -v group="$group" '$2 == group && $3 !~ /^Z/ { found=1 } END { exit !found }' "$evidence/cancel-processes.txt"; then exit 1; fi
     printf 'group=%s live_members=0\n' "$group" >> "$evidence/cancel-observed.txt"

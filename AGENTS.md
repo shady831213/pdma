@@ -69,8 +69,9 @@ memory profile, eight reserved burst rows per channel, independent read/write en
 core/bus asynchronous queues, a reg/core mailbox and reset drain. Software
 can submit Copy followed by Fence and poll its memory marker for completion.
 It is not the complete
-DMA execution/atomic/full-bus-profile implementation. Multichannel qualification
-is in progress; see `docs/rtl/multichannel.md`. Aligned long-copy throughput
+DMA execution/atomic/full-bus-profile implementation. The 2026-11-16 qualification
+passes functional checks for every count in 1..8 and control-budget implementation
+checks at 2 and 8; see `docs/rtl/multichannel.md`. Aligned long-copy throughput
 has its own zero-delay qualification; other profiles remain open. See
 `docs/rtl/minimal-copy.md`. Register reset action/clear ports alone remain
 integration boundaries, not evidence of transaction drain without that owner.
@@ -84,8 +85,9 @@ at 1GHz, register clock at 500MHz, still three asynchronous domains. ULVT is
 forbidden; qualify library selection, mapping exclusions and actual mapped-cell
 identities. Both CDC and RDC must use VC SpyGlass with PDMA-owned constraints
 and reviewed findings. The Genus and VC SpyGlass flows are implemented;
-the prior single-channel control-budget logic setup estimate meets the target
-with zero slack margin; the new multichannel mapping remains under qualification; SRAM area/power and intrinsic timing remain excluded and unqualified. The
+the current 2-channel and 8-channel control-budget logic setup estimates meet the
+target with zero slack margin. SRAM area/power and intrinsic timing remain excluded
+and unqualified. The
 redundant mailbox startup gates are removed; CDC/RDC reviewed gates accept only
 source-bound, path-specific findings, including exact unconnected/no-clock sinks
 with disabled consumers. Group counts never substitute for endpoint proof; raw

@@ -19,7 +19,7 @@ main() {
     [[ ${suite:-dut} == dut ]] || { printf 'Only DUT regressions may enter DUT coverage reports\n' >&2; exit 2; }
     pdma_environment verification
     pdma_new_run "$report"
-    databases=("$build/coverage.vdb")
+    databases=()
     while IFS= read -r result; do
         [[ $result =~ ^PASS\ test=([a-zA-Z_][a-zA-Z0-9_]*)\ seed=([1-9][0-9]{0,8})$ ]] || continue
         test_name=${BASH_REMATCH[1]} seed=${BASH_REMATCH[2]}
@@ -29,11 +29,13 @@ main() {
         test -d "$case_run/coverage.vdb"
         databases+=("$case_run/coverage.vdb")
     done < "$regression/results.txt"
-    ((${#databases[@]}>1)) || { printf 'No successful simulation coverage\n' >&2; exit 1; }
+    ((${#databases[@]})) || { printf 'No successful simulation coverage\n' >&2; exit 1; }
     printf '%s\n' "${databases[@]}" > "$report/databases.list"
-    pdma_execute "${PDMA_COVERAGE_TIMEOUT:-300}" "$report/coverage.log" "${PDMA_COVERAGE_TOOL:-urg}" \
-        -dir "${databases[@]}" -report "$report/report" -format text -show summary
+    pdma_execute "${PDMA_COVERAGE_TIMEOUT:-300}" "$report/coverage.log" \
+        python3 "$root/tools/rtl-flow/coverage/merge.py" --tool "${PDMA_COVERAGE_TOOL:-urg}" \
+        --design "$build/coverage.vdb" --inputs "$report/databases.list" --output "$report"
     test -s "$report/report/dashboard.txt"
+    test -s "$report/merge-result.json"
     printf 'PDMA_COVERAGE_COMPLETE\n'
 }
 { main "$@"; exit $?; }

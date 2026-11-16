@@ -43,11 +43,17 @@ class pdma_task extends uvm_object;
     task deallocate(jvs_memory_allocator allocator,pdma_memory memory);
         source_buffer.deallocate(allocator,memory); dest_buffer.deallocate(allocator,memory); fence_buffer.deallocate(allocator,memory);
     endtask
-    function Command_t copy_record();
+    function Command_t command_record();
         CopyCommand_t record_value='0;
         CommandHeader_t header='0;
         LinearEndpoint_t source='0, destination='0;
         CommandHeader_set_opcode(header,opcode);
+        if(opcode==COMMANDHEADER_OPCODE_TRAP) begin
+            // A valid unsupported command, not a Copy body with its tag changed.
+            TrapCommand_t trap_value='0;
+            TrapCommand_set_header(trap_value,header); TrapCommand_set_id(trap_value,id);
+            return Command_t'(trap_value);
+        end
         LinearEndpoint_set_address(source,source_base); LinearEndpoint_set_offset(source,source_offset);
         LinearEndpoint_set_address(destination,dest_address-dest_offset); LinearEndpoint_set_offset(destination,dest_offset);
         CopyCommand_set_header(record_value,header); CopyCommand_set_id(record_value,id);

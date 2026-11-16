@@ -147,9 +147,13 @@ as DUT failures or include them in coverage.
 Timeouts and signal exits remain failures even if a negative run printed its
 expected diagnostic. Coverage reports are emitted as text summaries with all
 collected metrics; only successful positive runs enter the merge. Raw databases
-remain available for detailed reporting. The installed report tool crashes in
-the detailed-report path for this suite, while summary reporting succeeds with
-the identical full input set; this is not a metric or bin exclusion.
+remain available for detailed reporting. The generic merge helper bounds each
+native invocation to 32 inputs, checks original simulation provenance through
+every intermediate database and verifies that input fingerprints are unchanged.
+The final report's test count may describe merged batches; `merge-result.json`
+records the original source count. Summary reporting avoids the installed tool's
+detailed-report failure without excluding metrics or bins. See the latest
+[results](results.md) for native merge equivalence and remaining coverage gaps.
 
 `tb/generated/contract_records.sv` is generated directly from the contract's schema through
 the public export API. Typed byte images, field accessors, enum values, sizes and

@@ -29,7 +29,7 @@ directory; no particular machine path is required.
 | `PDMA_CHANNEL_COUNT` | DMA/VIP elaboration count in 1..8, default 2; compile a separate binary and qualify the final 8-channel profile |
 | `PDMA_DESIGN_PROFILE` | Optional top/clock/port profile; defaults to the DMA Copy slice |
 | `PDMA_STATIC_REVIEW` | Optional explicit source-bound CDC/RDC review policy; default raw findings remain failures |
-| `PDMA_SYNTH_STAGE` | Genus `prepare` or default `map`; preparation alone is not synthesis qualification |
+| `PDMA_SYNTH_STAGE` | Genus `prepare`, diagnostic `mapped`, or default full `map`; only full mapping and optimization run the qualification gates |
 | `PDMA_MEMORY_MODE` | Default `control-budget` binds inventoried RAM boundaries; `generic` maps behavioral arrays to standard cells |
 | `SVT_COMMON_HOME`, `SVT_AMBA_HOME`, `DESIGNWARE_HOME` | Installed AXI VIP |
 | `JVSUK_HOME` | jarvisuk source checkout |
@@ -59,6 +59,17 @@ from a guessed source-tree/cache path. See [package resources](ip/README.md).
 Compile, simulation, coverage and implementation commands share owned process-group
 execution and teardown; cancellation stops descendants before returning. Log checks
 reject native failures even if a success marker was printed earlier.
+
+Coverage merges use `coverage/merge.py` with bounded native-tool fan-in. No
+metrics or source runs are discarded: every stage checks the original simulation
+identities and the final merge rechecks all input database fingerprints. Native
+arguments use short local aliases so caller paths may contain spaces; those
+aliases are removed after each invocation. Keep the per-stage manifests and logs
+alongside the final database and report. `coverage/verify.sh` compares direct and
+staged native metrics for the same diagnostic subset; it does not replace merging
+the complete regression. Tool failures, missing provenance and changed inputs
+remain failures. Native coverage warnings also fail the merge: the tool can skip
+incompatible instance data while returning zero, even with strict flags enabled.
 
 `bash tools/rtl-flow/tests/environment_test.sh` checks log failure detection and stale-output
 rejection without requiring commercial tools. Temporary selftest fixtures are

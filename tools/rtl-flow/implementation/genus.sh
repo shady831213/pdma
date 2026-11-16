@@ -6,7 +6,7 @@ main() {
     source "$root/tools/rtl-flow/environment.sh"
     source "$root/tools/rtl-flow/implementation/run.sh"
     export PDMA_SYNTH_STAGE=${PDMA_SYNTH_STAGE:-map}
-    case "$PDMA_SYNTH_STAGE" in prepare|map) ;; *) printf 'Invalid synthesis stage\n' >&2; exit 2 ;; esac
+    case "$PDMA_SYNTH_STAGE" in prepare|mapped|map) ;; *) printf 'Invalid synthesis stage\n' >&2; exit 2 ;; esac
     export PDMA_MEMORY_MODE=${PDMA_MEMORY_MODE:-control-budget}
     case "$PDMA_MEMORY_MODE" in generic|control-budget) ;; *) printf 'Invalid memory mode\n' >&2; exit 2 ;; esac
     snapshot=$(realpath "${1:?Usage: genus.sh SNAPSHOT NEW_RUN}")
@@ -26,11 +26,19 @@ main() {
     if [[ $PDMA_SYNTH_STAGE == prepare ]]; then
         marker=PDMA_GENUS_PREPARE_COMPLETE
         reports=(prepared.db)
+    elif [[ $PDMA_SYNTH_STAGE == mapped ]]; then
+        marker=PDMA_GENUS_MAPPED_CHECKPOINT_COMPLETE
+        reports=(mapped.db mapped-timing.rpt mapped-qor.rpt mapped.sha256)
+    else
+        reports+=(mapped.db mapped-timing.rpt mapped-qor.rpt mapped.sha256)
     fi
     pdma_check_log genus.log "$marker"
     for report in "${reports[@]}" units.rpt applied.sdc constraint-coverage.rpt memory-inventory.tsv memory-load-pre.tsv; do
         test -f "$report" && test -s "$report"
     done
+    if [[ $PDMA_SYNTH_STAGE != prepare ]]; then
+        sha256sum --check --status mapped.sha256
+    fi
     printf '%s\n' "$marker"
 }
 { main "$@"; exit $?; }

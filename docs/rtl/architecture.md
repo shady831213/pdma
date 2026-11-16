@@ -43,6 +43,11 @@ Function/context 外围、firmware 资源管理与 PCIe/SoC 集成保持既定�
 2026-11-11 决定：上述目标替代此前暂用的 22nm/500MHz 评估目标。本轮已基于
 Genus 建立首个 12nm 评估结果，见 [最小闭环评审](minimal-loop-review.md)；旧结果
 保留其原有配置含义，不缩放旧 slack 或混用面积。
+2026-11-16 的共享 Copy/Fence 切片已完成 1..8 channel 功能回归，以及 2/8 channel
+的上述频率、非 ULVT、CDC/RDC 和控制逻辑/RAM 边界预算检查；详见
+[多 channel 结果](../../verification/dma/results.md#2026-11-16-multichannel-closure)。
+该结果仅覆盖当前 32-bit 寄存器、64-bit 普通内存 profile，不外推到其它位宽、完整
+指令集、真实 SRAM 本征时序或布局布线签核。
 禁止 ULVT 必须覆盖允许库选择、映射前禁用以及最终实际映射单元的库身份与阈值属性
 审计，不能仅检查库文件名。不能为达到 1GHz 默许 ULVT 或放宽约束。
 通用流程和设计约束进入仓库；商业工具部署、工艺库输入与原始报告留在私有配置和

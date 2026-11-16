@@ -32,8 +32,8 @@ module FenceTest {
         memory                                                                                        ,
     );
     initial {
-        // Widths, recoverable fault, permanent failure, reset drain and bad geometry.
-        for scenario in 0..7 {
+        // Widths, faults, reset drain, bad geometry and malformed width encoding.
+        for scenario in 0..10 {
             let wide   : logic     = scenario != 0;
             let address: logic<64> = case scenario {
                 0      : 64'h304,
@@ -65,15 +65,25 @@ module FenceTest {
                     memory.receipt.data[127:64]  = 9;
                     memory.receipt.data[191:128] = address;
                     memory.receipt.data[223:192] = 11;
-                    memory.receipt.data[255:224] = wide as 32;
+                    memory.receipt.data[255:224] = if scenario == 7 ? 2 : wide as 32;
                     memory.receipt.data[319:256] = 64'h123456789abcdef0;
+                    if scenario == 8 {
+                        memory.receipt.data[CommandHeaderLayout::EXTENT * 8] = 1;
+                    }
+                    if scenario == 9 {
+                        memory.receipt.data[FenceCommandLayout::EXTENT * 8] = 1;
+                    }
                 }
                 memory.returned = 1;
                 clk.next();
                 memory.returned = 0;
             }
-            $assert(command_advance, "FENCE_ACCEPTED");
-            command.consumer = 1;
+            if scenario >= 7 {
+                $assert(!command_advance, "MALFORMED_FENCE_NOT_CONSUMED");
+            } else {
+                $assert(command_advance, "FENCE_ACCEPTED");
+                command.consumer = 1;
+            }
             for timeout in 0..10 {
                 if memory.valid {
                     break;
@@ -107,6 +117,14 @@ module FenceTest {
                     actions.resume_request = 1;
                     clk.next();
                     actions.resume_request = 0;
+                    // Resume makes the owner eligible; arbitration may take a
+                    // cycle before the retained request reaches this interface.
+                    for timeout in 0..10 {
+                        if memory.valid {
+                            break;
+                        }
+                        clk.next();
+                    }
                     $assert(
                         memory.valid && memory.request.write && memory.request.address == address
                             && memory.request.selector == 11 && memory.request.size == 3 && memory.request.data[63:0]
@@ -120,7 +138,7 @@ module FenceTest {
                     memory.returned = 0;
                 }
             }
-            if scenario == 3 || scenario >= 5 {
+            if scenario == 3 || (scenario >= 5 && scenario <: 7) {
                 for timeout in 0..10 {
                     if memory.valid {
                         break;
@@ -150,6 +168,12 @@ module FenceTest {
             }
             if scenario == 4 {
                 $assert(!status[0].resetting, "FENCE_RESET_FINISHES_AFTER_RECEIPT");
+            }
+            if scenario >= 7 {
+                $assert(
+                    status[0].fatal == ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD && command.consumer == 0,
+                    "MALFORMED_FENCE_COMMAND_READ_FATAL",
+                );
             }
         }
         $finish();

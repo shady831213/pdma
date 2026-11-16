@@ -1,0 +1,85 @@
+#[test(malformed_copy_is_not_accepted)]
+module DescriptorTest {
+    inst clk   : $tb::clock_gen #( period: 10 );
+    inst rst   : $tb::reset_gen ( clk );
+    inst memory: CopyMemoryPort;
+    var configuration: RegisterState::ChannelConfig    ;
+    var status       : RegisterState::ChannelStatus [1];
+    var advance      : logic                           ;
+    var event_advance: logic                           ;
+    inst dut: CopyEngine (
+        clk                                                                                           ,
+        rst_n          : rst                                                                          ,
+        command        : '{RegisterState::Ring'{base: 0, capacity: 2, producer: 1, consumer: 0}},
+        events         : '{RegisterState::Ring'{base: 64'h800, capacity: 2, producer: 0, consumer: 0}},
+        configuration  : '{configuration},
+        actions        : '{'0},
+        reset_all      : 0                                                                            ,
+        global_blocked : 0                                                                            ,
+        global_clear   : 0                                                                            ,
+        fatal_in       : 0                                                                            ,
+        event_geometry : 1                                                                            ,
+        event_ready    : 1                                                                            ,
+        status                                                                                        ,
+        clear          : _                                                                            ,
+        command_advance: advance                                                                      ,
+        event_advance                                                                                 ,
+        internal_fatal : _                                                                            ,
+        memory                                                                                        ,
+    );
+    initial {
+        // Reserved option, direct gap, source inactive tail, destination inactive tail.
+        for corruption in 0..4 {
+            configuration   = '0;
+            memory.ready    = 1;
+            memory.returned = 0;
+            memory.receipt  = '0;
+            rst.assert();
+            clk.next(3);
+            configuration.enable = 1;
+            for part in 0..2 {
+                for timeout in 0..10 {
+                    if memory.valid {
+                        break;
+                    }
+                    clk.next();
+                }
+                $assert(memory.valid && !memory.request.write, "MALFORMED_COPY_FETCH");
+                clk.next();
+                memory.receipt = '0;
+                if part == 0 {
+                    memory.receipt.data[127:64]  = 9;
+                    memory.receipt.data[191:128] = 8;
+                    memory.receipt.data[319:256] = 64'h200;
+                    if corruption == 0 {
+                        memory.receipt.data[10] = 1;
+                    }
+                    if corruption == 1 {
+                        memory.receipt.data[16] = 1;
+                    }
+                    if corruption == 2 {
+                        memory.receipt.data[384] = 1;
+                    }
+                } else {
+                    memory.receipt.data[63:0] = 64'h300;
+                    if corruption == 3 {
+                        memory.receipt.data[128] = 1;
+                    }
+                }
+                memory.returned = 1;
+                clk.next();
+                memory.returned = 0;
+            }
+            $assert(!advance, "MALFORMED_COPY_NOT_CONSUMED");
+            clk.next();
+            for quiet in 0..5 {
+                $assert(
+                    status[0].fatal == ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD && !advance && !memory.valid && !event_advance,
+                    "MALFORMED_COPY_HAS_NO_EXECUTION_OR_EVENT",
+                );
+                clk.next();
+            }
+        }
+        $finish();
+    }
+}

@@ -78,8 +78,23 @@ proc run {} {
         set start [clock milliseconds]
         $command
         check_errors $command
-        if {$command eq "syn_map"} {cdc_preserve $design_profile}
+        if {$command eq "syn_map"} {
+            cdc_preserve $design_profile
+            # Keep a usable diagnostic even if later optimization times out.
+            # This checkpoint is not final timing or implementation qualification.
+            write_db -all_root_attributes mapped.db
+            report_timing -max_paths 20 > mapped-timing.rpt
+            report_qor > mapped-qor.rpt
+            check_errors mapped_checkpoint
+            exec sha256sum --check --status technology.sha256
+            exec sha256sum mapped.db mapped-timing.rpt mapped-qor.rpt inputs.sha256 technology.sha256 > mapped.sha256
+            puts PDMA_GENUS_MAPPED_CHECKPOINT_COMPLETE
+        }
         puts $timings "$command\t[expr {([clock milliseconds]-$start)/1000.0}]"
+        if {$command eq "syn_map" && $env(PDMA_SYNTH_STAGE) eq "mapped"} {
+            close $timings
+            return 0
+        }
     }
     close $timings
     write_db -all_root_attributes copy.db

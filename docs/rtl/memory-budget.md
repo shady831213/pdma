@@ -23,7 +23,9 @@ The current inventory is the Copy window's `engine/copy/buffers/u_ram`:
 `core_clk`, with bit write masks and no content reset. The logical reservation is
 512B per channel: 1KiB at the development count of 2 and 4KiB at the maximum of 8.
 The previous single-channel qualification remains a 512B checkpoint; it does not
-qualify the larger configurations.
+qualify the larger configurations. Fresh 2/8-channel control-budget mapping and
+restored-database audits completed on 2026-11-16; see the
+[multichannel results](../../verification/dma/results.md#2026-11-16-multichannel-closure).
 Same-address collisions retain the common-cell contract; the budget model does
 not add forwarding or qualify a physical macro's collision behavior.
 

@@ -1,7 +1,10 @@
 # Shared execution with one to eight channels
 
-Status: functional and structural checks pass at this checkpoint; mapping and
-aggregate coverage remain pending. See the [validation record](../../verification/dma/results.md#2026-11-13-multichannel-checkpoint). The accepted scope
+Status: the 2026-11-16 Copy/Fence slice passes native tests, retained one-through-eight
+scenario checks, source-bound two/eight-channel CDC/RDC reviews and fresh two/eight-channel
+control-budget synthesis and boundary audits. Physical SRAM and post-layout signoff
+remain separate. The results use the final source, not inherited implementation evidence. See the
+[validation record](../../verification/dma/results.md#2026-11-16-multichannel-closure). The accepted scope
 is every integer `CHANNEL_COUNT` from 1 through 8. Develop and synthesize first
 at 2, preserve the 1-channel case, check intermediate configurations, and close the
 complete functional/throughput/CDC/RDC/synthesis loop at 8 before completion.
@@ -11,7 +14,7 @@ Copy/Fence and the existing fault/error/reset semantics remain the command scope
 
 | Resource | Owner and capacity | Release |
 | --- | --- | --- |
-| Accepted descriptor and command progress | One retained context per channel | Terminal command handling or completed reset cleanup |
+| Accepted descriptor, control-request address and command progress | One retained context per channel | Terminal command handling or completed reset cleanup |
 | Retained burst metadata and read data | Eight 64-byte rows reserved per channel | Successful write retirement or safe cancellation |
 | Data RAM | One shared 1R1W provider, `8 * CHANNEL_COUNT` rows of 512 bits | Row validity follows its channel/slot owner; contents need no reset |
 | Issue, decode and payload preparation | One shared execution datapath | Command completion, safe park, or closing the selected owner |
@@ -36,9 +39,19 @@ prepared write, outstanding receipt or notification.
 
 Round-robin admission uses the existing common-cell selector. Eligibility excludes
 reset, stopped, fatal and faulted channels. Cursor wrap uses the actual count,
-including non-powers of two. A healthy command retains its grant across chunks;
+including non-powers of two. The selected owner is registered before execution;
+there is no combinational arbitration bypass into address generation. A healthy command retains its grant across chunks;
 the channel consumer advances once at valid descriptor acceptance. Resuming a
 parked command reacquires a grant and uses its stored descriptor/progress/data.
+
+Descriptor fetch and error-event publication calculate their ring start address
+before issuing a request. The channel context retains the current control-request
+address and advances it only after a successful partial transfer. Fence decode
+captures its target into the same address state and preserves it across parking.
+Event preparation checks geometry, capacity and address overflow before entering
+publication. These register cuts separate ring arithmetic from request-FIFO input
+timing; they add admission/preparation latency without inserting payload-burst
+stages. Software still observes the same acceptance, error, fault and reset rules.
 
 Closing an owner immediately blocks its new requests. Requests already accepted
 by the core-to-bus queue remain obligations even before AXI handshakes. Return
@@ -98,7 +111,7 @@ owner. Cold reset still covers all three domains, with local synchronous release
 RDC dead-sink groups name exact unused FIFO data-match inputs (`MATCH_COUNT_WIDTH=0`)
 and the unused RAM collision result (`FORWARD_NEW_DATA=false`). At two channels,
 one additional named `eligible` intermediate is unconnected in the native graph:
-its flat fanout and endpoint fanout are both zero, while live `choice` and `selected`
+its flat fanout and endpoint fanout are both zero, while live `chosen` and `owner`
 nodes have consumers. Only that precise two-channel node is covered. This is not
 an exception for live arbitration logic or an inference that all resetless storage
 is safe. Group counts check coverage of these proven endpoints, not correctness.

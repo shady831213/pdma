@@ -67,6 +67,16 @@ uses explicit tool-default activity parameters (toggle rate 0.02, probability
 object in ps, rather than rounded text; negative slack fails the setup gate.
 Hold, routed parasitics, clock-tree implementation, synchronizer MTBF and physical
 CDC/reset timing still require separate qualification.
+
+Both `map` and the diagnostic `mapped` mode save `mapped.db`, the top 20 setup
+paths and a QoR report immediately after `syn_map`, before `syn_opt`. The
+`mapped.sha256` receipt binds these files to the captured flow/source and library
+identities. This preserves a useful diagnostic if optimization later times out.
+`PDMA_SYNTH_STAGE=mapped` stops at that checkpoint; it does **not** run the final
+timing, mapped-library, memory or CDC qualification gates and cannot establish a
+PPA pass. `tests/genus/checkpoint.sh` checks the full and diagnostic modes and
+restores the diagnostic database in a fresh tool process for the RAM audit.
+
 `cdc-timing.tsv` and `cdc-timing-status.json` additionally check that every declared
 mapped crossing is timed under its explicit budget, that held-payload paths remain
 visible, and that synchronizer stage paths retain normal local timing. The current

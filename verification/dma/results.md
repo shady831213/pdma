@@ -1,5 +1,114 @@
 # Scenario-level verification checkpoints
 
+## 2026-11-16 multichannel closure
+
+The normal two-channel mapped diagnostic reports roughly −344ps worst setup
+slack before optimization. A separate register-to-register query also reports
+−344ps from a command-ring consumer to request-FIFO address storage; this is not
+solely a reset-input path. Full baseline optimization completed with −186.3ps
+worst setup slack, failing the 1GHz target; library and crossing-budget checks
+passed. The timing-cut version, before the later decode correction, subsequently
+reached 0ps with all implementation gates passing. That is diagnostic evidence,
+not qualification of the final source.
+
+The execution pipeline registers the arbitration grant and retains each channel's current
+control-request address before issue. Event publication has an explicit address
+preparation phase. No clock, crossing budget, library policy or external protocol
+was relaxed. Both native compiler backends pass 21/21 tests; the local 64-byte
+Copy fixture retains its 10/12 bus-cycle results without/with backpressure. The
+Fence resume fixture now waits within its existing request timeout instead of
+assuming immediate arbitration, retaining every target/value/width/context check.
+
+Decode review also reproduced malformed Fence acceptance: an invalid width
+latched CommandRead fatal but still advanced the consumer. Acceptance and fatal
+handling now share one validity predicate. Native tests also reject nonzero
+Copy/Fence direct gaps and inactive union bytes before consumption, execution or
+event publication. The unsupported-command scenario now constructs a valid Trap
+record instead of changing the opcode on a Copy body.
+
+Fresh two-channel regression passes 62 positive runs and rejects all eight checker
+mutations. Long-copy read/write throughput remains 8 B/bus cycle with zero payload
+bubbles. At matched settings, short/long descriptor-to-Fence latency increases
+from 120/2160 to 121/2161 bus cycles; the extra admission register is visible at
+command boundaries, not repeated for every payload burst.
+
+Fresh source-bound gates accept CDC 66/66 and RDC 2163/2163, with zero unresolved
+findings. The changed two-channel tag slices are checked against exact disabled
+FIFO data-match pins: they have no endpoints and their flat traversal contains
+only the queried input pin. The named unused arbitration intermediate has zero
+fanout; live chosen/owner nets remain connected. The old source binding is rejected.
+The final eight-channel regression passes all 248 positive runs and rejects eight
+checker mutations. Its fresh CDC/RDC gates accept 210/210 and 4171/4171 findings,
+with zero unresolved items; all 650 cited disabled FIFO inputs and RAM collision
+nodes have no downstream endpoints. These remain path-specific reviews.
+The full coverage merge preserves all 248 source runs: PDMA scenario bins 18/18,
+top-level line 2596/2809 (92.42%), condition 1975/2983 (66.21%), branch 1240/1552
+(79.90%) and toggle 87707/907796 (9.66%). No metric exclusions were added.
+
+The retained matrix is complete: 31 positive runs at one channel, 62 at two,
+18 each at three through seven, and 248 at eight: **431 positive runs**. Each
+configuration rejects the eight distinct checker mutations; supplemental batches
+repeat some negative controls and do not add new mutation classes. Eight-channel
+synchronizer-latency stress adds 18 positive runs and eight rejected mutations.
+All seven native review-gate checks pass on the final eight-channel source.
+
+Fresh final-source control-budget mapping and restored-database audits pass at
+both required implementation configurations:
+
+| Configuration | Worst setup slack | Mapped instances | Sequential instances | Logic cell area (library units) | Minimum crossing slack | Minimum RAM boundary slack |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 channels | 0ps | 73,196 | 23,575 | 29,824.451 | 223.4ps | 49.4ps |
+| 8 channels | 0ps | 175,196 | 40,147 | 66,717.573 | 191.8ps | 44.7ps |
+
+Both use core/bus at 1GHz and registers at 500MHz, with no ULVT. Each mapped run
+checks eight crossing groups, four held-payload paths and eight local synchronizer
+chains; minimum local synchronizer slack is 820.6ps in both configurations.
+Restoring each database passes the RAM/load/boundary and hierarchy audits;
+tightening the core clock is correctly rejected. No clock, crossing budget or
+reset constraint was weakened to obtain these results.
+
+The instance totals include one opaque accounting RAM leaf; its physical area,
+power and intrinsic timing are excluded. FIFO storage remains synthesized logic.
+Zero worst slack provides no extra margin. These are pre-layout logic and boundary
+budget results, not routed timing, real-SRAM, reset recovery/removal, synchronizer
+MTBF or workload-power signoff. Earlier RTL results below retain their own snapshot.
+
+## 2026-11-16 multichannel coverage and synthesis diagnostics
+
+The full eight-channel regression (31 tests × eight seeds) now has an accepted
+coverage merge for the pre-cut RTL, unchanged from the checkpoint below.
+Direct aggregation fails in the installed tool even with short input paths;
+bounded native merges preserve all **248 original simulation identities** and
+leave every input database byte unchanged. A separate 31-run comparison produces
+identical direct/staged scores and metric numerators/denominators. Paths containing
+spaces also pass. Native merged-test labels count intermediate batches, not the
+original simulations; the provenance receipt records the latter.
+
+A negative test mixing a two-channel run into the eight-channel design exposed
+zero-exit instance-shape warnings. The merge now rejects native warnings as well
+as errors; strict tool flags alone do not guarantee complete metric preservation.
+
+| Eight-channel ordinary regression | Covered / expected | Coverage |
+| --- | ---: | ---: |
+| Declared PDMA scenario bins | 18 / 18 | 100% |
+| Top-level line | 2588 / 2799 | 92.46% |
+| Top-level condition | 1951 / 2956 | 66.00% |
+| Top-level branch | 1241 / 1552 | 79.96% |
+| Top-level toggle | 87346 / 906760 | 9.63% |
+
+No metric exclusions were added. Generic VIP coverage remains in the report and
+is not a PDMA feature-coverage claim. The earlier “64/64” scenario-bin statements
+misread the tool's `AUTO BIN MAX` columns; those reports show 100% for the declared
+scenario group, not 64 covered bins. They are corrected below and in the linked
+review records. This finite covergroup is not exhaustive architecture coverage.
+
+Both previous full synthesis runs timed out during optimization after mapping;
+neither is a PPA pass. The flow now saves a source/library-bound mapped database
+and critical-path report before optimization. Native fixture tests restore that
+database and verify that diagnostic mode cannot claim final qualification.
+The two-channel timing investigation and final eight-channel implementation
+qualification remain open. Physical SRAM cost/timing remain excluded.
+
 ## 2026-11-13 multichannel checkpoint
 
 The shared Copy/Fence implementation supports every integer channel count in 1..8.
@@ -104,7 +213,7 @@ responsibilities and the failing-before smoke correction.
   restored mapping's core clock is correctly rejected.
 
 Only the 48 ordinary random-clock positive runs enter the final coverage merge.
-The declared scenario bins remain 64/64; module line/condition/branch coverage and
+The declared scenario group remains at 100%; module line/condition/branch coverage and
 the zero-delay results are identical to the burst-window checkpoint below. Long
 aligned payload remains 8B/bus-cycle with no gaps and 2160 descriptor-to-Fence
 cycles; short, batched and half-core results remain 120, 519 and 2200 cycles.

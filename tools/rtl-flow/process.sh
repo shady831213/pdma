@@ -14,7 +14,8 @@ pdma_group_alive() {
     local group=$1 pgid state
     while read -r pgid state; do
         if [[ $pgid == "$group" && $state != Z* ]]; then return 0; fi
-    done < <(ps -eo pgid=,stat=)
+    # A comma following '=' is parsed as header text by some procps versions.
+    done < <(ps -e -o pgid= -o stat=)
     return 1
 }
 

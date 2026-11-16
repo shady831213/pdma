@@ -22,5 +22,6 @@ tests/package.sv
 tb/clock_domain.sv
 checkers/lifecycle.sv
 tb/bindings.sv
+env/coverage/pipeline_timing.sv
 tb/dut.sv
 tb/top.sv

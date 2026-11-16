@@ -83,4 +83,4 @@ The SPDX license expression is `MIT OR Apache-2.0`.
 Third-party material retains its own copyright notices and license terms.
 Dependencies and linked specifications are not relicensed by this repository.
 Veryl compiler patch origins are recorded in
-[the patch provenance document](tools/rtl-flow/patches/README.md).
+[my-veryl provenance](https://github.com/shady831213/my-veryl/blob/master/PROVENANCE.md).

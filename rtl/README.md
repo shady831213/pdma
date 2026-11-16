@@ -1,5 +1,9 @@
 # PDMA Copy Engine RTL
 
+For code-corresponding block diagrams, state machines and timing, see the
+[implemented microarchitecture](../docs/rtl/microarchitecture.md) and
+[performance report](../docs/rtl/performance.md).
+
 This directory contains the in-progress core RTL for PDMA, a programmable copy
 engine for virtualized systems. The managed resource-control and platform-integration layers remain
 outside the first RTL phase; see the [project overview](../README.md).
@@ -52,13 +56,14 @@ mapped logic from excluded SRAM cost; the generic array mode remains available.
 | `src/dma/memory/` | Internal memory interface and independent read/write endpoints |
 | `src/hw_components/` | Deferred placeholder for managed peripheral hardware; outside the first RTL phase |
 | `src/tests/` | Native Veryl block tests and their local support |
-| `common_cell/` | Protocol-independent reusable cells and separate native tests |
-| `tech_cell/generic/` | Technology-independent RAM providers for common-cell contracts |
+| `common_cell` dependency | Protocol-independent cells, constraints and passive checkers from my-veryl-cells |
+| `tech_cell_generic` dependency | Generic RAM providers from my-veryl-cells |
 
 Keep DMA in one native project, with reusable cells in their own library project;
 the Rust module tree is not a prescribed RTL hierarchy.
-The DMA project now depends on the [local common-cell library](common_cell/README.md),
-with an explicit upstream snapshot and no runtime access to the source repository.
+The DMA project consumes [my-veryl-cells](https://github.com/shady831213/my-veryl-cells)
+through exact native package versions and a committed lockfile. Compiler recipes
+come from the pinned `external/my-veryl` submodule; see [tool setup](../tools/rtl-flow/README.md).
 Do not create empty pipeline controllers or one project per proposed module.
 Firmware stays software under `model/modeling/crates/firmware`; a hardware wrapper
 does not own its policy or introduce another software runtime.
@@ -83,14 +88,9 @@ VERYL_DUT_REUSE=0 bash ../tools/rtl-flow/veryl.sh test --backend cranelift
 See [DMA register ownership and integration](src/dma/README.md) and
 [test coverage](src/tests/README.md) before wiring another owner.
 
-Common-cell tests use the same qualified compiler, selected by this workspace
-rather than by the reusable library. From the repository root:
-
-```sh
-cd rtl/common_cell/tests
-VERYL_DUT_REUSE=0 bash ../../../tools/rtl-flow/veryl.sh test
-VERYL_DUT_REUSE=0 bash ../../../tools/rtl-flow/veryl.sh test --backend cranelift
-```
+Cell unit tests stay with [my-veryl-cells](https://github.com/shady831213/my-veryl-cells).
+PDMA's tests cover integration with the resolved cells. The [DMA module tree](src/dma/README.md)
+shows containment within each owner group without adding hardware wrappers.
 
 ## Verification and implementation
 

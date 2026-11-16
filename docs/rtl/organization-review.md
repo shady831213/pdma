@@ -1,6 +1,6 @@
 # RTL and flow organization review
 
-Date: 2026-11-12. Baseline: `6a2bc763`, the qualified burst-window checkpoint.
+Initial review: 2026-11-12; ownership update: 2026-11-16. Baseline: `6a2bc763`, the qualified burst-window checkpoint.
 This review changes ownership and tooling, not DMA architecture or capabilities.
 Synthesizable module/package names, instance hierarchy and Veryl hardware source
 bodies remain unchanged. Register, execution and memory tests follow their
@@ -12,8 +12,8 @@ corresponding owners.
 | --- | --- |
 | `rtl/src/dma` | Top-level assembly and generated common layout |
 | `rtl/src/dma/{registers,execution,memory}` | Register interface/storage, command/window lifetime, bus endpoints respectively |
-| `rtl/common_cell` | Reusable hardware, component-owned constraint queries and passive custody checker definitions |
-| `rtl/tech_cell/generic` | Generic RAM providers; no technology deployment |
+| `common_cell` dependency from my-veryl-cells | Reusable hardware, component-owned constraint queries and passive custody checker definitions |
+| `tech_cell_generic` dependency from my-veryl-cells | Generic RAM providers; no technology deployment |
 | `verification/dma/env` | Platform/VIP assembly, software operations, flow lifetime, result checking and passive observations |
 | `verification/dma/tests` | Independently selectable DUT/TB scenarios and standalone oracles |
 | `verification/dma/tb` | DUT/VIP wiring, explicit binds and generated software-facing packages |
@@ -21,8 +21,9 @@ corresponding owners.
 | `tools/rtl-flow/implementation` | Generic tool adapters, validation, immutable run inputs and report gates |
 
 Source directories express ownership without introducing extra RTL wrappers.
-Imported common-cell hardware/test bodies retain their original provenance;
-the project manifest declares the added flow resources separately.
+Native dependencies now own common-cell hardware/tests and declared resources.
+The local copies and compiler patches were removed after byte comparison against
+the pinned packages. See [tool ownership](../../tools/rtl-flow/README.md).
 
 ## Findings and fixes
 
@@ -97,3 +98,38 @@ This remains the one-channel Linear Copy/Fence RTL profile. There is no new CPU,
 firmware, peripheral, multichannel or atomic RTL. Mapping and reviewed structural
 checks do not establish routed timing, hold/reset recovery/removal, analog MTBF
 or workload power signoff.
+
+## Containment and shared dependencies, 2026-11-16
+
+The [DMA tree](../../rtl/src/dma/README.md) now follows actual module ownership:
+register bank → channel → rings, shared engine → Copy window, and memory endpoint
+→ independent read/write lanes. Every moved Veryl file retains its bytes and its
+module/instance names. Paths express containment without introducing RTL wrappers.
+
+my-veryl owns the compiler installer, patches and reproducer tests; the selected
+recipe preserves all three previously qualified fixes. my-veryl-cells owns common
+cells, generic RAM providers, their constraints and passive checkers. PDMA retains
+its generic flows, integration profiles and explicitly source-bound reviews. A
+native lockfile pins package versions/revisions, and the compiler is a Git submodule.
+Snapshots continue resolving resources through metadata, not workspace-relative
+library paths. Public flow code contains no private deployment settings.
+
+Qualification for the shared-dependency migration: all 26 cell RTL/resource files
+and all moved PDMA Veryl files are byte-identical to the checkpoint inputs. Of 42
+emitted SV files, 40 match after source-map comment removal; the other two contain
+the same specialized package token sequences in a different declaration order.
+All five bundled constraint/checker files match. CC and Cranelift each pass all 21
+DMA native tests and five shared compiler regressions; nine launcher/installer
+checks and 16 generic flow checks pass. Fresh CDC/RDC accepts the same exact
+findings for 2 channels (66/2163) and 8 channels (210/4171), with zero unresolved.
+The obsolete source identities fail the stale-review gate before refreshed
+identities are accepted; no finding selector or timing budget changed.
+
+Fresh 2/8-channel UVM builds each pass all 31 DUT scenarios at seed 19 and
+reject all eight checker mutations. Both builds consume the new snapshot,
+including the package-owned passive checker. The channel count comes from the
+same compile-time setting for DUT, RAL, drivers, IRQ handlers and checkers.
+
+The prior multichannel PPA results remain baseline evidence for the unchanged
+hardware. This migration does not claim a fresh synthesis, physical SRAM timing,
+routed timing, reset recovery/removal, workload power or MTBF signoff.

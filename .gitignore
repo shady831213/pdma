@@ -9,7 +9,4 @@
 /impl/**/.run/
 /tools/rtl-flow/.run/
 /tools/rtl-flow/local.env
-/tools/rtl-flow/smoke/target/
-/tools/rtl-flow/smoke/.build/
-/tools/rtl-flow/smoke/dependencies/
-/tools/rtl-flow/smoke/pdma_tool_smoke.f
+__pycache__/

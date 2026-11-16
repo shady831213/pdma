@@ -6,16 +6,17 @@ technology/electrical budgets belong to the integrating platform.
 
 | File | Role |
 | --- | --- |
-| `rtl/common_cell/constraints/duplex_mailbox.tcl` | Reusable instance-scoped handshake timing API; no clock creation or global exceptions |
-| `rtl/common_cell/constraints/async_queue.tcl` | Reusable FIFO data/Gray-pointer budgets and synchronizer-chain metadata |
-| `rtl/common_cell/constraints/ip.tcl` | Veryl metadata entry exporting the package's contracts; no automatic constraint or waiver application |
+| `common_cell::constraints/duplex_mailbox.tcl` | Reusable instance-scoped handshake timing API; no clock creation or global exceptions |
+| `common_cell::constraints/async_queue.tcl` | Reusable FIFO data/Gray-pointer budgets and synchronizer-chain metadata |
+| `common_cell::constraints/ip.tcl` | Veryl metadata entry exporting the package's contracts; no automatic constraint or waiver application |
 | `impl/dma/profiles/copy.tcl` | Copy integration: port ownership, clocks, reset contract, provider/instance bindings, depths and maximum delays |
 | `tools/rtl-flow/implementation/constraints-common.tcl` | Standalone clock SDC and explicit provider invocation |
 | `tools/rtl-flow/implementation/genus/{timing,cdc}.tcl` | Electrical constraints and mapped timing/structure audit |
 | `tools/rtl-flow/implementation/vc/constraints.tcl` | RTL clock/reset/interface intent and structural-analysis setup |
 | `impl/dma/reviews/copy.tcl` | Reviewed findings for one exact design/configuration; not a reusable whole-IP waiver |
 
-Paths in this table are repository-relative. Native Veryl metadata resolves
+`common_cell::` paths are relative to the resolved my-veryl-cells package;
+other paths are repository-relative. Native Veryl metadata resolves
 package paths and revisions; snapshots carry their declared constraint resources.
 The generic adapters load that snapshot copy. Provider namespaces isolate multiple
 versions, and the profile applies contracts once per actual instance. See the

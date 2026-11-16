@@ -238,3 +238,38 @@ CPU execution is not a prerequisite. Native block tests live under
 Keep commercial runs and waves outside the repository. A report must identify sources,
 parameters, tool versions, scenarios actually executed and their results;
 zero tests, stale artifacts and timeouts do not establish a pass.
+
+## DUT and environment parameters
+
+`PDMA_CHANNEL_COUNT` selects an integer in 1..8 at **compile time** (default 2).
+`flow/compile.sh` records it in `configuration.txt` and passes one macro to both
+`tb/dut.sv` and the environment. That value sizes DUT channels, IRQ wiring,
+per-channel handlers/checkers, software channels and the generated RAL instance.
+Environment construction rejects a different channel count or IRQ-vector count;
+the register-access tests exercise the discovery register through RAL. Reusing a compiled
+simulation does not change its channel count when the caller changes the environment
+variable: compile a new build directory for another count.
+
+The current Copy/Fence profile still fixes register data to 32 bits and memory data
+to 64 bits. These are not independent randomized TB knobs. Protocol delays, memory
+outstanding limits, IRQ handling and clocks are platform stimulus settings. Clock
+configuration intentionally supports target frequencies, asynchronous ratios and
+jitter; they are not synthesized DUT parameters. Genus/VC independently select
+`PDMA_CHANNEL_COUNT` through the DMA profile and freeze its resolved value per run.
+
+
+## Optional internal timing
+
+`flow/run.sh ... +PDMA_INTERNAL_TIMING` enables the passive module in
+`env/coverage/pipeline_timing.sv`, wired only by `tb/dut.sv`. It samples handshake
+boundaries, matches receipts by channel/slot (including same-edge R-to-W reuse),
+and reports grant/start, request ingress, return crossing and roundtrip intervals.
+Its sampling processes do not run without the plusarg. Software reset does not
+clear the observation's outstanding obligations; they must retire through receipts.
+Cold reset during live transactions is outside the DUT integration contract.
+
+This complements the task/VIP performance callbacks; it neither drives the DUT
+nor replaces completion/data checking. See [the performance report](../../docs/rtl/performance.md)
+for interval definitions, configuration and measured results. The multichannel
+throughput case also reports the common first-descriptor/last-Fence window, so
+per-channel payload peaks cannot be mistaken for aggregate copy bandwidth.

@@ -14,7 +14,7 @@ are private inputs; target frequency is not a timing-closure claim.
 | `impl/dma/flow/` | DMA entrypoints selecting the profile before delegating to generic adapters |
 | `tools/rtl-flow/implementation/profile.tcl` | Tool-independent profile validation and traversal |
 | `tools/rtl-flow/implementation/constraints-common.tcl` | Standalone clock SDC and provider/instance traversal |
-| `rtl/common_cell/constraints/ip.tcl` | Package-owned scoped IP contracts; integration supplies clocks, hierarchy and budget |
+| `common_cell::constraints/ip.tcl` | Package-owned scoped IP contracts; integration supplies clocks, hierarchy and budget |
 | `tools/rtl-flow/implementation/run.sh` | Fresh run ownership, copied snapshot resources, hashes and failure receipts |
 | `tools/rtl-flow/process.sh` | Shared owned-process-group teardown for simulation and implementation |
 | `tools/rtl-flow/implementation/genus/` | Genus units, mapping/library policy, constraints, reports and setup gate |

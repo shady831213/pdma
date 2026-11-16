@@ -1,5 +1,8 @@
 # Linear Copy and Fence RTL slice
 
+Detailed implemented [microarchitecture](microarchitecture.md) and current
+[performance measurements](performance.md) supplement this scope summary.
+
 This DMA-core slice implements one shared Linear Copy/Fence engine with an
 instance-configured channel count in 1..8. Other command families and bus-width
 profiles are not the complete configurable DMA; multichannel qualification is

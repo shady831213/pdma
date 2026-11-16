@@ -7,10 +7,44 @@ copies of the engine. Channel state and stage-local state must have explicit own
 Function ownership, managed access windows and context-table resolution belong
 to the deferred sibling `hw_components` directory.
 
-`copy.veryl` is the top-level assembly and `layout.veryl` is generated contract
-metadata. `registers/`, `execution/` and `memory/` group the three actual hardware
-responsibilities; source directories do not create additional Veryl namespaces
-or synthesized wrappers. Module and instance names remain independent of paths.
+The source tree groups hardware responsibilities. Module directories show containment;
+packages and interfaces instead declare shared types/protocols within that responsibility.
+In particular, `registers/bus.veryl` is the internal register transaction protocol,
+not the system bus or a bus-arbitration module. See the [implemented microarchitecture](../../../docs/rtl/microarchitecture.md)
+for the actual instance tree, arbitration owners, state machines and pipeline cuts.
+Directory nesting does not add Veryl namespaces, wrappers, registers or latency.
+
+```text
+copy.veryl                         DmaCopy: clocks, transport, IRQ/reset collection
+layout.veryl                       Generated contract constants
+registers/
+  interface.veryl                  DmaRegisterInterface: frontend → CDC → bank
+  frontend.veryl                   AXI4-Lite pairing/response owner
+  bus.veryl, access.veryl           Register protocol and access validation
+  state.veryl                      Live register-owner interfaces
+  bank/
+    bank.veryl                     DmaRegisterBank: global state and channel routing
+    channel/
+      channel.veryl                ChannelRegisters: channel state and effects
+      ring.veryl                   RingRegisters: command/event ring state
+execution/
+  engine.veryl                     CopyEngine: shared arbitration/command execution
+  command.veryl                    Accepted command context and phases
+  copy/window.veryl                CopyWindow: per-channel burst rows and RAM owner
+memory/
+  interface.veryl                  CopyMemory request/receipt types and port
+  endpoint/
+    endpoint.veryl                 CopyMemoryEndpoint: routing and return merge
+    read.veryl                     CopyReadEndpoint: AXI read lane
+    write.veryl                    CopyWriteEndpoint: AXI write lane
+```
+
+The actual top-level instance paths are `csr` (frontend, crossing, owners),
+`engine` (copy window), `request_crossing`, `response_crossing`, and `endpoint`
+(reader, writer). Register channels are `csr.owners.channels[*].owner`; their two
+ring owners are `command_ring` and `event_ring`. Shared execution does not
+instantiate one engine per channel. Module and instance names survive file moves,
+so constraints, checkers and integration bindings keep their hardware identities.
 
 ## Implemented register path
 

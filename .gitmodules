@@ -1,0 +1,3 @@
+[submodule "external/my-veryl"]
+	path = external/my-veryl
+	url = https://github.com/shady831213/my-veryl.git

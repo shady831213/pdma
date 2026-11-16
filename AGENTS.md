@@ -19,8 +19,8 @@ The GitLab repository's visibility was not changed.
 PDMA-authored RTL, model, firmware, software, tools, tests and documentation are
 licensed under MIT OR Apache-2.0; see the repository-root licenses and README.
 Third-party notices and terms remain applicable to their respective material.
-The public repository retains the pinned Veryl compiler and checked-in
-patches. Reference the [pcie_modeling repository](https://github.com/shady831213/pcie_modeling)
+The public repository retains a pinned open-source Veryl tool dependency;
+its patches now belong to the my-veryl submodule. Reference the [pcie_modeling repository](https://github.com/shady831213/pcie_modeling)
 for their origins, not machine-local checkout paths. External upgrades do not
 automatically change PDMA's toolchain. Any further changes to repository visibility,
 history or commit-email disclosure require explicit user authorization.
@@ -75,11 +75,11 @@ checks at 2 and 8; see `docs/rtl/multichannel.md`. Aligned long-copy throughput
 has its own zero-delay qualification; other profiles remain open. See
 `docs/rtl/minimal-copy.md`. Register reset action/clear ports alone remain
 integration boundaries, not evidence of transaction drain without that owner.
-Follow `rtl/README.md` for source and verification ownership. PDMA independently
-pins and maintains Veryl under `tools/rtl-flow`, starting from a verified snapshot
-of [pcie_modeling's tool inputs](https://github.com/shady831213/pcie_modeling).
-Do not modify that project's active toolchain or
-automatically follow its updates; shared tool extraction is deferred.
+Follow `rtl/README.md` for source and verification ownership. PDMA consumes the pinned `external/my-veryl` submodule for compiler recipes,
+patches and installation, and exact `my-veryl-cells` package versions through native
+Veryl dependencies and `rtl/Veryl.lock`. The user authorized this shared migration
+on 2026-11-16. Keep generic PDMA flows here; do not restore local copies of compiler
+patches or reusable cells. Updates remain deliberate, qualified pin changes.
 The 2026-11-11 implementation target is 12nm with Genus: core and bus clocks
 at 1GHz, register clock at 500MHz, still three asynchronous domains. ULVT is
 forbidden; qualify library selection, mapping exclusions and actual mapped-cell
@@ -287,12 +287,14 @@ decisions. HSA is a semantic reference; AQL compatibility is not a current goal.
 
 ## RTL microarchitecture working principles
 
-Reusable RTL belongs in `rtl/common_cell`, currently snapshotted from pcie_modeling
-with source identity and tests. Use its existing cells instead of duplicating
-transport/storage/selection logic. Technology-specific implementations stay behind
-the common contracts; `rtl/tech_cell/generic` contains only generic RTL providers.
-Keep DMA/PCIe protocols and lifecycle policies outside common_cell. Shared-repo
-extraction is deferred; do not add machine-local source references to Git.
+Reusable cells, their unit tests, constraints and passive checkers belong in
+[my-veryl-cells](https://github.com/shady831213/my-veryl-cells), consumed through
+native `common_cell` and `tech_cell_generic` dependencies. Use those cells instead
+of duplicating transport/storage/selection logic. Technology-specific providers
+stay behind their public RAM contracts. Keep DMA/PCIe protocols and lifecycle
+policies outside shared cells. Generic tool fixes belong in the pinned
+[my-veryl](https://github.com/shady831213/my-veryl) helper, not local patch copies.
+Do not add machine-local source references to Git.
 
 Adapted from [pcie_modeling](https://github.com/shady831213/pcie_modeling).
 These principles apply to the DMA-core scope; they do not import that project's

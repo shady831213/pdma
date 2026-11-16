@@ -132,5 +132,16 @@ class pdma_multichannel_throughput_test extends pdma_throughput_test;
             flows[i].expect_result(TASK_SUCCESS); metrics[i].finish(write_latency_budget());
             flows[i].close(); cases++;
         end
+        begin
+            realtime first_descriptor=metrics[0].descriptor_at, last_fence=metrics[0].fence_at;
+            longint unsigned payload_bytes=0;
+            foreach(metrics[i]) begin
+                if(metrics[i].descriptor_at<first_descriptor) first_descriptor=metrics[i].descriptor_at;
+                if(metrics[i].fence_at>last_fence) last_fence=metrics[i].fence_at;
+                payload_bytes+=metrics[i].job.length;
+            end
+            `uvm_info("COPY_MULTI_BATCH",$sformatf("channels=%0d payload_bytes=%0d first_descriptor_to_last_fence_cycles=%0.0f",
+                metrics.size(),payload_bytes,(last_fence-first_descriptor)/(clocks.period_ns[2]*1ns)),UVM_NONE)
+        end
     endtask
 endclass

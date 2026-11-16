@@ -8,6 +8,21 @@ module pdma_vip_dut(svt_axi_if host_bus, svt_axi_if memory_bus, pdma_control_if 
         .irq(control.irq), .irq_ready(control.irq_ready), .fatal(control.fatal),
         .fatal_irq(control.fatal_irq), .fatal_irq_ready(control.fatal_irq_ready)
     );
+    pdma_pipeline_timing #(.CHANNELS(`PDMA_CHANNEL_COUNT)) timing_probe(
+        .core_clk(control.core_clk),.core_rst_n(control.core_rst_n),
+        .bus_clk(control.bus_clk),.bus_rst_n(control.bus_rst_n),
+        .grant(!dut.engine.locked && |dut.engine.choice),.chosen(dut.engine.chosen),
+        .copy_start(dut.engine.copy_start),
+        .issued(dut.requests.valid && dut.requests.ready),
+        .issue_channel(dut.requests.request.tag.channel),.issue_slot(dut.requests.request.tag.slot),
+        .issue_write(dut.requests.request.write),
+        .retired(dut.requests.returned && dut.requests.accepted),
+        .retire_channel(dut.requests.receipt.tag.channel),.retire_slot(dut.requests.receipt.tag.slot),
+        .admitted(dut.transactions.valid && dut.transactions.ready),
+        .admit_channel(dut.transactions.request.tag.channel),.admit_slot(dut.transactions.request.tag.slot),
+        .returned(dut.transactions.returned && dut.transactions.accepted),
+        .return_channel(dut.transactions.receipt.tag.channel),.return_slot(dut.transactions.receipt.tag.slot)
+    );
     for(genvar c=0;c<`PDMA_CHANNEL_COUNT;c++) begin: channels
         pdma_lifecycle_assertions lifecycle(
             .clk(control.core_clk),.rst_n(control.core_rst_n),

@@ -7,6 +7,7 @@ output=$(realpath -m "${1:?Usage: snapshot.sh NEW_OUTPUT_DIRECTORY}")
 pdma_new_run "$output"
 cd "$root"
 GIT_MASTER=1 bash "$root/tools/rtl-flow/veryl.sh" --version > "$output/compiler.txt"
+GIT_MASTER=1 git -C "$root/external/my-veryl" rev-parse HEAD > "$output/compiler-repository.txt"
 (cd "$root/rtl" && GIT_MASTER=1 bash "$root/tools/rtl-flow/veryl.sh" metadata --format json --format-version 2) \
     > "$output/metadata-v2.json"
 design_inputs() {
@@ -14,7 +15,15 @@ design_inputs() {
     # Recompute the inventory too, so adding/removing a source during the build
     # cannot evade the final check of the previously listed files.
     python3 "$root/tools/rtl-flow/ip/bundle.py" inputs "$output/metadata-v2.json"
-    find tools/rtl-flow/patches -type f -name '*.patch' -print0 | sort -z | xargs -0 sha256sum
+    (
+        source tools/rtl-flow/toolchain.env
+        recipe="external/my-veryl/toolchains/$MY_VERYL_TOOLCHAIN.env"
+        source "$recipe"
+        sha256sum external/my-veryl/veryl.sh "$recipe"
+        for patch in "${VERYL_PATCH_FILES[@]}"; do
+            sha256sum "external/my-veryl/patches/$patch"
+        done
+    )
     sha256sum tools/rtl-flow/toolchain.env tools/rtl-flow/veryl.sh \
         tools/rtl-flow/snapshot.sh tools/rtl-flow/ip/bundle.py
 }
@@ -41,7 +50,7 @@ cmp "$output/design.sha256" "$output/design-after.sha256"
 cd "$output"
 find . -type f \( -name '*.sv' -o -path './ip/*' -o -name 'ip-manifest.*' \) -print0 \
     | sort -z | xargs -0 sha256sum > snapshot.sha256
-sha256sum sources.f compiler.txt design.sha256 metadata-v2.json >> snapshot.sha256
+sha256sum sources.f compiler.txt compiler-repository.txt design.sha256 metadata-v2.json >> snapshot.sha256
 printf 'PDMA_SNAPSHOT_COMPLETE\n'
 }
 { main "$@"; exit $?; }

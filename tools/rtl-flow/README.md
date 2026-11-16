@@ -1,100 +1,80 @@
 # RTL tools
 
-PDMA maintains its own fixed Veryl installation. `toolchain.env`, the ordered
-`patches/` and `veryl.sh` are a snapshot of
-[pcie_modeling's qualified tooling](https://github.com/shady831213/pcie_modeling),
-with installation paths localized to this directory. Running them requires no
-pcie_modeling checkout. Shared repository extraction is deferred; future updates
-are deliberate PDMA changes, not automatic tracking of that project's work.
+PDMA consumes the commit-pinned [my-veryl](https://github.com/shady831213/my-veryl)
+submodule at `external/my-veryl`. Compiler recipes, patches, installer and compiler
+regressions belong there. PDMA owns only the recipe selection in `toolchain.env`,
+a forwarding launcher and its design/verification/implementation flows.
 
 ## Pinned compiler
 
-The upstream revision is `8521c8c21e495916ca33648ddab746320953e11d` (Veryl 0.22.1),
-built with Rust 1.97.0, the upstream Cargo.lock and `release-verylup` profile.
-The reported version is `0.22.1+generic-parameters+wide-array-guard+struct-width`. The source
-archive and ordered patch manifest have SHA-256 pins in `toolchain.env`.
-This is a patched compiler, not an unmodified official release. Three patches
-retain generic parameter forwarding, fix wide-array guarded indexing and enforce
-struct member expression widths in the native simulator;
-see [patch provenance](patches/README.md).
-
-The launcher checks patch integrity on every invocation, downloads and verifies
-the source archive when needed, applies patches with zero fuzz, then builds and
-atomically installs under `.run/tools`. `provenance.txt`, `PATCHES.sha256` and
-`SHA256SUMS` accompany the executable. Later invocations verify the installed
-binary without rebuilding. Concurrent installations serialize through `flock`.
-Do not substitute a source Git checkout for the archive: preserved generated
-parser files and timestamps avoid an upstream parser-regeneration problem.
-
-Prerequisites: Linux x86_64, rustup with Rust/Cargo 1.97.0 for building, a C compiler/linker,
-Bash, curl, tar, patch, coreutils and flock. `VERYL_BUILD_JOBS` defaults to four;
-Cargo cache/target overrides and normal proxy environment variables are honored.
-No machine-specific proxy or license setting is embedded. The user-level Veryl
-installation is untouched. The launcher selects `rustup run 1.97.0` only for the
-compiler build; it does not change PDMA's Rust model baseline or default toolchain.
-Install that compiler toolchain with `rustup toolchain install 1.97.0 --profile minimal`.
-The cache identity includes the build profile so a development build cannot be
-mistaken for the optimized installation.
-
-From the repository root:
+Initialize the helper after cloning this repository:
 
 ```sh
+GIT_MASTER=1 git submodule update --init external/my-veryl
 bash tools/rtl-flow/veryl.sh --version
 export PATH="$(bash tools/rtl-flow/veryl.sh --print-bin-dir):$PATH"
-export VERYL_DUT_REUSE=0
-cd tools/rtl-flow/smoke
-veryl build
-veryl test
-veryl test --backend cranelift
 ```
+
+The selected recipe is `0.22.1-generic-wide-struct`: upstream Veryl 0.22.1 at
+`8521c8c21e495916ca33648ddab746320953e11d`, Rust 1.97.0, locked Cargo dependencies
+and `release-verylup`, with generic-parameter, wide-array and struct-member-width
+fixes. This is the same compiler recipe as before extraction, not an upgrade to a
+different fix set. The submodule commit pins its launcher and ordered patch bytes;
+see its [provenance](../../external/my-veryl/PROVENANCE.md) and
+[upstream tracking](../../external/my-veryl/UPSTREAM.md).
+
+The upstream installer verifies source, patches and cached executable bytes and
+serializes installation. PDMA defaults its cache to `tools/rtl-flow/.run/tools`,
+so an already verified installation can be reused. `MY_VERYL_CACHE_DIR` overrides
+that location. Compiler cache reuse is not a fresh source build. Prerequisites and
+build controls belong to the [helper README](../../external/my-veryl/README.md).
+The launcher neither changes the user's default Rust/Veryl nor simulator options.
 
 Keep `VERYL_DUT_REUSE=0` explicit for native tests while upstream
 [issue #3576](https://github.com/veryl-lang/veryl/issues/3576) remains unresolved
-for this pin. The launcher does not disable tests or change simulator defaults.
-The smoke project checks compilation and native execution only; it is not DMA
-RTL, a complete compiler regression or CDC/RDC qualification. Design commands
-run separately in [rtl](../../rtl/README.md).
+for this pin. Compiler regressions now live in the helper's `regressions/` native
+projects; run those with the selected compiler on PATH. DMA's native tests remain
+in `rtl/src/tests`. `node --test tools/rtl-flow/tests/veryl_test.mjs` checks PDMA's
+forwarding boundary; installer integrity tests belong to my-veryl.
 
-For this upgrade, an independently checksummed copy of the already-built
-qualified compiler can seed the local ignored installation. That is artifact
-reuse, not a claim of a fresh local build. An absent installation triggers the
-reproducible source-build path above.
+## Shared cells
 
-The original upgrade passed the two initial smoke tests and seven register tests,
-but those cases did not cover a wide struct assigned in an `always_comb` block.
-The Copy slice exposed adjacent-field corruption in that case; the member-width
-fix is restored and `smoke/src/struct_neighbors.veryl` retains its failing input.
-Run all compiler smoke tests on both native backends after any pin change.
-Run `node --test tools/rtl-flow/tests/veryl_test.mjs` from the repository root to check
-launcher cache selection and rejection of modified patches or installed binaries.
-These tests use temporary fixtures and clean them up automatically.
+`rtl/Veryl.toml` selects `common_cell` and `tech_cell_generic` version `=0.1.0`
+from [my-veryl-cells](https://github.com/shady831213/my-veryl-cells).
+`rtl/Veryl.lock` pins both published source revisions. Veryl resolves their source
+and package-owned constraints/checkers through native metadata. There is no
+PDMA-local source copy or dependency override. Cell development and native cell
+tests belong to that repository; PDMA qualifies their use in its own design.
+
+An immutable snapshot captures emitted RTL, dependency metadata, package resources,
+the compiler repository revision, recipe/patch content hashes and design input
+hashes. Generic IP transport does not apply waivers just because a dependency
+exists. Updating a dependency or compiler pin requires downstream qualification;
+old source-bound reviews cannot silently cover new inputs.
 
 ## Contract layout
 
 `bash tools/rtl-flow/layout.sh --write` runs the contract's `pdma-rtl-layout`
 binary and writes `rtl/src/dma/layout.veryl`. `--check` rejects absent or stale
-output without overwriting it. The exporter uses the normal Cargo workspace and
-schema dependency. The generators consume registry schema 0.3.0 with no local override. Other
-framework dependencies retain their existing registry releases.
-Generated packages use `#[fmt(skip)]` so formatter alignment does not change the
-generator's deterministic output. Handwritten RTL uses normal Veryl formatting.
+output without overwriting it. The generators consume registry schema 0.3.0
+without a local override. Generated packages use `#[fmt(skip)]`; handwritten RTL
+uses normal Veryl formatting.
 
 `bash tools/rtl-flow/sv-layout.sh --write|--check` handles the plain-SV counterpart
-at `verification/dma/tb/generated/register_layout.sv`. Its generator uses schema's optional
-`export-sv` backend and preserves 64-bit layout parameters. `records.sh` also uses
-that feature for byte-record types; `registers.sh` uses `export-uvm-regs` for RAL.
-The three outputs serve independent consumers and do not require each other.
+at `verification/dma/tb/generated/register_layout.sv`. Its generator uses schema's
+optional `export-sv` backend and preserves 64-bit layout parameters. `records.sh`
+uses the same feature for byte-record types; `registers.sh` uses `export-uvm-regs`
+for RAL. These outputs serve independent consumers.
 
 ## Maintenance boundary
 
-An upgrade must update source/patch identity together and rerun relevant compiler
-regressions and downstream positive/negative tests. Never fix a compiler defect
-by hand-editing generated SystemVerilog or weakening a DUT assertion.
+Never fix a compiler defect by hand-editing generated SystemVerilog or weakening
+a DUT assertion. Submit reusable cell/compiler fixes to their owning repositories,
+then deliberately update PDMA's pins after verification.
 
 Design-specific testbench and implementation logic belong in `verification/dma`
-and `impl/dma`. Generic implementation adapters are under `implementation/`;
-[package resources](ip/README.md) use native Veryl dependency metadata. Their flows are tracked;
-see [flow configuration](flows.md). Keep machine-local settings in a private
-deployment file, tool artifacts in local run directories, and credentials/license
-details out of tracked files. A future shared tool repository should replace this
-tool directory without changing design source ownership or native manifests.
+and `impl/dma`. Generic implementation adapters stay under `implementation/`;
+[package resources](ip/README.md) use native Veryl dependency metadata. These flows
+remain tracked; see [flow configuration](flows.md). Keep machine-local settings
+in a private deployment file, and raw tool reports, proprietary inputs and
+credentials outside tracked content.

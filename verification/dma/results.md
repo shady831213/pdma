@@ -1,5 +1,21 @@
 # Scenario-level verification checkpoints
 
+## 2026-11-16 implemented microarchitecture and timing observations
+
+The [microarchitecture](../../docs/rtl/microarchitecture.md) maps the current RTL's
+owners, arbitration, FSMs, pipeline cuts and lifecycle timing. The separate
+[performance report](../../docs/rtl/performance.md) defines and records payload,
+command/batch and internal-boundary measurements.
+
+Fresh 2/8-channel builds passed 16 runs in total: five timing scenarios and one
+observer-disabled case per configuration, two aggregate multichannel runs, and
+write-fault/multichannel-reset runs checking observer custody. The ten original
+throughput observations exactly match the observer-free baseline. Production RTL,
+constraints and instance hierarchy did not change. No synthesis or CDC/RDC rerun
+is claimed for this documentation/observation change. Raw logs and private tool
+configuration remain outside tracked content.
+
+
 ## 2026-11-16 multichannel closure
 
 The normal two-channel mapped diagnostic reports roughly −344ps worst setup

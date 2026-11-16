@@ -7,8 +7,8 @@ sources = ["src"]
 target = {type = "directory", path = "target"}
 
 [dependencies]
-common_cell = {path = "common_cell"}
-tech_cell_generic = {path = "tech_cell/generic"}
+common_cell = {git = "https://github.com/shady831213/my-veryl-cells", version = "=0.1.0"}
+tech_cell_generic = {git = "https://github.com/shady831213/my-veryl-cells", version = "=0.1.0"}
 
 [test]
 seed = 20261028

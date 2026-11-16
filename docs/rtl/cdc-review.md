@@ -252,7 +252,7 @@ payload 存储和 reset 排空责任一起确定，且读写串行 engine 本身
 `ReadyValidSlice::Forward` 是同一时钟域内的 slice，不是 CDC cell。它已经复位
 valid/占用位；无复位的是 payload。只要复位协调、消费者按 valid 消费，且建立
 valid 时已经写入新数据，就不需要靠 payload reset 保证功能。pcie_modeling 的
-[common-cell 合同](https://github.com/shady831213/pcie_modeling/blob/master/rtl/common_cell/README.md)
+[common-cell 合同](https://github.com/shady831213/my-veryl-cells/blob/master/common_cell/README.md)
 也明确如此。类似地，
 [OpenTitan 单项 FIFO](https://github.com/lowRISC/opentitan/blob/master/hw/ip/prim/rtl/prim_fifo_sync.sv)
 将 full 状态复位、数据存储不复位。

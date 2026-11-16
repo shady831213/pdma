@@ -1,5 +1,8 @@
 # 共享执行流水与资源设计草案
 
+当前 Copy/Fence RTL 的逐模块、状态机、流水和时序说明见 [已实现微架构](microarchitecture.md)，
+最新吞吐/延迟测量见 [性能说明](performance.md)。本文件的目标设计条目不自动代表已实现。
+
 状态：尚未编码。本文把 [architecture](architecture.md) 的原则展开到状态所有者、
 数据交接和吞吐预算。它不是 Rust 模块的逐一翻译，也不引入逻辑 channel 超售。
 2026-10-29 明确首阶段仅实现 DMA；CPU、外围组件及完整子系统留到 DMA 收敛以后。

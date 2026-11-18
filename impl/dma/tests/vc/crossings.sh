@@ -24,7 +24,7 @@ for mode in synchronized unsynchronized resetless; do
 done
 run_case() {
     local name=$1 mode=$2 check=$3 expected=$4 tag=$5 status=0
-    pdma_execute 0 "$out/$name.log" bash "$root/impl/dma/flow/crossings.sh" "$out/$mode" "$out/$name" "$check" || status=$?
+    pdma_execute 0 "$out/$name.log" bash "$root/tools/rtl-flow/implementation/crossings.sh" "$out/$mode" "$out/$name" "$check" || status=$?
     if (( status != expected )); then
         printf 'Unexpected status %s: %s (expected %s)\n' "$status" "$name" "$expected" >&2
         return 1

@@ -2,7 +2,7 @@ class pdma_env extends uvm_env;
     `uvm_component_utils(pdma_env)
     svt_axi_system_env host_bus, memory_bus;
     svt_axi_system_configuration host_cfg;
-    svt_axi_reg_adapter register_adapter;
+    pdma_register_adapter register_adapter;
     DmaRegisters registers;
     pdma_configuration cfg;
     pdma_memory memory;
@@ -41,7 +41,7 @@ class pdma_env extends uvm_env;
         registers=DmaRegisters::type_id::create("registers");
         registers.build(cfg.channel_count,cfg.REGISTER_DATA_BITS/8);
         registers.lock_model();
-        register_adapter=svt_axi_reg_adapter::type_id::create("register_adapter");
+        register_adapter=pdma_register_adapter::type_id::create("register_adapter");
         register_adapter.p_cfg=host_cfg.master_cfg[0];
         backing=new("memory","AMBA3",cfg.MEMORY_DATA_BITS,0,0,64'hffff_ffff_ffff_ffff);
         svt_config_object_db#(svt_mem)::set(this,"memory_bus.slave*","axi_slave_mem",backing);

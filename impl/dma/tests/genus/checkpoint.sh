@@ -18,7 +18,7 @@ main() {
     (cd "$out/full/map" && sha256sum --check --status mapped.sha256)
     pdma_execute 0 "$out/mapped.log" env PDMA_SYNTH_STAGE=mapped PDMA_MEMORY_MODE=control-budget \
         PDMA_DESIGN_PROFILE="$root/impl/dma/tests/genus/memory-profile.tcl" \
-        bash "$root/impl/dma/flow/genus.sh" "$out/full/snapshot" "$out/mapped"
+        bash "$root/tools/rtl-flow/implementation/genus.sh" "$out/full/snapshot" "$out/mapped"
     test ! -e "$out/mapped/copy.db"
     if grep -Fxq PDMA_GENUS_REPORTS_COMPLETE "$out/mapped/genus.log"; then
         printf 'Mapped-only diagnostic claimed final qualification\n' >&2; exit 1

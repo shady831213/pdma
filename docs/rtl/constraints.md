@@ -32,11 +32,11 @@ that unit to ns; an integrator must establish its own consistent units and budge
 # COMMON_CELL_ROOT comes from resolved metadata (or a bundled resource root).
 source [file join $COMMON_CELL_ROOT constraints ip.tcl]
 
-common_cell_cdc::duplex_mailbox soc/dma0/csr/crossing \
+common_cell_cdc::duplex_mailbox soc/dma0/control/csr/crossing \
     [get_clocks cfg_clock] [get_clocks dma_clock] $register_crossing_budget
-common_cell_cdc::async_queue soc/dma0/request_crossing \
+common_cell_cdc::async_queue soc/dma0/transport/request_crossing \
     [get_clocks dma_clock] [get_clocks memory_clock] $memory_crossing_budget
-common_cell_cdc::async_queue soc/dma0/response_crossing \
+common_cell_cdc::async_queue soc/dma0/transport/response_crossing \
     [get_clocks memory_clock] [get_clocks dma_clock] $memory_crossing_budget
 ```
 
@@ -58,10 +58,10 @@ qualification, which are not supplied by an SDC maximum-delay constraint.
 
 ```tcl
 # Genus adapter, after technology mapping and before subsequent optimization:
-set sync_cells [common_cell_cdc::synchronizers soc/dma0/csr/crossing \
+set sync_cells [common_cell_cdc::synchronizers soc/dma0/control/csr/crossing \
     [get_clocks cfg_clock] [get_clocks dma_clock]]
 set_dont_touch $sync_cells
-set chains [common_cell_cdc::async_queue_chains soc/dma0/request_crossing \
+set chains [common_cell_cdc::async_queue_chains soc/dma0/transport/request_crossing \
     [get_clocks dma_clock] [get_clocks memory_clock] 8]
 set_dont_touch [common_cell_cdc::synchronizer_cells $chains]
 # Repeat for the response queue with its reversed clocks and actual depth.

@@ -1,0 +1,61 @@
+// Core/bus transport owns CDC queues and AXI credits, independently of the
+// command engine. Every accepted transfer retains its tag through the receipt.
+pub module DmaMemoryBridge::<
+    B          : $std::axi4_prototype = $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>,
+    BURST_BEATS: u32                  = 8                  ,
+    SLOTS      : u32                  = 8                  ,
+> #(
+    param REQUEST_DEPTH    : u32 = 8,
+    param RECEIPT_DEPTH    : u32 = 8,
+    param READ_OUTSTANDING : u32 = 8,
+    param WRITE_OUTSTANDING: u32 = 8,
+) (
+    core_clk  : input   'core clock                                                           ,
+    core_rst_n: input   'core reset_async_low                                                 ,
+    bus_clk   : input   'bus  clock                                                           ,
+    bus_rst_n : input   'bus  reset_async_low                                                 ,
+    requests  : modport 'core CopyMemoryPort::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>::slave,
+    memory    : modport 'bus  $std::axi4_if::<B>::master                                      ,
+) {
+    alias package M = CopyMemory::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>;
+    inst transactions     : 'bus CopyMemoryPort::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>;
+    inst request_crossing: common_cell::AsyncQueue #(
+        TYPE : M::Request   ,
+        DEPTH: REQUEST_DEPTH,
+    ) (
+        s_clk  : core_clk            ,
+        s_rst_n: core_rst_n          ,
+        s_valid: requests.valid      ,
+        s_ready: requests.ready      ,
+        s_data : requests.request    ,
+        d_clk  : bus_clk             ,
+        d_rst_n: bus_rst_n           ,
+        d_valid: transactions.valid  ,
+        d_ready: transactions.ready  ,
+        d_data : transactions.request,
+    );
+    inst response_crossing: common_cell::AsyncQueue #(
+        TYPE : M::Receipt   ,
+        DEPTH: RECEIPT_DEPTH,
+    ) (
+        s_clk  : bus_clk              ,
+        s_rst_n: bus_rst_n            ,
+        s_valid: transactions.returned,
+        s_ready: transactions.accepted,
+        s_data : transactions.receipt ,
+        d_clk  : core_clk             ,
+        d_rst_n: core_rst_n           ,
+        d_valid: requests.returned    ,
+        d_ready: requests.accepted    ,
+        d_data : requests.receipt     ,
+    );
+    inst endpoint: CopyMemoryEndpoint::<B, BURST_BEATS, SLOTS> #(
+        READ_OUTSTANDING   ,
+        WRITE_OUTSTANDING  ,
+    ) (
+        clk  : bus_clk     ,
+        rst_n: bus_rst_n   ,
+        port : transactions,
+        axi  : memory      ,
+    );
+}

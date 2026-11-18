@@ -12,7 +12,7 @@ class pdma_register_model_test extends pdma_base_test;
         channel.write_reg(channel.registers.command_block.base_reg,pointer_value);
         channel.read_reg(channel.registers.command_block.base_reg,observed);
         if(observed!==pointer_value)
-            `uvm_fatal("RAL_SPLIT_ACCESS","64-bit register did not round-trip through the 32-bit bus")
+            `uvm_fatal("RAL_REGISTER_ACCESS","64-bit register did not round-trip through the configured bus")
         env.registers.default_map.set_base_addr('h40000000);
         env.registers.discovery_block.channel_num_reg.read(status,observed,UVM_FRONTDOOR);
         if(status!=UVM_NOT_OK) `uvm_fatal("RAL_BUS_ERROR","Unmapped register access did not propagate failure")

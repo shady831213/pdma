@@ -64,17 +64,27 @@ make their register redesign prerequisites for this phase.
 it does not supersede the system specification under `model/modeling/docs`.
 The DMA register-access slice has native tests: a 32/64-bit AXI4-Lite frontend,
 reg/core CDC and object-owned registers. `DmaCopy` implements configurable 1..8 physical channels with one shared
-Linear Copy and Fence32/64 engine, a fixed 32-bit register / 64-bit ordinary
-memory profile, eight reserved burst rows per channel, independent read/write endpoints,
+Linear Copy and Fence32/64 engine, statically configurable register/memory data widths,
+reserved burst rows per channel, independent read/write outstanding capacities,
 core/bus asynchronous queues, a reg/core mailbox and reset drain. Software
 can submit Copy followed by Fence and poll its memory marker for completion.
 It is not the complete
-DMA execution/atomic/full-bus-profile implementation. The 2026-11-16 qualification
-passes functional checks for every count in 1..8 and control-budget implementation
-checks at 2 and 8; see `docs/rtl/multichannel.md`. Aligned long-copy throughput
+DMA execution/atomic/full-bus-profile implementation. The 2026-11-18 configuration
+checkpoint passes functional checks for every count in 1..8 and representative
+32/128-bit memory profiles, with fresh source-bound CDC/RDC gates at 2 and 8.
+New control-budget synthesis passes at default 2 channels and the narrow 1-channel
+profile; default 8-channel and wide-profile synthesis are still running.
+The earlier 2026-11-16 implementation results retain their original source identity;
+see `docs/rtl/multichannel.md` and `verification/dma/results.md`. Aligned long-copy throughput
 has its own zero-delay qualification; other profiles remain open. See
 `docs/rtl/minimal-copy.md`. Register reset action/clear ports alone remain
 integration boundaries, not evidence of transaction drain without that owner.
+`DmaCopy` statically connects control, execution and transport owners through typed
+interfaces without adding storage or cycle cuts. `rtl/profiles/default.json` selects
+the development integration profile (32-bit registers, 64-bit memory, eight rows
+per channel). RTL, VIP and implementation consume one resolved snapshot profile;
+dependent widths and RAM dimensions are derived. See `docs/rtl/configuration.md`
+for the supported parameters and configuration-specific qualification status.
 Follow `rtl/README.md` for source and verification ownership. PDMA consumes the pinned `external/my-veryl` submodule for compiler recipes,
 patches and installation, and exact `my-veryl-cells` package versions through native
 Veryl dependencies and `rtl/Veryl.lock`. The user authorized this shared migration
@@ -85,8 +95,9 @@ at 1GHz, register clock at 500MHz, still three asynchronous domains. ULVT is
 forbidden; qualify library selection, mapping exclusions and actual mapped-cell
 identities. Both CDC and RDC must use VC SpyGlass with PDMA-owned constraints
 and reviewed findings. The Genus and VC SpyGlass flows are implemented;
-the current 2-channel and 8-channel control-budget logic setup estimates meet the
-target with zero slack margin. SRAM area/power and intrinsic timing remain excluded
+the current default 2-channel and narrow 1-channel control-budget logic setup estimates
+meet the target with zero slack margin. The new 8-channel and wide-profile results
+are pending, not inherited from the earlier implementation. SRAM area/power and intrinsic timing remain excluded
 and unqualified. The
 redundant mailbox startup gates are removed; CDC/RDC reviewed gates accept only
 source-bound, path-specific findings, including exact unconnected/no-clock sinks
@@ -106,7 +117,7 @@ immutable RTL snapshot. Generic implementation adapters live under
 source-bound reviews. Never load current workspace IP scripts to qualify an old
 snapshot, and never apply waivers merely because a package is a dependency.
 The 2026-11-13 synthesis flow defaults to `PDMA_MEMORY_MODE=control-budget`:
-one `(8 * CHANNEL_COUNT)` x 512-bit Copy RAM provider is bound to a generated
+one `(channels * slots)` x `(memory_bits * burst_beats)` Copy RAM provider is bound to a generated
 capacitance-only Liberty leaf. The development flow defaults to 2 channels; 8 is
 the final qualification target. Every count in 1..8 is supported. `generic` retains standard-cell array synthesis; FIFO storage remains
 synthesized in both modes. Never treat the placeholder's zero area or boundary

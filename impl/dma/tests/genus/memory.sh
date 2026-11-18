@@ -30,7 +30,7 @@ main() {
     } > snapshot.sha256)
     pdma_execute 0 "$run/map-launch.log" env PDMA_MEMORY_MODE=control-budget \
         PDMA_DESIGN_PROFILE="$root/impl/dma/tests/genus/$profile" \
-        bash "$root/impl/dma/flow/genus.sh" "$run/snapshot" "$run/map"
+        bash "$root/tools/rtl-flow/implementation/genus.sh" "$run/snapshot" "$run/map"
     mkdir "$run/audit"
     cp "$run/map/"{checks.tcl,library-policy.tcl,config.tcl,technology.tcl,profile.tcl,memory-model.tcl,memory.tcl,memory-report.tcl,design-profile.tcl} "$run/audit/"
     cp "$root/impl/dma/tests/genus/memory-audit.tcl" "$run/audit/"

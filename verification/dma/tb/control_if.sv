@@ -1,6 +1,4 @@
-`ifndef PDMA_CHANNEL_COUNT
-`define PDMA_CHANNEL_COUNT 1
-`endif
+`include "configuration.svh"
 interface pdma_control_if #(parameter int CHANNELS=`PDMA_CHANNEL_COUNT)(input logic reg_clk, core_clk, bus_clk);
     wire reg_rst_n, core_rst_n, bus_rst_n;
     logic [CHANNELS-1:0] irq, irq_ready='0;

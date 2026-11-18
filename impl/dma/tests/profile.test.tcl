@@ -25,7 +25,7 @@ dict set changed reset_groups cold {reg_rst_n nonexistent}
 lappend variants $changed
 foreach {field value} {source unknown destination reg_clk max_delay 0 max_delay 2} {
     set changed $base
-    dict set changed crossings csr/crossing $field $value
+    dict set changed crossings dma/control/csr/crossing $field $value
     lappend variants $changed
 }
 foreach {name value} {CHANNEL_COUNT nope bad-name 2 CHANNEL_COUNT {2;exit}} {
@@ -34,14 +34,14 @@ foreach {name value} {CHANNEL_COUNT nope bad-name 2 CHANNEL_COUNT {2;exit}} {
     lappend variants $changed
 }
 set index 0
-foreach {field value} {depth 3 depth 0 max_delay 0 max_delay 2 destination unknown} {
+foreach {field value} {depth 2 depth 3 depth 0 max_delay 0 max_delay 2 destination unknown} {
     set changed $base
-    dict set changed crossings request_crossing $field $value
+    dict set changed crossings dma/transport/request_crossing $field $value
     lappend variants $changed
 }
 foreach {field value} {provider absent cell UnknownCell} {
     set changed $base
-    dict set changed crossings request_crossing $field $value
+    dict set changed crossings dma/transport/request_crossing $field $value
     lappend variants $changed
 }
 foreach {field value} {depth 0 width -1 clock unknown kind RamAsync provider bad-name instance */ram} {
@@ -68,7 +68,7 @@ puts "PDMA_PROFILE_TEST_PASS negatives=$index"
 for {set count 1} {$count <= 8} {incr count} {
     set ::env(PDMA_CHANNEL_COUNT) $count
     set current [profile::read [file join $root impl/dma/profiles/copy.tcl]]
-    if {[dict get $current parameters CHANNEL_COUNT] != $count ||
+    if {[dict get $current configuration channels] != $count ||
         [dict get $current memories copy_buffer depth] != 8*$count ||
         [dict get $current ports core_clk input irq_ready] != $count ||
         [dict get $current ports core_clk output irq] != $count} {error "Incorrect channel profile $count"}

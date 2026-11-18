@@ -9,6 +9,7 @@ package pdma_vip_pkg;
     import pdma_contract_records::*;
     import pdma_uvm_regs::*;
     `include "env/configuration.svh"
+    `include "env/register_adapter.svh"
     `include "env/clocks.svh"
     `include "env/memory/memory_backing.svh"
     `include "env/memory/memory_policy.svh"

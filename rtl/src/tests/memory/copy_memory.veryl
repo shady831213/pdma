@@ -1,14 +1,14 @@
 // Test-only memory slave. Expected bytes originate here, independently of the DUT.
 module CopyTestMemory (
-    clk             : input   clock                                            ,
-    rst_n           : input   reset_async_low                                  ,
-    axi             : modport $std::axi4_if::<CopyMemory::Bus>::slave          ,
-    backpressure    : input   logic                                            ,
-    hold_b          : input   logic                                            ,
-    delay_aw        : input   logic                                            ,
-    unaligned       : input   logic                                            ,
-    completed_writes: output  logic                                  <32>      ,
-    observed        : output  logic                                  <64> [128],
+    clk             : input   clock                                                                        ,
+    rst_n           : input   reset_async_low                                                              ,
+    axi             : modport $std::axi4_if::<$std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>>::slave          ,
+    backpressure    : input   logic                                                                        ,
+    hold_b          : input   logic                                                                        ,
+    delay_aw        : input   logic                                                                        ,
+    unaligned       : input   logic                                                                        ,
+    completed_writes: output  logic                                                              <32>      ,
+    observed        : output  logic                                                              <64> [128],
 ) {
     var reading          : logic        ;
     var read_address     : logic<64>    ;
@@ -29,13 +29,13 @@ module CopyTestMemory (
     assign axi.rvalid  = reading;
     assign axi.rdata   = observed[(read_address >> 3) as 7];
     assign axi.rlast   = read_beat == read_length;
-    assign axi.rresp   = 0 as CopyMemory::Bus::resp_t;
+    assign axi.rresp   = 0 as $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>::resp_t;
     assign axi.rid     = 0;
     assign axi.ruser   = 0;
     assign axi.awready = !aw_seen && !pending_b && !delay_aw;
     assign axi.wready  = !w_seen && !pending_b && (!backpressure || cycle[1:0] != 1);
     assign axi.bvalid  = pending_b && !hold_b;
-    assign axi.bresp   = 0 as CopyMemory::Bus::resp_t;
+    assign axi.bresp   = 0 as $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>::resp_t;
     assign axi.bid     = 0;
     assign axi.buser   = 0;
     always_ff (clk, rst_n) {

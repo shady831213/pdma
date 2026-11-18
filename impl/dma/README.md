@@ -23,12 +23,15 @@ are private inputs; target frequency is not a timing-closure claim.
 | `impl/dma/reviews/copy.tcl`, `copy-8.tcl` | Explicit source-bound dispositions for 2 and 8 channels respectively; never generic block waivers |
 | `impl/dma/tests/{genus,vc}/` | Backend-specific qualification fixtures; profile/runner tests remain directly under `tests/` |
 
-The Copy profile accepts `PDMA_CHANNEL_COUNT=1..8` (default 2), including every
-non-power-of-two count. Parameters, IRQ widths and RAM geometry are resolved
-before tool launch into an immutable `design-profile.tcl`; the source profile
-is retained separately. A later environment change cannot reinterpret a run.
-The profile describes the actual emitted boundary. A new top can select its own
-profile through `PDMA_DESIGN_PROFILE`; it must account for every port. Adapters
+The Copy profile consumes the DMA snapshot's resolved configuration, including
+1..8 channels, bus widths, retained rows and queue depths. IRQ widths and RAM
+geometry are derived before tool launch into an immutable `design-profile.tcl`;
+the source profile is retained separately. A later environment change cannot
+reinterpret a run; `PDMA_CHANNEL_COUNT` overrides belong at snapshot creation.
+The profile describes the actual emitted boundary. A different top or an isolated
+flow fixture uses the generic `tools/rtl-flow/implementation` adapter and selects
+its own `PDMA_DESIGN_PROFILE`, without requiring a DMA configuration file.
+Its profile must account for every port. Adapters
 fail on missing ports, unexpected bits/directions or incomplete coverage. Genus
 flattens SV interface separators; VC retains them. Neither adapter owns a second
 DMA interface specification. Optional reset groups describe simultaneous
@@ -41,8 +44,9 @@ owns clock creation, while the reusable cell API touches only the named instance
 
 The profile's optional `memories` inventory names RAM provider instances, port
 contracts, dimensions and clocks. Synthesis defaults to `PDMA_MEMORY_MODE=control-budget`;
-`generic` retains standard-cell array mapping. The Copy profile excludes one
-`(8 * CHANNEL_COUNT)` x 512-bit RAM in budget mode; standard-library FIFO storage remains synthesized.
+`generic` retains standard-cell array mapping. Budget mode binds one
+`channels * slots` by `memory_bits * burst_beats` RAM; this is
+`(8 * CHANNEL_COUNT)` x 512 bits in the default profile. FIFO storage remains synthesized.
 See [RAM boundary accounting](../../docs/rtl/memory-budget.md) for the generated
 library, exact binding checks and the distinction between logical area and
 unqualified SRAM cost. Ordinary RTL allows automatic ungrouping and boundary
@@ -51,7 +55,7 @@ optimization; RAM leaves and synchronizers retain their separate protection.
 Generate an immutable source snapshot, then invoke the desired tool adapter:
 
 ```sh
-bash tools/rtl-flow/snapshot.sh "$PDMA_RUN_ROOT/snapshot"
+bash rtl/flow/snapshot.sh "$PDMA_RUN_ROOT/snapshot"
 PDMA_SYNTH_STAGE=prepare bash impl/dma/flow/genus.sh \
     "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/prepare"
 bash impl/dma/flow/genus.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/map"
@@ -143,7 +147,7 @@ default. These structural exceptions do not waive physical timing or MTBF.
 
 `cdc-formal` additionally runs the tool's data-hold, data-loss and convergence
 properties, with a 60-second limit per property and the ordinary overall timeout.
-Inconclusive properties remain findings. `tests/mailbox.sh DUT_SNAPSHOT NEW_PROOF`
+Inconclusive properties remain findings. `tests/vc/mailbox.sh DUT_SNAPSHOT NEW_PROOF`
 uses the same mode on the actual register mailbox and payload types, with free
 interface inputs, to separate cell invariants from whole-DMA proof complexity.
 It retains the raw structural verdict; proven properties do not silently create
@@ -175,8 +179,8 @@ deliberately tightens the core period to reject negative slack. It does not chan
 the design target or producer artifacts. Timed-out or interrupted implementation
 and simulation jobs tear down their own process groups; failed runs retain their
 input and result records.
-Select the matching review with `PDMA_STATIC_REVIEW`; the 8-channel review also
-requires `PDMA_CHANNEL_COUNT=8`. A different count or source identity is rejected.
+Select the matching review with `PDMA_STATIC_REVIEW`; the 8-channel review requires
+an 8-channel snapshot. A different configuration or source identity is rejected.
 The review tests accept the same explicit policy override.
 
 The review tests use the real unchanged DUT to reject stale identity, a changed

@@ -14,8 +14,9 @@ The [minimal Linear Copy and Fence slice](../docs/rtl/minimal-copy.md) now conne
 this path to one execution owner and an ordinary AXI memory endpoint. Fence32/64
 writes a software-observable memory marker after prior channel work. It is not a
 complete DMA or a physically qualified design; the remaining command families,
-multichannel qualification, unaligned/full-profile throughput and physical closure
-still need implementation. The current retained burst window and asynchronous
+unaligned/full-profile throughput and physical closure remain open. Configuration-specific
+functional and implementation results are recorded in the
+[verification checkpoints](../verification/dma/results.md). The retained burst window and asynchronous
 queues are described in the slice document; measured results are in the
 [throughput review](../docs/rtl/throughput-review.md).
 The subsequent [organization review](../docs/rtl/organization-review.md) records
@@ -36,9 +37,11 @@ the tested register slice from outstanding lifecycle/datapath integration.
 The related [memory interface](../docs/rtl/memory-interface.md),
 [datapath](../docs/rtl/datapath.md) and [reset/CDC](../docs/rtl/reset-cdc.md) drafts
 define transaction ownership and identify correctness constraints on pipelining.
-The [next implementation steps](../docs/rtl/architecture.md#后续执行顺序)
-now cover the [1..8 channel shared engine](../docs/rtl/multichannel.md),
-including the full eight-channel qualification. The implementation target is now 12nm/Genus without ULVT,
+The [1..8 channel shared engine](../docs/rtl/multichannel.md) has an eight-channel
+qualification requirement. Its configurable composition is described in the
+[configuration contract](../docs/rtl/configuration.md); later work is listed in the
+[architecture plan](../docs/rtl/architecture.md#后续执行顺序).
+The implementation target is 12nm/Genus without ULVT,
 core/bus 1GHz and reg 500MHz, with separate VC SpyGlass CDC/RDC checks; see
 [implementation checks](../impl/dma/README.md).
 Synthesis now uses an explicit [RAM boundary budget](../docs/rtl/memory-budget.md)
@@ -51,9 +54,9 @@ mapped logic from excluded SRAM cost; the generic array mode remains available.
 | Path | Contents |
 | --- | --- |
 | `src/dma/` | DMA channels, shared execution, register behavior and bus endpoints |
-| `src/dma/registers/` | Register frontend, CDC integration and object-owned register state |
+| `src/dma/control/` | Register owners, IRQ delivery and global reset collection |
 | `src/dma/execution/` | Command owner and its retained burst window |
-| `src/dma/memory/` | Internal memory interface and independent read/write endpoints |
+| `src/dma/memory/` | Typed memory port, CDC transport and independent read/write endpoints |
 | `src/hw_components/` | Deferred placeholder for managed peripheral hardware; outside the first RTL phase |
 | `src/tests/` | Native Veryl block tests and their local support |
 | `common_cell` dependency | Protocol-independent cells, constraints and passive checkers from my-veryl-cells |
@@ -70,8 +73,9 @@ does not own its policy or introduce another software runtime.
 
 Veryl is the design source. Generated SystemVerilog, dependency checkouts,
 filelists, simulator caches and waveforms are build artifacts. Use native
-Veryl source discovery and dependencies, not generated manifests or copied source
-trees. `Veryl.lock` pins the resolved native project dependencies.
+Veryl source discovery and dependencies. The configured integration project selects
+type arguments and references the real source directory; it never copies the
+design or substitutes a hand-maintained source list for native discovery. `Veryl.lock` pins the resolved native project dependencies.
 
 Regenerate layout metadata from the Rust contract, then run the native checks:
 
@@ -108,3 +112,13 @@ behavior. They do not require a CPU, synthesized firmware or a recreated managed
 Veryl version and patches, initially taken from a qualified
 [pcie_modeling](https://github.com/shady831213/pcie_modeling) snapshot.
 Its separate compiler smoke test is not a PDMA design test or EDA qualification.
+
+## Static integration profiles
+
+Use `bash rtl/flow/snapshot.sh NEW_OUTPUT [PROFILE_JSON]` for DMA-level simulation
+and implementation. The default profile is `rtl/profiles/default.json`; an override
+file supplies only independent inputs. `PDMA_CHANNEL_COUNT` may select a count
+when creating the snapshot. Subsequent VIP and implementation runs consume that
+snapshot's configuration; conflicting overrides fail before launching a tool.
+The generic `tools/rtl-flow/snapshot.sh` remains available for native projects.
+See [configuration and parameter dependencies](../docs/rtl/configuration.md).

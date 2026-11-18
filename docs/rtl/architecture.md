@@ -31,8 +31,8 @@ Function/context 外围、firmware 资源管理与 PCIe/SoC 集成保持既定�
 
 | 项目 | 本轮决定 |
 | --- | --- |
-| 设计语言和工具 | 参考 [pcie_modeling](https://github.com/shady831213/pcie_modeling) 的 Veryl 和原生测试；平台实现环境的信息在仓库外维护，本阶段不开展共享工具仓库拆分 |
-| 工具版本 | PDMA 在 tools/rtl-flow 独立维护固定 Veryl 源码版本、有序补丁和安装入口，以 pcie_modeling 已验证快照为起点；后续再统一共享仓库，不自动跟随外部更新 |
+| 设计语言和工具 | 使用 Veryl 和原生测试；共享 [my-veryl](https://github.com/shady831213/my-veryl) 工具及 [my-veryl-cells](https://github.com/shady831213/my-veryl-cells) 单元，平台实现环境的信息在仓库外维护 |
+| 工具版本 | PDMA 固定 external/my-veryl 子模块和工具配方；单元通过原生 Veryl 依赖及 Veryl.lock 固定版本。更新须单独验证，不自动跟随上游 |
 | 内存接口 | AXI5 master；需要明确选择 atomic 支持及相关事务属性 |
 | 寄存器接口 | AXI4-Lite slave，数据位宽在实例化时选择 32 或 64 位 |
 | 时钟 | 寄存器 slave 500MHz（2ns）、core 与 bus master 各 1GHz（1ns）；三个域没有相位关系保证，等频也按异步跨域设计 |
@@ -49,8 +49,10 @@ Genus 建立首个 12nm 评估结果，见 [最小闭环评审](minimal-loop-rev
 2026-11-16 的共享 Copy/Fence 切片已完成 1..8 channel 功能回归，以及 2/8 channel
 的上述频率、非 ULVT、CDC/RDC 和控制逻辑/RAM 边界预算检查；详见
 [多 channel 结果](../../verification/dma/results.md#2026-11-16-multichannel-closure)。
-该结果仅覆盖当前 32-bit 寄存器、64-bit 普通内存 profile，不外推到其它位宽、完整
+该结果仅覆盖当时的 32-bit 寄存器、64-bit 普通内存 profile，不外推到其它位宽、完整
 指令集、真实 SRAM 本征时序或布局布线签核。
+后续的控制面/执行/传输边界和静态参数依赖见[配置设计](configuration.md)；
+新配置的功能和实现结果必须分别记录，不能继承旧 profile 的 PPA 结论。
 禁止 ULVT 必须覆盖允许库选择、映射前禁用以及最终实际映射单元的库身份与阈值属性
 审计，不能仅检查库文件名。不能为达到 1GHz 默许 ULVT 或放宽约束。
 通用流程和设计约束进入仓库；商业工具部署、工艺库输入与原始报告留在私有配置和

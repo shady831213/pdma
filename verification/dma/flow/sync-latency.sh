@@ -16,7 +16,7 @@ targets=[file for file in files if file.name.endswith('_synchronizer_basic.sv')]
 if len(targets)!=1:raise SystemExit('Expected one pinned synchronizer implementation')
 for file in files:shutil.copyfile(file,output/file.name)
 shutil.copyfile(replacement,output/targets[0].name)
-for name in ['compiler.txt','design.sha256']:shutil.copyfile(source/name,output/name)
+for name in ['compiler.txt','design.sha256','configuration.json','configuration.tcl','configuration.svh','dut_binding.svh']:shutil.copyfile(source/name,output/name)
 (output/'sources.f').write_text('+define+PDMA_CDC_LATENCY_STRESS\n'+''.join(str(output/file.name)+'\n' for file in files))
 (output/'simulation-only.json').write_text(json.dumps({
  'purpose':'independent coherent-vector 0/1 destination-cycle synchronizer latency stress',
@@ -26,7 +26,7 @@ for name in ['compiler.txt','design.sha256']:shutil.copyfile(source/name,output/
 },indent=2)+'\n')
 PY
 (cd "$output" && {
-    sha256sum ./*.sv sources.f compiler.txt design.sha256 simulation-only.json ip-manifest.*
+    sha256sum ./*.sv sources.f compiler.txt design.sha256 configuration.json configuration.tcl configuration.svh dut_binding.svh simulation-only.json ip-manifest.*
     find ip -type f -print0 | sort -z | xargs -0 -r sha256sum
 } > snapshot.sha256)
 (cd "$snapshot" && sha256sum --check --status snapshot.sha256)

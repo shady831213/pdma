@@ -3,13 +3,15 @@ set -euo pipefail
 main() {
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 source "$root/tools/rtl-flow/environment.sh"
-output=$(realpath -m "${1:?Usage: snapshot.sh NEW_OUTPUT_DIRECTORY}")
+output=$(realpath -m "${1:?Usage: snapshot.sh NEW_OUTPUT_DIRECTORY [NATIVE_PROJECT]}")
+project=$(realpath "${2:-$root/rtl}")
 pdma_new_run "$output"
 cd "$root"
 GIT_MASTER=1 bash "$root/tools/rtl-flow/veryl.sh" --version > "$output/compiler.txt"
 GIT_MASTER=1 git -C "$root/external/my-veryl" rev-parse HEAD > "$output/compiler-repository.txt"
-(cd "$root/rtl" && GIT_MASTER=1 bash "$root/tools/rtl-flow/veryl.sh" metadata --format json --format-version 2) \
+(cd "$project" && GIT_MASTER=1 bash "$root/tools/rtl-flow/veryl.sh" metadata --format json --format-version 2) \
     > "$output/metadata-v2.json"
+project_name=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["root"]["name"])' "$output/metadata-v2.json")
 design_inputs() {
     # Only compiler inputs: README edits do not invalidate a hardware snapshot.
     # Recompute the inventory too, so adding/removing a source during the build
@@ -31,7 +33,7 @@ design_inputs > "$output/design.sha256"
 python3 "$root/tools/rtl-flow/ip/bundle.py" bundle "$output/metadata-v2.json" "$output/resources"
 mv "$output/resources/ip" "$output/resources/ip-manifest.tcl" "$output/resources/ip-manifest.json" "$output/"
 rmdir "$output/resources"
-cd "$root/rtl"
+cd "$project"
 bash "$root/tools/rtl-flow/veryl.sh" build > "$output/build.log" 2>&1
 bash "$root/tools/rtl-flow/veryl.sh" --version > "$output/compiler.txt"
 index=0
@@ -42,7 +44,7 @@ while IFS= read -r source; do
     cp "$source" "$output/$file"
     printf '%s\n' "$output/$file" >> "$output/sources.f"
     ((index+=1))
-done < pdma_rtl.f
+done < "$project_name.f"
 ((index>0))
 cd "$root"
 design_inputs > "$output/design-after.sha256"

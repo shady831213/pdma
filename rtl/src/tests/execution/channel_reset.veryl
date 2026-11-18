@@ -14,27 +14,29 @@ module ChannelResetTest {
     var reset_all    : logic                                                       ;
     var fatal        : logic                                                       ;
     var tag          : CopyMemory::Tag                                             ;
+    inst channels: DmaChannels #( CHANNEL_COUNT: CHANNEL_COUNT );
+    assign channels.command        = commands;
+    assign channels.events         = '{default: '0};
+    assign channels.configuration  = configuration;
+    assign channels.actions        = actions;
+    assign channels.reset_all      = reset_all;
+    assign channels.global_blocked = 0;
+    assign channels.global_clear   = 0;
+    assign channels.fatal_in       = fatal;
+    assign channels.event_geometry = 0;
+    assign channels.event_ready    = 0;
+    assign status                  = channels.status;
+    assign clear                   = channels.clear;
+    assign advance                 = channels.command_advance;
+    assign event_advance           = channels.event_advance;
+    assign fatal                   = channels.internal_fatal;
     inst dut: CopyEngine #(
         CHANNEL_COUNT  ,
     ) (
-        clk                            ,
-        rst_n          : rst           ,
-        command        : commands      ,
-        events         : '{default: '0},
-        configuration                  ,
-        actions                        ,
-        reset_all      : reset_all     ,
-        global_blocked : 0             ,
-        global_clear   : 0             ,
-        fatal_in       : fatal         ,
-        event_geometry : 0             ,
-        event_ready    : 0             ,
-        status                         ,
-        clear                          ,
-        command_advance: advance       ,
-        event_advance                  ,
-        internal_fatal : fatal         ,
-        memory                         ,
+        clk          ,
+        rst_n   : rst,
+        memory       ,
+        channels     ,
     );
     initial {
         reset_all       = 0;

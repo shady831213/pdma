@@ -67,7 +67,7 @@ Software submits Copy followed by Fence32/64 and polls the real memory marker fo
 successful completion. Destination equality is a checker result, never a
 completion signal. Fault, error and fatal results come from software-visible
 registers and error events. Each channel has separate software, IRQ-handler and
-checker instances. `PDMA_CHANNEL_COUNT=1..8` selects elaboration (default 2 for
+checker instances. The snapshot profile selects 1..8 channels (default 2 for
 iteration). IRQ vectors start at 17 and are distinct from channel IDs; device
 fatal uses its own vector and handler. The memory oracle checks both the channel
 sideband and context against task/ring allocations. Compile a separate immutable
@@ -78,7 +78,7 @@ After configuring the local environment described in
 [the flow guide](../../tools/rtl-flow/flows.md):
 
 ```sh
-bash tools/rtl-flow/snapshot.sh "$PDMA_RUN_ROOT/snapshot"
+bash rtl/flow/snapshot.sh "$PDMA_RUN_ROOT/snapshot"
 bash verification/dma/flow/compile.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/build"
 bash verification/dma/flow/regression.sh "$PDMA_RUN_ROOT/build" "$PDMA_RUN_ROOT/regression"
 bash verification/dma/flow/coverage.sh "$PDMA_RUN_ROOT/build" "$PDMA_RUN_ROOT/regression" "$PDMA_RUN_ROOT/coverage"
@@ -181,9 +181,12 @@ The model preserves block hierarchy and parameterized banks, for example
 `_field` names; register and block handles use `_reg` and `_block` to avoid language
 keywords and inherited UVM methods. Build with `DmaRegisters.build(channel_count,
 bus_bytes)`, then configure the root base, lock the model and bind its map.
-The environment uses the VIP's native `svt_axi_reg_adapter`; native UVM maps
-split 64-bit registers into 32-bit bus accesses. The old address-based sequence
-and manual split-write helper are removed.
+The environment extends the VIP's native `svt_axi_reg_adapter` with
+`pdma_register_adapter`. Native UVM maps split 64-bit registers into 32-bit bus
+accesses; on a 64-bit AXI4-Lite port, the adapter places a 32-bit register's data
+and write strobes in its addressed lane and extracts the same lane on reads.
+It adds no register side effects or address routing. The old address-based
+sequence and manual split-write helper are removed.
 
 Software uses explicit frontdoor reads/writes and checks their status. Hardware
 reset, Resume and IRQ side effects occur in the DUT, not through RAL mirror
@@ -213,8 +216,8 @@ independent parameter/width oracles through `SCHEMA_SV_REGISTER_FIXTURE`,
 `SCHEMA_UVM_ADDRESS_FIXTURE` and `SCHEMA_UVM_PARAMETER_FIXTURE`.
 Keep generated fixtures and native run artifacts untracked.
 
-The configuration separates this DUT's fixed bus widths and AXI burst boundary
-from platform heap placement, ring capacities, optional explicit ring addresses
+The configuration separates the immutable RTL profile's bus widths and the AXI
+burst boundary from platform heap placement, ring capacities, optional explicit ring addresses
 and software polling limits. The event-boundary test places one entry across a
 4 KiB boundary and checks its decoded identity/code/progress and the neighboring
 slot. Coverage uses allocated addresses, rather than requested placement flags,
@@ -241,21 +244,26 @@ zero tests, stale artifacts and timeouts do not establish a pass.
 
 ## DUT and environment parameters
 
-`PDMA_CHANNEL_COUNT` selects an integer in 1..8 at **compile time** (default 2).
-`flow/compile.sh` records it in `configuration.txt` and passes one macro to both
-`tb/dut.sv` and the environment. That value sizes DUT channels, IRQ wiring,
+`rtl/flow/snapshot.sh` resolves the static profile before RTL generation.
+`PDMA_CHANNEL_COUNT` can override its channel count only at this step.
+`flow/compile.sh` copies that snapshot configuration into `configuration.txt`;
+the snapshot also supplies the DUT binding and shared environment macros.
+The channel count sizes DUT channels, IRQ wiring,
 per-channel handlers/checkers, software channels and the generated RAL instance.
 Environment construction rejects a different channel count or IRQ-vector count;
 the register-access tests exercise the discovery register through RAL. Reusing a compiled
 simulation does not change its channel count when the caller changes the environment
-variable: compile a new build directory for another count.
+variable: generate a new snapshot and compile a new build for another count.
+A conflicting override is rejected.
 
-The current Copy/Fence profile still fixes register data to 32 bits and memory data
-to 64 bits. These are not independent randomized TB knobs. Protocol delays, memory
+The profile selects register/memory data widths, burst storage and outstanding
+capacities; derived geometry is not separately configurable. These are not
+independent randomized TB knobs. Protocol delays, memory
 outstanding limits, IRQ handling and clocks are platform stimulus settings. Clock
 configuration intentionally supports target frequencies, asynchronous ratios and
-jitter; they are not synthesized DUT parameters. Genus/VC independently select
-`PDMA_CHANNEL_COUNT` through the DMA profile and freeze its resolved value per run.
+jitter; they are not synthesized DUT parameters. Genus/VC consume the same
+snapshot configuration for ports, memory geometry and crossing depths. See
+[DMA configuration](../../docs/rtl/configuration.md).
 
 
 ## Optional internal timing

@@ -1,0 +1,41 @@
+// Core-clock resource/lifecycle boundary. The engine owns accepted work and
+// reports terminal drain; control owns the software-visible registers and IRQs.
+pub interface DmaChannels #(
+    param CHANNEL_COUNT: u32 = 1,
+) {
+    var command        : RegisterState::Ring                          [CHANNEL_COUNT];
+    var events         : RegisterState::Ring                          [CHANNEL_COUNT];
+    var configuration  : RegisterState::ChannelConfig                 [CHANNEL_COUNT];
+    var actions        : RegisterState::ChannelActions                [CHANNEL_COUNT];
+    var status         : RegisterState::ChannelStatus                 [CHANNEL_COUNT];
+    var reset_all      : logic                                                       ;
+    var global_blocked : logic                                                       ;
+    var global_clear   : logic                                                       ;
+    var fatal_in       : logic                                                       ;
+    var internal_fatal : logic                                                       ;
+    var event_geometry : logic                        <CHANNEL_COUNT>                ;
+    var event_ready    : logic                        <CHANNEL_COUNT>                ;
+    var clear          : logic                        <CHANNEL_COUNT>                ;
+    var command_advance: logic                        <CHANNEL_COUNT>                ;
+    var event_advance  : logic                        <CHANNEL_COUNT>                ;
+    modport engine {
+        command        : input ,
+        events         : input ,
+        configuration  : input ,
+        actions        : input ,
+        status         : output,
+        reset_all      : input ,
+        global_blocked : input ,
+        global_clear   : input ,
+        fatal_in       : input ,
+        internal_fatal : output,
+        event_geometry : input ,
+        event_ready    : input ,
+        clear          : output,
+        command_advance: output,
+        event_advance  : output,
+    }
+    modport control {
+        ..converse(engine)
+    }
+}

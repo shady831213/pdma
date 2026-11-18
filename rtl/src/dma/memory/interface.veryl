@@ -1,64 +1,72 @@
-// First executable profile: 64-bit ordinary AXI5 transfers, bounded bursts.
+// Ordinary memory transactions with configured bus and retained-burst geometry.
 // AXI5 AWATOP is zero; atomic capabilities remain disabled.
 // Address USER is {channel, ContextId}; neither field is a platform identity.
-pub package CopyMemory {
+pub package CopyMemory::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> {
     const MAX_CHANNELS: u32                 = 8;
     const CHANNEL_BITS: u32                 = $clog2(MAX_CHANNELS);
     const CONTEXT_BITS: u32                 = 32;
     const USER_BITS   : u32                 = CONTEXT_BITS + CHANNEL_BITS;
     type Channel      = logic<CHANNEL_BITS>;
-    alias package Bus = $std::axi4_pkg::<64, 8, 1, USER_BITS, 1, 2, USER_BITS, 2>;
+    const DATA_BITS   : u32                 = DATA_BYTES * 8;
+    const DATA_SIZE   : u32                 = $clog2(DATA_BYTES);
+    const BURST_BYTES : u32                 = DATA_BYTES * BURST_BEATS;
+    const BURST_BITS  : u32                 = BURST_BYTES * 8;
+    const LENGTH_BITS : u32                 = if BURST_BEATS >: 1 ? $clog2(BURST_BEATS) : 1;
+    const SLOT_BITS   : u32                 = $clog2(SLOTS + 1);
+    const INDEX_BITS  : u32                 = if SLOTS >: 1 ? $clog2(SLOTS) : 1;
+    const AMOUNT_BITS : u32                 = $clog2(BURST_BYTES + 1);
     // This fixed transport encoding covers the supported maximum. Eligibility
     // and wrap use the instantiated channel count, not the tag's binary modulus.
     struct Tag {
-        channel: Channel   ,
-        slot   : logic  <4>,
+        channel: Channel           ,
+        slot   : logic  <SLOT_BITS>,
     }
     struct Request {
-        tag     : Tag       ,
-        write   : logic     ,
-        address : logic<64> ,
-        selector: logic<32> ,
-        size    : logic<3>  ,
-        length  : logic<3>  ,
-        data    : logic<512>,
+        tag     : Tag               ,
+        write   : logic             ,
+        address : logic<64>         ,
+        selector: logic<32>         ,
+        size    : logic<3>          ,
+        length  : logic<LENGTH_BITS>,
+        data    : logic<BURST_BITS> ,
     }
     struct Receipt {
-        tag           : Tag       ,
-        data          : logic<512>,
-        failed        : logic     ,
-        page_fault    : logic     ,
-        protocol_error: logic     ,
+        tag           : Tag              ,
+        data          : logic<BURST_BITS>,
+        failed        : logic            ,
+        page_fault    : logic            ,
+        protocol_error: logic            ,
     }
     // Internal receipt identity is independent of the external AXI ID. Requests
     // within each AXI direction use ID zero and responses therefore stay ordered.
     struct Address {
-        channel : Channel    ,
-        address : logic  <64>,
-        selector: logic  <32>,
-        size    : logic  <3> ,
-        length  : logic  <3> ,
+        channel : Channel             ,
+        address : logic  <64>         ,
+        selector: logic  <32>         ,
+        size    : logic  <3>          ,
+        length  : logic  <LENGTH_BITS>,
     }
     struct ReadTracker {
-        tag   : Tag     ,
-        lane  : logic<3>,
-        size  : logic<3>,
-        length: logic<3>,
+        tag   : Tag               ,
+        lane  : logic<DATA_SIZE>  ,
+        size  : logic<3>          ,
+        length: logic<LENGTH_BITS>,
     }
     struct WritePayload {
-        data  : logic<512>,
-        lane  : logic<3>  ,
-        size  : logic<3>  ,
-        length: logic<3>  ,
+        data  : logic<BURST_BITS> ,
+        lane  : logic<DATA_SIZE>  ,
+        size  : logic<3>          ,
+        length: logic<LENGTH_BITS>,
     }
 }
-pub interface CopyMemoryPort {
-    var valid   : logic              ;
-    var ready   : logic              ;
-    var request : CopyMemory::Request;
-    var returned: logic              ;
-    var accepted: logic              ;
-    var receipt : CopyMemory::Receipt;
+pub interface CopyMemoryPort::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> {
+    alias package M = CopyMemory::<DATA_BYTES, BURST_BEATS, SLOTS>;
+    var valid   : logic     ;
+    var ready   : logic     ;
+    var request : M::Request;
+    var returned: logic     ;
+    var accepted: logic     ;
+    var receipt : M::Receipt;
     modport master {
         valid   : output,
         ready   : input ,

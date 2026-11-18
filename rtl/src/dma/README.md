@@ -9,42 +9,57 @@ to the deferred sibling `hw_components` directory.
 
 The source tree groups hardware responsibilities. Module directories show containment;
 packages and interfaces instead declare shared types/protocols within that responsibility.
-In particular, `registers/bus.veryl` is the internal register transaction protocol,
+In particular, `control/registers/bus.veryl` is the internal register transaction protocol,
 not the system bus or a bus-arbitration module. See the [implemented microarchitecture](../../../docs/rtl/microarchitecture.md)
 for the actual instance tree, arbitration owners, state machines and pipeline cuts.
 Directory nesting does not add Veryl namespaces, wrappers, registers or latency.
 
 ```text
-copy.veryl                         DmaCopy: clocks, transport, IRQ/reset collection
+copy.veryl                         DmaCopy: static composition, no private controller
 layout.veryl                       Generated contract constants
-registers/
-  interface.veryl                  DmaRegisterInterface: frontend → CDC → bank
-  frontend.veryl                   AXI4-Lite pairing/response owner
-  bus.veryl, access.veryl           Register protocol and access validation
-  state.veryl                      Live register-owner interfaces
-  bank/
-    bank.veryl                     DmaRegisterBank: global state and channel routing
-    channel/
-      channel.veryl                ChannelRegisters: channel state and effects
-      ring.veryl                   RingRegisters: command/event ring state
+control/
+  control.veryl                    DmaControl: registers, IRQ delivery, reset collection
+  interface.veryl                  DmaChannels: typed engine/resource boundary
+  registers/
+    interface.veryl                Register frontend → CDC → bank
+    frontend.veryl                 AXI4-Lite pairing/response owner
+    bus.veryl, access.veryl         Register transaction protocol and validation
+    state.veryl                    Channel/ring configuration, actions and status types
+    bank/
+      bank.veryl                   Global state and channel address routing
+      channel/channel.veryl        ChannelRegisters: channel state and effects
+      channel/ring.veryl           RingRegisters: command/event ring state
 execution/
   engine.veryl                     CopyEngine: shared arbitration/command execution
   command.veryl                    Accepted command context and phases
-  copy/window.veryl                CopyWindow: per-channel burst rows and RAM owner
+  copy/window.veryl                CopyWindow: reserved rows and shared payload RAM
 memory/
-  interface.veryl                  CopyMemory request/receipt types and port
+  interface.veryl                  Typed memory requests/receipts
+  bridge.veryl                     DmaMemoryBridge: CDC queues and bus endpoint
   endpoint/
-    endpoint.veryl                 CopyMemoryEndpoint: routing and return merge
-    read.veryl                     CopyReadEndpoint: AXI read lane
-    write.veryl                    CopyWriteEndpoint: AXI write lane
+    endpoint.veryl                 Direction routing and receipt merge
+    read.veryl                     AXI read credits and burst assembly
+    write.veryl                    AXI write credits, data and terminal responses
 ```
 
-The actual top-level instance paths are `csr` (frontend, crossing, owners),
-`engine` (copy window), `request_crossing`, `response_crossing`, and `endpoint`
-(reader, writer). Register channels are `csr.owners.channels[*].owner`; their two
-ring owners are `command_ring` and `event_ring`. Shared execution does not
-instantiate one engine per channel. Module and instance names survive file moves,
-so constraints, checkers and integration bindings keep their hardware identities.
+`DmaCopy` composes `control`, `engine` and `transport`. The control plane exposes
+`DmaChannels`; this interface is wiring, not a second copy of the register state.
+Each channel's registers remain in `control.csr.owners.channels[i].owner` and its
+rings in `command_ring`/`event_ring`. Accepted-command state and retained bytes
+belong to the execution engine. One shared RAM is banked across channels; there
+is still one shared engine, not one engine per channel.
+
+A different engine can connect to the same channel and memory ports. It must
+honor admission, cursor-update, error and reset/drain obligations; control does
+not inspect its FSM or private buffers. The memory bridge owns CDC and outstanding
+credits, so replacing an engine does not require copying that transport. Neither
+boundary adds a pipeline register. See [configuration](../../../docs/rtl/configuration.md)
+for independent inputs, derived geometry and qualified-profile limits.
+
+The configured simulation/implementation top adds only a static `dma` instance
+under `DmaConfigured`. Its native type arguments, VIP settings and implementation
+inventory come from the same immutable profile. Hierarchical checkers and design
+constraints use this actual instance tree.
 
 ## Implemented register path
 
@@ -75,17 +90,20 @@ software-programmable settings. The interface does not implement a wider-address
 decoder. The register access matrix is specified in
 [register-interface.md](../../../docs/rtl/register-interface.md).
 
-## Core owner boundaries
+## Register-to-control boundary
+
+These are the ports of the standalone `DmaRegisterInterface`. `DmaControl`
+connects them to the live `DmaChannels` interface and owns notification delivery.
 
 - `commands`, `events`, `configurations` expose the actual ring/channel state to
-  the future execution owners. Atomic capability bits are immutable parameters.
-- `command_advance` and `event_advance` commit one hardware cursor increment after
-  successful work. Their `*_advance_ready` outputs report cursor credit and reset
+  execution owners. Atomic capability bits are immutable parameters.
+- `command_advance` accepts a descriptor; `event_advance` publishes a completely
+  written error event. Each commits one cursor increment. Their `*_advance_ready` outputs report cursor credit and reset
   blocking only; they do not authorize memory access. Execution must also check
   channel enable, lifecycle and geometry. `event_geometry` supports deciding an
   event-configuration failure; enable already validates command geometry.
 - `statuses` and global fatal/busy inputs are live owner state, not storage copies.
-  `actions` and `global_reset_request` pulse once at successful CSR commit. Future
+  `actions` and `global_reset_request` pulse once at successful CSR commit. Execution
   owners must consume these pulses in the core domain; there is no action FIFO.
 - `clear_channels` and `global_clear` mean the responsible lifecycle owner has
   completed cleanup. A reset request alone never asserts these or clears state.
@@ -93,8 +111,9 @@ decoder. The register access matrix is specified in
   IRQ cause is a view of supplied sticky causes and actual event occupancy;
   notification generation and set-versus-ACK priority remain the IRQ owner's work.
 
-Both physical reset inputs must assert together and release synchronously to
-their respective clocks; reset synchronization belongs to the enclosing reset
+The register interface's reg/core cold resets must assert together and release
+synchronously to their respective clocks. `DmaCopy` includes the bus reset in the
+same assertion group. Reset synchronization belongs to the enclosing reset
 tree. A released source may buffer before its peer starts. Independently resetting one live domain
 is unsupported. Software channel/DMA reset must leave the transport running.
 The memory endpoint has independent read/write lanes and ordered return tracking.

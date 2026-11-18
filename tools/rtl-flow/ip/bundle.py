@@ -98,14 +98,19 @@ def bundle(entries, output):
 
 
 def inputs(entries):
-    paths = set()
+    # Source identity describes compiler inputs, not their checkout/run location.
+    # Logical labels are an inventory; they are not paths for sha256sum --check.
+    records = {}
+
+    def record(name, contents):
+        records[name] = hashlib.sha256(contents).hexdigest()
+
     for project in entries:
         root = Path(project["local_path"]).resolve()
+        prefix = f'{project["id"]}/{project["name"]}'
         manifest = root / "Veryl.toml"
         if manifest.is_file():
-            paths.add(manifest)
-            # Ask the pinned compiler for its build configuration rather than
-            # duplicating its TOML/default-source interpretation in this tool.
+            # Native metadata retains compiler defaults and all build options.
             launcher = Path(__file__).resolve().parents[1] / "veryl.sh"
             query = subprocess.run(
                 ["bash", str(launcher), "metadata", "--format", "json", "--format-version", "1"],
@@ -113,21 +118,25 @@ def inputs(entries):
                 env=dict(os.environ, GIT_MASTER="1"),
             )
             config = json.loads(query.stdout)
-            for source in config.get("build", {}).get("sources", ["."]):
+            sources = config.get("build", {}).get("sources", ["."])
+            for index, source in enumerate(sources):
                 directory = root / source
-                if directory.is_file():
-                    paths.add(directory)
-                else:
-                    paths.update(directory.rglob("*.veryl"))
+                files = [directory] if directory.is_file() else sorted(directory.rglob("*.veryl"))
+                for file in files:
+                    name = file.name if directory.is_file() else str(file.relative_to(directory))
+                    record(f"{prefix}/source-{index}/{name}", file.read_bytes())
+            config.setdefault("build", {})["sources"] = [f"source-{i}" for i in range(len(sources))]
+            record(f"{prefix}/Veryl.config.json",
+                   json.dumps(config, sort_keys=True, separators=(",", ":")).encode())
         lock = root / "Veryl.lock"
         if lock.is_file():
-            paths.add(lock)
+            record(f"{prefix}/Veryl.lock", lock.read_bytes())
         resource = resources(project)
         if resource:
-            paths.update(resource["files"])
-    for path in sorted(paths):
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        print(f"{digest}  {os.path.relpath(path)}")
+            for file in resource["files"]:
+                record(f"{prefix}/resource/{file.relative_to(root)}", file.read_bytes())
+    for name, digest in sorted(records.items()):
+        print(f"{digest}  {name}")
 
 
 def main():

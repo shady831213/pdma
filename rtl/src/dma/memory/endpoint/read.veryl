@@ -1,27 +1,37 @@
 // ID-zero reads may be outstanding together. Ordered R bursts consume the
 // metadata FIFO; only the final beat publishes a complete internal receipt.
-module CopyReadEndpoint (
-    clk  : input   clock                                        ,
-    rst_n: input   reset_async_low                              ,
-    port : modport CopyMemoryPort::slave                        ,
-    axi  : modport $std::axi4_if::<CopyMemory::Bus>::read_master,
+module CopyReadEndpoint::<
+    B          : $std::axi4_prototype = $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>,
+    BURST_BEATS: u32                  = 8                  ,
+    SLOTS      : u32                  = 8                  ,
+> #(
+    param OUTSTANDING: u32 = 8,
+) (
+    clk  : input   clock                                                           ,
+    rst_n: input   reset_async_low                                                 ,
+    port : modport CopyMemoryPort::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>::slave,
+    axi  : modport $std::axi4_if::<B>::read_master                                 ,
 ) {
-    var full         : logic                     ;
-    var empty        : logic                     ;
-    var head         : CopyMemory::ReadTracker   ;
-    var beat         : logic                  <3>;
-    var accumulated  : CopyMemory::Receipt       ;
-    var next_result  : CopyMemory::Receipt       ;
-    var receipt_ready: logic                     ;
-    let terminal     : logic                      = axi.rvalid && axi.rready && axi.rlast;
+    alias package M = CopyMemory::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>;
+    var full         : logic                         ;
+    var empty        : logic                         ;
+    var head         : M::ReadTracker                ;
+    var beat         : logic         <M::LENGTH_BITS>;
+    var accumulated  : M::Receipt                    ;
+    var next_result  : M::Receipt                    ;
+    var receipt_ready: logic                         ;
+    let lane         : logic         <M::DATA_SIZE>   = head.lane + ((beat as u32) << head.size);
+    let all_bits     : logic         <M::DATA_BITS>   = '1;
+    let beat_mask    : logic         <M::DATA_BITS>   = all_bits >> (M::DATA_BITS - (8 << head.size));
+    let terminal     : logic                          = axi.rvalid && axi.rready && axi.rlast;
     assign axi.arvalid  = port.valid && !full;
     assign port.ready   = axi.arready && !full;
     assign axi.araddr   = port.request.address;
     assign axi.arlen    = port.request.length as 8;
-    assign axi.arsize   = port.request.size as CopyMemory::Bus::size_t;
-    assign axi.arburst  = 2'b01 as CopyMemory::Bus::burst_t;
-    assign axi.aruser   = (port.request.selector as CopyMemory::USER_BITS)
-        | ((port.request.tag.channel as CopyMemory::USER_BITS) << CopyMemory::CONTEXT_BITS);
+    assign axi.arsize   = port.request.size as B::size_t;
+    assign axi.arburst  = 2'b01 as B::burst_t;
+    assign axi.aruser   = (port.request.selector as M::USER_BITS)
+        | ((port.request.tag.channel as M::USER_BITS) << M::CONTEXT_BITS);
     assign axi.arcache  = 0;
     assign axi.arprot   = 0;
     assign axi.arid     = 0;
@@ -30,9 +40,9 @@ module CopyReadEndpoint (
     assign axi.arregion = 0;
     assign axi.rready   = !empty && (!axi.rlast || receipt_ready);
     inst pending: $std::fifo #(
-        TYPE         : CopyMemory::ReadTracker,
-        DEPTH        : 8                      ,
-        RESET_DATA_FF: false                  ,
+        TYPE         : M::ReadTracker,
+        DEPTH        : OUTSTANDING   ,
+        RESET_DATA_FF: false         ,
     ) (
         i_clk        : clk                       ,
         i_rst        : rst_n                     ,
@@ -42,10 +52,10 @@ module CopyReadEndpoint (
         o_almost_full: _                         ,
         o_word_count : _                         ,
         i_push       : axi.arvalid && axi.arready,
-        i_data       : CopyMemory::ReadTracker'{
-            tag   : port.request.tag         ,
-            lane  : port.request.address[2:0],
-            size  : port.request.size        ,
+        i_data       : M::ReadTracker'{
+            tag   : port.request.tag                    ,
+            lane  : port.request.address as M::DATA_SIZE,
+            size  : port.request.size                   ,
             length: port.request.length
         },
         i_pop : terminal,
@@ -54,11 +64,9 @@ module CopyReadEndpoint (
     always_comb {
         next_result     = accumulated;
         next_result.tag = head.tag;
-        if head.size == 0 {
-            next_result.data = ((axi.rdata >> (head.lane * 8)) as 8) as 512;
-        } else {
-            next_result.data[beat * 64+:64] = axi.rdata;
-        }
+        // AXI lanes wrap at the bus word; the retained payload is densely packed.
+        next_result.data = accumulated.data | (((axi.rdata >> (lane * 8)) & beat_mask) as M::BURST_BITS)
+            << (((beat as u32) << head.size) << 3);
         if (axi.rresp as 2) != 0 {
             next_result.failed     = 1;
             next_result.page_fault = (!accumulated.failed || accumulated.page_fault) && axi.ruser == 1
@@ -68,7 +76,7 @@ module CopyReadEndpoint (
             || (axi.rresp as 2) == 1 || (axi.ruser != 0 && (axi.ruser != 1 || (axi.rresp as 2) <: 2));
     }
     inst receipt: common_cell::ReadyValidSlice #(
-        TYPE: CopyMemory::Receipt                        ,
+        TYPE: M::Receipt                                 ,
         MODE: common_cell::ReadyValid::SliceMode::Forward,
     ) (
         clk                    ,

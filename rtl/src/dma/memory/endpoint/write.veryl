@@ -1,36 +1,43 @@
 // AW, W and B advance independently, in the same request order. Admission reserves
 // all three queues atomically. ID zero imposes B order; slot is returned internally.
-module CopyWriteEndpoint (
-    clk  : input   clock                                         ,
-    rst_n: input   reset_async_low                               ,
-    port : modport CopyMemoryPort::slave                         ,
-    axi  : modport $std::axi4_if::<CopyMemory::Bus>::write_master,
+module CopyWriteEndpoint::<
+    B          : $std::axi4_prototype = $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>,
+    BURST_BEATS: u32                  = 8                  ,
+    SLOTS      : u32                  = 8                  ,
+> #(
+    param OUTSTANDING: u32 = 8                      ,
+    const CREDIT_BITS: u32 = $clog2(OUTSTANDING + 1),
+) (
+    clk  : input   clock                                                           ,
+    rst_n: input   reset_async_low                                                 ,
+    port : modport CopyMemoryPort::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>::slave,
+    axi  : modport $std::axi4_if::<B>::write_master                                ,
 ) {
-    var address_full     : logic                      ;
-    var data_full        : logic                      ;
-    var response_full    : logic                      ;
-    var address_empty    : logic                      ;
-    var data_empty       : logic                      ;
-    var response_empty   : logic                      ;
-    var address          : CopyMemory::Address        ;
-    var payload          : CopyMemory::WritePayload   ;
-    var tag              : CopyMemory::Tag            ;
-    var beat             : logic                   <3>;
-    var addressed        : logic                   <5>;
-    var written          : logic                   <5>;
-    var completed        : logic                   <5>;
-    var receipt_ready    : logic                      ;
-    let accept           : logic                       = port.valid && port.ready;
-    let data_complete    : logic                       = axi.wvalid && axi.wready && axi.wlast;
-    let response_complete: logic                       = axi.bvalid && axi.bready;
+    alias package M = CopyMemory::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>;
+    var address_full     : logic                          ;
+    var data_full        : logic                          ;
+    var response_full    : logic                          ;
+    var address_empty    : logic                          ;
+    var data_empty       : logic                          ;
+    var response_empty   : logic                          ;
+    var address          : M::Address                     ;
+    var payload          : M::WritePayload                ;
+    var tag              : M::Tag                         ;
+    var beat             : logic          <M::LENGTH_BITS>;
+    var addressed        : logic          <CREDIT_BITS>   ;
+    var written          : logic          <CREDIT_BITS>   ;
+    var completed        : logic          <CREDIT_BITS>   ;
+    var receipt_ready    : logic                          ;
+    let accept           : logic                           = port.valid && port.ready;
+    let data_complete    : logic                           = axi.wvalid && axi.wready && axi.wlast;
+    let response_complete: logic                           = axi.bvalid && axi.bready;
     assign port.ready   = !(address_full || data_full || response_full);
     assign axi.awvalid  = !address_empty;
     assign axi.awaddr   = address.address;
     assign axi.awlen    = address.length as 8;
-    assign axi.awsize   = address.size as CopyMemory::Bus::size_t;
-    assign axi.awburst  = 2'b01 as CopyMemory::Bus::burst_t;
-    assign axi.awuser   = (address.selector as CopyMemory::USER_BITS)
-        | ((address.channel as CopyMemory::USER_BITS) << CopyMemory::CONTEXT_BITS);
+    assign axi.awsize   = address.size as B::size_t;
+    assign axi.awburst  = 2'b01 as B::burst_t;
+    assign axi.awuser   = (address.selector as M::USER_BITS) | ((address.channel as M::USER_BITS) << M::CONTEXT_BITS);
     assign axi.awcache  = 0;
     assign axi.awprot   = 0;
     assign axi.awid     = 0;
@@ -40,25 +47,15 @@ module CopyWriteEndpoint (
     assign axi.wvalid   = !data_empty;
     assign axi.wlast    = beat == payload.length;
     assign axi.wuser    = 0;
-    assign axi.wdata    = if payload.size == 0 ?
-        (payload.data[7:0] as 64) << (payload.lane * 8)
-    : if payload.size == 2 ?
-        (payload.data[31:0] as 64) << (payload.lane * 8)
-    :
-        (payload.data >> ((beat as u32) * 64)) as 64
-    ;
-    assign axi.wstrb    = if payload.size == 0 ?
-        8'h01 << payload.lane
-    : if payload.size == 2 ?
-        8'h0f << payload.lane
-    :
-        8'hff
-    ;
-    assign axi.bready   = !response_empty && addressed != completed && written != completed && receipt_ready;
+    let lane     : logic<M::DATA_SIZE>        = payload.lane + ((beat as u32) << payload.size);
+    let all_lanes: logic<B::DATA_WIDTH_BYTES> = '1;
+    assign axi.wdata  = ((payload.data >> (((beat as u32) << payload.size) << 3)) as M::DATA_BITS) << (lane * 8);
+    assign axi.wstrb  = (all_lanes >> (B::DATA_WIDTH_BYTES - (1 << payload.size))) << lane;
+    assign axi.bready = !response_empty && addressed != completed && written != completed && receipt_ready;
     inst addresses: $std::fifo #(
-        TYPE         : CopyMemory::Address,
-        DEPTH        : 8                  ,
-        RESET_DATA_FF: false              ,
+        TYPE         : M::Address ,
+        DEPTH        : OUTSTANDING,
+        RESET_DATA_FF: false      ,
     ) (
         i_clk        : clk                       ,
         i_rst        : rst_n                     ,
@@ -70,7 +67,7 @@ module CopyWriteEndpoint (
         i_push       : accept                    ,
         i_pop        : axi.awvalid && axi.awready,
         o_data       : address                   ,
-        i_data       : CopyMemory::Address'{
+        i_data       : M::Address'{
             channel : port.request.tag.channel,
             address : port.request.address    ,
             selector: port.request.selector   ,
@@ -79,9 +76,9 @@ module CopyWriteEndpoint (
         },
     );
     inst data: $std::fifo #(
-        TYPE         : CopyMemory::WritePayload,
-        DEPTH        : 8                       ,
-        RESET_DATA_FF: false                   ,
+        TYPE         : M::WritePayload,
+        DEPTH        : OUTSTANDING    ,
+        RESET_DATA_FF: false          ,
     ) (
         i_clk        : clk          ,
         i_rst        : rst_n        ,
@@ -93,17 +90,17 @@ module CopyWriteEndpoint (
         i_push       : accept       ,
         i_pop        : data_complete,
         o_data       : payload      ,
-        i_data       : CopyMemory::WritePayload'{
-            data  : port.request.data        ,
-            lane  : port.request.address[2:0],
-            size  : port.request.size        ,
+        i_data       : M::WritePayload'{
+            data  : port.request.data                   ,
+            lane  : port.request.address as M::DATA_SIZE,
+            size  : port.request.size                   ,
             length: port.request.length
         },
     );
     inst responses: $std::fifo #(
-        TYPE         : CopyMemory::Tag,
-        DEPTH        : 8              ,
-        RESET_DATA_FF: false          ,
+        TYPE         : M::Tag     ,
+        DEPTH        : OUTSTANDING,
+        RESET_DATA_FF: false      ,
     ) (
         i_clk        : clk              ,
         i_rst        : rst_n            ,
@@ -118,14 +115,14 @@ module CopyWriteEndpoint (
         o_data       : tag              ,
     );
     inst receipt: common_cell::ReadyValidSlice #(
-        TYPE: CopyMemory::Receipt                        ,
+        TYPE: M::Receipt                                 ,
         MODE: common_cell::ReadyValid::SliceMode::Forward,
     ) (
         clk                       ,
         rst_n                     ,
         s_valid: response_complete,
         s_ready: receipt_ready    ,
-        s_data : CopyMemory::Receipt'{
+        s_data : M::Receipt'{
             tag           : tag                                    ,
             data          : '0                                     ,
             failed        : (axi.bresp as 2) != 0,

@@ -1,14 +1,22 @@
 // Independent ordered AXI lanes. Each accepted internal request owns one receipt;
 // software reset closes the producer but never retracts accepted AW/W/AR or R/B.
-pub module CopyMemoryEndpoint (
-    clk  : input   clock                                   ,
-    rst_n: input   reset_async_low                         ,
-    port : modport CopyMemoryPort::slave                   ,
-    axi  : modport $std::axi4_if::<CopyMemory::Bus>::master,
+pub module CopyMemoryEndpoint::<
+    B          : $std::axi4_prototype = $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>,
+    BURST_BEATS: u32                  = 8                  ,
+    SLOTS      : u32                  = 8                  ,
+> #(
+    param READ_OUTSTANDING : u32 = 8,
+    param WRITE_OUTSTANDING: u32 = 8,
+) (
+    clk  : input   clock                                                           ,
+    rst_n: input   reset_async_low                                                 ,
+    port : modport CopyMemoryPort::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>::slave,
+    axi  : modport $std::axi4_if::<B>::master                                      ,
 ) {
-    inst reads : CopyMemoryPort;
-    inst writes: CopyMemoryPort;
-    inst lanes : $std::axi4_if::<CopyMemory::Bus>;
+    alias package M = CopyMemory::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>;
+    inst reads : CopyMemoryPort::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>;
+    inst writes: CopyMemoryPort::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>;
+    inst lanes : $std::axi4_if::<B>;
     // A full interface joins disjoint read/write views. Passing the already
     // restricted master modport as a different modport is illegal SystemVerilog.
     connect axi            <> lanes.slave;
@@ -17,13 +25,17 @@ pub module CopyMemoryEndpoint (
     assign reads.request  = port.request;
     assign writes.request = port.request;
     assign port.ready     = if port.request.write ? writes.ready : reads.ready;
-    inst reader: CopyReadEndpoint (
+    inst reader: CopyReadEndpoint::<B, BURST_BEATS, SLOTS> #(
+        OUTSTANDING: READ_OUTSTANDING,
+    ) (
         clk         ,
         rst_n       ,
         port : reads,
         axi  : lanes,
     );
-    inst writer: CopyWriteEndpoint (
+    inst writer: CopyWriteEndpoint::<B, BURST_BEATS, SLOTS> #(
+        OUTSTANDING: WRITE_OUTSTANDING,
+    ) (
         clk          ,
         rst_n        ,
         port : writes,
@@ -38,7 +50,7 @@ pub module CopyMemoryEndpoint (
     // Register the merged receipt; a newly arriving contender cannot replace a
     // receipt already offered under downstream backpressure.
     inst result: common_cell::ReadyValidSlice #(
-        TYPE: CopyMemory::Receipt                        ,
+        TYPE: M::Receipt                                 ,
         MODE: common_cell::ReadyValid::SliceMode::Forward,
     ) (
         clk                                                      ,

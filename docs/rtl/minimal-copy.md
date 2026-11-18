@@ -4,11 +4,11 @@ Detailed implemented [microarchitecture](microarchitecture.md) and current
 [performance measurements](performance.md) supplement this scope summary.
 
 This DMA-core slice implements one shared Linear Copy/Fence engine with an
-instance-configured channel count in 1..8. Other command families and bus-width
-profiles are not the complete configurable DMA; multichannel qualification is
-tracked in [the multichannel design](multichannel.md).
-It connects a 32-bit AXI4-Lite slave, a 64-bit ordinary memory master and three
-asynchronous clock domains. Atomic capability is disabled and AWATOP is zero.
+instance-configured channel count in 1..8. Its independent bus widths and resource
+capacities are described in [elaboration configuration](configuration.md), including
+the qualification limits. Other command families remain outside this slice.
+The default profile connects a 32-bit AXI4-Lite slave, a 64-bit ordinary memory
+master and three asynchronous clock domains. Atomic capability is disabled and AWATOP is zero.
 ARUSER/AWUSER are 35 bits: channel in bits 34:32 and the full context selector in
 bits 31:0; Function/PASID translation remains outside DMA.
 
@@ -18,8 +18,8 @@ bits 31:0; Function/PASID translation remains outside DMA.
 flowchart LR
   SW[AXI-Lite] --> CSR[Register mailbox and register owners]
   CSR --> CMD[CopyEngine: channel contexts and shared execution]
-  CMD --> WIN[CopyWindow: eight retained chunks per channel]
-  WIN --> REQ[Eight-entry request FIFO]
+  CMD --> WIN[CopyWindow: SLOTS retained chunks per channel]
+  WIN --> REQ[Request FIFO]
   CMD --> REQ
   REQ --> RD[Read endpoint]
   REQ --> WR[Write endpoint]
@@ -29,15 +29,16 @@ flowchart LR
   MEM --> WR
   RD --> MERGE[Receipt arbitration]
   WR --> MERGE
-  MERGE --> RESP[Eight-entry receipt FIFO]
+  MERGE --> RESP[Receipt FIFO]
   RESP --> WIN
   RESP --> CMD
 ```
 
 The core fetches and accepts the current 96-byte descriptor once. Copy owns an
-eight-slot window until that command completes, stops or is reset. Each chunk is
-at most 64 bytes, is bounded by both address ranges and does not cross 4KiB.
-Aligned ranges use up to eight 64-bit beats; unmatched alignment and short tails
+configured retained window until that command completes, stops or is reset. Each
+chunk is at most `memory_bytes * burst_beats`, is bounded by both address ranges
+and does not cross 4KiB. In the default profile, aligned ranges use up to eight
+64-bit beats; unmatched alignment and short tails
 still use byte accesses without over-reading. Source and destination selectors
 remain independent. No successor in the same channel may bypass its accepted command. A safely parked
 channel yields shared execution to an eligible peer.
@@ -45,14 +46,14 @@ channel yields shared execution to an eligible peer.
 | Owner | State and release boundary |
 | --- | --- |
 | `CopyEngine` | One descriptor/lifecycle context per channel, one round-robin selected shared Fetch/Fence/error-publication datapath |
-| `CopyWindow` | Eight source/destination/length entries per channel, access states and retained read bytes; reuses a slot only after successful write and in-order retirement |
-| Core RAM/read offer | `(8 * CHANNEL_COUNT)` × 512-bit shared 1R1W storage, one synchronous read and one write port; a separate register holds the prepared write under backpressure |
-| Request/receipt FIFOs | Eight typed entries each, registered Gray pointers and two-stage synchronization; enqueue transfers custody, not transaction completion |
-| Read endpoint | Up to eight accepted AR metadata entries, one ordered R-burst assembly and a held receipt |
+| `CopyWindow` | `SLOTS` source/destination/length entries per channel, access states and retained read bytes; reuses a slot only after successful write and in-order retirement |
+| Core RAM/read offer | `channels * slots` rows of `memory_bits * burst_beats` shared 1R1W storage, one synchronous read and one write port; a separate register holds the prepared write under backpressure |
+| Request/receipt FIFOs | Independently configured depths, registered Gray pointers and two-stage synchronization; enqueue transfers custody, not transaction completion |
+| Read endpoint | Configured AR tracking capacity, one ordered R-burst assembly and a held receipt |
 | Write endpoint | Separately advancing AW, W and B queues; admission reserves all three, and B consumes the oldest completed AW/W responsibility |
 
 Internal channel/slot identities accompany requests and receipts; slot zero belongs to
-serialized Fetch/Fence/event accesses and slots 1..8 to the Copy window. They are
+serialized Fetch/Fence/event accesses and slots 1..SLOTS to the Copy window. They are
 not architectural context IDs. External reads use AXI ID zero, as do external
 writes. AXI's ordering within each direction supplies receipt association; R and B
 may complete independently. A fair registered merger feeds the receipt FIFO.

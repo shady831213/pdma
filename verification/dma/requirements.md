@@ -1,14 +1,17 @@
 # DMA RTL verification obligations
 
-The DUT is the current one-channel `DmaCopy` profile, with AXI4-Lite 32-bit
-register access and a 64-bit memory port using the ordinary AXI subset of AXI5.
+The DUT is `DmaCopy`, with 1..8 channels and a default AXI4-Lite 32-bit register
+port / 64-bit ordinary memory port. The testbench obtains channel count, data
+widths and resource dimensions from the same immutable integration profile as
+the DUT; see [static configuration](../../docs/rtl/configuration.md).
 Atomic traffic is forbidden in this profile. The bench uses the actual protocol
 VIP for both ports. Test software publishes descriptors through jarvisuk memory
 and software-owned MMIO sequences. Copy followed by Fence32/64 produces a real
 memory marker that software polls for successful completion. Destination equality
 never signals completion. Fault, error and fatal observations use registers and
 error events through the same software channel abstraction. Register operations
-use generated UVM register handles and the protocol VIP's native RAL adapter;
+use generated UVM register handles and the protocol VIP's RAL adapter with
+AXI4-Lite lane handling for 32-bit registers on a 64-bit bus;
 software never substitutes mirrored values for a real hardware read.
 
 | Obligation | Model reference under `crates/scenarios/tests` | RTL scenario/check |
@@ -76,11 +79,10 @@ reports combine only successful seeds, excluding checker mutation runs.
 
 ## Throughput and bubble qualification
 
-### Planned multichannel qualification
+### Multichannel qualification
 
-The next RTL slice targets every integer channel count from one through eight, with eight as the
-initial supported maximum. This is planned coverage; the implemented DUT above
-remains single-channel. Use two channels for routine development, simulation and
+The RTL slice supports every integer channel count from one through eight, with eight as the
+initial supported maximum. Use two channels for routine development, simulation and
 synthesis. Retain one-channel regressions and a four-channel scaling check.
 Final acceptance requires the eight-channel configuration to close functional
 and mixed-traffic scenarios, independent reset, retained-fault resume, shared
@@ -99,13 +101,13 @@ physical slot counts, chunk boundaries or cycle traces between model and RTL.
 
 ### Datapath measurements
 
-The current eight-slot window and asynchronous request/receipt queues are measured
+The default eight-slot window and asynchronous request/receipt queues are measured
 in [the throughput review](../../docs/rtl/throughput-review.md). The requirements
 below remain acceptance criteria for further configurations, not a declaration
 that every alignment, width and clock ratio is closed.
 
-Agreed on 2026-11-11 for the next iteration; these cases are not yet implemented
-or counted as passed coverage. Reference the existing Veryl tests and UVM zero-delay
+These requirements were agreed on 2026-11-11; implemented cases and their qualified
+configurations are recorded in [results](results.md). Reference the existing Veryl tests and UVM zero-delay
 case construction in [pcie_modeling](https://github.com/shady831213/pcie_modeling),
 adapting their methodology to the DMA contract rather than importing project-specific
 paths, deployment settings or assumptions.

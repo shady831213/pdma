@@ -1,14 +1,14 @@
 // Optional passive timing probes. Without +PDMA_INTERNAL_TIMING these initial
 // blocks terminate: ordinary regressions pay no per-clock observation cost.
-module pdma_pipeline_timing #(parameter int CHANNELS=1, SLOTS=8)(
+module pdma_pipeline_timing #(parameter int CHANNELS=1, SLOTS=8, localparam int SLOT_BITS=$clog2(SLOTS+1))(
     input logic core_clk, core_rst_n, bus_clk, bus_rst_n,
     input logic grant, input logic [2:0] chosen,
     input logic [CHANNELS-1:0] copy_start,
-    input logic issued, input logic [2:0] issue_channel, input logic [3:0] issue_slot,
+    input logic issued, input logic [2:0] issue_channel, input logic [SLOT_BITS-1:0] issue_slot,
     input logic issue_write,
-    input logic retired, input logic [2:0] retire_channel, input logic [3:0] retire_slot,
-    input logic admitted, input logic [2:0] admit_channel, input logic [3:0] admit_slot,
-    input logic returned, input logic [2:0] return_channel, input logic [3:0] return_slot
+    input logic retired, input logic [2:0] retire_channel, input logic [SLOT_BITS-1:0] retire_slot,
+    input logic admitted, input logic [2:0] admit_channel, input logic [SLOT_BITS-1:0] admit_slot,
+    input logic returned, input logic [2:0] return_channel, input logic [SLOT_BITS-1:0] return_slot
 );
     timeunit 1ns; timeprecision 1ps;
     bit enabled=$test$plusargs("PDMA_INTERNAL_TIMING");

@@ -1,52 +1,44 @@
 module pdma_vip_dut(svt_axi_if host_bus, svt_axi_if memory_bus, pdma_control_if control);
-    __std___axi4_lite_if____std___axi4_lite_pkg__32__4__1 cfg();
-    __std___axi4_if____std___axi4_pkg__64__8__1__pdma_rtl_CopyMemory_USER_BITS__1__2__pdma_rtl_CopyMemory_USER_BITS__2 memory();
-    pdma_rtl_DmaCopy #(.CHANNEL_COUNT(`PDMA_CHANNEL_COUNT)) dut(
-        .reg_clk(control.reg_clk), .core_clk(control.core_clk), .bus_clk(control.bus_clk),
-        .reg_rst_n(control.reg_rst_n), .core_rst_n(control.core_rst_n), .bus_rst_n(control.bus_rst_n),
-        .cfg(cfg), .memory(memory), .awatop(control.awatop),
-        .irq(control.irq), .irq_ready(control.irq_ready), .fatal(control.fatal),
-        .fatal_irq(control.fatal_irq), .fatal_irq_ready(control.fatal_irq_ready)
-    );
-    pdma_pipeline_timing #(.CHANNELS(`PDMA_CHANNEL_COUNT)) timing_probe(
+    `include "dut_binding.svh"
+    pdma_pipeline_timing #(.CHANNELS(`PDMA_CHANNEL_COUNT),.SLOTS(`PDMA_COPY_SLOTS)) timing_probe(
         .core_clk(control.core_clk),.core_rst_n(control.core_rst_n),
         .bus_clk(control.bus_clk),.bus_rst_n(control.bus_rst_n),
-        .grant(!dut.engine.locked && |dut.engine.choice),.chosen(dut.engine.chosen),
-        .copy_start(dut.engine.copy_start),
-        .issued(dut.requests.valid && dut.requests.ready),
-        .issue_channel(dut.requests.request.tag.channel),.issue_slot(dut.requests.request.tag.slot),
-        .issue_write(dut.requests.request.write),
-        .retired(dut.requests.returned && dut.requests.accepted),
-        .retire_channel(dut.requests.receipt.tag.channel),.retire_slot(dut.requests.receipt.tag.slot),
-        .admitted(dut.transactions.valid && dut.transactions.ready),
-        .admit_channel(dut.transactions.request.tag.channel),.admit_slot(dut.transactions.request.tag.slot),
-        .returned(dut.transactions.returned && dut.transactions.accepted),
-        .return_channel(dut.transactions.receipt.tag.channel),.return_slot(dut.transactions.receipt.tag.slot)
+        .grant(!integration.dma.engine.locked && |integration.dma.engine.choice),.chosen(integration.dma.engine.chosen),
+        .copy_start(integration.dma.engine.copy_start),
+        .issued(integration.dma.requests.valid && integration.dma.requests.ready),
+        .issue_channel(integration.dma.requests.request.tag.channel),.issue_slot(integration.dma.requests.request.tag.slot),
+        .issue_write(integration.dma.requests.request.write),
+        .retired(integration.dma.requests.returned && integration.dma.requests.accepted),
+        .retire_channel(integration.dma.requests.receipt.tag.channel),.retire_slot(integration.dma.requests.receipt.tag.slot),
+        .admitted(integration.dma.transport.transactions.valid && integration.dma.transport.transactions.ready),
+        .admit_channel(integration.dma.transport.transactions.request.tag.channel),.admit_slot(integration.dma.transport.transactions.request.tag.slot),
+        .returned(integration.dma.transport.transactions.returned && integration.dma.transport.transactions.accepted),
+        .return_channel(integration.dma.transport.transactions.receipt.tag.channel),.return_slot(integration.dma.transport.transactions.receipt.tag.slot)
     );
     for(genvar c=0;c<`PDMA_CHANNEL_COUNT;c++) begin: channels
-        pdma_lifecycle_assertions lifecycle(
+        pdma_lifecycle_assertions #(.SLOTS(`PDMA_COPY_SLOTS)) lifecycle(
             .clk(control.core_clk),.rst_n(control.core_rst_n),
-            .request(dut.requests.valid && dut.requests.request.tag.channel==c),.ready(dut.requests.ready),
-            .returned(dut.requests.returned && dut.requests.receipt.tag.channel==c),.accepted(dut.requests.accepted),
-            .request_slot(dut.requests.request.tag.slot),.receipt_slot(dut.requests.receipt.tag.slot),
-            .closing(dut.engine.shutdown[c]),.clear(dut.clear[c]),
-            .enabled(dut.configurations[c].enable),.has_commands(dut.commands[c].producer!=dut.commands[c].consumer),
+            .request(integration.dma.requests.valid && integration.dma.requests.request.tag.channel==c),.ready(integration.dma.requests.ready),
+            .returned(integration.dma.requests.returned && integration.dma.requests.receipt.tag.channel==c),.accepted(integration.dma.requests.accepted),
+            .request_slot(integration.dma.requests.request.tag.slot),.receipt_slot(integration.dma.requests.receipt.tag.slot),
+            .closing(integration.dma.engine.shutdown[c]),.clear(integration.dma.channels.clear[c]),
+            .enabled(integration.dma.channels.configuration[c].enable),.has_commands(integration.dma.channels.command[c].producer!=integration.dma.channels.command[c].consumer),
             .irq(control.irq[c]),.irq_ready(control.irq_ready[c]),
-            .irq_source(dut.statuses[c].error || dut.statuses[c].fatal!=0 ||
-                dut.statuses[c].trap || dut.events[c].producer!=dut.events[c].consumer),
-            .parked(dut.statuses[c].faulted),.resume_request(dut.actions[c].resume_request),
-            .parked_state({dut.engine.contexts[c].descriptor,dut.engine.copy.next_source[c],dut.engine.copy.next_destination[c],
-                dut.engine.copy.remaining[c],dut.engine.copy.committed[c]})
+            .irq_source(integration.dma.channels.status[c].error || integration.dma.channels.status[c].fatal!=0 ||
+                integration.dma.channels.status[c].trap || integration.dma.channels.events[c].producer!=integration.dma.channels.events[c].consumer),
+            .parked(integration.dma.channels.status[c].faulted),.resume_request(integration.dma.channels.actions[c].resume_request),
+            .parked_state({integration.dma.engine.contexts[c].descriptor,integration.dma.engine.copy.next_source[c],integration.dma.engine.copy.next_destination[c],
+                integration.dma.engine.copy.remaining[c],integration.dma.engine.copy.committed[c]})
         );
     end
     assert property(@(posedge control.core_clk) disable iff(!control.core_rst_n)
-        dut.requests.valid |-> dut.requests.request.tag.channel<`PDMA_CHANNEL_COUNT)
+        integration.dma.requests.valid |-> integration.dma.requests.request.tag.channel<`PDMA_CHANNEL_COUNT)
         else $fatal(1,"DMA_INVALID_REQUEST_OWNER");
     assert property(@(posedge control.core_clk) disable iff(!control.core_rst_n)
-        dut.requests.returned |-> dut.requests.receipt.tag.channel<`PDMA_CHANNEL_COUNT)
+        integration.dma.requests.returned |-> integration.dma.requests.receipt.tag.channel<`PDMA_CHANNEL_COUNT)
         else $fatal(1,"DMA_INVALID_RECEIPT_OWNER");
     assert property(@(posedge control.core_clk) disable iff(!control.core_rst_n)
-        control.fatal_irq && !control.fatal_irq_ready && !dut.global_clear |=> control.fatal_irq || dut.global_clear)
+        control.fatal_irq && !control.fatal_irq_ready && !integration.dma.channels.global_clear |=> control.fatal_irq || integration.dma.channels.global_clear)
         else $fatal(1,"DMA_FATAL_NOTIFICATION_DROPPED");
     assign cfg.awaddr=host_bus.master_if[0].awaddr;
     assign cfg.awprot=host_bus.master_if[0].awprot;

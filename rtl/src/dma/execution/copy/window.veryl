@@ -1,32 +1,42 @@
 // Banked retained burst state; one shared issue/read/forward datapath.
-// Every channel has eight reserved rows, so parked work cannot consume a peer's
+// Every channel has its configured reserved rows, so parked work cannot consume a peer's
 // storage. Tags retain ownership across shared queues and reset drain.
-module CopyWindow #(
-    param CHANNEL_COUNT: u32 = 1                        ,
-    const ROW_BITS     : u32 = $clog2(CHANNEL_COUNT * 8),
+module CopyWindow::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> #(
+    param CHANNEL_COUNT: u32 = 1                                                                ,
+    const ROW_BITS     : u32 = if CHANNEL_COUNT * SLOTS >: 1 ? $clog2(CHANNEL_COUNT * SLOTS) : 1,
 ) (
-    clk                : input   clock                                                ,
-    rst_n              : input   reset_async_low                                      ,
-    selected           : input   CopyMemory::Channel                                  ,
-    selected_valid     : input   logic                                                ,
-    start              : input   logic                 <CHANNEL_COUNT>                ,
-    cancel             : input   logic                 <CHANNEL_COUNT>                ,
-    clear              : input   logic                 <CHANNEL_COUNT>                ,
-    resume             : input   logic                 <CHANNEL_COUNT>                ,
-    source             : input   logic                 <64>                           ,
-    destination        : input   logic                 <64>                           ,
-    length             : input   logic                 <64>                           ,
-    source_context     : input   logic                 <32>                           ,
-    destination_context: input   logic                 <32>                           ,
-    done               : output  logic                 <CHANNEL_COUNT>                ,
-    drained            : output  logic                 <CHANNEL_COUNT>                ,
-    parked             : output  logic                 <CHANNEL_COUNT>                ,
-    error_code         : output  logic                 <32>            [CHANNEL_COUNT],
-    error_prefix       : output  logic                 <64>            [CHANNEL_COUNT],
-    error_ready        : output  logic                 <CHANNEL_COUNT>                ,
-    protocol_error     : output  logic                 <CHANNEL_COUNT>                ,
-    memory             : modport CopyMemoryPort::master                               ,
+    clk                : input   clock                                                                                  ,
+    rst_n              : input   reset_async_low                                                                        ,
+    selected           : input   CopyMemory::Channel                                                                    ,
+    selected_valid     : input   logic                                                                                  ,
+    start              : input   logic                                                   <CHANNEL_COUNT>                ,
+    cancel             : input   logic                                                   <CHANNEL_COUNT>                ,
+    clear              : input   logic                                                   <CHANNEL_COUNT>                ,
+    resume             : input   logic                                                   <CHANNEL_COUNT>                ,
+    source             : input   logic                                                   <64>                           ,
+    destination        : input   logic                                                   <64>                           ,
+    length             : input   logic                                                   <64>                           ,
+    source_context     : input   logic                                                   <32>                           ,
+    destination_context: input   logic                                                   <32>                           ,
+    done               : output  logic                                                   <CHANNEL_COUNT>                ,
+    drained            : output  logic                                                   <CHANNEL_COUNT>                ,
+    parked             : output  logic                                                   <CHANNEL_COUNT>                ,
+    error_code         : output  logic                                                   <32>            [CHANNEL_COUNT],
+    error_prefix       : output  logic                                                   <64>            [CHANNEL_COUNT],
+    error_ready        : output  logic                                                   <CHANNEL_COUNT>                ,
+    protocol_error     : output  logic                                                   <CHANNEL_COUNT>                ,
+    memory             : modport CopyMemoryPort::<
+        DATA_BYTES ,
+        BURST_BEATS,
+        SLOTS      ,
+    >::master                               ,
 ) {
+    alias package M = CopyMemory::<DATA_BYTES, BURST_BEATS, SLOTS>;
+    function next_slot (
+        slot: input logic<M::INDEX_BITS>,
+    ) -> logic<M::INDEX_BITS> {
+        return if (slot as u32) + 1 == SLOTS ? 0 : slot + 1;
+    }
     enum State: logic<3> {
         Free,
         Read,
@@ -36,95 +46,90 @@ module CopyWindow #(
         Done,
     }
     struct Chunk {
-        source     : logic<64>,
-        destination: logic<64>,
-        length     : logic<7> ,
+        source     : logic<64>            ,
+        destination: logic<64>            ,
+        length     : logic<M::AMOUNT_BITS>,
     }
-    var states               : State                              [CHANNEL_COUNT * 8];
-    var chunks               : Chunk                              [CHANNEL_COUNT * 8];
-    var active               : logic              <CHANNEL_COUNT>                    ;
-    var frozen               : logic              <CHANNEL_COUNT>                    ;
-    var recovering           : logic              <CHANNEL_COUNT>                    ;
-    var debt                 : logic              <4>             [CHANNEL_COUNT]    ;
-    var head                 : logic              <3>             [CHANNEL_COUNT]    ;
-    var tail                 : logic              <3>             [CHANNEL_COUNT]    ;
-    var next_source          : logic              <64>            [CHANNEL_COUNT]    ;
-    var next_destination     : logic              <64>            [CHANNEL_COUNT]    ;
-    var remaining            : logic              <64>            [CHANNEL_COUNT]    ;
-    var committed            : logic              <64>            [CHANNEL_COUNT]    ;
-    var failure_successes    : logic              <8>             [CHANNEL_COUNT]    ;
-    var failure_head         : logic              <3>             [CHANNEL_COUNT]    ;
-    var all_free             : logic              <CHANNEL_COUNT>                    ;
-    var readable             : logic              <8>                                ;
-    var writable             : logic              <8>                                ;
-    var returned_completed   : logic              <8>                                ;
-    var read_choice          : logic              <8>                                ;
-    var write_choice         : logic              <8>                                ;
-    var read_slot            : logic              <3>                                ;
-    var write_slot           : logic              <3>                                ;
-    var prepared             : logic                                                 ;
-    var loading              : logic                                                 ;
-    var prepared_data        : logic              <512>                              ;
-    var prepared_slot        : logic              <3>                                ;
-    var cache_owner          : CopyMemory::Channel                                   ;
-    var portion              : logic              <7>                                ;
-    var amount               : logic              <7>                                ;
-    var selected_slot        : logic              <3>                                ;
-    let base                 : logic              <ROW_BITS>                          = (selected as ROW_BITS) << 3;
-    let return_owner_valid   : logic                                                  = (memory.receipt.tag.channel as u32)
+    var states               : State                      [CHANNEL_COUNT * SLOTS];
+    var chunks               : Chunk                      [CHANNEL_COUNT * SLOTS];
+    var active               : logic     <CHANNEL_COUNT>                         ;
+    var frozen               : logic     <CHANNEL_COUNT>                         ;
+    var recovering           : logic     <CHANNEL_COUNT>                         ;
+    var debt                 : logic     <M::SLOT_BITS>   [CHANNEL_COUNT]        ;
+    var head                 : logic     <M::INDEX_BITS>  [CHANNEL_COUNT]        ;
+    var tail                 : logic     <M::INDEX_BITS>  [CHANNEL_COUNT]        ;
+    var next_source          : logic     <64>             [CHANNEL_COUNT]        ;
+    var next_destination     : logic     <64>             [CHANNEL_COUNT]        ;
+    var remaining            : logic     <64>             [CHANNEL_COUNT]        ;
+    var committed            : logic     <64>             [CHANNEL_COUNT]        ;
+    var failure_successes    : logic     <SLOTS>          [CHANNEL_COUNT]        ;
+    var failure_head         : logic     <M::INDEX_BITS>  [CHANNEL_COUNT]        ;
+    var all_free             : logic     <CHANNEL_COUNT>                         ;
+    var readable             : logic     <SLOTS>                                 ;
+    var writable             : logic     <SLOTS>                                 ;
+    var returned_completed   : logic     <SLOTS>                                 ;
+    var read_choice          : logic     <SLOTS>                                 ;
+    var write_choice         : logic     <SLOTS>                                 ;
+    var read_slot            : logic     <M::INDEX_BITS>                         ;
+    var write_slot           : logic     <M::INDEX_BITS>                         ;
+    var prepared             : logic                                             ;
+    var loading              : logic                                             ;
+    var prepared_data        : logic     <M::BURST_BITS>                         ;
+    var prepared_slot        : logic     <M::INDEX_BITS>                         ;
+    var cache_owner          : M::Channel                                        ;
+    var portion              : logic     <M::AMOUNT_BITS>                        ;
+    var amount               : logic     <M::AMOUNT_BITS>                        ;
+    var selected_slot        : logic     <M::INDEX_BITS>                         ;
+    let base                 : logic     <ROW_BITS>                               = (selected as ROW_BITS) * SLOTS;
+    let return_owner_valid   : logic                                              = (memory.receipt.tag.channel as u32)
         <: CHANNEL_COUNT;
-    let return_channel       : CopyMemory::Channel                                    = if return_owner_valid ?
+    let return_channel       : M::Channel                                         = if return_owner_valid ?
         memory.receipt.tag.channel
     :
         0
     ;
-    let returned_slot        : logic              <3>                                 = (memory.receipt.tag.slot
-        - 1) as 3;
-    let return_row           : logic              <ROW_BITS>                          = ((return_channel as ROW_BITS)
-            << 3) | (returned_slot as ROW_BITS);
-    let receiving            : logic                                                  = memory.returned
-        && memory.accepted;
-    let selected_failure     : logic                                                  = receiving && return_channel
+    let returned_slot        : logic     <M::INDEX_BITS>                          = (memory.receipt.tag.slot
+        - 1) as M::INDEX_BITS;
+    let return_row           : logic     <ROW_BITS>                               = (return_channel as ROW_BITS) * SLOTS
+        + (returned_slot as ROW_BITS);
+    let receiving            : logic                                              = memory.returned && memory.accepted;
+    let selected_failure     : logic                                              = receiving && return_channel
         == selected && (memory.receipt.failed || memory.receipt.protocol_error);
-    let stop_issue           : logic                                                  = !selected_valid
-        || cancel[selected] || frozen[selected] || error_code[selected] != 0 || protocol_error[selected]
-        || selected_failure;
-    let cache_current        : logic                                                  = cache_owner == selected;
-    let usable_prepared      : logic                                                  = prepared && cache_current;
-    let stale_cache          : logic                                                  = (prepared || loading)
+    let stop_issue           : logic                                              = !selected_valid || cancel[selected]
+        || frozen[selected] || error_code[selected] != 0 || protocol_error[selected] || selected_failure;
+    let cache_current        : logic                                              = cache_owner == selected;
+    let usable_prepared      : logic                                              = prepared && cache_current;
+    let stale_cache          : logic                                              = (prepared || loading)
         && !cache_current;
-    let returned_usable      : logic                                                  = return_owner_valid
-        && memory.receipt.tag.slot != 0 && memory.receipt.tag.slot <= 8;
-    let forward_read         : logic                                                  = receiving && returned_usable
+    let returned_usable      : logic                                              = return_owner_valid
+        && memory.receipt.tag.slot != 0 && memory.receipt.tag.slot <= SLOTS;
+    let forward_read         : logic                                              = receiving && returned_usable
         && return_channel == selected && !stop_issue && !prepared && !loading && writable == 0 && states[return_row]
         == State::Reading;
-    let head_row             : logic              <ROW_BITS>                          = base
-        | (head[selected] as ROW_BITS);
-    let tail_row             : logic              <ROW_BITS>                          = base
-        | (tail[selected] as ROW_BITS);
-    let retire               : logic                                                  = active[selected] && !stop_issue
+    let head_row             : logic     <ROW_BITS>                               = base + (head[selected] as ROW_BITS);
+    let tail_row             : logic     <ROW_BITS>                               = base + (tail[selected] as ROW_BITS);
+    let retire               : logic                                              = active[selected] && !stop_issue
         && (states[head_row] == State::Done
             || (receiving && return_channel == selected && states[head_row] == State::Writing && memory.receipt.tag.slot
-                == (head[selected] as 4) + 1));
-    let allocate             : logic                                                  = active[selected] && !stop_issue
+                == (head[selected] as M::SLOT_BITS) + 1));
+    let allocate             : logic                                              = active[selected] && !stop_issue
         && !recovering[selected] && remaining[selected] != 0
         && (states[tail_row] == State::Free || (retire && tail[selected] == head[selected]));
-    let sending              : logic                                                  = memory.valid && memory.ready;
-    let allocated_source     : logic              <64>                                = next_source[selected] + amount;
-    let allocated_destination: logic              <64>                                = next_destination[selected]
-        + amount;
-    let allocated_remaining  : logic              <64>                                = remaining[selected] - amount;
-    let retired_prefix       : logic              <64>                                = committed[selected]
+    let sending              : logic                                              = memory.valid && memory.ready;
+    let allocated_source     : logic     <64>                                     = next_source[selected] + amount;
+    let allocated_destination: logic     <64>                                     = next_destination[selected] + amount;
+    let allocated_remaining  : logic     <64>                                     = remaining[selected] - amount;
+    let retired_prefix       : logic     <64>                                     = committed[selected]
         + chunks[head_row].length;
-    let failure_row          : logic              <ROW_BITS>                          = base
-        | (failure_head[selected] as ROW_BITS);
-    let extended_error_prefix: logic              <64>                                = error_prefix[selected]
+    let failure_row          : logic     <ROW_BITS>                               = base
+        + (failure_head[selected] as ROW_BITS);
+    let extended_error_prefix: logic     <64>                                     = error_prefix[selected]
         + chunks[failure_row].length;
     always_comb {
         all_free = '1;
         for channel in 0..CHANNEL_COUNT {
-            for slot in 0..8 {
-                all_free[channel] &= states[channel * 8 + slot] == State::Free;
+            for slot in 0..SLOTS {
+                all_free[channel] &= states[channel * SLOTS + slot] == State::Free;
             }
             drained[channel] = debt[channel] == 0;
             parked[channel]  = active[channel] && frozen[channel] && drained[channel]
@@ -133,26 +138,31 @@ module CopyWindow #(
                 && !frozen[channel] && error_code[channel] == 0 && !protocol_error[channel];
         }
         returned_completed = 0;
-        for slot in 0..8 {
+        for slot in 0..SLOTS {
             readable[slot] = states[base + slot] == State::Read;
             writable[slot] = states[base + slot] == State::Write;
             if return_owner_valid {
-                returned_completed[slot] = states[(return_channel as u32) * 8 + slot] == State::Done;
+                returned_completed[slot] = states[(return_channel as u32) * SLOTS + slot] == State::Done;
             }
         }
-        read_choice  = common_cell::RoundRobin::<8>::select(readable, head[selected]);
-        write_choice = common_cell::RoundRobin::<8>::select(writable, head[selected]);
-        read_slot    = common_cell::BoundedIndex::<8>::encode_onehot(read_choice);
-        write_slot   = common_cell::BoundedIndex::<8>::encode_onehot(write_choice);
-        portion      = if remaining[selected] >= 64 ? 64 : remaining[selected] as 7;
+        read_choice  = common_cell::RoundRobin::<SLOTS>::select(readable, head[selected]);
+        write_choice = common_cell::RoundRobin::<SLOTS>::select(writable, head[selected]);
+        read_slot    = common_cell::BoundedIndex::<SLOTS>::encode_onehot(read_choice);
+        write_slot   = common_cell::BoundedIndex::<SLOTS>::encode_onehot(write_choice);
+        portion      = if remaining[selected] >= M::BURST_BYTES ?
+            M::BURST_BYTES
+        :
+            remaining[selected] as M::AMOUNT_BITS
+        ;
         if portion >: 4096 - (next_source[selected][11:0] as u32) {
-            portion = (4096 - (next_source[selected][11:0] as u32)) as 7;
+            portion = (4096 - (next_source[selected][11:0] as u32)) as M::AMOUNT_BITS;
         }
         if portion >: 4096 - (next_destination[selected][11:0] as u32) {
-            portion = (4096 - (next_destination[selected][11:0] as u32)) as 7;
+            portion = (4096 - (next_destination[selected][11:0] as u32)) as M::AMOUNT_BITS;
         }
-        amount          = if next_source[selected][2:0] == 0 && next_destination[selected][2:0] == 0 && portion >= 8 ?
-            portion & 7'h78
+        amount          = if next_source[selected][M::DATA_SIZE - 1:0] == 0
+            && next_destination[selected][M::DATA_SIZE - 1:0] == 0 && portion >= DATA_BYTES ?
+            (portion >> M::DATA_SIZE) << M::DATA_SIZE
         :
             1
         ;
@@ -161,11 +171,11 @@ module CopyWindow #(
             memory.accepted = active[return_channel] && debt[return_channel] != 0;
         }
     }
-    inst buffer_read : common_cell::RamReadPort #( ADDR_WIDTH: ROW_BITS, WIDTH: 512 );
-    inst buffer_write: common_cell::RamWritePort #( ADDR_WIDTH: ROW_BITS, WIDTH: 512 );
+    inst buffer_read : common_cell::RamReadPort #( ADDR_WIDTH: ROW_BITS, WIDTH: M::BURST_BITS );
+    inst buffer_write: common_cell::RamWritePort #( ADDR_WIDTH: ROW_BITS, WIDTH: M::BURST_BITS );
     inst buffers: common_cell::Ram1R1W::<tech_cell_generic::Ram1R1W> #(
-        DEPTH: CHANNEL_COUNT * 8,
-        WIDTH: 512              ,
+        DEPTH: CHANNEL_COUNT * SLOTS,
+        WIDTH: M::BURST_BITS        ,
     ) (
         clk                     ,
         read_port : buffer_read ,
@@ -173,7 +183,7 @@ module CopyWindow #(
     );
     assign buffer_read.enable   = active[selected] && !stop_issue && !prepared && !loading && !stale_cache
         && (|write_choice);
-    assign buffer_read.address  = base | (write_slot as ROW_BITS);
+    assign buffer_read.address  = base + (write_slot as ROW_BITS);
     assign buffer_write.enable  = receiving && returned_usable && states[return_row] == State::Reading
         && !memory.receipt.failed && !memory.receipt.protocol_error && !cancel[return_channel];
     assign buffer_write.address = return_row;
@@ -182,20 +192,20 @@ module CopyWindow #(
     always_comb {
         selected_slot           = if usable_prepared ? prepared_slot : if forward_read ? returned_slot : read_slot;
         memory.request          = '0;
-        memory.request.tag      = CopyMemory::Tag'{channel: selected, slot: (selected_slot as 4) + 1};
+        memory.request.tag      = M::Tag'{channel: selected, slot: (selected_slot as M::SLOT_BITS) + 1};
         memory.request.write    = usable_prepared || forward_read;
         memory.request.address  = if memory.request.write ?
-            chunks[base | (selected_slot as ROW_BITS)].destination
+            chunks[base + (selected_slot as ROW_BITS)].destination
         :
-            chunks[base | (selected_slot as ROW_BITS)].source
+            chunks[base + (selected_slot as ROW_BITS)].source
         ;
         memory.request.selector = if memory.request.write ? destination_context : source_context;
         memory.request.data     = if forward_read ? memory.receipt.data : prepared_data;
-        memory.request.size     = if chunks[base | (selected_slot as ROW_BITS)].length == 1 ? 0 : 3;
+        memory.request.size     = if chunks[base + (selected_slot as ROW_BITS)].length == 1 ? 0 : M::DATA_SIZE;
         memory.request.length   = if memory.request.size == 0 ?
             0
         :
-            ((chunks[base | (selected_slot as ROW_BITS)].length >> 3) - 1) as 3
+            ((chunks[base + (selected_slot as ROW_BITS)].length >> M::DATA_SIZE) - 1) as M::LENGTH_BITS
         ;
         memory.valid            = active[selected] && !stop_issue && !stale_cache
             && (usable_prepared || forward_read || (|read_choice));
@@ -277,8 +287,8 @@ module CopyWindow #(
                     protocol_error[channel]    = 0;
                     failure_successes[channel] = 0;
                     failure_head[channel]      = 0;
-                    for slot in 0..8 {
-                        states[channel * 8 + slot] = State::Free;
+                    for slot in 0..SLOTS {
+                        states[channel * SLOTS + slot] = State::Free;
                     }
                 } else {
                     if done[channel] {
@@ -299,28 +309,28 @@ module CopyWindow #(
                     if selected_valid && selected == channel {
                         if sending {
                             if usable_prepared {
-                                states[base | (prepared_slot as ROW_BITS)] = State::Writing;
+                                states[base + (prepared_slot as ROW_BITS)] = State::Writing;
                             } else if !forward_read {
-                                states[base | (read_slot as ROW_BITS)] = State::Reading;
+                                states[base + (read_slot as ROW_BITS)] = State::Reading;
                             }
                         }
                         if retire {
-                            committed[channel] =  retired_prefix;
-                            states[head_row]   =  State::Free;
-                            head[channel]      += 1;
+                            committed[channel] = retired_prefix;
+                            states[head_row]   = State::Free;
+                            head[channel]      = next_slot(head[channel]);
                         }
                         if allocate {
-                            states[tail_row]          =  State::Read;
-                            tail[channel]             += 1;
-                            next_source[channel]      =  allocated_source;
-                            next_destination[channel] =  allocated_destination;
-                            remaining[channel]        =  allocated_remaining;
+                            states[tail_row]          = State::Read;
+                            tail[channel]             = next_slot(tail[channel]);
+                            next_source[channel]      = allocated_source;
+                            next_destination[channel] = allocated_destination;
+                            remaining[channel]        = allocated_remaining;
                         }
                         if error_code[channel] != 0 && !error_ready[channel] {
                             if failure_successes[channel][failure_head[channel]] {
-                                error_prefix[channel]                             =  extended_error_prefix;
-                                failure_successes[channel][failure_head[channel]] =  0;
-                                failure_head[channel]                             += 1;
+                                error_prefix[channel]                             = extended_error_prefix;
+                                failure_successes[channel][failure_head[channel]] = 0;
+                                failure_head[channel]                             = next_slot(failure_head[channel]);
                             } else {
                                 error_ready[channel] = 1;
                             }

@@ -9,14 +9,18 @@ is every integer `CHANNEL_COUNT` from 1 through 8. Develop and synthesize first
 at 2, preserve the 1-channel case, check intermediate configurations, and close the
 complete functional/throughput/CDC/RDC/synthesis loop at 8 before completion.
 Copy/Fence and the existing fault/error/reset semantics remain the command scope.
+The subsequent [static configuration refactor](configuration.md) separates
+control, execution and transport and derives the capacities below from one profile.
+The dated qualification above applies to its recorded source and default geometry;
+new configuration results are tracked separately.
 
 ## Resources and ownership
 
 | Resource | Owner and capacity | Release |
 | --- | --- | --- |
 | Accepted descriptor, control-request address and command progress | One retained context per channel | Terminal command handling or completed reset cleanup |
-| Retained burst metadata and read data | Eight 64-byte rows reserved per channel | Successful write retirement or safe cancellation |
-| Data RAM | One shared 1R1W provider, `8 * CHANNEL_COUNT` rows of 512 bits | Row validity follows its channel/slot owner; contents need no reset |
+| Retained burst metadata and read data | `slots` rows of `memory_bytes * burst_beats` bytes per channel (default eight 64-byte rows) | Successful write retirement or safe cancellation |
+| Data RAM | One shared 1R1W provider, `channels * slots` rows of `memory_bits * burst_beats` bits | Row validity follows its channel/slot owner; contents need no reset |
 | Issue, decode and payload preparation | One shared execution datapath | Command completion, safe park, or closing the selected owner |
 | Requests and receipts across domains | Shared bounded queues, explicit channel/slot tags | Handoff transfers custody; a request terminates only on its own receipt |
 | Bus outstanding metadata and data | Shared read/write endpoints | Existing AR/R and AW/W/B completion rules |
@@ -26,7 +30,7 @@ It avoids a parked owner consuming a global pool needed by a healthy peer. The
 model owns one bounded chunk payload per accepted channel; RTL may retain several
 bursts while preserving the same ownership, replay and progress contract. It does
 not require the model to acquire eight physical slots or reproduce RAM cycles.
-At eight channels the logical retained-data capacity is 4KiB, independently of
+At eight channels the default logical retained-data capacity is 4KiB, independently of
 the shared FIFO/outstanding capacities. There are no per-channel engine replicas.
 
 Ordinary command and chunk computation uses the selected context. State banks

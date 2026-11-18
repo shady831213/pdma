@@ -26,7 +26,7 @@ directory; no particular machine path is required.
 | `PDMA_STATIC_TOOL` | VC SpyGlass executable; defaults to `vc_static_shell` |
 | `PDMA_COVERAGE_TOOL` | Coverage executable; defaults to `urg` |
 | `PDMA_TECH_CONFIG` | Private technology/library and timing-budget Tcl file |
-| `PDMA_CHANNEL_COUNT` | DMA/VIP elaboration count in 1..8, default 2; compile a separate binary and qualify the final 8-channel profile |
+| `PDMA_CHANNEL_COUNT` | Optional channel override at DMA snapshot creation, 1..8; later stages reject disagreement with that snapshot |
 | `PDMA_DESIGN_PROFILE` | Optional top/clock/port profile; defaults to the DMA Copy slice |
 | `PDMA_STATIC_REVIEW` | Optional explicit source-bound CDC/RDC review policy; default raw findings remain failures |
 | `PDMA_SYNTH_STAGE` | Genus `prepare`, diagnostic `mapped`, or default full `map`; only full mapping and optimization run the qualification gates |
@@ -38,7 +38,7 @@ directory; no particular machine path is required.
 Generate SystemVerilog on a machine that supports the pinned Veryl binary:
 
 ```sh
-bash tools/rtl-flow/snapshot.sh "$PDMA_RUN_ROOT/snapshot"
+bash rtl/flow/snapshot.sh "$PDMA_RUN_ROOT/snapshot"
 bash verification/dma/flow/smoke.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/smoke"
 bash impl/dma/flow/genus.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/synthesis"
 bash impl/dma/flow/crossings.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/cdc" cdc
@@ -51,6 +51,15 @@ No execution-host identity is built into the flow. Each run has a fresh director
 input hashes and output logs; timeouts and nonzero tool exits are failures.
 Changing source requires a new snapshot/build. The directed smoke and UVM/VIP
 regression are separate surfaces; neither substitutes for native unit tests.
+
+`design.sha256` identifies compiler inputs by resolved package, source-root ordinal
+and relative filename. Native parsed configuration retains build options while
+replacing source-root locations with those logical labels; source contents,
+lockfiles, package resources and compiler recipes remain hashed. Relocating an
+otherwise identical checkout or generated integration project does not change
+this design identity. Adding/removing a source, changing an option or changing
+content does. This logical inventory is distinct from `snapshot.sha256`, which
+checks the actual retained artifact files and their captured provenance.
 
 The `impl/dma/flow` entries select the DMA profile and delegate to generic adapters
 under `tools/rtl-flow/implementation`. Direct callers of those adapters must set

@@ -18,10 +18,12 @@ geometry and clock domains. Shared serialization, binding and audits live in
 `tools/rtl-flow/implementation`. RAM behavior and ports remain with the native
 Veryl providers; there is no replacement simulation model or generated RTL stub.
 
-The current inventory is the Copy window's `engine/copy/buffers/u_ram`:
-`8 * CHANNEL_COUNT` rows of 512 bits, one synchronous read and one write port on
-`core_clk`, with bit write masks and no content reset. The logical reservation is
-512B per channel: 1KiB at the development count of 2 and 4KiB at the maximum of 8.
+The current inventory is the Copy window's `dma/engine/copy/buffers/u_ram`:
+`slots * channels` rows of `memory_bits * burst_beats` bits, one synchronous read
+and one write port on `core_clk`, with bit write masks and no content reset.
+The immutable profile supplies all these dimensions to the memory binder.
+The default logical reservation is 512B per channel: 1KiB at the development
+count of 2 and 4KiB at the maximum of 8.
 The previous single-channel qualification remains a 512B checkpoint; it does not
 qualify the larger configurations. Fresh 2/8-channel control-budget mapping and
 restored-database audits completed on 2026-11-16; see the

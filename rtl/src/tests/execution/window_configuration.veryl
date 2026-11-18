@@ -1,0 +1,200 @@
+// Exercise resource reuse at the smallest and a non-binary window size.
+#[test(copy_window_single_slots)]
+module WindowSingleTest {
+    const SLOTS: u32 = 1;
+    alias package M = CopyMemory::<8, 8, 1>;
+    const BYTES: u32 = M::BURST_BYTES * (SLOTS + 3);
+    inst clk   : $tb::clock_gen #( period: 10 );
+    inst rst   : $tb::reset_gen ( clk );
+    inst memory: CopyMemoryPort::<8, 8, 1>;
+    var start         : logic        ;
+    var done          : logic        ;
+    var drained       : logic        ;
+    var parked        : logic        ;
+    var errors        : logic<32> [1];
+    var prefixes      : logic<64> [1];
+    var error_ready   : logic        ;
+    var protocol_error: logic        ;
+    inst dut: CopyWindow::<8, 8, 1> (
+        clk                          ,
+        rst_n              : rst     ,
+        selected           : 0       ,
+        selected_valid     : 1       ,
+        start                        ,
+        cancel             : 0       ,
+        clear              : 0       ,
+        resume             : 0       ,
+        source             : 64'h1000,
+        destination        : 64'h2000,
+        length             : BYTES   ,
+        source_context     : 7       ,
+        destination_context: 9       ,
+        done                         ,
+        drained                      ,
+        parked                       ,
+        error_code         : errors  ,
+        error_prefix       : prefixes,
+        error_ready                  ,
+        protocol_error               ,
+        memory                       ,
+    );
+    var pending: logic     ;
+    var request: M::Request;
+    var reads  : u32       ;
+    var writes : u32       ;
+    function contents (
+        address: input u64,
+    ) -> logic<M::BURST_BITS> {
+        var value: logic<M::BURST_BITS>;
+        value = 0;
+        for octet in 0..M::BURST_BYTES {
+            value[octet * 8+:8] = (address + octet) as 8;
+        }
+        return value;
+    }
+    initial {
+        pending         = 0;
+        request         = '0;
+        reads           = 0;
+        writes          = 0;
+        start           = 0;
+        memory.ready    = 1;
+        memory.returned = 0;
+        memory.receipt  = '0;
+        rst.assert();
+        clk.next(3);
+        start = 1;
+        clk.next();
+        start = 0;
+        for cycle in 0..250 {
+            memory.returned     = pending;
+            memory.receipt      = '0;
+            memory.receipt.tag  = request.tag;
+            memory.receipt.data = contents(request.address);
+            if pending {
+                $assert(memory.accepted, "CONFIGURED_WINDOW_OWNS_RECEIPT");
+            }
+            pending = memory.valid && memory.ready;
+            if pending {
+                request = memory.request;
+                $assert(request.tag.slot >: 0 && request.tag.slot <= SLOTS, "SLOT_WITHIN_CONFIGURED_WINDOW");
+                if request.write {
+                    $assert(request.address == 64'h2000 + writes * M::BURST_BYTES, "CONFIGURED_WRITE_ORDER");
+                    $assert(request.data == contents(request.address - 64'h1000), "CONFIGURED_RETAINED_DATA");
+                    writes += 1;
+                } else {
+                    $assert(request.address == 64'h1000 + reads * M::BURST_BYTES, "CONFIGURED_READ_ORDER");
+                    reads += 1;
+                }
+            }
+            if done {
+                break;
+            }
+            clk.next();
+        }
+        $assert(done && drained && !parked && !pending, "CONFIGURED_WINDOW_COMPLETES");
+        $assert(errors[0] == 0 && !protocol_error, "CONFIGURED_WINDOW_NO_ERROR");
+        $assert(reads == SLOTS + 3 && writes == reads, "CONFIGURED_WINDOW_REUSES_SLOTS");
+        $finish();
+    }
+}
+
+#[test(copy_window_three_slots)]
+module WindowThreeTest {
+    const SLOTS: u32 = 3;
+    alias package M = CopyMemory::<8, 8, 3>;
+    const BYTES: u32 = M::BURST_BYTES * (SLOTS + 3);
+    inst clk   : $tb::clock_gen #( period: 10 );
+    inst rst   : $tb::reset_gen ( clk );
+    inst memory: CopyMemoryPort::<8, 8, 3>;
+    var start         : logic        ;
+    var done          : logic        ;
+    var drained       : logic        ;
+    var parked        : logic        ;
+    var errors        : logic<32> [1];
+    var prefixes      : logic<64> [1];
+    var error_ready   : logic        ;
+    var protocol_error: logic        ;
+    inst dut: CopyWindow::<8, 8, 3> (
+        clk                          ,
+        rst_n              : rst     ,
+        selected           : 0       ,
+        selected_valid     : 1       ,
+        start                        ,
+        cancel             : 0       ,
+        clear              : 0       ,
+        resume             : 0       ,
+        source             : 64'h1000,
+        destination        : 64'h2000,
+        length             : BYTES   ,
+        source_context     : 7       ,
+        destination_context: 9       ,
+        done                         ,
+        drained                      ,
+        parked                       ,
+        error_code         : errors  ,
+        error_prefix       : prefixes,
+        error_ready                  ,
+        protocol_error               ,
+        memory                       ,
+    );
+    var pending: logic     ;
+    var request: M::Request;
+    var reads  : u32       ;
+    var writes : u32       ;
+    function contents (
+        address: input u64,
+    ) -> logic<M::BURST_BITS> {
+        var value: logic<M::BURST_BITS>;
+        value = 0;
+        for octet in 0..M::BURST_BYTES {
+            value[octet * 8+:8] = (address + octet) as 8;
+        }
+        return value;
+    }
+    initial {
+        pending         = 0;
+        request         = '0;
+        reads           = 0;
+        writes          = 0;
+        start           = 0;
+        memory.ready    = 1;
+        memory.returned = 0;
+        memory.receipt  = '0;
+        rst.assert();
+        clk.next(3);
+        start = 1;
+        clk.next();
+        start = 0;
+        for cycle in 0..250 {
+            memory.returned     = pending;
+            memory.receipt      = '0;
+            memory.receipt.tag  = request.tag;
+            memory.receipt.data = contents(request.address);
+            if pending {
+                $assert(memory.accepted, "CONFIGURED_WINDOW_OWNS_RECEIPT");
+            }
+            pending = memory.valid && memory.ready;
+            if pending {
+                request = memory.request;
+                $assert(request.tag.slot >: 0 && request.tag.slot <= SLOTS, "SLOT_WITHIN_CONFIGURED_WINDOW");
+                if request.write {
+                    $assert(request.address == 64'h2000 + writes * M::BURST_BYTES, "CONFIGURED_WRITE_ORDER");
+                    $assert(request.data == contents(request.address - 64'h1000), "CONFIGURED_RETAINED_DATA");
+                    writes += 1;
+                } else {
+                    $assert(request.address == 64'h1000 + reads * M::BURST_BYTES, "CONFIGURED_READ_ORDER");
+                    reads += 1;
+                }
+            }
+            if done {
+                break;
+            }
+            clk.next();
+        }
+        $assert(done && drained && !parked && !pending, "CONFIGURED_WINDOW_COMPLETES");
+        $assert(errors[0] == 0 && !protocol_error, "CONFIGURED_WINDOW_NO_ERROR");
+        $assert(reads == SLOTS + 3 && writes == reads, "CONFIGURED_WINDOW_REUSES_SLOTS");
+        $finish();
+    }
+}

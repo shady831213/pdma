@@ -1,0 +1,107 @@
+// AXI byte lanes wrap at the bus word; internal retained data is packed densely.
+#[test(wide_bus_packs_full_and_narrow_read_bursts)]
+module MemoryReadProfileTest {
+    alias package B = $std::axi4_pkg::<64, 16, 1, 35, 1, 2, 35, 2>;
+    alias package M = CopyMemory::<16, 4, 4>;
+    inst clk : $tb::clock_gen #( period: 10 );
+    inst rst : $tb::reset_gen ( clk );
+    inst port: CopyMemoryPort::<16, 4, 4>;
+    inst axi : $std::axi4_if::<B>;
+    inst dut: CopyMemoryEndpoint::<B, 4, 4> (
+        clk       ,
+        rst_n: rst,
+        port      ,
+        axi       ,
+    );
+    var response_address: u64;
+    var amount          : u32;
+    initial {
+        port.valid    = 0;
+        port.accepted = 1;
+        port.request  = '0;
+        axi.arready   = 1;
+        axi.awready   = 1;
+        axi.wready    = 1;
+        axi.rvalid    = 0;
+        axi.rdata     = 0;
+        axi.rlast     = 0;
+        axi.rid       = 0;
+        axi.ruser     = 0;
+        axi.rresp     = 0 as B::resp_t;
+        axi.bvalid    = 0;
+        axi.bid       = 0;
+        axi.buser     = 0;
+        axi.bresp     = 0 as B::resp_t;
+        rst.assert();
+        clk.next(3);
+        for kind in 0..4 {
+            port.request = '0;
+            case kind {
+                0: {
+                    port.request.address = 64'h101d;
+                    port.request.size    = 0;
+                }
+                1: {
+                    port.request.address = 64'h1014;
+                    port.request.size    = 2;
+                }
+                2: {
+                    port.request.address = 64'h1018;
+                    port.request.size    = 3;
+                }
+                3: {
+                    port.request.address = 64'h1000;
+                    port.request.size    = 4;
+                }
+                default: {}
+            }
+            port.request.length   = 3;
+            port.request.tag.slot = 1;
+            amount                = 4 << port.request.size;
+            port.valid            = 1;
+            for timeout in 0..10 {
+                if port.ready {
+                    break;
+                }
+                clk.next();
+            }
+            $assert(port.ready && axi.arvalid, "WIDE_READ_ADMITTED");
+            clk.next();
+            port.valid = 0;
+            for beat in 0..4 {
+                response_address = (port.request.address + (beat << port.request.size)) & ~64'hf;
+                for lane in 0..16 {
+                    axi.rdata[lane * 8+:8] = (response_address + lane) as 8;
+                }
+                axi.rlast  = beat == 3;
+                axi.rvalid = 1;
+                for timeout in 0..10 {
+                    if axi.rready {
+                        break;
+                    }
+                    clk.next();
+                }
+                $assert(axi.rready, "WIDE_READ_ACCEPTS_EACH_BEAT");
+                clk.next();
+            }
+            axi.rvalid = 0;
+            for timeout in 0..10 {
+                if port.returned {
+                    break;
+                }
+                clk.next();
+            }
+            $assert(port.returned && !port.receipt.failed && !port.receipt.protocol_error, "WIDE_READ_RECEIPT");
+            for octet in 0..64 {
+                if octet <: amount {
+                    $assert(
+                        port.receipt.data[octet * 8+:8] == ((port.request.address + octet) as 8),
+                        "NARROW_READ_PACKING",
+                    );
+                }
+            }
+            clk.next();
+        }
+        $finish();
+    }
+}

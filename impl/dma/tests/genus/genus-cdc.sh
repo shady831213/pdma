@@ -24,7 +24,7 @@ main() {
         find ip -type f -print0 | sort -z | xargs -0 -r sha256sum
     } > snapshot.sha256)
     pdma_execute 0 "$run/map-launch.log" env PDMA_DESIGN_PROFILE="$root/impl/dma/tests/genus/cdc-integration-profile.tcl" \
-        bash "$root/impl/dma/flow/genus.sh" "$run/snapshot" "$run/map"
+        bash "$root/tools/rtl-flow/implementation/genus.sh" "$run/snapshot" "$run/map"
     mkdir "$run/audit"
     cp "$run/map/"{checks.tcl,cdc.tcl,profile.tcl,constraints-common.tcl,ip.tcl,ip-manifest.tcl,design-profile.tcl} "$run/audit/"
     cp -R "$run/map/ip" "$run/audit/"

@@ -1,5 +1,94 @@
 # Scenario-level verification checkpoints
 
+## 2026-11-18 configurable ownership boundaries
+
+This candidate separates `DmaControl`, `CopyEngine` and `DmaMemoryBridge` without
+adding a pipeline cut. The [configuration contract](../../docs/rtl/configuration.md)
+defines independent inputs and derived geometry. RTL, VIP/checkers and
+implementation use the same immutable snapshot profile.
+
+The frozen eight-channel RTL passes all **31 scenarios at eight seeds: 248 positive
+runs**, plus all eight checker mutations with their expected diagnostics. Separate
+synchronizer-latency stress passes 16 positive runs and rejects the same eight
+mutation classes. The native suite passes 27 tests, including directional credits,
+narrow/full bus lanes, one/non-binary slot counts and Fence64 on a 32-bit port.
+
+Fresh source-bound CDC/RDC checks pass at both required channel counts:
+
+| Channels | CDC raw / reviewed / unresolved | RDC raw / reviewed / unresolved |
+| --- | --- | --- |
+| 2 | 66 / 66 / 0 | 2163 / 2163 / 0 |
+| 8 | 210 / 210 / 0 | 4171 / 4171 / 0 |
+
+All seven native review-gate tests pass, including rejection of stale input
+identity, incorrect/missing endpoints and invalid grouping. The new source
+inventory is independent of checkout/run location while retaining native compiler
+options, source contents, lockfiles and package-owned resources. Snapshot byte
+checks remain separate; relocation is not permission to reuse different RTL.
+
+The 248-run coverage merge preserves every input and adds no exclusions. The
+declared PDMA scenario group covers 18/18 bins. Selected module line/condition/
+branch coverage is:
+
+| Module | Line | Condition | Branch |
+| --- | ---: | ---: | ---: |
+| CopyEngine | 89.74% | 74.45% | 81.94% |
+| CopyWindow | 97.73% | 83.06% | 97.44% |
+| CopyReadEndpoint | 100% | 81.82% | 100% |
+| CopyWriteEndpoint | 100% | 81.97% | 100% |
+
+This finite scenario group is not exhaustive architecture coverage. Raw reports
+retain VIP coverage, unexercised protocol-error paths and reserved bits; neither
+the scenario score nor module line coverage claims full parameter-space coverage.
+
+At the unchanged default 64-bit memory profile, aligned 16KiB Copy still transfers
+2048 read beats and 2048 write beats in 2048 cycles per direction, with zero payload
+bubbles. Descriptor-to-Fence latency remains 2161 bus cycles. The internal observer
+also retains the previous 4.18ns issue-to-endpoint and 4.82ns receipt-to-core values;
+the arbitration-to-issue register path remains two core cycles.
+
+The final functional matrix passes **391 positive runs**, with eight checker
+mutations rejected in each of its ten configurations:
+
+| Profile | Positive runs | Scope |
+| --- | ---: | --- |
+| Default, 1 channel | 6 | Copy, random traffic, reset, ring wrap and registers |
+| Default, 2 channels | 31 | Full scenario suite |
+| Default, 3..7 channels, each | 12 | Count boundaries and independent peer lifecycle |
+| Default, 8 channels | 248 | Full suite, eight seeds |
+| 3 channels, 64-bit registers / 128-bit memory | 26 | Three slots, read/write credits 2/3, FIFO depths 4/4 |
+| 1 channel, 32-bit memory | 20 | Three beats, one slot, read/write credits 1/2, FIFO depths 4/4 |
+
+The first narrow-profile implementation preparation rejected FIFO depth two:
+the pinned cell's constraint contract requires at least four. The resolver now
+rejects that input before tool launch. The supported narrow profile was rebuilt
+and all 20 scenarios plus eight negatives rerun; the earlier depth-two simulation
+does not qualify a supported integration. Six resolver tests pass, and the native
+implementation-profile checks reject 27 invalid configurations and six invalid
+channel counts while accepting every count in 1..8. Widths 256/512/1024 and the
+256-beat boundary have elaboration evidence only, not functional or PPA closure.
+
+New Genus control-budget results are available for two configurations. Core/bus
+remain at 1GHz, registers at 500MHz, with no ULVT and no relaxed crossing budgets:
+
+| Profile | Worst setup slack | Mapped instances | Sequential instances | Logic cell area (library units) | Minimum crossing slack | Minimum RAM boundary slack |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Default, 2 channels | 0ps | 80,292 | 23,571 | 30,423.749 | 224.9ps | 75.6ps |
+| Narrow, 1 channel | 0ps | 20,360 | 4,604 | 6,718.685 | 262.3ps | 223.2ps |
+
+Each passes eight crossing groups, four held-payload checks and eight local
+synchronizer chains; minimum local-chain slack is 820.6ps. At matched default
+two-channel settings and technology inputs, logic area increases **2.01%** from
+29,824.451. Throughput and command latency remain unchanged; this is not a claim
+of cost-free parameterization. The narrow profile has different resources and is
+not a like-for-like area improvement over that baseline.
+
+The two-channel restored database also passes the RAM/load/boundary and hierarchy
+audits, and correctly rejects a tightened core clock. Eight-channel and wide-profile
+mapping, followed by the eight-channel restored-database audits, are still running.
+Physical SRAM area, power and intrinsic timing remain outside
+the control-budget model. Zero worst slack provides no extra timing margin.
+
 ## 2026-11-16 implemented microarchitecture and timing observations
 
 The [microarchitecture](../../docs/rtl/microarchitecture.md) maps the current RTL's

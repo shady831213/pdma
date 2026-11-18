@@ -1,8 +1,10 @@
 class pdma_configuration extends uvm_object;
-    // Fixed DUT profile and AXI burst boundary, not randomized platform settings.
-    localparam int unsigned REGISTER_DATA_BITS=32, MEMORY_DATA_BITS=64;
+    // The immutable DUT profile configures the VIP and generated register model.
+    localparam int unsigned REGISTER_DATA_BITS=`PDMA_REGISTER_BITS, MEMORY_DATA_BITS=`PDMA_MEMORY_BITS;
     localparam int unsigned REGISTER_WORD_BYTES=REGISTER_DATA_BITS/8;
     localparam int unsigned MEMORY_BEAT_BYTES=MEMORY_DATA_BITS/8, AXI_BOUNDARY_BYTES=4096;
+    localparam int unsigned COPY_BURST_BEATS=`PDMA_BURST_BEATS;
+    localparam int unsigned COPY_BURST_BYTES=MEMORY_BEAT_BYTES*COPY_BURST_BEATS;
     int channel_count=`PDMA_CHANNEL_COUNT;
     int unsigned command_capacity=4, event_capacity=2;
     bit[64:0] command_ring_address=`JVS_MEM_NULL, event_ring_address=`JVS_MEM_NULL;
@@ -35,7 +37,7 @@ class pdma_configuration extends uvm_object;
         p=software_port ? c.master_cfg[0] : c.slave_cfg[0];
         p.is_active=1;
         p.axi_interface_type=software_port ? svt_axi_port_configuration::AXI4_LITE : svt_axi_port_configuration::AXI4;
-        p.addr_width=software_port ? REGISTER_DATA_BITS : MEMORY_DATA_BITS;
+        p.addr_width=software_port ? 32 : 64;
         p.data_width=software_port ? REGISTER_DATA_BITS : MEMORY_DATA_BITS;
         p.id_width=1;
         p.wysiwyg_enable=1;

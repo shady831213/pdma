@@ -7,25 +7,25 @@ module DescriptorTest {
     var status       : RegisterState::ChannelStatus [1];
     var advance      : logic                           ;
     var event_advance: logic                           ;
+    inst channels: DmaChannels #( CHANNEL_COUNT: 1 );
+    assign channels.command        = '{RegisterState::Ring'{base: 0, capacity: 2, producer: 1, consumer: 0}};
+    assign channels.events         = '{RegisterState::Ring'{base: 64'h800, capacity: 2, producer: 0, consumer: 0}};
+    assign channels.configuration  = '{configuration};
+    assign channels.actions        = '{'0};
+    assign channels.reset_all      = 0;
+    assign channels.global_blocked = 0;
+    assign channels.global_clear   = 0;
+    assign channels.fatal_in       = 0;
+    assign channels.event_geometry = 1;
+    assign channels.event_ready    = 1;
+    assign status                  = channels.status;
+    assign advance                 = channels.command_advance;
+    assign event_advance           = channels.event_advance;
     inst dut: CopyEngine (
-        clk                                                                                           ,
-        rst_n          : rst                                                                          ,
-        command        : '{RegisterState::Ring'{base: 0, capacity: 2, producer: 1, consumer: 0}},
-        events         : '{RegisterState::Ring'{base: 64'h800, capacity: 2, producer: 0, consumer: 0}},
-        configuration  : '{configuration},
-        actions        : '{'0},
-        reset_all      : 0                                                                            ,
-        global_blocked : 0                                                                            ,
-        global_clear   : 0                                                                            ,
-        fatal_in       : 0                                                                            ,
-        event_geometry : 1                                                                            ,
-        event_ready    : 1                                                                            ,
-        status                                                                                        ,
-        clear          : _                                                                            ,
-        command_advance: advance                                                                      ,
-        event_advance                                                                                 ,
-        internal_fatal : _                                                                            ,
-        memory                                                                                        ,
+        clk          ,
+        rst_n   : rst,
+        memory       ,
+        channels     ,
     );
     initial {
         // Reserved option, direct gap, source inactive tail, destination inactive tail.

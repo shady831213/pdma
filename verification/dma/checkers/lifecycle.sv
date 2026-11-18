@@ -1,20 +1,22 @@
-module pdma_lifecycle_assertions(
+module pdma_lifecycle_assertions #(parameter int SLOTS=8, localparam int SLOT_BITS=$clog2(SLOTS+1))(
     input logic clk, rst_n, request, ready, returned, accepted, closing, clear, enabled, has_commands,
     input logic irq, irq_ready, irq_source, parked, resume_request,
-    input logic [3:0] request_slot, receipt_slot,
+    input logic [SLOT_BITS-1:0] request_slot, receipt_slot,
     input logic [1023:0] parked_state
 );
     int unsigned outstanding=0;
-    logic [15:0] owned='0;
+    logic [SLOTS:0] owned='0;
     logic reset_quiet=0;
     always @(posedge clk or negedge rst_n) begin
         if(!rst_n) begin outstanding<=0; owned<='0; reset_quiet<=0; end
         else begin
             if(returned && accepted) begin
+                assert(receipt_slot<=SLOTS) else $fatal(1,"DMA_BAD_RECEIPT_SLOT");
                 assert(outstanding!=0 && owned[receipt_slot]) else $fatal(1,"DMA_UNOWNED_RECEIPT");
                 owned[receipt_slot]<=0;
             end
             if(request && ready) begin
+                assert(request_slot<=SLOTS) else $fatal(1,"DMA_BAD_REQUEST_SLOT");
                 // Read completion can forward a write for the same live chunk
                 // at this edge. Old receipt consumption precedes new ownership.
                 assert(!owned[request_slot] || (returned && accepted && request_slot==receipt_slot))

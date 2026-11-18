@@ -3,7 +3,7 @@ module FenceMemoryTest {
     inst clk : $tb::clock_gen #( period: 10 );
     inst rst : $tb::reset_gen ( clk );
     inst port: CopyMemoryPort;
-    inst axi : $std::axi4_if::<CopyMemory::Bus>;
+    inst axi : $std::axi4_if::<$std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>>;
     var observed: logic<64>;
     inst dut: CopyMemoryEndpoint (
         clk       ,
@@ -18,14 +18,14 @@ module FenceMemoryTest {
         axi.arready   = 0;
         axi.rvalid    = 0;
         axi.rdata     = 0;
-        axi.rresp     = 0 as CopyMemory::Bus::resp_t;
+        axi.rresp     = 0 as $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>::resp_t;
         axi.rlast     = 0;
         axi.rid       = 0;
         axi.ruser     = 0;
         axi.awready   = 0;
         axi.wready    = 0;
         axi.bvalid    = 0;
-        axi.bresp     = 0 as CopyMemory::Bus::resp_t;
+        axi.bresp     = 0 as $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>::resp_t;
         axi.bid       = 0;
         axi.buser     = 0;
         rst.assert();

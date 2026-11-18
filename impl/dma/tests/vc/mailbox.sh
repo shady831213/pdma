@@ -20,6 +20,6 @@ main() {
     } > snapshot.sha256)
     export PDMA_DESIGN_PROFILE="$root/impl/dma/tests/vc/mailbox-profile.tcl"
     # Preserve the raw structural verdict: proof diagnostics are not a waiver.
-    exec bash "$root/impl/dma/flow/crossings.sh" "$out/snapshot" "$out/check" cdc-formal
+    exec bash "$root/tools/rtl-flow/implementation/crossings.sh" "$out/snapshot" "$out/check" cdc-formal
 }
 { main "$@"; exit $?; }

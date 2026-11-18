@@ -1,0 +1,11 @@
+{
+  "channels": 2,
+  "register_bits": 32,
+  "memory_bits": 64,
+  "burst_beats": 8,
+  "slots": 8,
+  "read_outstanding": 8,
+  "write_outstanding": 8,
+  "request_depth": 8,
+  "receipt_depth": 8
+}

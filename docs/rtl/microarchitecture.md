@@ -1,7 +1,9 @@
 # DMA Copy/Fence 微架构：与当前 RTL 对应
 
-本文描述已经实现的 `DmaCopy`，不是完整 PDMA 的目标设计。硬件行为基线为
-`8365c8c1`；2026-11-16 的目录整理及共享 cells 迁移没有改变这些 RTL 的内容。
+本文描述 `DmaCopy` 的当前源码组织。2026-11-18 的配置与职责调整已通过功能
+矩阵及 2/8 channel CDC/RDC 检查；默认 2 channel 和窄接口配置的综合已通过，
+8 channel 和宽接口综合仍在运行。各阶段证据见
+[验证记录](../../verification/dma/results.md)，旧源码的结果不作为新版资格证据。
 本文的路径采用整理后的主工作区。体系结构语义以
 [系统规范](../../model/modeling/docs/spec.md)及
 [命令合同](../../model/modeling/docs/copy-engine.md)为准；未来配置与尚未实现的
@@ -15,22 +17,24 @@
 Fence 保证本 channel 的先前任务已退休再发标记；它不是跨 channel/global barrier，
 也不替平台实现 cache coherence。平台仍须满足其事务完成与内存可见性合同。
 
-当前顶层固定为 32-bit AXI4-Lite 配置接口、64-bit 普通内存数据接口和 64-bit
-内存地址。内存口沿用 AXI4 普通事务子集，额外 AWATOP 固定为零；不是完整 AXI5
-atomic 实现。独立寄存器 frontend 支持 32/64-bit，并不意味着 `DmaCopy` 顶层
-已支持任意总线 profile。SG、Write/Fill/Wait/Atomic/Semaphore/Trap/Timestamp
-执行、外围权限检查、CPU 和 firmware RTL 均未在这个切片实现。
+顶层静态配置支持 32/64-bit AXI4-Lite 数据接口及 32..1024-bit 普通内存数据
+接口；内存地址仍为 64-bit。默认 profile 为寄存器 32-bit、内存 64-bit。
+内存口沿用 AXI4 普通事务子集，AWATOP 为零；不是完整 AXI5 atomic 实现。
+数据宽度、burst 上限、每 channel 保留槽、读写 outstanding 和 CDC 深度的依赖
+见 [配置说明](configuration.md)。合法配置与完成物理资格检查是两件事。
+SG、Write/Fill/Wait/Atomic/Semaphore/Trap/Timestamp、外围权限检查、CPU 和
+firmware RTL 仍未在这个切片实现。
 
 ### 1.1 目录是职责分组，不全是实例包含关系
 
-`registers/bus.veryl` 声明的是 **RegisterBus 请求/响应类型和 RegisterPort**：
+`control/registers/bus.veryl` 声明的是 **RegisterBus 请求/响应类型和 RegisterPort**：
 它没有 AXI 引脚、仲裁器、FIFO 或状态寄存器，也不是系统总线。放在寄存器访问
 职责组内合理，但文件名 `bus` 不足以表达“内部寄存器事务协议”，不能据此推断
 DMA 的所有 bus 都从属于 registers。本文区分以下三种关系：
 
 | 关系 | 例子 | 对硬件的含义 |
 | --- | --- | --- |
-| 实例包含 | `csr.owners.channels[i].owner.command_ring` | 真正的 module instance 层次 |
+| 实例包含 | `control.csr.owners.channels[i].owner.command_ring` | 真正的 module instance 层次 |
 | 类型/接口依赖 | RegisterFrontend 和 DmaRegisterBank 使用 RegisterPort | 同一协议，两端各有自己的实例/状态，不是类型声明拥有使用者 |
 | 共享算法 | 多处调用 `common_cell::RoundRobin::select` | 每个调用者拥有自己的候选与授权状态，没有一个隐藏的全局仲裁 module |
 
@@ -42,30 +46,33 @@ DMA 的所有 bus 都从属于 registers。本文区分以下三种关系：
 ### 1.2 实际实例树与源码
 
 ```text
-DmaCopy                                      copy.veryl
-├─ csr: DmaRegisterInterface                  registers/interface.veryl
-│  ├─ frontend: RegisterFrontend              registers/frontend.veryl
-│  │  └─ aw_storage / w_storage / ar_storage  common_cell::ReadyValidSlice
-│  ├─ crossing: DuplexMailbox                common_cell
-│  └─ owners: DmaRegisterBank                 registers/bank/bank.veryl
-│     └─ channels[i].owner: ChannelRegisters  registers/bank/channel/channel.veryl
-│        ├─ command_ring: RingRegisters
-│        └─ event_ring: RingRegisters         registers/bank/channel/ring.veryl
-├─ engine: CopyEngine                        execution/engine.veryl
-│  └─ copy: CopyWindow                       execution/copy/window.veryl
-│     └─ buffers: Ram1R1W                     common_cell + tech_cell_generic
-├─ request_crossing: AsyncQueue              common_cell
-├─ response_crossing: AsyncQueue             common_cell
-└─ endpoint: CopyMemoryEndpoint              memory/endpoint/endpoint.veryl
-   ├─ reader: CopyReadEndpoint               memory/endpoint/read.veryl
-   ├─ writer: CopyWriteEndpoint              memory/endpoint/write.veryl
-   └─ result: ReadyValidSlice                合并回执的保持寄存器
+DmaConfigured                               由静态 profile 生成，无状态
+└─ dma: DmaCopy                              copy.veryl
+   ├─ channels: DmaChannels                  control/interface.veryl，连线接口
+   ├─ control: DmaControl                    control/control.veryl
+   │  └─ csr: DmaRegisterInterface           control/registers/interface.veryl
+   │     ├─ frontend: RegisterFrontend
+   │     ├─ crossing: DuplexMailbox
+   │     └─ owners: DmaRegisterBank
+   │        └─ channels[i].owner: ChannelRegisters
+   │           ├─ command_ring: RingRegisters
+   │           └─ event_ring: RingRegisters
+   ├─ engine: CopyEngine                     execution/engine.veryl
+   │  └─ copy: CopyWindow                    execution/copy/window.veryl
+   │     └─ buffers: Ram1R1W                 共用的、按 channel 保留行的 RAM
+   └─ transport: DmaMemoryBridge             memory/bridge.veryl
+      ├─ request_crossing: AsyncQueue
+      ├─ response_crossing: AsyncQueue
+      └─ endpoint: CopyMemoryEndpoint
+         ├─ reader: CopyReadEndpoint
+         ├─ writer: CopyWriteEndpoint
+         └─ result: ReadyValidSlice
 ```
 
-主要实现入口：[顶层][top]、[寄存器桥接](../../rtl/src/dma/registers/interface.veryl)、
-[全局 bank](../../rtl/src/dma/registers/bank/bank.veryl)、
-[channel owner](../../rtl/src/dma/registers/bank/channel/channel.veryl)、
-[ring owner](../../rtl/src/dma/registers/bank/channel/ring.veryl)、[共享引擎][engine]、
+主要实现入口：[顶层][top]、[寄存器桥接](../../rtl/src/dma/control/registers/interface.veryl)、
+[全局 bank](../../rtl/src/dma/control/registers/bank/bank.veryl)、
+[channel owner](../../rtl/src/dma/control/registers/bank/channel/channel.veryl)、
+[ring owner](../../rtl/src/dma/control/registers/bank/channel/ring.veryl)、[共享引擎][engine]、
 [burst window][window]、[内存端点][endpoint]、
 [read lane](../../rtl/src/dma/memory/endpoint/read.veryl)、
 [write lane](../../rtl/src/dma/memory/endpoint/write.veryl)。
@@ -78,6 +85,8 @@ interface 则有真实连线实例，例如 `source_port/target_port`、`request
 这些 interface 本身不增加存储或仲裁。Veryl package 的名字不等同于源文件目录。
 
 ### 1.3 顶层框图
+
+下图以默认 8 槽、8 深度 profile 表示容量；它们均为静态配置输入。
 
 ```mermaid
 flowchart LR
@@ -92,7 +101,7 @@ flowchart LR
         ENG["engine：RR 授权 + 共用 Fetch/Decode/Fence/Event"]
         WIN["engine.copy：8 行/channel 的 burst window"]
         RAM["共享 1R1W RAM + 一个 prepared cache"]
-        LIFE["DmaCopy：global reset 收集、通知保持"]
+        LIFE["DmaControl：global reset 收集、通知保持"]
         BANK -->|"配置、游标、动作"| ENG
         CTX <--> ENG
         ENG <--> WIN
@@ -135,13 +144,13 @@ flowchart LR
 | ring base/capacity/producer/consumer | 两个 RingRegisters | 每 channel 一对 | channel clear；正常按各自软/硬件游标推进 |
 | descriptor、phase、control_address、错误前缀/状态 | `engine.contexts[c]` | 每 channel 一个 `CommandState::Context` | 终态转 Idle 或 clear；park 保留 |
 | 当前执行授权 | `engine.locked/owner/cursor` | 全机一份 | 命令终态、安全 park、shutdown/fatal |
-| burst 元数据和状态 | CopyWindow | 8 行/channel；扁平 row=`channel*8+slot` | 写成功按序退休，或完成取消后的 clear |
-| 读回的 payload | `copy.buffers` | `(8*C) × 512 bit`，一读一写端口 | 对应 row 安全复用；不靠清零 RAM 内容释放 |
-| prepared/加载中的写数据 | CopyWindow | 全机一个 512-bit cache，带 channel/slot | 已发写或失去当前 owner；权威数据仍在 RAM |
-| 已承诺 payload 请求数 | `copy.debt[c]` | 每 channel 4-bit counter | 自己的 terminal receipt，R→W 同拍可净变化为零 |
+| burst 元数据和状态 | CopyWindow | SLOTS 行/channel；扁平 row=`channel*SLOTS+slot` | 写成功按序退休，或完成取消后的 clear |
+| 读回的 payload | `copy.buffers` | `(SLOTS*C) × BURST_BITS`，一读一写端口 | 对应 row 安全复用；不靠清零 RAM 内容释放 |
+| prepared/加载中的写数据 | CopyWindow | 全机一个 BURST_BITS cache，带 channel/slot | 已发写或失去当前 owner；权威数据仍在 RAM |
+| 已承诺 payload 请求数 | `copy.debt[c]` | 每 channel 可表示 0..SLOTS 的 counter | 自己的 terminal receipt，R→W 同拍可净变化为零 |
 | 控制访问在途责任 | `contexts[c].phase` | FetchReturn/FenceReturn/PublishReturn | 自己的 slot-0 receipt |
-| global reset 收集集合 | `DmaCopy.global_pending` | C bit | 每 channel clear；集合归零才 global clear |
-| 待交付通知 | `DmaCopy.irq/fatal_irq` | C+1 bit | 接收方 ready，或相应 reset clear |
+| global reset 收集集合 | `DmaControl.global_pending` | C bit | 每 channel clear；集合归零才 global clear |
+| 待交付通知 | `DmaControl.irq/fatal_irq` | C+1 bit | 接收方 ready，或相应 reset clear |
 
 `RegisterState` 是这些对象之间的 live view，不在 `DmaCopy` 再维护一份影子
 register bank。command consumer 的推进表示**描述符已接受**，不是命令已完成；
@@ -152,26 +161,27 @@ register bank。command consumer 的推进表示**描述符已接受**，不是�
 | 字段 | 当前编码 | 用途 |
 | --- | --- | --- |
 | 内部 `Tag.channel` | 3 bit，实际合法范围 `< CHANNEL_COUNT` | 归还给哪个物理 channel |
-| 内部 `Tag.slot` | 4 bit；0=控制，1..8=burst row | 归还哪份在途责任 |
+| 内部 `Tag.slot` | `ceil(log2(SLOTS+1))` bit；0=控制，1..SLOTS=burst row | 归还哪份在途责任 |
 | `Request.selector` | 32 bit | ring/source/destination/Fence 的 context selector |
 | AXI ARUSER/AWUSER | 35 bit：`{channel[2:0], selector[31:0]}` | 集成平台进一步处理身份与地址空间 |
 | AXI ID | 读、写分别固定 0 | 利用同方向同 ID 返回顺序；不作为 channel 身份 |
 
-内部请求 622 bit，回执 522 bit；寄存器 mailbox 请求 106 bit、响应 66 bit。
-这些是当前 packed 字段的逻辑宽度，不是物理面积估计。DMA 不在这里实现
+默认 profile 的内部请求 622 bit，回执 522 bit；寄存器 mailbox 请求 106 bit、响应 66 bit。
+请求与回执随 burst 容量和 slot 身份位宽变化；寄存器 mailbox 保持内部 64-bit 数据格式。
+这些是 packed 字段的逻辑宽度，不是物理面积估计。DMA 不在这里实现
 Function/PASID 查表、MMU、ATS/PRI 或 fault tag 的平台映射。
 
 ### 2.3 容量和物理实现边界
 
-| 资源 | 当前深度 | 含义 |
+| 资源 | 静态容量（括号内为默认值） | 含义 |
 | --- | --- | --- |
-| core→bus 请求 FIFO | 8 | 接收即产生事务义务，尚未到 AXI 也计债 |
-| bus→core 回执 FIFO | 8 | 每个内部请求一个完整 receipt，不是每 beat 一个 |
-| reader pending | 8 | AR 后等待 terminal R 的有序 tracker |
-| writer addresses/data/responses | 各 8 | 同一个请求一次性保留三队列容量，分别在 AW/WLAST/B 释放 |
+| core→bus 请求 FIFO | REQUEST_DEPTH（8） | 接收即产生事务义务，尚未到 AXI 也计债 |
+| bus→core 回执 FIFO | RECEIPT_DEPTH（8） | 每个内部请求一个完整 receipt，不是每 beat 一个 |
+| reader pending | READ_OUTSTANDING（8） | AR 后等待 terminal R 的有序 tracker |
+| writer addresses/data/responses | 各 WRITE_OUTSTANDING（8） | 同一个请求一次性保留三队列容量，分别在 AW/WLAST/B 释放 |
 | reader / writer receipt register | 各 1 | 保持完整回执并施加背压 |
 | 合并 result register | 1 | 仲裁后稳定保持，防止背压时被新候选替换 |
-| burst RAM | 512B/channel；8 channel 为 4KiB | 固定保留配额，park 的 channel 不占掉 peer 的配额 |
+| burst RAM | `SLOTS*BURST_BYTES`/channel（512B）；默认 8 channel 为 4KiB | 固定保留配额，park 的 channel 不占掉 peer 的配额 |
 
 RAM 为一个共享 1R1W owner，并非 8 个独立执行引擎。FIFO storage 仍参与综合。
 control-budget 综合只给 RAM 保留边界负载模型；不能把 placeholder 的零面积和
@@ -203,7 +213,7 @@ control-budget 综合只给 RAM 保留边界负载模型；不能把 placeholder
 
 这提供命令边界的轮询机会，不提供按字节分时或有界抢占。长 Copy 可以让 peer
 等待很久；若平台一直不返回某笔请求，没有有限的调度/完成延迟保证。
-多个 channel 不会把一个 64-bit master 的峰值带宽乘以 channel 数。
+多个 channel 不会把同一个 memory master 的峰值带宽乘以 channel 数。
 
 ### 3.2 Shared ingress 的 head-of-line 阻塞
 
@@ -297,7 +307,9 @@ Copy 的 page fault **不改变外层 phase=Copy**，而是在 window 冻结，�
 | PrepareEvent | 固定 event 起始地址；与后续请求 FIFO 输入之间有寄存器切点 |
 | PublishReturn | 全部 24B 写成功后才 event_advance；部分写不能提前暴露 producer |
 
-Descriptor fetch 通常为 64B+32B 两个串行读；遇 4KiB 边界继续切分，始终不越界。
+默认 profile 的 descriptor fetch 通常为 64B+32B 两个串行读；遇 4KiB 边界继续切分，始终不越界。
+控制访问每 beat 为 `min(DATA_BYTES,8)` 字节，每笔不超过 BURST_BEATS；32-bit
+memory 的 Fence64 因而是两个 beat。更宽的总线上，控制读写按窄传输 lane 排列。
 控制请求 tag.slot=0，只允许该 channel 一个在途控制访问。Fetch/Publish 的失败不能
 作为可恢复 payload fault：前者无法可信解码，后者破坏错误上报通路，均转 channel fatal。
 
@@ -308,16 +320,17 @@ Descriptor fetch 通常为 64B+32B 两个串行读；遇 4KiB 边界继续切分
 每次分配只处理当前 selected channel：
 
 ```text
-portion = min(remaining, 64, 4096-src[11:0], 4096-dst[11:0])
-amount  = src、dst 都 8B 对齐且 portion>=8 ? floor(portion/8)*8 : 1
-row     = channel*8 + tail
+portion = min(remaining, BURST_BYTES, 4096-src[11:0], 4096-dst[11:0])
+amount  = src、dst 都 DATA_BYTES 对齐且 portion>=DATA_BYTES
+          ? floor(portion/DATA_BYTES)*DATA_BYTES : 1
+row     = channel*SLOTS + tail
 ```
 
 metadata `{source,destination,length}` 写到该行；tail 和 next_source/destination、
 remaining 同时前进。不能分配到尚未安全退休的行。`recovering` 时先清完保留 window，
 然后才继续分配后面的新数据。
 
-若 src/dst 的低 3 位不同，逐字节推进不会使二者同时 8B 对齐：整个任务可能走 byte
+若 src/dst 的 bus-word 内 offset 不同，逐字节推进不会使二者同时 DATA_BYTES 对齐：整个任务可能走 byte
 路径。这是当前实现的明确吞吐限制，不应把 aligned 的结果推广到任意 offset。
 
 ### 6.2 每行状态机
@@ -386,7 +399,7 @@ flowchart LR
 ### 7.1 Read lane
 
 AR 只在 pending tracker 有空间时发送；握手时保存 tag、lane、size、length。
-同方向 AXI ID 固定为零，R burst 顺序对应 tracker 队头。R 数据收齐到一个 512-bit
+同方向 AXI ID 固定为零，R burst 顺序对应 tracker 队头。R 数据收齐到一个 BURST_BITS
 receipt；只有 RLAST 发布完整回执和 pop tracker，最后一拍还受 receipt credit 限制。
 单字节读只提取地址对应 lane，不对外承诺其它字节。
 
@@ -609,10 +622,10 @@ formal signoff。既有 setup 收敛是控制预算下的实现证据，不替�
 [engine]: ../../rtl/src/dma/execution/engine.veryl
 [command]: ../../rtl/src/dma/execution/command.veryl
 [window]: ../../rtl/src/dma/execution/copy/window.veryl
-[register-protocol]: ../../rtl/src/dma/registers/bus.veryl
-[register-state]: ../../rtl/src/dma/registers/state.veryl
-[access]: ../../rtl/src/dma/registers/access.veryl
-[frontend]: ../../rtl/src/dma/registers/frontend.veryl
+[register-protocol]: ../../rtl/src/dma/control/registers/bus.veryl
+[register-state]: ../../rtl/src/dma/control/registers/state.veryl
+[access]: ../../rtl/src/dma/control/registers/access.veryl
+[frontend]: ../../rtl/src/dma/control/registers/frontend.veryl
 [memory]: ../../rtl/src/dma/memory/interface.veryl
 [endpoint]: ../../rtl/src/dma/memory/endpoint/endpoint.veryl
 [layout]: ../../rtl/src/dma/layout.veryl

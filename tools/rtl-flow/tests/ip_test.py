@@ -109,7 +109,40 @@ class PackageResources(unittest.TestCase):
         self.assertIn("cell.veryl", first)
         self.assertIn("helper.tcl", first)
         self.assertNotIn("README.md", first)
+        (directory / "README.md").write_text("changed documentation")
+        self.assertEqual(self.invoke("inputs").stdout, first)
+        added = directory / "src" / "extra.veryl"
+        added.write_text("pub module Additional {}\n")
+        self.assertNotEqual(self.invoke("inputs").stdout, first)
+        added.unlink()
+        self.assertEqual(self.invoke("inputs").stdout, first)
         (directory / "constraints" / "helper.tcl").write_text("changed resource\n")
+        self.assertNotEqual(self.invoke("inputs").stdout, first)
+
+    def test_input_identity_is_relocatable_without_dropping_build_options(self):
+        hardware = self.root / "hardware"
+        hardware.mkdir()
+        (hardware / "top.veryl").write_text("pub module Top {}\n")
+        manifest = ('[project]\nname="top"\nversion="0.1.0"\n'
+                    f'[build]\nsources=[{json.dumps(str(hardware))}]\n')
+        (self.project / "Veryl.toml").write_text(manifest)
+        first = self.invoke("inputs").stdout
+        moved = self.root / "another snapshot project"
+        moved.mkdir()
+        (moved / "Veryl.toml").write_text(manifest)
+        self.metadata["root"]["local_path"] = str(moved)
+        self.assertEqual(self.invoke("inputs").stdout, first,
+                         "a different run directory must not invalidate a source-bound review")
+        relocated = self.root / "relocated hardware"
+        relocated.mkdir()
+        (relocated / "top.veryl").write_bytes((hardware / "top.veryl").read_bytes())
+        (moved / "Veryl.toml").write_text(manifest.replace(str(hardware), str(relocated)))
+        self.assertEqual(self.invoke("inputs").stdout, first,
+                         "identical declared sources must survive workspace relocation")
+        (moved / "Veryl.toml").write_text(manifest + 'omit_project_prefix=true\n')
+        self.assertNotEqual(self.invoke("inputs").stdout, first)
+        (moved / "Veryl.toml").write_text(manifest)
+        (hardware / "top.veryl").write_text("pub module Different {}\n")
         self.assertNotEqual(self.invoke("inputs").stdout, first)
 
     def test_existing_bundle_is_never_overwritten(self):

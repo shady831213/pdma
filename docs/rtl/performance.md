@@ -6,6 +6,16 @@
 [2026-11-12 throughput review](throughput-review.md) 的 120/2160-cycle 数字属于较早
 单 channel 实现；下面的 121/2161-cycle 数字才对应当前多 channel RTL。
 
+2026-11-18 复核：控制面/执行/传输拆分及参数化后的默认 2、8-channel profile，
+在相同的总线宽度、容量、时钟、seed=19 和 VIP 设置下重新运行上述场景，结果保持一致：
+16KiB 为 2161 cycles、64B 为 121 cycles、四任务 batch 为 526 cycles，
+两种 channel 数的全局 batch 分别为 4336/17386 cycles。读写 payload 均无空泡。
+8-channel 内部观测的跨域延迟和两周期 grant→issue 也未变化。验证范围及新的
+实现资格状态见 [本轮结果](../../verification/dma/results.md)；这些测量不能外推为
+不同数据宽度、slot/credit/FIFO 容量下的性能保证。下面保留原测量定义与明细。
+本轮八个种子中，8-channel 全局 batch 的观测范围为 17386..17398 cycles；
+17386 是上述匹配种子的比较值，不是所有随机地址与相位下的固定延迟合同。
+
 ## 测量配置与边界
 
 * 本轮新编译 2、8-channel 配置，seed=19；每个配置分别执行 long、short、batch、
@@ -150,10 +160,11 @@ payload 内部逻辑延迟不一定增加稳态带宽。更明显的成本在：
 ## 6. 复现
 
 工具配置使用受信任的私有环境文件；部署路径和原始商业工具报告不进入公共仓库。
-例如在已经生成 immutable snapshot 后：
+例如生成 8 通道 immutable snapshot 后：
 
 ```sh
-PDMA_CHANNEL_COUNT=8 bash verification/dma/flow/compile.sh "$snapshot" "$build"
+PDMA_CHANNEL_COUNT=8 bash rtl/flow/snapshot.sh "$snapshot"
+bash verification/dma/flow/compile.sh "$snapshot" "$build"
 bash verification/dma/flow/run.sh "$build" "$run" pdma_zero_delay_long_test 19 +PDMA_INTERNAL_TIMING
 ```
 

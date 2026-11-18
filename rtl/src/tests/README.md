@@ -23,9 +23,21 @@ The minimal execution slice adds `CopyEngineTest`, `CopyErrorTest` and
 `MemoryStreamTest` checks continuous writes with delayed B responses;
 `CopyWindowTest` checks multi-burst fault/error/reset lifetime;
 `CopyWindowReuseTest` checks receipt-driven slot reuse; `CopyWindowForwardTest`
-checks direct read-to-write handoff and its reset debt. There are seventeen tests.
+checks direct read-to-write handoff and its reset debt. Descriptor boundary,
+channel discovery, peer progress and independent reset fixtures retain their
+separate checks.
 Their scope is recorded in the
 [slice description](../../../docs/rtl/minimal-copy.md#verification-and-limits).
+
+The configurable-resource slice adds six tests, bringing the native total to 27:
+
+| Test | Observable behavior |
+| --- | --- |
+| `MemoryCapacityTest` | Independent one-read/three-write credits, held terminal responses and ordered tag/credit return |
+| `MemoryWideProfileTest` | 128-bit writes, upper/lower data patterns, continuous beats and delayed B |
+| `MemoryReadProfileTest` | Full and narrow bursts on a 128-bit bus, lane wrap and densely packed retained bytes |
+| `WindowSingleTest`, `WindowThreeTest` | One and three retained rows, wrap/reuse beyond one window and terminal drain |
+| `NarrowFenceOrderTest` | 32-bit memory, three retained rows, bounded descriptor fetch and two-beat Fence64 after Copy |
 
 Run both native CC and Cranelift backends with `VERYL_DUT_REUSE=0`, as shown in
 [the RTL README](../../README.md). These fixtures drive lifecycle and IRQ status

@@ -26,7 +26,7 @@ main() {
     export JVSUK_HOME="$build/jarvisuk"
     (cd "$snapshot" && sha256sum --check --status snapshot.sha256)
     custody=$(python3 "$root/tools/rtl-flow/ip/bundle.py" locate "$snapshot" common_cell verification/cdc_custody.sv)
-    transfer=$(python3 "$root/tools/rtl-flow/ip/bundle.py" locate "$snapshot" bus_cell verification/ready_valid.sv)
+    transfer=$(python3 "$root/tools/rtl-flow/ip/bundle.py" locate "$snapshot" common_cell verification/ready_valid.sv)
     cd "$root/verification/dma"
     find tb env tests checkers -type f -print0 | sort -z | xargs -0 sha256sum > "$build/testbench.sha256"
     find "$JVSUK_HOME/src" "$JVSUK_HOME/include" "$JVSUK_HOME/interfaces" "$JVSUK_HOME/pkg" "$JVSUK_HOME/etc" \

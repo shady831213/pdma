@@ -5,7 +5,7 @@ pub module ChannelRegisters #(
 ) (
     clk                  : input  clock                         ,
     rst_n                : input  reset_async_low               ,
-    request              : input  bus_cell::RegisterBus::Request,
+    request              : input  common_cell::RegisterBus::Request,
     commit               : input  logic                         ,
     clear                : input  logic                         ,
     global_blocked       : input  logic                         ,
@@ -186,7 +186,7 @@ pub module ChannelRegisters #(
                 || (request.address == BASE + L::CONTROL_CONFIG_RING_CONTEXT_OFFSET && control_result.value
                     != configuration.ring_context as u64 && locked) {
                 control_result.write  = 0;
-                control_result.status = bus_cell::RegisterBus::ACCESS_ERROR;
+                control_result.status = common_cell::RegisterBus::ACCESS_ERROR;
             }
         }
         result = control_result;

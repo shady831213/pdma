@@ -42,7 +42,7 @@ its lifecycle behavior or timing.
 
 ## Replacing a bus endpoint
 
-The configuration port terminates at `bus_cell::AxiLiteRegisterFrontend`.
+The configuration port terminates at `common_cell::AxiLiteRegisterFrontend`.
 A replacement register target (for example, an APB slave) drives the same
 `RegisterPort` in the register clock domain. It must hold an offered operation
 through backpressure, return one host response per accepted operation, and
@@ -51,7 +51,7 @@ then perform the operation and its side effects exactly once.
 
 The memory clock crossing carries DMA requests and receipts. In the bus domain
 `CopyMemoryEndpoint` packs the channel and context selector into address
-attributes and classifies response USER. The shared `bus_cell::AxiMemoryMaster`
+attributes and classifies response USER. The shared `common_cell::AxiMemoryMaster`
 owns AXI handshakes, beat assembly, directional credits and receipt merging.
 A different memory transport can implement `CopyMemoryPort` at that same
 boundary. It must retain the caller's tag and return the terminal outcome

@@ -9,7 +9,7 @@ to the deferred sibling `hw_components` directory.
 
 The source tree groups hardware responsibilities. Module directories show containment;
 packages and interfaces instead declare shared types/protocols within that responsibility.
-The register request/response protocol lives in `bus_cell::RegisterPort`. AXI
+The register request/response protocol lives in `common_cell::RegisterPort`. AXI
 pairing belongs to the frontend, and DMA register decoding belongs to the control plane.
 See the [implemented microarchitecture](../../../docs/rtl/microarchitecture.md)
 for the actual instance tree, arbitration owners, state machines and pipeline cuts.
@@ -39,7 +39,7 @@ memory/
   axi.veryl                        CopyMemoryEndpoint: DMA identity and error encoding
 ```
 
-`DmaCopy` connects the `bus_cell` register frontend, control, engine, memory crossing
+`DmaCopy` connects the `common_cell` register frontend, control, engine, memory crossing
 and memory endpoint. `DmaChannels` carries control/engine wires.
 Each channel's registers remain in `control.csr.owners.channels[i].owner` and its
 rings in `command_ring`/`event_ring`. Accepted-command state and retained bytes

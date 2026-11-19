@@ -9,7 +9,7 @@ pub module DmaRegisterInterface #(
     reg_rst_n            : input   'cfg  reset_async_low                                             ,
     core_clk             : input   'core clock                                                       ,
     core_rst_n           : input   'core reset_async_low                                             ,
-    source_port          : modport 'cfg  bus_cell::RegisterPort::slave                               ,
+    source_port          : modport 'cfg  common_cell::RegisterPort::slave                               ,
     global_reset_busy    : input   'core logic                                                       ,
     global_fatal         : input   'core logic                                                       ,
     global_clear         : input   'core logic                                                       ,
@@ -28,10 +28,10 @@ pub module DmaRegisterInterface #(
     configurations       : output  'core RegisterState::ChannelConfig                 [CHANNEL_COUNT],
     actions              : output  'core RegisterState::ChannelActions                [CHANNEL_COUNT],
 ) {
-    inst target_port: 'core bus_cell::RegisterPort;
+    inst target_port: 'core common_cell::RegisterPort;
     inst crossing: common_cell::DuplexMailbox #(
-        REQUEST_TYPE : bus_cell::RegisterBus::Request ,
-        RESPONSE_TYPE: bus_cell::RegisterBus::Response,
+        REQUEST_TYPE : common_cell::RegisterBus::Request ,
+        RESPONSE_TYPE: common_cell::RegisterBus::Response,
     ) (
         s_clk           : reg_clk                   ,
         s_rst_n         : reg_rst_n                 ,

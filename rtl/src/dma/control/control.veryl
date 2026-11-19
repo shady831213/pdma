@@ -7,7 +7,7 @@ pub module DmaControl #(
     reg_rst_n      : input   'registers reset_async_low                             ,
     core_clk       : input   'core      clock                                       ,
     core_rst_n     : input   'core      reset_async_low                             ,
-    cfg            : modport 'registers bus_cell::RegisterPort::slave               ,
+    cfg            : modport 'registers common_cell::RegisterPort::slave               ,
     channels       : modport 'core      DmaChannels::control                        ,
     irq            : output  'core      logic                        <CHANNEL_COUNT>,
     irq_ready      : input   'core      logic                        <CHANNEL_COUNT>,

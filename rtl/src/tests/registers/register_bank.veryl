@@ -2,7 +2,7 @@
 module DmaRegisterBankTest {
     inst clk : $tb::clock_gen #( period: 10 );
     inst rst : $tb::reset_gen ( clk );
-    inst port: bus_cell::RegisterPort;
+    inst port: common_cell::RegisterPort;
     var global_reset_busy    : logic                               ;
     var global_fatal         : logic                               ;
     var global_clear         : logic                               ;
@@ -79,7 +79,7 @@ module DmaRegisterBankTest {
         clk.next();
         port.request_valid = 0;
         $assert(
-            port.response.status == bus_cell::RegisterBus::SUCCESS && commands[1].base == 32'h1000,
+            port.response.status == common_cell::RegisterBus::SUCCESS && commands[1].base == 32'h1000,
             "CHANNEL_ONE_BASE",
         );
         $assert(commands[0].base == 0, "PEER_ISOLATION");
@@ -104,7 +104,7 @@ module DmaRegisterBankTest {
         clk.next();
         port.request_valid = 0;
         $assert(
-            port.response.status == bus_cell::RegisterBus::ACCESS_ERROR && commands[1].base == 32'h1000,
+            port.response.status == common_cell::RegisterBus::ACCESS_ERROR && commands[1].base == 32'h1000,
             "LOCK_REJECTS_CHANGE",
         );
         clk.next();

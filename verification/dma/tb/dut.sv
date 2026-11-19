@@ -1,6 +1,6 @@
 module pdma_vip_dut(svt_axi_if host_bus, svt_axi_if memory_bus, pdma_control_if control);
     `include "dut_binding.svh"
-    import bus_cell_properties::held_until_accepted;
+    import common_cell_ready_valid_properties::held_until_accepted;
     register_request: assert property (held_until_accepted(control.reg_clk, control.reg_rst_n,
         integration.dma.register_port.request_valid, integration.dma.register_port.request_ready,
         integration.dma.register_port.request)) else $fatal(1, "register_request changed while stalled");

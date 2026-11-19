@@ -27,7 +27,7 @@ firmware RTL 仍未在这个切片实现。
 
 ### 1.1 目录是职责分组，不全是实例包含关系
 
-`bus_cell::RegisterPort` 定义字节地址、写使能、数据和访问结果。总线前端拥有 AXI 握手状态，
+`common_cell::RegisterPort` 定义字节地址、写使能、数据和访问结果。总线前端拥有 AXI 握手状态，
 DMA 的 channel 和 ring 拥有寄存器及读写副作用。模块实例、接口类型和共享算法的关系如下。
 
 | 关系 | 例子 | 对硬件的含义 |
@@ -47,7 +47,7 @@ DMA 的 channel 和 ring 拥有寄存器及读写副作用。模块实例、接�
 DmaConfigured                               由静态 profile 生成，无状态
 └─ dma: DmaCopy                              copy.veryl
    ├─ channels: DmaChannels                  control/interface.veryl，连线接口
-   ├─ frontend: bus_cell::AxiLiteRegisterFrontend
+   ├─ frontend: common_cell::AxiLiteRegisterFrontend
    ├─ control: DmaControl                    control/control.veryl
    │  └─ csr: DmaRegisterInterface           control/registers/interface.veryl
    │     ├─ crossing: DuplexMailbox
@@ -62,7 +62,7 @@ DmaConfigured                               由静态 profile 生成，无状态
    │  ├─ request_crossing: AsyncQueue
    │  └─ response_crossing: AsyncQueue
    └─ endpoint: CopyMemoryEndpoint           memory/axi.veryl，编码请求属性并解释响应
-      └─ master: bus_cell::AxiMemoryMaster
+      └─ master: common_cell::AxiMemoryMaster
          ├─ reader: AxiMemoryRead
          ├─ writer: AxiMemoryWrite
          └─ result: ReadyValidSlice
@@ -73,7 +73,7 @@ DmaConfigured                               由静态 profile 生成，无状态
 [channel owner](../../rtl/src/dma/control/registers/bank/channel/channel.veryl)、
 [ring owner](../../rtl/src/dma/control/registers/bank/channel/ring.veryl)、[共享引擎][engine]、
 [burst window][window]、[内存端点][endpoint]、
-共享库的 `bus_cell/src/memory/axi/{read,write}.veryl`。
+共享库的 `common_cell/src/bus/memory/axi/{read,write}.veryl`。
 
 协议与公共声明入口：
 [RegisterBus/RegisterPort][register-protocol]、[RegisterState][register-state]、
@@ -193,7 +193,7 @@ control-budget 综合只给 RAM 保留边界负载模型；不能把 placeholder
 | [CopyEngine][engine]：`eligible/choice/chosen` | 合法 Idle 新任务、可运行 Copy、待重试 FenceWrite | `RoundRobin<8>::select(eligible,cursor)`；超出实例数的 bit 恒零 | grant 时锁存 owner，并按实际 C 回绕 cursor；健康 command 保持授权 |
 | [CopyWindow][window]：`read_choice/write_choice` | 当前 channel 的 Read/Write 行 | 从退休 head 起找第一个对应状态行 | head 只在按序写退休时前进；这是有序优先选择，不是每 cycle 轮换 slot |
 | [CopyWindow][window]：`selected_slot/memory.valid` | prepared write、可直接转发的 R、候选读 | prepared write 优先；可用返回直通其次；然后发读 | 写数据尚在同步 RAM 加载中时，可继续发其它读；stop_issue 关闭所有新发射 |
-| `bus_cell::AxiMemoryMaster`：`selected/cursor/result` | reader receipt、writer receipt | 2 路 RR | 只有合并入口实际握手才前进；result 寄存器负责稳定保持 |
+| `common_cell::AxiMemoryMaster`：`selected/cursor/result` | reader receipt、writer receipt | 2 路 RR | 只有合并入口实际握手才前进；result 寄存器负责稳定保持 |
 
 寄存器 bank 的 `matched` 选择是**地址译码**，地址窗口互斥，不是多个请求者争抢
 一个资源，因此不应叫仲裁。

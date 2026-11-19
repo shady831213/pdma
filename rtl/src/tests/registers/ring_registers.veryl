@@ -2,7 +2,7 @@
 module RingRegistersTest {
     inst clk: $tb::clock_gen #( period: 10 );
     inst rst: $tb::reset_gen ( clk );
-    var request         : bus_cell::RegisterBus::Request;
+    var request         : common_cell::RegisterBus::Request;
     var commit          : logic                         ;
     var locked          : logic                         ;
     var blocked         : logic                         ;
@@ -81,7 +81,7 @@ module RingRegistersTest {
         clk.next();
         $assert(command.producer == 3 && consume_ready, "PRODUCER_PUBLISHED");
         request.data = 2;
-        $assert(command_result.status == bus_cell::RegisterBus::ACCESS_ERROR, "PRODUCER_CANNOT_REWIND");
+        $assert(command_result.status == common_cell::RegisterBus::ACCESS_ERROR, "PRODUCER_CANNOT_REWIND");
         clk.next();
         $assert(command.producer == 3, "FAILED_WRITE_ATOMIC");
         commit  = 0;
@@ -93,7 +93,7 @@ module RingRegistersTest {
         commit          = 1;
         request.address = 0;
         request.data    = 32'h2000;
-        $assert(command_result.status == bus_cell::RegisterBus::ACCESS_ERROR, "FROZEN_BASE");
+        $assert(command_result.status == common_cell::RegisterBus::ACCESS_ERROR, "FROZEN_BASE");
         clk.next();
         $assert(command.base == 64'h00000001_00001000, "LOCKED_VALUE_PRESERVED");
         locked          = 0;
@@ -112,7 +112,7 @@ module RingRegistersTest {
         $assert(events.consumer == 1, "SOFTWARE_EVENT_CONSUMER");
         request.address = 44;
         request.data    = 3;
-        $assert(event_result.status == bus_cell::RegisterBus::ACCESS_ERROR, "EVENT_PRODUCER_READ_ONLY");
+        $assert(event_result.status == common_cell::RegisterBus::ACCESS_ERROR, "EVENT_PRODUCER_READ_ONLY");
         clk.next();
         $assert(events.producer == 2, "READ_ONLY_UNCHANGED");
         clear = 1;

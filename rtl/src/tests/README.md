@@ -37,7 +37,7 @@ The configurable-resource tests exercise directional credits, retained rows and 
 | `NarrowFenceOrderTest` | 32-bit memory, three retained rows, bounded descriptor fetch and two-beat Fence64 after Copy |
 
 Standalone AXI4-Lite pairing, wide read/write packing and response classification tests
-live with the endpoints in `my-veryl-cells/bus_cell/tests`.
+live with the endpoints in `my-veryl-cells/common_cell/tests/src/bus`.
 
 Run both native CC and Cranelift backends with `VERYL_DUT_REUSE=0`, as shown in
 [the RTL README](../../README.md). These fixtures drive lifecycle and IRQ status

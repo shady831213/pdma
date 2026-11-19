@@ -1,5 +1,31 @@
 # Scenario-level verification checkpoints
 
+## AXI endpoints in common_cell
+
+The local review candidate moves both endpoints, their tests and the passive
+ready/valid property into `common_cell`. The published 0.1.0 package predates
+these endpoints. These checks used local package sources. Updating the native
+lockfile after release also requires a compatible `tech_cell_generic` dependency.
+
+Both native simulators passed 16 shared-cell tests and 24 DMA tests each.
+The new ordering test admits two two-beat reads followed by a write, returns
+the write first and stalls its receipt. Both read receipts subsequently
+deliver their original tags and complete data in request order.
+
+Across 15 integration profiles, all 49 generated SystemVerilog compilation
+units per profile matched the preceding endpoint checkpoint after normalizing
+the package prefix and ignoring comments and whitespace. The profile inputs
+matched byte for byte. The mapped synthesis results below are from the
+preceding checkpoint.
+
+Fresh DUT simulations on the two-channel, eight-channel and two-channel AXI4
+profiles passed 12 scenarios and detected all 24 injected checker failures.
+Each zero-delay 16 KiB Copy transferred 2,048 read and 2,048 write beats in
+2,048 bus cycles per direction, with 2,161 cycles from descriptor to Fence.
+The two- and eight-channel CDC/RDC reviews reproduced the counts in the next
+section, with zero unresolved findings. The standalone mailbox CDC check
+reported zero findings.
+
 ## AXI endpoint extraction — local review candidate
 
 The local `bus_cell` candidate was exercised with the DMA core and with an

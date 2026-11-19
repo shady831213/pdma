@@ -14,7 +14,7 @@ pub module CopyMemoryEndpoint::<
 ) {
     alias package M = CopyMemory::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>;
     const REASON_BITS: u32 = if B::RUSER_LENGTH >: B::BUSER_LENGTH ? B::RUSER_LENGTH : B::BUSER_LENGTH;
-    inst bus_port: bus_cell::BurstPort::<B::ADDRESS_WIDTH, B::DATA_WIDTH_BYTES, BURST_BEATS, M::TAG_BITS, M::USER_BITS>;
+    inst bus_port: common_cell::BurstPort::<B::ADDRESS_WIDTH, B::DATA_WIDTH_BYTES, BURST_BEATS, M::TAG_BITS, M::USER_BITS>;
     assign bus_port.valid              = port.valid;
     assign port.ready                  = bus_port.ready;
     assign bus_port.request.tag        = port.request.tag as M::TAG_BITS;
@@ -36,13 +36,13 @@ pub module CopyMemoryEndpoint::<
     function attributes (
         resp          : input logic<2>                                         ,
         reason        : input logic<REASON_BITS>                               ,
-    ) -> bus_cell::AxiResponse::Attributes {
-        return bus_cell::AxiResponse::Attributes'{
+    ) -> common_cell::AxiResponse::Attributes {
+        return common_cell::AxiResponse::Attributes'{
             retryable: reason == 1 && resp >= 2,
             invalid  : reason != 0 && (reason != 1 || resp <: 2),
         };
     }
-    inst master: bus_cell::AxiMemoryMaster::<B, BURST_BEATS, M::TAG_BITS, M::USER_BITS> #(
+    inst master: common_cell::AxiMemoryMaster::<B, BURST_BEATS, M::TAG_BITS, M::USER_BITS> #(
         READ_OUTSTANDING   ,
         WRITE_OUTSTANDING  ,
     ) (

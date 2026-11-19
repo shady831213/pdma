@@ -7,7 +7,7 @@ pub module DmaRegisterBank #(
 ) (
     clk                  : input   clock                                                       ,
     rst_n                : input   reset_async_low                                             ,
-    port                 : modport bus_cell::RegisterPort::slave                               ,
+    port                 : modport common_cell::RegisterPort::slave                               ,
     global_reset_busy    : input   logic                                                       ,
     global_fatal         : input   logic                                                       ,
     global_clear         : input   logic                                                       ,
@@ -48,7 +48,7 @@ pub module DmaRegisterBank #(
     var   global_result  : RegisterAccess::Result                         ;
     var   candidate      : RegisterAccess::Result                         ;
     var   response_valid : logic                                          ;
-    var   response       : bus_cell::RegisterBus::Response                ;
+    var   response       : common_cell::RegisterBus::Response                ;
 
     for i in 0..CHANNEL_COUNT :channels {
         inst owner: ChannelRegisters #(
@@ -114,7 +114,7 @@ pub module DmaRegisterBank #(
         );
         if candidate.write && (global_reset_busy || global_clear) {
             candidate.write  = 0;
-            candidate.status = bus_cell::RegisterBus::ACCESS_ERROR;
+            candidate.status = common_cell::RegisterBus::ACCESS_ERROR;
         }
         if candidate.matched {
             global_result = candidate;
@@ -151,7 +151,7 @@ pub module DmaRegisterBank #(
             }
         }
         if port.request.address[1:0] != 0 {
-            selected.status = bus_cell::RegisterBus::ACCESS_ERROR;
+            selected.status = common_cell::RegisterBus::ACCESS_ERROR;
             selected.data   = 0;
         }
     }

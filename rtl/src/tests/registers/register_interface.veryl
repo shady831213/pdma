@@ -33,8 +33,8 @@ module DmaRegisterInterfaceTest {
     var wide_commands        : 'core RegisterState::Ring               [1];
     var wide_actions         : 'core RegisterState::ChannelActions     [1];
     var wide_resume_count    : 'core logic                        <32>    ;
-    inst port             : 'cfg  bus_cell::RegisterPort;
-    inst dut_frontend: bus_cell::AxiLiteRegisterFrontend::<B> (
+    inst port             : 'cfg  common_cell::RegisterPort;
+    inst dut_frontend: common_cell::AxiLiteRegisterFrontend::<B> (
         clk  : reg_clk,
         rst_n: reg_rst,
         axi  : axi    ,
@@ -66,8 +66,8 @@ module DmaRegisterInterfaceTest {
         configurations                 ,
         actions                        ,
     );
-    inst wide_port        : 'cfg  bus_cell::RegisterPort;
-    inst wide_dut_frontend: bus_cell::AxiLiteRegisterFrontend::<WideBus> (
+    inst wide_port        : 'cfg  common_cell::RegisterPort;
+    inst wide_dut_frontend: common_cell::AxiLiteRegisterFrontend::<WideBus> (
         clk  : reg_clk  ,
         rst_n: reg_rst  ,
         axi  : wide_axi ,
@@ -169,10 +169,10 @@ module DmaRegisterInterfaceTest {
             core_clk.next();
             reg_clk.next();
         }
-        $assert(axi.bvalid && (axi.bresp as 2) == bus_cell::RegisterBus::SUCCESS, "WRITE_RESPONSE");
+        $assert(axi.bvalid && (axi.bresp as 2) == common_cell::RegisterBus::SUCCESS, "WRITE_RESPONSE");
         $assert(commands[0].base == 64'h12345678, "OWNER_CHANGED");
         $assert(wide_commands[0].base == 64'h12345678, "WIDE_OWNER_CHANGED");
-        $assert(wide_axi.bvalid && (wide_axi.bresp as 2) == bus_cell::RegisterBus::SUCCESS, "WIDE_WRITE_RESPONSE");
+        $assert(wide_axi.bvalid && (wide_axi.bresp as 2) == common_cell::RegisterBus::SUCCESS, "WIDE_WRITE_RESPONSE");
         axi.bready = 1;
         reg_clk.next();
         axi.bready  = 0;

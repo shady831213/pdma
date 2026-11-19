@@ -10,19 +10,19 @@ module RegisterCdcTest {
     );
     var s_valid         : 's logic                          ;
     var s_ready         : 's logic                          ;
-    var s_request       : 's bus_cell::RegisterBus::Request ;
+    var s_request       : 's common_cell::RegisterBus::Request ;
     var s_response_valid: 's logic                          ;
     var s_response_ready: 's logic                          ;
-    var s_response      : 's bus_cell::RegisterBus::Response;
+    var s_response      : 's common_cell::RegisterBus::Response;
     var d_valid         : 'd logic                          ;
     var d_ready         : 'd logic                          ;
-    var d_request       : 'd bus_cell::RegisterBus::Request ;
+    var d_request       : 'd common_cell::RegisterBus::Request ;
     var d_response_valid: 'd logic                          ;
     var d_response_ready: 'd logic                          ;
-    var d_response      : 'd bus_cell::RegisterBus::Response;
+    var d_response      : 'd common_cell::RegisterBus::Response;
     inst dut: common_cell::DuplexMailbox #(
-        REQUEST_TYPE : bus_cell::RegisterBus::Request ,
-        RESPONSE_TYPE: bus_cell::RegisterBus::Response,
+        REQUEST_TYPE : common_cell::RegisterBus::Request ,
+        RESPONSE_TYPE: common_cell::RegisterBus::Response,
     ) (
         s_clk                  ,
         s_rst_n         : s_rst,
@@ -76,7 +76,7 @@ module RegisterCdcTest {
             d_clk.next();
             d_ready           = 0;
             d_response.data   = 64'h0123456789abcdef;
-            d_response.status = bus_cell::RegisterBus::ACCESS_ERROR;
+            d_response.status = common_cell::RegisterBus::ACCESS_ERROR;
             $assert(d_response_ready, "RESPONSE_CREDIT");
             d_response_valid = 1;
             d_clk.next();
@@ -84,7 +84,7 @@ module RegisterCdcTest {
             d_response.data  = 0;
             s_clk.next(8);
             $assert(s_response_valid && s_response.data == 64'h0123456789abcdef, "RESPONSE_SNAPSHOT");
-            $assert(s_response.status == bus_cell::RegisterBus::ACCESS_ERROR, "RESPONSE_STATUS");
+            $assert(s_response.status == common_cell::RegisterBus::ACCESS_ERROR, "RESPONSE_STATUS");
             s_clk.next(3);
             $assert(s_response_valid, "RESPONSE_HELD");
             s_response_ready = 1;

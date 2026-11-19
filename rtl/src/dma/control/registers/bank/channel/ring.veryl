@@ -5,7 +5,7 @@ pub module RingRegisters #(
 ) (
     clk           : input  clock                         ,
     rst_n         : input  reset_async_low               ,
-    request       : input  bus_cell::RegisterBus::Request,
+    request       : input  common_cell::RegisterBus::Request,
     commit        : input  logic                         ,
     locked        : input  logic                         ,
     blocked       : input  logic                         ,
@@ -123,7 +123,7 @@ pub module RingRegisters #(
                         || (capacity_access.write && next_capacity != state.capacity))) || pending >: next_capacity
                 || delta >: (if SOFTWARE_PRODUCER ? next_capacity - pending : pending) {
                 result.write  = 0;
-                result.status = bus_cell::RegisterBus::ACCESS_ERROR;
+                result.status = common_cell::RegisterBus::ACCESS_ERROR;
             }
         }
     }

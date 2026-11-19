@@ -1,5 +1,57 @@
 # Scenario-level verification checkpoints
 
+## AXI endpoint extraction — local review candidate
+
+The local `bus_cell` candidate was exercised with the DMA core and with an
+independent consumer. The latter carried a high 48-bit register address,
+48-bit memory address, six USER bits, an 11-bit tag and 128-bit read data
+through emitted SystemVerilog. Both native simulators passed the four endpoint
+tests and 24 DMA tests. An isolated checker test held a transaction stalled and
+detected a deliberate change to its payload.
+
+| DUT regression | Positive runs | Expected checker rejections |
+| --- | ---: | ---: |
+| 14 configurations from the preceding checkpoint | 448 | 112 |
+| Default two-channel profile with the AXI4 memory port | 32 | 8 |
+| Eight-channel synchronizer-delay stress | 16 | 8 |
+
+The shared endpoint preserved the zero-delay 16 KiB Copy measurement on both
+default channel counts and on the AXI4 variant: 2,048 cycles for 2,048 data
+beats in each direction, and 2,161 bus cycles from descriptor to Fence. The
+eight-channel build reproduced all 14 previously measured latency distributions
+at the same seed. All 256 eight-channel positive runs contributed to the merged
+coverage database, which hit all 18 PDMA scenario bins.
+
+| Channels | CDC raw / reviewed / unresolved | RDC raw / reviewed / unresolved |
+| ---: | ---: | ---: |
+| 2 | 66 / 66 / 0 | 1,517 / 1,517 / 0 |
+| 8 | 210 / 210 / 0 | 2,369 / 2,369 / 0 |
+
+Flattening the opaque tag and address attributes changes how the tool groups
+RDC findings. Expanding the reports to bit endpoints reproduced the previous
+64,486 and 105,010 source/sink pairs for two and eight channels respectively.
+Separate connectivity queries confirmed zero fanout at the affected unused
+sinks. The standalone register mailbox CDC run reported zero findings. These
+reviews are bound to the local dependency graph. A released dependency and
+lockfile require a fresh identity check.
+
+At RTL checkpoint `beb343fe` with the local `bus_cell` sources from
+`debfcf6`, all four control-budget synthesis profiles met the 1 GHz core
+and bus and 500 MHz register targets. The table compares final mapped
+results with the corresponding pre-extraction profile and technology inputs.
+
+| Profile | Logic area change | Vectorless power change | Worst setup slack |
+| --- | ---: | ---: | ---: |
+| 1 channel, 32-bit memory | +0.061% | -0.369% | 0 ps |
+| 2 channels, 64-bit memory | -0.340% | -0.651% | 0 ps |
+| 3 channels, 128-bit memory | +0.009% | +0.072% | 0 ps |
+| 8 channels, 64-bit memory | +0.006% | +0.179% | 0 ps |
+
+Each profile retained the same number of sequential cells as its baseline.
+The restored mapped databases passed the memory qualification and tightened-
+clock rejection checks. Power estimates use default activity. The RAM leaf
+models boundary loading only. Physical SRAM and routed timing remain open.
+
 ## 2026-11-19 core timing follow-up
 
 Each write-one action now takes its pulse directly from the decoded channel

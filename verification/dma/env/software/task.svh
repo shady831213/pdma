@@ -6,7 +6,9 @@ class pdma_task extends uvm_object;
     rand bit[31:0] fence_context, source_context, dest_context;
     int unsigned max_length=257;
     constraint geometry {
-        length inside {[1:max_length]}; source_lane inside {[0:7]}; dest_lane inside {[0:7]};
+        length inside {[1:max_length]};
+        source_lane < pdma_configuration::MEMORY_BEAT_BYTES;
+        dest_lane < pdma_configuration::MEMORY_BEAT_BYTES;
         source_offset inside {[0:31]}; dest_offset inside {[0:31]};
     }
     pdma_buffer source_buffer, dest_buffer, fence_buffer;

@@ -3,7 +3,10 @@ virtual class pdma_error_irq_test extends pdma_base_test;
     function new(string name,uvm_component parent); super.new(name,parent); endfunction
     virtual task run_scenario();
         pdma_task_flow flow_=env.task_flow();
-        pdma_task job=settings(96);
+        // The fault targets the first byte after the page boundary. Keep a
+        // second beat in range when the memory bus is wider than the payload.
+        localparam int unsigned BEAT_BYTES=pdma_configuration::MEMORY_BEAT_BYTES;
+        pdma_task job=settings(96>BEAT_BYTES ? 96 : 2*BEAT_BYTES);
         pdma_channel channel=flow_.channel;
         int delivered_before=channel.delivered;
         job.cross_page=1;

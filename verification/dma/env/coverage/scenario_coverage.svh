@@ -6,9 +6,9 @@ class pdma_scenario_coverage extends uvm_subscriber#(pdma_observation);
     covergroup scenarios with function sample(pdma_observation item);
         option.per_instance=1;
         outcome: coverpoint item.outcome;
-        length: coverpoint item.length {bins short_length={[0:16]}; bins medium_length={[17:64]}; bins long_length={[65:257]};}
-        source_alignment: coverpoint item.source_lane {bins aligned={0}; bins unaligned={[1:7]};}
-        dest_alignment: coverpoint item.dest_lane {bins aligned={0}; bins unaligned={[1:7]};}
+        length: coverpoint item.length {bins short_length={[0:16]}; bins medium_length={[17:64]}; bins long_length={[65:$]};}
+        source_alignment: coverpoint item.source_lane {bins aligned={0}; bins unaligned={[1:pdma_configuration::MEMORY_BEAT_BYTES-1]};}
+        dest_alignment: coverpoint item.dest_lane {bins aligned={0}; bins unaligned={[1:pdma_configuration::MEMORY_BEAT_BYTES-1]};}
         page_boundary: coverpoint item.cross_page;
         event_boundary: coverpoint item.event_cross_page iff(item.outcome==TASK_ERROR);
         fence_width: coverpoint item.fence_wide;

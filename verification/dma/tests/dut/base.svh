@@ -31,6 +31,14 @@ virtual class pdma_base_test extends uvm_test;
         }) `uvm_fatal("TASK_CONFIG","Cannot configure task")
         return job;
     endfunction
+    // Fault/replay scenarios mutate the source after a failed write. Every
+    // byte they mutate must belong to the single burst retained by the DUT.
+    function pdma_task single_burst_copy();
+        int unsigned target=pdma_configuration::MEMORY_BEAT_BYTES>64 ? pdma_configuration::MEMORY_BEAT_BYTES : 64;
+        pdma_task job=settings(target<pdma_configuration::COPY_BURST_BYTES ? target : pdma_configuration::COPY_BURST_BYTES);
+        job.payload_alignment=1<<$clog2(job.length);
+        return job;
+    endfunction
     task inject(bit wr,bit page,longint unsigned address);
         platform.fault_enabled=1; platform.fault_write=wr;
         platform.fault_page=page; platform.fault_address=address;

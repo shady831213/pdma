@@ -1,4 +1,5 @@
 pdma_aligned_copy_test
+pdma_last_lane_copy_test
 pdma_random_copy_test
 pdma_read_fault_test
 pdma_write_fault_test

@@ -3,10 +3,7 @@ virtual class pdma_fault_test extends pdma_base_test;
     function new(string name,uvm_component parent); super.new(name,parent); endfunction
     virtual task run_scenario();
         pdma_task_flow flow_=env.task_flow();
-        pdma_task job=settings(pdma_configuration::COPY_BURST_BYTES<64 ? pdma_configuration::COPY_BURST_BYTES : 64);
-        // Mutate only bytes retained by this one failed write, never unfetched successors.
-        // Round alignment up independently of a non-power-of-two burst length.
-        job.payload_alignment=1<<$clog2(job.length);
+        pdma_task job=single_burst_copy();
         flow_.open(job);
         inject(writing,1,fence_target ? job.fence_address : (writing ? job.dest_address : job.source_address));
         flow_.submit(); flow_.expect_result(TASK_FAULT);
@@ -30,9 +27,12 @@ class pdma_w_first_fault_test extends pdma_fault_test;
         super.new(name,parent); writing=1; fence_target=1;
     endfunction
     virtual function void build_phase(uvm_phase phase);
+        // Delay AW past the last W of the faulting Fence, including Fence64
+        // on a narrow bus. Payload burst capacity is independent of Fence size.
+        int unsigned beat_bytes=pdma_configuration::MEMORY_BEAT_BYTES;
+        int unsigned fence_beats=(8+beat_bytes-1)/beat_bytes;
         super.build_phase(phase);
-        // Deliberately longer than the configured maximum burst.
-        platform.write_address_delay=2*pdma_configuration::COPY_BURST_BEATS; platform.write_data_ready_delay=0;
+        platform.write_address_delay=fence_beats+2; platform.write_data_ready_delay=0;
         platform.delay_max=0;
     endfunction
     virtual task run_scenario();

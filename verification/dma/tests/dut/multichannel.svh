@@ -29,7 +29,7 @@ class pdma_multichannel_park_test extends pdma_base_test;
         pdma_task_flow flows[]=new[platform.channel_count];
         // Park every owner except the final peer, retaining a full write burst.
         foreach(flows[i]) begin
-            pdma_task job=settings(64); job.payload_alignment=64;
+            pdma_task job=single_burst_copy();
             flows[i]=env.task_flow(i); flows[i].open(job);
             if(i+1<flows.size()) inject(1,1,job.dest_address);
             else platform.fault_enabled=0;

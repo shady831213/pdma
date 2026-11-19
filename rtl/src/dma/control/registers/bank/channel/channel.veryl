@@ -116,7 +116,7 @@ pub module ChannelRegisters #(
         if candidate.matched {
             control_result = candidate;
         }
-        candidate = RegisterAccess::leaf(
+        candidate              = RegisterAccess::leaf(
             request,
             BASE + L::CONTROL_RECOVERY_RESUME_OFFSET,
             L::CONTROL_RECOVERY_RESUME_BYTES,
@@ -125,6 +125,7 @@ pub module ChannelRegisters #(
             L::CONTROL_RECOVERY_RESUME_WRITE,
             L::CONTROL_RECOVERY_RESUME_WRITABLE,
         );
+        actions.resume_request = commit && !blocked && candidate.write && candidate.value[0];
         if candidate.matched {
             control_result = candidate;
         }
@@ -164,7 +165,7 @@ pub module ChannelRegisters #(
         if candidate.matched {
             control_result = candidate;
         }
-        candidate = RegisterAccess::leaf(
+        candidate        = RegisterAccess::leaf(
             request,
             BASE + L::CONTROL_IRQ_TRAP_ACK_OFFSET,
             L::CONTROL_IRQ_TRAP_ACK_BYTES,
@@ -173,6 +174,7 @@ pub module ChannelRegisters #(
             L::CONTROL_IRQ_TRAP_ACK_WRITE,
             L::CONTROL_IRQ_TRAP_ACK_WRITABLE,
         );
+        actions.trap_ack = commit && !blocked && candidate.write && candidate.value[0];
         if candidate.matched {
             control_result = candidate;
         }
@@ -206,12 +208,8 @@ pub module ChannelRegisters #(
         if candidate.matched {
             result = candidate;
         }
-        actions = '0;
-        if commit && result.write && result.value[0] {
-            actions.reset_request  = request.address == ADMIN_BASE + ChannelAdminLayout::RESET_OFFSET;
-            actions.resume_request = request.address == BASE + L::CONTROL_RECOVERY_RESUME_OFFSET;
-            actions.trap_ack       = request.address == BASE + L::CONTROL_IRQ_TRAP_ACK_OFFSET;
-        }
+        // The decoded admin leaf commits independently of the MMIO response mux.
+        actions.reset_request = commit && candidate.write && candidate.value[0];
     }
     always_ff (clk, rst_n) {
         if_reset {

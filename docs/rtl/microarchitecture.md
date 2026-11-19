@@ -1,8 +1,8 @@
 # DMA Copy/Fence 微架构：与当前 RTL 对应
 
 本文描述 `DmaCopy` 的当前源码组织。2026-11-18 的配置与职责调整已通过功能
-矩阵及 2/8 channel CDC/RDC 检查；默认 2 channel 和窄接口配置的综合已通过，
-8 channel 和宽接口综合仍在运行。各阶段证据见
+矩阵及 2/8 channel CDC/RDC 检查。检查点 `4de9cb7f` 的默认 2、8 channel
+和窄接口配置满足综合 setup 目标，3 channel 的 128-bit 内存口配置差 43.2ps。各阶段证据见
 [验证记录](../../verification/dma/results.md)，旧源码的结果不作为新版资格证据。
 本文的路径采用整理后的主工作区。体系结构语义以
 [系统规范](../../model/modeling/docs/spec.md)及

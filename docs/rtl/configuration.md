@@ -126,16 +126,18 @@ own snapshot and qualification results.
 Functional checks cover every count in 1..8, the default 64-bit memory profile,
 a 64-bit register/128-bit memory profile with three channels and three slots, and
 a 32-bit memory profile with one channel, one slot and three-beat bursts. The
-ten configurations pass 391 positive scenario runs plus eight checker negatives
-per configuration. The default 2/8-channel throughput comparison retains the
+ten configurations passed 408 positive scenario runs and rejected eight checker
+mutations per configuration on the November 19 testbench. The default 2/8-channel throughput comparison retains the
 baseline's zero payload bubbles and measured command latency. Fresh source-bound
 CDC/RDC gates pass at both counts with zero unresolved findings. See the
 [verification record](../../verification/dma/results.md) for exact coverage.
 
-New synthesis and mapped timing checks pass for the default two-channel and narrow
-one-channel profiles; the two-channel restored-database audits also pass. Default
-eight-channel and wide-profile qualification are still running at this checkpoint.
-The earlier mapped results must not be relabeled as results for these changes. Widths above
-128 bits and the maximum burst setting have elaboration checks only. The
+At checkpoint `4de9cb7f`, the default two- and eight-channel profiles and the
+narrow one-channel profile met synthesized setup. Both default profiles passed
+the restored-database audits. The three-channel profile with 128-bit memory
+missed core setup by 43.2ps. Subsequent focused functional regressions
+exercise 256-, 512- and 1024-bit memory ports and a 256-beat burst configuration.
+The [verification record](../../verification/dma/results.md) lists the tested
+combinations. These four profiles have no synthesis qualification. The
 capacitance-only RAM boundary still excludes physical SRAM area, power and
 intrinsic timing. New profile legality is not physical signoff.

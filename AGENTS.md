@@ -72,8 +72,12 @@ It is not the complete
 DMA execution/atomic/full-bus-profile implementation. The 2026-11-18 configuration
 checkpoint passes functional checks for every count in 1..8 and representative
 32/128-bit memory profiles, with fresh source-bound CDC/RDC gates at 2 and 8.
-New control-budget synthesis passes at default 2 channels and the narrow 1-channel
-profile; default 8-channel and wide-profile synthesis are still running.
+At checkpoint `4de9cb7f`, control-budget synthesis passes at default 2 and 8
+channels and at the narrow 1-channel profile. The 3-channel wide profile misses
+core setup by 43.2ps. The November 19 update passes 448 functional runs across
+14 configurations, rejects 112 checker mutations and passes fresh CDC/RDC
+reviews at 2 and 8 channels. Narrow one-channel synthesis meets setup on the
+revised RTL. The default 2/8-channel and wide 3-channel updates are pending.
 The earlier 2026-11-16 implementation results retain their original source identity;
 see `docs/rtl/multichannel.md` and `verification/dma/results.md`. Aligned long-copy throughput
 has its own zero-delay qualification; other profiles remain open. See
@@ -95,9 +99,8 @@ at 1GHz, register clock at 500MHz, still three asynchronous domains. ULVT is
 forbidden; qualify library selection, mapping exclusions and actual mapped-cell
 identities. Both CDC and RDC must use VC SpyGlass with PDMA-owned constraints
 and reviewed findings. The Genus and VC SpyGlass flows are implemented;
-the current default 2-channel and narrow 1-channel control-budget logic setup estimates
-meet the target with zero slack margin. The new 8-channel and wide-profile results
-are pending, not inherited from the earlier implementation. SRAM area/power and intrinsic timing remain excluded
+the default 2- and 8-channel and narrow 1-channel control-budget logic setup
+estimates at `4de9cb7f` met the target with zero slack margin. SRAM area/power and intrinsic timing remain excluded
 and unqualified. The
 redundant mailbox startup gates are removed; CDC/RDC reviewed gates accept only
 source-bound, path-specific findings, including exact unconnected/no-clock sinks

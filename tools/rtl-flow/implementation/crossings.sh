@@ -12,7 +12,9 @@ main() {
     pdma_environment static
     pdma_impl_prepare "$snapshot" "$run"
     cp "$root/tools/rtl-flow/implementation/vc/"*.tcl "$run/"
-    "${PDMA_STATIC_TOOL:-vc_static_shell}" -id > "$run/tool-version.txt" 2>&1
+    # The complete version report participates in the review identity. Use a
+    # portable locale so child shells do not insert locale warnings into it.
+    LC_ALL=C "${PDMA_STATIC_TOOL:-vc_static_shell}" -id > "$run/tool-version.txt" 2>&1
     marker=PDMA_STATIC_CLEAN
     if [[ -n ${PDMA_STATIC_REVIEW:-} ]]; then
         cp "$PDMA_STATIC_REVIEW" "$run/static-review.tcl"

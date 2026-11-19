@@ -1,5 +1,81 @@
 # Scenario-level verification checkpoints
 
+## 2026-11-19 core timing follow-up
+
+Each write-one action now takes its pulse directly from the decoded channel
+register. The Copy window selects a forwarding candidate from the returned row
+and gates its transfer with the existing stop/valid handshake. Queue depths,
+clock periods and pipeline cuts are unchanged.
+
+Both native backends passed all 27 tests. A differential simulation compared
+the previous and revised channel register modules on identical inputs across
+114,688 combinations of address, access width, write strobe and lifecycle
+controls. All response, state and action outputs matched. The admin reset
+still fired on valid writes while work-register writes were blocked.
+
+| Channels | CDC raw / reviewed / unresolved | RDC raw / reviewed / unresolved |
+| --- | --- | --- |
+| 2 | 66 / 66 / 0 | 1805 / 1805 / 0 |
+| 8 | 210 / 210 / 0 | 2819 / 2819 / 0 |
+
+The new RDC reports remove 358 and 1,352 source-to-sink paths respectively.
+Comparison of the native endpoint and reset fields found no added paths.
+Fresh connectivity queries found zero endpoint fanout on each affected sink
+and confirmed that the selected channel and owner registers still have consumers.
+All seven source-bound review tests passed, including the stale-identity and
+missing-sink rejections.
+
+At 128-bit memory width, the original testbench could not generate a Copy
+starting on lane 15. The random task and its alignment coverage now use the
+configured beat width. The last-lane scenario checks the allocated addresses
+and the copied bytes with the source and destination taking turns on that lane.
+At 1024 bits it reaches lane 127. Error tests span the injected address after
+the page boundary, and fault-replay tests change only the bytes retained by
+the failed write. Delaying the Fence write address by the Fence64 beat count plus
+two cycles exercises W-before-AW even with a payload capacity of 256 beats.
+
+A separate page-aligned 2KiB Copy on the 64-bit port produced one 256-beat
+read and one 256-beat write. Both directions sustained eight bytes per cycle
+within that burst. The scoreboard observed the Fence and verified destination
+bytes and guard bytes. This single-burst observation does not measure the gap
+between consecutive 256-beat bursts.
+
+The default eight-channel build passed 32 scenarios at eight seeds each. All
+256 positive runs contributed to the merged coverage database. The PDMA scenario
+group hit 18/18 bins, and eight independent checker mutations were rejected.
+The separate synchronizer-delay build passed 16 scenarios and rejected eight
+mutations. At the matched default two- and eight-channel settings, the 16KiB
+zero-delay Copy retained 2,048 beats in 2,048 cycles per direction and 2,161
+cycles from descriptor to Fence. The eight-channel timing probe measured 4.18ns
+from core issue to endpoint and 4.82ns from return FIFO to core.
+
+Across the default profiles for channel counts 1 through 8 and the narrow
+one-channel and wide three-channel profiles, the final testbench passed 408
+positive runs and rejected 80 checker mutations. This total includes the 256
+eight-channel runs above. The four limit profiles below bring the total to
+448 positive runs and 112 expected rejections across 14 configurations.
+
+Four additional profiles each passed ten Copy, lane, register, error and
+fault-recovery scenarios and rejected all eight checker mutations:
+
+| Channels | Memory width | Maximum beats per burst | Slots per channel |
+| ---: | ---: | ---: | ---: |
+| 3 | 256 bits | 3 | 3 |
+| 2 | 512 bits | 8 | 5 |
+| 1 | 1024 bits | 1 | 1 |
+| 1 | 64 bits | 256 | 1 |
+
+All four used 32-bit registers and eight read and write credits. These are
+functional results; they establish no PPA or sustained-throughput guarantee
+for the four profiles.
+
+The revised narrow one-channel design met synthesized setup with 0ps reported
+worst slack, 6,850.068 logic cell area and 20,938 mapped instances. The minimum
+reported crossing and RAM boundary margins were 262.4ps and 277.6ps respectively.
+The default two- and eight-channel and 128-bit three-channel synthesis runs
+are pending at this checkpoint. The RAM estimate excludes intrinsic SRAM timing,
+area and power.
+
 ## 2026-11-18 configurable ownership boundaries
 
 This candidate separates `DmaControl`, `CopyEngine` and `DmaMemoryBridge` without
@@ -68,12 +144,13 @@ implementation-profile checks reject 27 invalid configurations and six invalid
 channel counts while accepting every count in 1..8. Widths 256/512/1024 and the
 256-beat boundary have elaboration evidence only, not functional or PPA closure.
 
-New Genus control-budget results are available for two configurations. Core/bus
+Genus control-budget synthesis of checkpoint `4de9cb7f` met setup for three configurations. Core/bus
 remain at 1GHz, registers at 500MHz, with no ULVT and no relaxed crossing budgets:
 
 | Profile | Worst setup slack | Mapped instances | Sequential instances | Logic cell area (library units) | Minimum crossing slack | Minimum RAM boundary slack |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Default, 2 channels | 0ps | 80,292 | 23,571 | 30,423.749 | 224.9ps | 75.6ps |
+| Default, 8 channels | 0ps | 158,771 | 39,913 | 57,202.532 | 199.7ps | 102.2ps |
 | Narrow, 1 channel | 0ps | 20,360 | 4,604 | 6,718.685 | 262.3ps | 223.2ps |
 
 Each passes eight crossing groups, four held-payload checks and eight local
@@ -83,9 +160,15 @@ two-channel settings and technology inputs, logic area increases **2.01%** from
 of cost-free parameterization. The narrow profile has different resources and is
 not a like-for-like area improvement over that baseline.
 
-The two-channel restored database also passes the RAM/load/boundary and hierarchy
-audits, and correctly rejects a tightened core clock. Eight-channel and wide-profile
-mapping, followed by the eight-channel restored-database audits, are still running.
+At eight channels, logic area decreased **14.26%** from 66,717.573 under the
+matched constraints. Both default-profile restored databases passed the RAM, load,
+boundary and hierarchy audits and rejected the tightened core clock.
+
+The three-channel profile with 64-bit registers and a 128-bit memory port missed
+core setup by **43.2ps**. Its bus and register clock groups met setup, and all
+mapped crossing checks passed. In 18 of the 20 worst paths the register request
+decode fed the core-side memory-request FIFO. The other two paths ran from
+event-ring capacity to channel fatal state.
 Physical SRAM area, power and intrinsic timing remain outside
 the control-budget model. Zero worst slack provides no extra timing margin.
 

@@ -2,7 +2,7 @@
 module DmaRegisterBankTest {
     inst clk : $tb::clock_gen #( period: 10 );
     inst rst : $tb::reset_gen ( clk );
-    inst port: RegisterPort;
+    inst port: bus_cell::RegisterPort;
     var global_reset_busy    : logic                               ;
     var global_fatal         : logic                               ;
     var global_clear         : logic                               ;
@@ -78,7 +78,10 @@ module DmaRegisterBankTest {
         port.request_valid   = 1;
         clk.next();
         port.request_valid = 0;
-        $assert(port.response.status == RegisterBus::OKAY && commands[1].base == 32'h1000, "CHANNEL_ONE_BASE");
+        $assert(
+            port.response.status == bus_cell::RegisterBus::SUCCESS && commands[1].base == 32'h1000,
+            "CHANNEL_ONE_BASE",
+        );
         $assert(commands[0].base == 0, "PEER_ISOLATION");
         port.response_ready = 1;
         clk.next();
@@ -100,7 +103,10 @@ module DmaRegisterBankTest {
         port.request_valid   = 1;
         clk.next();
         port.request_valid = 0;
-        $assert(port.response.status == RegisterBus::SLVERR && commands[1].base == 32'h1000, "LOCK_REJECTS_CHANGE");
+        $assert(
+            port.response.status == bus_cell::RegisterBus::ACCESS_ERROR && commands[1].base == 32'h1000,
+            "LOCK_REJECTS_CHANGE",
+        );
         clk.next();
         // Channel-1 reset is an action, not automatic storage cleanup or a fabricated completion.
         port.request.address = 24;

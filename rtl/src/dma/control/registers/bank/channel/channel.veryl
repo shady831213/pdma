@@ -3,24 +3,24 @@ pub module ChannelRegisters #(
     param BASE      : u32 = DmaRegistersLayout::channels_offset(1) as u32                                    ,
     param ADMIN_BASE: u32 = (DmaRegistersLayout::admin_offset(1) + DmaAdminLayout::channels_offset(1)) as u32,
 ) (
-    clk                  : input  clock                        ,
-    rst_n                : input  reset_async_low              ,
-    request              : input  RegisterBus::Request         ,
-    commit               : input  logic                        ,
-    clear                : input  logic                        ,
-    global_blocked       : input  logic                        ,
-    maintenance          : input  logic                        ,
-    status               : input  RegisterState::ChannelStatus ,
-    command_advance      : input  logic                        ,
-    event_advance        : input  logic                        ,
-    command_advance_ready: output logic                        ,
-    event_advance_ready  : output logic                        ,
-    event_geometry       : output logic                        ,
-    command              : output RegisterState::Ring          ,
-    events               : output RegisterState::Ring          ,
-    configuration        : output RegisterState::ChannelConfig ,
-    actions              : output RegisterState::ChannelActions,
-    result               : output RegisterAccess::Result       ,
+    clk                  : input  clock                         ,
+    rst_n                : input  reset_async_low               ,
+    request              : input  bus_cell::RegisterBus::Request,
+    commit               : input  logic                         ,
+    clear                : input  logic                         ,
+    global_blocked       : input  logic                         ,
+    maintenance          : input  logic                         ,
+    status               : input  RegisterState::ChannelStatus  ,
+    command_advance      : input  logic                         ,
+    event_advance        : input  logic                         ,
+    command_advance_ready: output logic                         ,
+    event_advance_ready  : output logic                         ,
+    event_geometry       : output logic                         ,
+    command              : output RegisterState::Ring           ,
+    events               : output RegisterState::Ring           ,
+    configuration        : output RegisterState::ChannelConfig  ,
+    actions              : output RegisterState::ChannelActions ,
+    result               : output RegisterAccess::Result        ,
 ) {
     alias package L = ChannelBlockLayout;
     var command_result  : RegisterAccess::Result    ;
@@ -186,7 +186,7 @@ pub module ChannelRegisters #(
                 || (request.address == BASE + L::CONTROL_CONFIG_RING_CONTEXT_OFFSET && control_result.value
                     != configuration.ring_context as u64 && locked) {
                 control_result.write  = 0;
-                control_result.status = RegisterBus::SLVERR;
+                control_result.status = bus_cell::RegisterBus::ACCESS_ERROR;
             }
         }
         result = control_result;

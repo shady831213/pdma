@@ -33,6 +33,8 @@ def resolve(overrides=None):
         raise ValueError('channels must be in 1..8')
     if values['register_bits'] not in (32, 64):
         raise ValueError('register_bits must be 32 or 64')
+    if values['memory_axi_version'] not in (4, 5):
+        raise ValueError('memory_axi_version must be 4 or 5')
     if values['memory_bits'] not in (32, 64, 128, 256, 512, 1024):
         raise ValueError('memory_bits must be an AXI width from 32 to 1024')
     for key in ('request_depth', 'receipt_depth'):
@@ -90,13 +92,15 @@ def project(destination, values):
         + ''.join(f'`define PDMA_{k} {values[v]}\n' for k, v in defines.items()) + '`endif\n')
     r = f'$std::axi4_lite_pkg::<32, {values["register_bytes"]}, 1>'
     b = f'$std::axi4_pkg::<64, {values["memory_bytes"]}, 1, 35, 1, 2, 35, 2>'
-    ports = '''reg_clk: input 'registers clock, reg_rst_n: input 'registers reset_async_low,
+    axi5 = values['memory_axi_version'] == 5
+    atop_port = "    awatop: output 'bus logic<6>,\n" if axi5 else ''
+    atop_connection = 'awatop' if axi5 else 'awatop: _'
+    ports = f'''reg_clk: input 'registers clock, reg_rst_n: input 'registers reset_async_low,
     core_clk: input 'core clock, core_rst_n: input 'core reset_async_low,
     bus_clk: input 'bus clock, bus_rst_n: input 'bus reset_async_low,
     cfg: modport 'registers $std::axi4_lite_if::<REG>::slave,
     memory: modport 'bus $std::axi4_if::<BUS>::master,
-    awatop: output 'bus logic<6>,
-    irq: output 'core logic<CHANNELS>, irq_ready: input 'core logic<CHANNELS>,
+{atop_port}    irq: output 'core logic<CHANNELS>, irq_ready: input 'core logic<CHANNELS>,
     fatal_irq: output 'core logic, fatal_irq_ready: input 'core logic, fatal: output 'core logic,'''
     ports = ports.replace('REG', r).replace('BUS', b).replace('CHANNELS', str(values['channels']))
     knobs = {'CHANNEL_COUNT':'channels', 'READ_OUTSTANDING':'read_outstanding',
@@ -110,7 +114,7 @@ pub module DmaConfigured (
         {parameters},
     ) (
         reg_clk, reg_rst_n, core_clk, core_rst_n, bus_clk, bus_rst_n,
-        cfg, memory, awatop, irq, irq_ready, fatal_irq, fatal_irq_ready, fatal,
+        cfg, memory, {atop_connection}, irq, irq_ready, fatal_irq, fatal_irq_ready, fatal,
     );
 }}
 '''

@@ -27,15 +27,13 @@ firmware RTL 仍未在这个切片实现。
 
 ### 1.1 目录是职责分组，不全是实例包含关系
 
-`control/registers/bus.veryl` 声明的是 **RegisterBus 请求/响应类型和 RegisterPort**：
-它没有 AXI 引脚、仲裁器、FIFO 或状态寄存器，也不是系统总线。放在寄存器访问
-职责组内合理，但文件名 `bus` 不足以表达“内部寄存器事务协议”，不能据此推断
-DMA 的所有 bus 都从属于 registers。本文区分以下三种关系：
+`bus_cell::RegisterPort` 定义字节地址、写使能、数据和访问结果。总线前端拥有 AXI 握手状态，
+DMA 的 channel 和 ring 拥有寄存器及读写副作用。模块实例、接口类型和共享算法的关系如下。
 
 | 关系 | 例子 | 对硬件的含义 |
 | --- | --- | --- |
 | 实例包含 | `control.csr.owners.channels[i].owner.command_ring` | 真正的 module instance 层次 |
-| 类型/接口依赖 | RegisterFrontend 和 DmaRegisterBank 使用 RegisterPort | 同一协议，两端各有自己的实例/状态，不是类型声明拥有使用者 |
+| 类型/接口依赖 | AxiLiteRegisterFrontend 和 DmaRegisterBank 使用 RegisterPort | 同一协议，两端各有自己的实例/状态，不是类型声明拥有使用者 |
 | 共享算法 | 多处调用 `common_cell::RoundRobin::select` | 每个调用者拥有自己的候选与授权状态，没有一个隐藏的全局仲裁 module |
 
 上一次目录图只展示了部分包含关系，不能替代这里的协议、状态和共享资源关系。
@@ -49,9 +47,9 @@ DMA 的所有 bus 都从属于 registers。本文区分以下三种关系：
 DmaConfigured                               由静态 profile 生成，无状态
 └─ dma: DmaCopy                              copy.veryl
    ├─ channels: DmaChannels                  control/interface.veryl，连线接口
+   ├─ frontend: bus_cell::AxiLiteRegisterFrontend
    ├─ control: DmaControl                    control/control.veryl
    │  └─ csr: DmaRegisterInterface           control/registers/interface.veryl
-   │     ├─ frontend: RegisterFrontend
    │     ├─ crossing: DuplexMailbox
    │     └─ owners: DmaRegisterBank
    │        └─ channels[i].owner: ChannelRegisters
@@ -60,12 +58,13 @@ DmaConfigured                               由静态 profile 生成，无状态
    ├─ engine: CopyEngine                     execution/engine.veryl
    │  └─ copy: CopyWindow                    execution/copy/window.veryl
    │     └─ buffers: Ram1R1W                 共用的、按 channel 保留行的 RAM
-   └─ transport: DmaMemoryBridge             memory/bridge.veryl
-      ├─ request_crossing: AsyncQueue
-      ├─ response_crossing: AsyncQueue
-      └─ endpoint: CopyMemoryEndpoint
-         ├─ reader: CopyReadEndpoint
-         ├─ writer: CopyWriteEndpoint
+   ├─ transport: DmaMemoryCrossing           memory/crossing.veryl
+   │  ├─ request_crossing: AsyncQueue
+   │  └─ response_crossing: AsyncQueue
+   └─ endpoint: CopyMemoryEndpoint           memory/axi.veryl，编码请求属性并解释响应
+      └─ master: bus_cell::AxiMemoryMaster
+         ├─ reader: AxiMemoryRead
+         ├─ writer: AxiMemoryWrite
          └─ result: ReadyValidSlice
 ```
 
@@ -74,8 +73,7 @@ DmaConfigured                               由静态 profile 生成，无状态
 [channel owner](../../rtl/src/dma/control/registers/bank/channel/channel.veryl)、
 [ring owner](../../rtl/src/dma/control/registers/bank/channel/ring.veryl)、[共享引擎][engine]、
 [burst window][window]、[内存端点][endpoint]、
-[read lane](../../rtl/src/dma/memory/endpoint/read.veryl)、
-[write lane](../../rtl/src/dma/memory/endpoint/write.veryl)。
+共享库的 `bus_cell/src/memory/axi/{read,write}.veryl`。
 
 协议与公共声明入口：
 [RegisterBus/RegisterPort][register-protocol]、[RegisterState][register-state]、
@@ -191,11 +189,11 @@ control-budget 综合只给 RAM 保留边界负载模型；不能把 placeholder
 
 | 位置/代码 | 候选 | 选择规则 | 何时前进/保持 |
 | --- | --- | --- | --- |
-| [RegisterFrontend][frontend]：`choose_write/dispatch/prefer_read` | 配对完成的 AW+W 与 AR | 双方都有时按 prefer_read 交替；单方就绪即可选 | dispatch 更新偏好；一次只推进一个内部 register operation |
+| [AxiLiteRegisterFrontend][frontend]：`choose_write/dispatch/prefer_read` | 配对完成的 AW+W 与 AR | 双方都有时按 prefer_read 交替；单方就绪即可选 | dispatch 更新偏好；一次只推进一个内部 register operation |
 | [CopyEngine][engine]：`eligible/choice/chosen` | 合法 Idle 新任务、可运行 Copy、待重试 FenceWrite | `RoundRobin<8>::select(eligible,cursor)`；超出实例数的 bit 恒零 | grant 时锁存 owner，并按实际 C 回绕 cursor；健康 command 保持授权 |
 | [CopyWindow][window]：`read_choice/write_choice` | 当前 channel 的 Read/Write 行 | 从退休 head 起找第一个对应状态行 | head 只在按序写退休时前进；这是有序优先选择，不是每 cycle 轮换 slot |
 | [CopyWindow][window]：`selected_slot/memory.valid` | prepared write、可直接转发的 R、候选读 | prepared write 优先；可用返回直通其次；然后发读 | 写数据尚在同步 RAM 加载中时，可继续发其它读；stop_issue 关闭所有新发射 |
-| [CopyMemoryEndpoint][endpoint]：`selected/cursor/result` | reader receipt、writer receipt | 2 路 RR | 只有合并入口实际握手才前进；result 寄存器负责稳定保持 |
+| `bus_cell::AxiMemoryMaster`：`selected/cursor/result` | reader receipt、writer receipt | 2 路 RR | 只有合并入口实际握手才前进；result 寄存器负责稳定保持 |
 
 寄存器 bank 的 `matched` 选择是**地址译码**，地址窗口互斥，不是多个请求者争抢
 一个资源，因此不应叫仲裁。
@@ -622,10 +620,10 @@ formal signoff。既有 setup 收敛是控制预算下的实现证据，不替�
 [engine]: ../../rtl/src/dma/execution/engine.veryl
 [command]: ../../rtl/src/dma/execution/command.veryl
 [window]: ../../rtl/src/dma/execution/copy/window.veryl
-[register-protocol]: ../../rtl/src/dma/control/registers/bus.veryl
+[register-protocol]: https://github.com/shady831213/my-veryl-cells
 [register-state]: ../../rtl/src/dma/control/registers/state.veryl
 [access]: ../../rtl/src/dma/control/registers/access.veryl
-[frontend]: ../../rtl/src/dma/control/registers/frontend.veryl
+[frontend]: https://github.com/shady831213/my-veryl-cells
 [memory]: ../../rtl/src/dma/memory/interface.veryl
-[endpoint]: ../../rtl/src/dma/memory/endpoint/endpoint.veryl
+[endpoint]: ../../rtl/src/dma/memory/axi.veryl
 [layout]: ../../rtl/src/dma/layout.veryl

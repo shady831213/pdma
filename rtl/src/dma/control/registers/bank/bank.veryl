@@ -7,7 +7,7 @@ pub module DmaRegisterBank #(
 ) (
     clk                  : input   clock                                                       ,
     rst_n                : input   reset_async_low                                             ,
-    port                 : modport RegisterPort::slave                                         ,
+    port                 : modport bus_cell::RegisterPort::slave                               ,
     global_reset_busy    : input   logic                                                       ,
     global_fatal         : input   logic                                                       ,
     global_clear         : input   logic                                                       ,
@@ -26,29 +26,29 @@ pub module DmaRegisterBank #(
     configurations       : output  RegisterState::ChannelConfig                 [CHANNEL_COUNT],
     actions              : output  RegisterState::ChannelActions                [CHANNEL_COUNT],
 ) {
-    const CHANNEL_BASE   : u32                                    = BASE_ADDR
+    const CHANNEL_BASE   : u32                                             = BASE_ADDR
         + DmaRegistersLayout::channels_offset(CHANNEL_COUNT as u64) as u32;
-    const ADMIN_BASE     : u32                                    = BASE_ADDR
+    const ADMIN_BASE     : u32                                             = BASE_ADDR
         + DmaRegistersLayout::admin_offset(CHANNEL_COUNT as u64) as u32;
-    const CONTROL_BASE   : u32                                    = ADMIN_BASE
+    const CONTROL_BASE   : u32                                             = ADMIN_BASE
         + DmaAdminLayout::control_offset(CHANNEL_COUNT as u64) as u32;
-    const DISCOVERY_BASE : u32                                    = BASE_ADDR
+    const DISCOVERY_BASE : u32                                             = BASE_ADDR
         + DmaRegistersLayout::discovery_offset(CHANNEL_COUNT as u64) as u32;
-    const CAPABILITIES   : u64                                    = ((if ATOMIC32 ? 64'd1 : 64'd0)
+    const CAPABILITIES   : u64                                             = ((if ATOMIC32 ? 64'd1 : 64'd0)
             << DmaDiscoveryLayout::CAPABILITIES_ATOMIC32_LSB)
         | ((if ATOMIC64 ? 64'd1 : 64'd0) << DmaDiscoveryLayout::CAPABILITIES_ATOMIC64_LSB);
-    let   fatal_value    : u64                                    = (if global_fatal ?
+    let   fatal_value    : u64                                             = (if global_fatal ?
             DmaControlLayout::FATAL_CODE_INTERNAL
         :
             DmaControlLayout::FATAL_CODE_NONE
         ) << DmaControlLayout::FATAL_CODE_LSB;
-    let   commit         : logic                                  = port.request_valid && port.request_ready;
-    var   channel_results: RegisterAccess::Result [CHANNEL_COUNT];
-    var   selected       : RegisterAccess::Result                ;
-    var   global_result  : RegisterAccess::Result                ;
-    var   candidate      : RegisterAccess::Result                ;
-    var   response_valid : logic                                 ;
-    var   response       : RegisterBus::Response                 ;
+    let   commit         : logic                                           = port.request_valid && port.request_ready;
+    var   channel_results: RegisterAccess::Result          [CHANNEL_COUNT];
+    var   selected       : RegisterAccess::Result                         ;
+    var   global_result  : RegisterAccess::Result                         ;
+    var   candidate      : RegisterAccess::Result                         ;
+    var   response_valid : logic                                          ;
+    var   response       : bus_cell::RegisterBus::Response                ;
 
     for i in 0..CHANNEL_COUNT :channels {
         inst owner: ChannelRegisters #(
@@ -114,7 +114,7 @@ pub module DmaRegisterBank #(
         );
         if candidate.write && (global_reset_busy || global_clear) {
             candidate.write  = 0;
-            candidate.status = RegisterBus::SLVERR;
+            candidate.status = bus_cell::RegisterBus::ACCESS_ERROR;
         }
         if candidate.matched {
             global_result = candidate;
@@ -151,7 +151,7 @@ pub module DmaRegisterBank #(
             }
         }
         if port.request.address[1:0] != 0 {
-            selected.status = RegisterBus::SLVERR;
+            selected.status = bus_cell::RegisterBus::ACCESS_ERROR;
             selected.data   = 0;
         }
     }

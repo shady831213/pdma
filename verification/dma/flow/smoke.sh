@@ -16,9 +16,10 @@ main() {
     cd "$run"
     cp "$root/verification/dma/tests/minimal_copy.sv" bench.sv
     cp "$root/verification/dma/tb/generated/contract_records.sv" records.sv
-    sha256sum bench.sv records.sv "$snapshot/snapshot.sha256" > inputs.sha256
+    cp "$root/verification/dma/tb/control_if.sv" control_if.sv
+    sha256sum bench.sv records.sv control_if.sv "$snapshot/snapshot.sha256" > inputs.sha256
     pdma_execute "${PDMA_COMPILE_TIMEOUT:-600}" compiler-console.log "${PDMA_SIM_COMPILER:-vcs}" \
-        -full64 -sverilog -timescale=1ns/1ps -f "$snapshot/sources.f" records.sv bench.sv \
+        -full64 -sverilog -timescale=1ns/1ps -f "$snapshot/sources.f" "+incdir+$snapshot" records.sv control_if.sv bench.sv \
         -top MinimalCopyTest -o simv -l compile.log
     pdma_execute "${PDMA_RUN_TIMEOUT:-120}" simulation-console.log ./simv -l simulation.log
     pdma_check_log simulation.log PDMA_MINIMAL_SV_PASS

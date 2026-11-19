@@ -2,7 +2,8 @@
 // Independent RTL oracle: free-running clocks and AXI handshakes, no DUT internals.
 module MinimalCopyTest;
     import pdma_contract_records::*;
-    localparam int WORD_BYTES=8, BURST_BYTES=64, COPY_BYTES=128, RING_CAPACITY=4;
+    localparam int WORD_BYTES=8, BURST_BYTES=WORD_BYTES*`PDMA_BURST_BEATS;
+    localparam int COPY_BYTES=128, RING_CAPACITY=4;
     localparam int RING_BYTES=RING_CAPACITY*COMMAND_SIZE;
     localparam int SOURCE_ADDRESS='h200, DEST_ADDRESS='h300, FENCE_ADDRESS='h380;
     localparam int RING_CONTEXT=7, SOURCE_CONTEXT=11, DEST_CONTEXT=13;
@@ -11,11 +12,11 @@ module MinimalCopyTest;
     always #7 core_clk = ~core_clk;
     always #4 bus_clk = ~bus_clk;
     logic reg_rst_n = 0, core_rst_n = 0, bus_rst_n = 0;
-    __std___axi4_lite_if____std___axi4_lite_pkg__32__4__1 cfg();
-    __std___axi4_if____std___axi4_pkg__64__8__1__pdma_rtl_CopyMemory_USER_BITS__1__2__pdma_rtl_CopyMemory_USER_BITS__2 memory();
-    logic [5:0] awatop;
-    logic irq, fatal;
-    pdma_rtl_DmaCopy dut(.*,.irq_ready(1'b1),.fatal_irq(),.fatal_irq_ready(1'b1));
+    pdma_control_if control(reg_clk, core_clk, bus_clk);
+    assign control.reg_rst_n = reg_rst_n;
+    assign control.core_rst_n = core_rst_n;
+    assign control.bus_rst_n = bus_rst_n;
+    `include "dut_binding.svh"
     logic [63:0] words[0:127];
     logic reading = 0, aw_seen = 0, w_seen = 0, b_pending = 0;
     logic hold_aw = 0, hold_b = 0;
@@ -117,9 +118,9 @@ module MinimalCopyTest;
         data = cfg.rdata;
         @(negedge reg_clk); cfg.rready = 0;
     endtask
-    localparam int CHANNEL = pdma_rtl_DmaRegistersLayout::channels_offset(1);
-    localparam int RESET = pdma_rtl_DmaRegistersLayout::admin_offset(1)
-        + pdma_rtl_DmaAdminLayout::channels_offset(1);
+    localparam int CHANNEL = pdma_rtl_DmaRegistersLayout::channels_offset(`PDMA_CHANNEL_COUNT);
+    localparam int RESET = pdma_rtl_DmaRegistersLayout::admin_offset(`PDMA_CHANNEL_COUNT)
+        + pdma_rtl_DmaAdminLayout::channels_offset(`PDMA_CHANNEL_COUNT);
     function automatic Command_t copy_record(input logic[63:0] id);
         CopyCommand_t value='0;
         CommandHeader_t header='0;
@@ -166,6 +167,9 @@ module MinimalCopyTest;
     logic [31:0] value;
     int before_reset, after_reset;
     initial begin
+        if (`PDMA_REGISTER_BITS != 32 || `PDMA_MEMORY_BITS != 64)
+            $fatal(1, "The minimal responder requires 32-bit registers and 64-bit memory");
+        control.irq_ready='1; control.fatal_irq_ready=1;
         cfg.awvalid=0; cfg.wvalid=0; cfg.bready=0; cfg.arvalid=0; cfg.rready=0;
         cfg.awaddr=0; cfg.awprot='0; cfg.awid=0; cfg.wdata=0; cfg.wstrb='1;
         cfg.araddr=0; cfg.arprot='0; cfg.arid=0;
@@ -214,7 +218,7 @@ module MinimalCopyTest;
         for(int i=0;i<COPY_BYTES/WORD_BYTES;i++) words[SOURCE_ADDRESS/WORD_BYTES+i]=64'h9080706050403000+i;
         install(0,copy_record('h300)); install(1,fence_record('h301,3));
         configure(); await_fence(3);
-        if (fatal || irq || awatop != 0) $fatal(1, "Unexpected fatal/IRQ/atomic");
+        if (control.fatal || |control.irq || control.awatop != 0) $fatal(1, "Unexpected fatal/IRQ/atomic");
         $display("PDMA_MINIMAL_SV_PASS");
         $finish;
     end

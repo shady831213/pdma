@@ -1,6 +1,7 @@
 {
   "channels": 2,
   "register_bits": 32,
+  "memory_axi_version": 5,
   "memory_bits": 64,
   "burst_beats": 8,
   "slots": 8,

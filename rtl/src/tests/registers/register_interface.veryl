@@ -33,14 +33,21 @@ module DmaRegisterInterfaceTest {
     var wide_commands        : 'core RegisterState::Ring               [1];
     var wide_actions         : 'core RegisterState::ChannelActions     [1];
     var wide_resume_count    : 'core logic                        <32>    ;
-    inst dut: DmaRegisterInterface::<B> #(
+    inst port             : 'cfg  bus_cell::RegisterPort;
+    inst dut_frontend: bus_cell::AxiLiteRegisterFrontend::<B> (
+        clk  : reg_clk,
+        rst_n: reg_rst,
+        axi  : axi    ,
+        core : port   ,
+    );
+    inst dut: DmaRegisterInterface #(
         CHANNEL_COUNT: 1,
     ) (
         reg_clk                        ,
         reg_rst_n            : reg_rst ,
         core_clk                       ,
         core_rst_n           : core_rst,
-        axi                            ,
+        source_port          : port    ,
         global_reset_busy              ,
         global_fatal                   ,
         global_clear                   ,
@@ -59,7 +66,14 @@ module DmaRegisterInterfaceTest {
         configurations                 ,
         actions                        ,
     );
-    inst wide_dut: DmaRegisterInterface::<WideBus> #(
+    inst wide_port        : 'cfg  bus_cell::RegisterPort;
+    inst wide_dut_frontend: bus_cell::AxiLiteRegisterFrontend::<WideBus> (
+        clk  : reg_clk  ,
+        rst_n: reg_rst  ,
+        axi  : wide_axi ,
+        core : wide_port,
+    );
+    inst wide_dut: DmaRegisterInterface #(
         CHANNEL_COUNT: 1        ,
         BASE_ADDR    : 32'h10000,
     ) (
@@ -67,7 +81,7 @@ module DmaRegisterInterfaceTest {
         reg_rst_n            : reg_rst      ,
         core_clk                            ,
         core_rst_n           : core_rst     ,
-        axi                  : wide_axi     ,
+        source_port          : wide_port    ,
         global_reset_busy                   ,
         global_fatal                        ,
         global_clear                        ,
@@ -155,10 +169,10 @@ module DmaRegisterInterfaceTest {
             core_clk.next();
             reg_clk.next();
         }
-        $assert(axi.bvalid && (axi.bresp as 2) == RegisterBus::OKAY, "WRITE_RESPONSE");
+        $assert(axi.bvalid && (axi.bresp as 2) == bus_cell::RegisterBus::SUCCESS, "WRITE_RESPONSE");
         $assert(commands[0].base == 64'h12345678, "OWNER_CHANGED");
         $assert(wide_commands[0].base == 64'h12345678, "WIDE_OWNER_CHANGED");
-        $assert(wide_axi.bvalid && (wide_axi.bresp as 2) == RegisterBus::OKAY, "WIDE_WRITE_RESPONSE");
+        $assert(wide_axi.bvalid && (wide_axi.bresp as 2) == bus_cell::RegisterBus::SUCCESS, "WIDE_WRITE_RESPONSE");
         axi.bready = 1;
         reg_clk.next();
         axi.bready  = 0;

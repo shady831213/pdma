@@ -26,6 +26,7 @@ main() {
     export JVSUK_HOME="$build/jarvisuk"
     (cd "$snapshot" && sha256sum --check --status snapshot.sha256)
     custody=$(python3 "$root/tools/rtl-flow/ip/bundle.py" locate "$snapshot" common_cell verification/cdc_custody.sv)
+    transfer=$(python3 "$root/tools/rtl-flow/ip/bundle.py" locate "$snapshot" bus_cell verification/ready_valid.sv)
     cd "$root/verification/dma"
     find tb env tests checkers -type f -print0 | sort -z | xargs -0 sha256sum > "$build/testbench.sha256"
     find "$JVSUK_HOME/src" "$JVSUK_HOME/include" "$JVSUK_HOME/interfaces" "$JVSUK_HOME/pkg" "$JVSUK_HOME/etc" \
@@ -42,7 +43,7 @@ main() {
         "+incdir+$snapshot" \
         "+define+DESIGNWARE_INCDIR=$DESIGNWARE_HOME" \
         -cm line+cond+tgl+branch -cm_dir "$build/coverage.vdb" \
-        -f "$snapshot/sources.f" "$custody" -f tb/vip.f -top pdma_vip_top \
+        -f "$snapshot/sources.f" "$custody" "$transfer" -f tb/vip.f -top pdma_vip_top \
         -Mdir="$build/csrc" -o "$build/simv" -l "$build/compile.log"
     sha256sum --check --status "$build/testbench.sha256"
     sha256sum --check --status "$build/jarvisuk.sha256"

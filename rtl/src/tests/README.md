@@ -6,13 +6,12 @@ in each test. Shared support must not become a second hardware executor.
 `registers/` covers access, storage and the CSR bridge; `execution/` covers command
 ownership and the burst window; `memory/` covers endpoint transfers and streaming.
 
-The seven register and layout tests cover:
+The DMA register and layout tests cover:
 
 | Test | Observable behavior |
 | --- | --- |
 | `DmaLayoutTest` | Schema offsets and parameterized admin/channel page boundary |
 | `RegisterAccessTest` | 32/64-bit lane mapping, full/half configuration access, invalid strobes, permissions and reserved bits |
-| `RegisterFrontendTest` | W-before-AW, read bypass, stalled request stability and held AXI responses |
 | `RegisterCdcTest` | Independent clock advancement, startup and request/response backpressure without duplicate transfer |
 | `RingRegistersTest` | Software/hardware cursor ownership, publication bounds, configuration freeze and cleanup |
 | `DmaRegisterBankTest` | Three-channel isolation, live reset status, request versus cleanup completion |
@@ -29,15 +28,16 @@ separate checks.
 Their scope is recorded in the
 [slice description](../../../docs/rtl/minimal-copy.md#verification-and-limits).
 
-The configurable-resource slice adds six tests, bringing the native total to 27:
+The configurable-resource tests exercise directional credits, retained rows and Fence ordering.
 
 | Test | Observable behavior |
 | --- | --- |
 | `MemoryCapacityTest` | Independent one-read/three-write credits, held terminal responses and ordered tag/credit return |
-| `MemoryWideProfileTest` | 128-bit writes, upper/lower data patterns, continuous beats and delayed B |
-| `MemoryReadProfileTest` | Full and narrow bursts on a 128-bit bus, lane wrap and densely packed retained bytes |
 | `WindowSingleTest`, `WindowThreeTest` | One and three retained rows, wrap/reuse beyond one window and terminal drain |
 | `NarrowFenceOrderTest` | 32-bit memory, three retained rows, bounded descriptor fetch and two-beat Fence64 after Copy |
+
+Standalone AXI4-Lite pairing, wide read/write packing and response classification tests
+live with the endpoints in `my-veryl-cells/bus_cell/tests`.
 
 Run both native CC and Cranelift backends with `VERYL_DUT_REUSE=0`, as shown in
 [the RTL README](../../README.md). These fixtures drive lifecycle and IRQ status

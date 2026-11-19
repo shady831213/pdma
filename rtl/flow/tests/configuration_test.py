@@ -43,6 +43,16 @@ class ConfigurationTest(unittest.TestCase):
         c = configuration.resolve({'request_depth': 4, 'receipt_depth': 16})
         self.assertEqual((c['request_depth'], c['receipt_depth']), (4, 16))
 
+    def test_memory_profile_selects_atomic_sideband_at_boundary(self):
+        for version in (4, 5):
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as tmp:
+                dst = Path(tmp) / 'project'
+                configuration.project(dst, configuration.resolve({'memory_axi_version': version}))
+                source = (dst / 'src/profile.veryl').read_text()
+                self.assertEqual("awatop: output" in source, version == 5)
+        with self.assertRaises(ValueError):
+            configuration.resolve({'memory_axi_version': 3})
+
     def test_manifest_selects_real_sources_and_types(self):
         with tempfile.TemporaryDirectory() as tmp:
             dst = Path(tmp) / 'project'

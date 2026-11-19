@@ -3,18 +3,18 @@ pub module RingRegisters #(
     param BASE             : u32   = 0   ,
     param SOFTWARE_PRODUCER: bbool = true,
 ) (
-    clk           : input  clock                 ,
-    rst_n         : input  reset_async_low       ,
-    request       : input  RegisterBus::Request  ,
-    commit        : input  logic                 ,
-    locked        : input  logic                 ,
-    blocked       : input  logic                 ,
-    clear         : input  logic                 ,
-    advance       : input  logic                 ,
-    advance_ready : output logic                 ,
-    state         : output RegisterState::Ring   ,
-    result        : output RegisterAccess::Result,
-    geometry_valid: output logic                 ,
+    clk           : input  clock                         ,
+    rst_n         : input  reset_async_low               ,
+    request       : input  bus_cell::RegisterBus::Request,
+    commit        : input  logic                         ,
+    locked        : input  logic                         ,
+    blocked       : input  logic                         ,
+    clear         : input  logic                         ,
+    advance       : input  logic                         ,
+    advance_ready : output logic                         ,
+    state         : output RegisterState::Ring           ,
+    result        : output RegisterAccess::Result        ,
+    geometry_valid: output logic                         ,
 ) {
     const BASE_OFFSET    : u32                        = if SOFTWARE_PRODUCER ?
         CommandRegistersLayout::BASE_OFFSET
@@ -123,7 +123,7 @@ pub module RingRegisters #(
                         || (capacity_access.write && next_capacity != state.capacity))) || pending >: next_capacity
                 || delta >: (if SOFTWARE_PRODUCER ? next_capacity - pending : pending) {
                 result.write  = 0;
-                result.status = RegisterBus::SLVERR;
+                result.status = bus_cell::RegisterBus::ACCESS_ERROR;
             }
         }
     }

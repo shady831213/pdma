@@ -1,19 +1,19 @@
 // Shared control plane. Channel register owners remain behind the register bank;
 // completion of reset is acknowledged only by the execution resource owner.
-pub module DmaControl::<R: $std::axi4_lite_prototype> #(
+pub module DmaControl #(
     param CHANNEL_COUNT: u32 = 1,
 ) (
-    reg_clk        : input   'registers clock                                        ,
-    reg_rst_n      : input   'registers reset_async_low                              ,
-    core_clk       : input   'core      clock                                        ,
-    core_rst_n     : input   'core      reset_async_low                              ,
-    cfg            : modport 'registers $std::axi4_lite_if::<R>::slave               ,
-    channels       : modport 'core      DmaChannels::control                         ,
-    irq            : output  'core      logic                         <CHANNEL_COUNT>,
-    irq_ready      : input   'core      logic                         <CHANNEL_COUNT>,
-    fatal_irq      : output  'core      logic                                        ,
-    fatal_irq_ready: input   'core      logic                                        ,
-    fatal          : output  'core      logic                                        ,
+    reg_clk        : input   'registers clock                                       ,
+    reg_rst_n      : input   'registers reset_async_low                             ,
+    core_clk       : input   'core      clock                                       ,
+    core_rst_n     : input   'core      reset_async_low                             ,
+    cfg            : modport 'registers bus_cell::RegisterPort::slave               ,
+    channels       : modport 'core      DmaChannels::control                        ,
+    irq            : output  'core      logic                        <CHANNEL_COUNT>,
+    irq_ready      : input   'core      logic                        <CHANNEL_COUNT>,
+    fatal_irq      : output  'core      logic                                       ,
+    fatal_irq_ready: input   'core      logic                                       ,
+    fatal          : output  'core      logic                                       ,
 ) {
     var global_request    : 'core logic               ;
     var global_pending    : 'core logic<CHANNEL_COUNT>;
@@ -61,14 +61,14 @@ pub module DmaControl::<R: $std::axi4_lite_prototype> #(
             }
         }
     }
-    inst csr: DmaRegisterInterface::<R> #(
+    inst csr: DmaRegisterInterface #(
         CHANNEL_COUNT  ,
     ) (
         reg_clk                                        ,
         reg_rst_n                                      ,
         core_clk                                       ,
         core_rst_n                                     ,
-        axi                  : cfg                     ,
+        source_port          : cfg                     ,
         global_reset_busy    : global_busy             ,
         global_fatal         : fatal                   ,
         global_clear         : channels.global_clear   ,

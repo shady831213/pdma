@@ -80,6 +80,19 @@ class PackageResources(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.splitlines(), ["17", "29"])
 
+    def test_passive_checker_without_tcl_entry(self):
+        directory = self.package("endpoint", 1)
+        checker = directory / "verification" / "ready_valid.sv"
+        checker.parent.mkdir()
+        checker.write_text("module ready_valid; endmodule")
+        self.metadata["dependencies"][0]["metadata"]["rtl_flow"] = {"files": ["verification/ready_valid.sv"]}
+        self.invoke()
+        output = self.root / "output"
+        package = json.loads((output / "ip-manifest.json").read_text())["endpoint"]
+        self.assertEqual(package["files"], ["verification/ready_valid.sv"])
+        self.assertEqual((output / package["directory"] / package["files"][0]).read_bytes(), checker.read_bytes())
+        self.assertNotIn("endpoint", (output / "ip-manifest.tcl").read_text())
+
     def test_reject_missing_declared_resource(self):
         directory = self.package("cells", 1)
         (directory / "constraints" / "ip.tcl").unlink()

@@ -1,7 +1,7 @@
 # DMA elaboration configuration
 
 The control plane, execution engine and memory transport have separate owners.
-`DmaCopy` statically connects `DmaControl`, `CopyEngine` and `DmaMemoryBridge`.
+`DmaCopy` statically connects `DmaControl`, `CopyEngine` and `DmaMemoryCrossing` to the bus endpoints.
 These boundaries add wires and hierarchy, not storage, arbitration or cycle delay.
 An alternative engine implements the same channel-resource and memory protocols;
 it does not have to reproduce the register bridge, notifications or CDC queues.
@@ -40,6 +40,24 @@ compatibility wrapper is required. Replacing an engine still requires fresh
 functional and implementation qualification; the interface alone does not prove
 its lifecycle behavior or timing.
 
+## Replacing a bus endpoint
+
+The configuration port terminates at `bus_cell::AxiLiteRegisterFrontend`.
+A replacement register target (for example, an APB slave) drives the same
+`RegisterPort` in the register clock domain. It must hold an offered operation
+through backpressure, return one host response per accepted operation, and
+preserve byte lanes and access status. The existing mailbox and register owners
+then perform the operation and its side effects exactly once.
+
+The memory clock crossing carries DMA requests and receipts. In the bus domain
+`CopyMemoryEndpoint` packs the channel and context selector into address
+attributes and classifies response USER. The shared `bus_cell::AxiMemoryMaster`
+owns AXI handshakes, beat assembly, directional credits and receipt merging.
+A different memory transport can implement `CopyMemoryPort` at that same
+boundary. It must retain the caller's tag and return the terminal outcome
+even when the channel enters reset after admission. Neither adapter adds a
+clock crossing or a pipeline stage.
+
 ## Inputs and dependencies
 
 `rtl/profiles/default.json` defines the development integration profile. An override
@@ -49,6 +67,7 @@ JSON supplies any subset of these independent inputs. None is software writable.
 | --- | --- | --- |
 | `channels` | Physical channels, 1..8 | 2 |
 | `register_bits` | AXI4-Lite data width, 32 or 64 | 32 |
+| `memory_axi_version` | 4 selects the AXI4 port; 5 also exposes the six-bit AWATOP output, tied low for ordinary transfers | 5 |
 | `memory_bits` | Ordinary AXI data width, 32/64/128/256/512/1024 | 64 |
 | `burst_beats` | Maximum beats in one retained memory request, 1..256 | 8 |
 | `slots` | Burst rows reserved for each channel | 8 |

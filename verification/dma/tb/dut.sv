@@ -1,5 +1,18 @@
 module pdma_vip_dut(svt_axi_if host_bus, svt_axi_if memory_bus, pdma_control_if control);
     `include "dut_binding.svh"
+    import bus_cell_properties::held_until_accepted;
+    register_request: assert property (held_until_accepted(control.reg_clk, control.reg_rst_n,
+        integration.dma.register_port.request_valid, integration.dma.register_port.request_ready,
+        integration.dma.register_port.request)) else $fatal(1, "register_request changed while stalled");
+    register_response: assert property (held_until_accepted(control.reg_clk, control.reg_rst_n,
+        integration.dma.register_port.response_valid, integration.dma.register_port.response_ready,
+        integration.dma.register_port.response)) else $fatal(1, "register_response changed while stalled");
+    burst_request: assert property (held_until_accepted(control.bus_clk, control.bus_rst_n,
+        integration.dma.endpoint.bus_port.valid, integration.dma.endpoint.bus_port.ready,
+        integration.dma.endpoint.bus_port.request)) else $fatal(1, "burst_request changed while stalled");
+    burst_response: assert property (held_until_accepted(control.bus_clk, control.bus_rst_n,
+        integration.dma.endpoint.bus_port.returned, integration.dma.endpoint.bus_port.accepted,
+        integration.dma.endpoint.bus_port.receipt)) else $fatal(1, "burst_response changed while stalled");
     pdma_pipeline_timing #(.CHANNELS(`PDMA_CHANNEL_COUNT),.SLOTS(`PDMA_COPY_SLOTS)) timing_probe(
         .core_clk(control.core_clk),.core_rst_n(control.core_rst_n),
         .bus_clk(control.bus_clk),.bus_rst_n(control.bus_rst_n),
@@ -10,10 +23,10 @@ module pdma_vip_dut(svt_axi_if host_bus, svt_axi_if memory_bus, pdma_control_if 
         .issue_write(integration.dma.requests.request.write),
         .retired(integration.dma.requests.returned && integration.dma.requests.accepted),
         .retire_channel(integration.dma.requests.receipt.tag.channel),.retire_slot(integration.dma.requests.receipt.tag.slot),
-        .admitted(integration.dma.transport.transactions.valid && integration.dma.transport.transactions.ready),
-        .admit_channel(integration.dma.transport.transactions.request.tag.channel),.admit_slot(integration.dma.transport.transactions.request.tag.slot),
-        .returned(integration.dma.transport.transactions.returned && integration.dma.transport.transactions.accepted),
-        .return_channel(integration.dma.transport.transactions.receipt.tag.channel),.return_slot(integration.dma.transport.transactions.receipt.tag.slot)
+        .admitted(integration.dma.transactions.valid && integration.dma.transactions.ready),
+        .admit_channel(integration.dma.transactions.request.tag.channel),.admit_slot(integration.dma.transactions.request.tag.slot),
+        .returned(integration.dma.transactions.returned && integration.dma.transactions.accepted),
+        .return_channel(integration.dma.transactions.receipt.tag.channel),.return_slot(integration.dma.transactions.receipt.tag.slot)
     );
     for(genvar c=0;c<`PDMA_CHANNEL_COUNT;c++) begin: channels
         pdma_lifecycle_assertions #(.SLOTS(`PDMA_COPY_SLOTS)) lifecycle(

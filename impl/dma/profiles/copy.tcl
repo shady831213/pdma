@@ -45,7 +45,6 @@ set result [dict create top pdma_rtl_DmaConfigured clocks {
             memory.rresp 2 memory.rlast 1 memory.ruser 2 memory.rvalid 1
         }
         output {
-            awatop 6
             memory.awid 1 memory.awaddr 64 memory.awlen 8 memory.awsize 3
             memory.awburst 2 memory.awlock 1 memory.awcache 4 memory.awprot 3
             memory.awqos 4 memory.awregion 4 memory.awuser 35 memory.awvalid 1
@@ -67,6 +66,9 @@ dict set result crossings dma/transport/response_crossing depth [dict get $confi
 dict set result ports reg_clk input cfg.wdata [dict get $configuration register_bits]
 dict set result ports reg_clk input cfg.wstrb [dict get $configuration register_bytes]
 dict set result ports reg_clk output cfg.rdata [dict get $configuration register_bits]
+if {[dict get $configuration memory_axi_version] == 5} {
+    dict set result ports bus_clk output awatop 6
+}
 dict set result ports bus_clk input memory.rdata [dict get $configuration memory_bits]
 dict set result ports bus_clk output memory.wdata [dict get $configuration memory_bits]
 dict set result ports bus_clk output memory.wstrb [dict get $configuration memory_bytes]

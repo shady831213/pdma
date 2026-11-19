@@ -13,6 +13,7 @@ pub package CopyMemory::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 =
     const BURST_BITS  : u32                 = BURST_BYTES * 8;
     const LENGTH_BITS : u32                 = if BURST_BEATS >: 1 ? $clog2(BURST_BEATS) : 1;
     const SLOT_BITS   : u32                 = $clog2(SLOTS + 1);
+    const TAG_BITS    : u32                 = CHANNEL_BITS + SLOT_BITS;
     const INDEX_BITS  : u32                 = if SLOTS >: 1 ? $clog2(SLOTS) : 1;
     const AMOUNT_BITS : u32                 = $clog2(BURST_BYTES + 1);
     // This fixed transport encoding covers the supported maximum. Eligibility
@@ -37,28 +38,8 @@ pub package CopyMemory::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 =
         page_fault    : logic            ,
         protocol_error: logic            ,
     }
-    // Internal receipt identity is independent of the external AXI ID. Requests
-    // within each AXI direction use ID zero and responses therefore stay ordered.
-    struct Address {
-        channel : Channel             ,
-        address : logic  <64>         ,
-        selector: logic  <32>         ,
-        size    : logic  <3>          ,
-        length  : logic  <LENGTH_BITS>,
-    }
-    struct ReadTracker {
-        tag   : Tag               ,
-        lane  : logic<DATA_SIZE>  ,
-        size  : logic<3>          ,
-        length: logic<LENGTH_BITS>,
-    }
-    struct WritePayload {
-        data  : logic<BURST_BITS> ,
-        lane  : logic<DATA_SIZE>  ,
-        size  : logic<3>          ,
-        length: logic<LENGTH_BITS>,
-    }
 }
+
 pub interface CopyMemoryPort::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> {
     alias package M = CopyMemory::<DATA_BYTES, BURST_BEATS, SLOTS>;
     var valid   : logic     ;

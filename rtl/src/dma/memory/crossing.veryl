@@ -1,0 +1,43 @@
+pub module DmaMemoryCrossing::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> #(
+    param REQUEST_DEPTH: u32 = 8,
+    param RECEIPT_DEPTH: u32 = 8,
+) (
+    core_clk    : input   'core clock                                                   ,
+    core_rst_n  : input   'core reset_async_low                                         ,
+    bus_clk     : input   'bus  clock                                                   ,
+    bus_rst_n   : input   'bus  reset_async_low                                         ,
+    requests    : modport 'core CopyMemoryPort::<DATA_BYTES, BURST_BEATS, SLOTS>::slave ,
+    transactions: modport 'bus  CopyMemoryPort::<DATA_BYTES, BURST_BEATS, SLOTS>::master,
+) {
+    alias package M = CopyMemory::<DATA_BYTES, BURST_BEATS, SLOTS>;
+    inst request_crossing: common_cell::AsyncQueue #(
+        TYPE : M::Request   ,
+        DEPTH: REQUEST_DEPTH,
+    ) (
+        s_clk  : core_clk            ,
+        s_rst_n: core_rst_n          ,
+        s_valid: requests.valid      ,
+        s_ready: requests.ready      ,
+        s_data : requests.request    ,
+        d_clk  : bus_clk             ,
+        d_rst_n: bus_rst_n           ,
+        d_valid: transactions.valid  ,
+        d_ready: transactions.ready  ,
+        d_data : transactions.request,
+    );
+    inst response_crossing: common_cell::AsyncQueue #(
+        TYPE : M::Receipt   ,
+        DEPTH: RECEIPT_DEPTH,
+    ) (
+        s_clk  : bus_clk              ,
+        s_rst_n: bus_rst_n            ,
+        s_valid: transactions.returned,
+        s_ready: transactions.accepted,
+        s_data : transactions.receipt ,
+        d_clk  : core_clk             ,
+        d_rst_n: core_rst_n           ,
+        d_valid: requests.returned    ,
+        d_ready: requests.accepted    ,
+        d_data : requests.receipt     ,
+    );
+}

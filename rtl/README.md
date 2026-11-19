@@ -9,7 +9,7 @@ engine for virtualized systems. The managed resource-control and platform-integr
 outside the first RTL phase; see the [project overview](../README.md).
 
 The first implemented slice is the DMA register-access path: AXI4-Lite 32/64,
-reg/core CDC and channel/ring register owners. Seven native tests exercise it.
+reg/core CDC and channel/ring register owners. DMA integration tests cover it alongside the standalone frontend test in `bus_cell`.
 The [minimal Linear Copy and Fence slice](../docs/rtl/minimal-copy.md) now connects
 this path to one execution owner and an ordinary AXI memory endpoint. Fence32/64
 writes a software-observable memory marker after prior channel work. It is not a
@@ -56,9 +56,10 @@ mapped logic from excluded SRAM cost; the generic array mode remains available.
 | `src/dma/` | DMA channels, shared execution, register behavior and bus endpoints |
 | `src/dma/control/` | Register owners, IRQ delivery and global reset collection |
 | `src/dma/execution/` | Command owner and its retained burst window |
-| `src/dma/memory/` | Typed memory port, CDC transport and independent read/write endpoints |
+| `src/dma/memory/` | Typed memory port, CDC queues and DMA-to-bus attribute mapping |
 | `src/hw_components/` | Deferred placeholder for managed peripheral hardware; outside the first RTL phase |
 | `src/tests/` | Native Veryl block tests and their local support |
+| `bus_cell` dependency | Register and burst ports, AXI4-Lite frontend, ordinary AXI master and transfer stability property |
 | `common_cell` dependency | Protocol-independent cells, constraints and passive checkers from my-veryl-cells |
 | `tech_cell_generic` dependency | Generic RAM providers from my-veryl-cells |
 

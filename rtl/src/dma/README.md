@@ -9,8 +9,9 @@ to the deferred sibling `hw_components` directory.
 
 The source tree groups hardware responsibilities. Module directories show containment;
 packages and interfaces instead declare shared types/protocols within that responsibility.
-In particular, `control/registers/bus.veryl` is the internal register transaction protocol,
-not the system bus or a bus-arbitration module. See the [implemented microarchitecture](../../../docs/rtl/microarchitecture.md)
+The register request/response protocol lives in `bus_cell::RegisterPort`. AXI
+pairing belongs to the frontend, and DMA register decoding belongs to the control plane.
+See the [implemented microarchitecture](../../../docs/rtl/microarchitecture.md)
 for the actual instance tree, arbitration owners, state machines and pipeline cuts.
 Directory nesting does not add Veryl namespaces, wrappers, registers or latency.
 
@@ -21,9 +22,8 @@ control/
   control.veryl                    DmaControl: registers, IRQ delivery, reset collection
   interface.veryl                  DmaChannels: typed engine/resource boundary
   registers/
-    interface.veryl                Register frontend → CDC → bank
-    frontend.veryl                 AXI4-Lite pairing/response owner
-    bus.veryl, access.veryl         Register transaction protocol and validation
+    interface.veryl                RegisterPort → CDC → bank
+    access.veryl                   Register access validation
     state.veryl                    Channel/ring configuration, actions and status types
     bank/
       bank.veryl                   Global state and channel address routing
@@ -35,15 +35,12 @@ execution/
   copy/window.veryl                CopyWindow: reserved rows and shared payload RAM
 memory/
   interface.veryl                  Typed memory requests/receipts
-  bridge.veryl                     DmaMemoryBridge: CDC queues and bus endpoint
-  endpoint/
-    endpoint.veryl                 Direction routing and receipt merge
-    read.veryl                     AXI read credits and burst assembly
-    write.veryl                    AXI write credits, data and terminal responses
+  crossing.veryl                   DmaMemoryCrossing: request and receipt CDC queues
+  axi.veryl                        CopyMemoryEndpoint: DMA identity and error encoding
 ```
 
-`DmaCopy` composes `control`, `engine` and `transport`. The control plane exposes
-`DmaChannels`; this interface is wiring, not a second copy of the register state.
+`DmaCopy` connects the `bus_cell` register frontend, control, engine, memory crossing
+and memory endpoint. `DmaChannels` carries control/engine wires.
 Each channel's registers remain in `control.csr.owners.channels[i].owner` and its
 rings in `command_ring`/`event_ring`. Accepted-command state and retained bytes
 belong to the execution engine. One shared RAM is banked across channels; there
@@ -51,7 +48,7 @@ is still one shared engine, not one engine per channel.
 
 A different engine can connect to the same channel and memory ports. It must
 honor admission, cursor-update, error and reset/drain obligations; control does
-not inspect its FSM or private buffers. The memory bridge owns CDC and outstanding
+not inspect its FSM or private buffers. The crossing owns the CDC queues and the shared bus master owns outstanding
 credits, so replacing an engine does not require copying that transport. Neither
 boundary adds a pipeline register. See [configuration](../../../docs/rtl/configuration.md)
 for independent inputs, derived geometry and qualified-profile limits.
@@ -63,8 +60,8 @@ constraints use this actual instance tree.
 
 ## Implemented register path
 
-`DmaRegisterInterface` assembles `RegisterFrontend` → `common_cell::DuplexMailbox` →
-`DmaRegisterBank`. The frontend pairs independent AW/W and retains B/R responses;
+`DmaRegisterInterface` connects `common_cell::DuplexMailbox` to `DmaRegisterBank`.
+`DmaCopy` places the AXI4-Lite frontend upstream of the mailbox. The frontend pairs independent AW/W and retains B/R responses;
 the CDC uses the standard library's acknowledged mailboxes. The bank routes
 accesses to `ChannelRegisters`, which composes two `RingRegisters`. Each ring
 owns its configuration and cursors; the bank has no shadow channel storage.

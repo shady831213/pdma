@@ -15,7 +15,9 @@ files = ["verification/cdc_custody.sv"]
 ```
 
 The entry's parent is a dedicated resource directory; all its ordinary files are
-copied. Optional `files` select additional package-relative resources. Missing
+copied. A package may declare only `files` when it provides passive checkers.
+These files participate in the source identity and can be located in the snapshot.
+Only packages with an `entry` appear in the Tcl provider list. Missing
 files, escaping paths, resource-directory symlinks and duplicate resolved provider
 identities fail. Entries at the project root are rejected to avoid copying the
 whole checkout. No absolute source/cache path is embedded in the resource manifest.

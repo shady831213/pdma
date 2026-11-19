@@ -30,36 +30,35 @@ def projects(metadata):
     return sorted(result, key=lambda item: item["id"])
 
 
+def resource_path(root, name):
+    relative = PurePosixPath(name)
+    if relative.is_absolute() or ".." in relative.parts or not relative.parts:
+        raise ValueError("resource must stay inside its package")
+    file = root / relative
+    if not file.is_file() or file.resolve() != file:
+        raise ValueError("missing or symlinked package resource")
+    return file
+
+
 def resources(project):
     settings = project.get("metadata", {}).get("rtl_flow")
     if settings is None:
         return None
-    entry = PurePosixPath(settings["entry"])
-    if entry.is_absolute() or ".." in entry.parts or len(entry.parts) < 2:
-        raise ValueError("entry must be inside a package resource directory")
     root = Path(project["local_path"]).resolve()
-    directory = root.joinpath(*entry.parent.parts)
-    for parent in (directory, *directory.parents):
-        if parent == root:
-            break
-        if parent.is_symlink():
-            raise ValueError("resource directory may not be a symlink")
-    files = sorted(directory.rglob("*"))
-    if not (directory / entry.name).is_file():
-        raise ValueError("missing declared resource entry")
-    for path in files:
-        if path.is_symlink() or not (path.is_file() or path.is_dir()):
-            raise ValueError("resource tree must contain ordinary files/directories")
-    selected = {p for p in files if p.is_file()}
-    for name in settings.get("files", []):
-        path = PurePosixPath(name)
-        if path.is_absolute() or ".." in path.parts:
-            raise ValueError("resource file must stay inside its package")
-        file = root.joinpath(*path.parts)
-        if not file.is_file() or file.is_symlink() or root not in file.resolve().parents:
-            raise ValueError("missing or external package resource file")
-        selected.add(file)
-    return {"root": root, "entry": str(entry), "files": sorted(selected)}
+    selected = {resource_path(root, name) for name in settings.get("files", [])}
+    entry = settings.get("entry")
+    if entry is not None:
+        script = resource_path(root, entry)
+        if script.parent == root:
+            raise ValueError("entry must be inside a package resource directory")
+        for path in script.parent.rglob("*"):
+            if path.is_symlink() or not (path.is_file() or path.is_dir()):
+                raise ValueError("resource tree must contain ordinary files/directories")
+            if path.is_file():
+                selected.add(path)
+    if not selected:
+        raise ValueError("declare a resource entry or files")
+    return {"root": root, "entry": entry, "files": sorted(selected)}
 
 
 def word(value):
@@ -89,8 +88,9 @@ def bundle(entries, output):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(file, target)
             names.append(str(name))
-        records.append("[dict create name %s id %s entry %s]" % (
-            word(project["name"]), word(project["id"]), word(relative / resource["entry"])))
+        if resource["entry"] is not None:
+            records.append("[dict create name %s id %s entry %s]" % (
+                word(project["name"]), word(project["id"]), word(relative / resource["entry"])))
         packages[project["name"]] = {"directory": str(relative), "files": names}
     (output / "ip").mkdir(exist_ok=True)
     (output / "ip-manifest.tcl").write_text("return [list " + " ".join(records) + "]\n")

@@ -127,7 +127,8 @@ Functional checks cover every count in 1..8, the default 64-bit memory profile,
 a 64-bit register/128-bit memory profile with three channels and three slots, and
 a 32-bit memory profile with one channel, one slot and three-beat bursts. The
 ten configurations passed 408 positive scenario runs and rejected eight checker
-mutations per configuration on the November 19 testbench. The default 2/8-channel throughput comparison retains the
+mutations per configuration on the November 19 testbench. The default
+2/8-channel throughput comparison retains the
 baseline's zero payload bubbles and measured command latency. Fresh source-bound
 CDC/RDC gates pass at both counts with zero unresolved findings. See the
 [verification record](../../verification/dma/results.md) for exact coverage.
@@ -135,8 +136,10 @@ CDC/RDC gates pass at both counts with zero unresolved findings. See the
 At checkpoint `4de9cb7f`, the default two- and eight-channel profiles and the
 narrow one-channel profile met synthesized setup. Both default profiles passed
 the restored-database audits. The three-channel profile with 128-bit memory
-missed core setup by 43.2ps. Subsequent focused functional regressions
-exercise 256-, 512- and 1024-bit memory ports and a 256-beat burst configuration.
+missed core setup by 43.2ps. At `9500c28c`, all four profiles met setup
+and passed the restored-database audits.
+Additional focused functional regressions exercise 256-, 512- and 1024-bit
+memory ports and a 256-beat burst configuration.
 The [verification record](../../verification/dma/results.md) lists the tested
 combinations. These four profiles have no synthesis qualification. The
 capacitance-only RAM boundary still excludes physical SRAM area, power and

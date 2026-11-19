@@ -69,12 +69,30 @@ All four used 32-bit registers and eight read and write credits. These are
 functional results; they establish no PPA or sustained-throughput guarantee
 for the four profiles.
 
-The revised narrow one-channel design met synthesized setup with 0ps reported
-worst slack, 6,850.068 logic cell area and 20,938 mapped instances. The minimum
-reported crossing and RAM boundary margins were 262.4ps and 277.6ps respectively.
-The default two- and eight-channel and 128-bit three-channel synthesis runs
-are pending at this checkpoint. The RAM estimate excludes intrinsic SRAM timing,
-area and power.
+The following control-budget synthesis runs use the RTL in `9500c28c`. The
+core and bus targets are 1GHz and the register target is 500MHz. Each run
+passed the mapped-cell policy and the instance-scoped crossing checks.
+
+| Profile | Worst setup slack | Mapped instances | Sequential instances | Logic cell area | Min. crossing slack | Min. RAM boundary slack |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Narrow, 1 channel | 0ps | 20,938 | 4,603 | 6,850.068 | 262.4ps | 277.6ps |
+| Default, 2 channels | 0ps | 70,627 | 23,571 | 29,500.674 | 220.3ps | 65.9ps |
+| 128-bit memory, 3 channels | 0ps | 69,820 | 16,688 | 24,188.609 | 249.3ps | 193.4ps |
+| Default, 8 channels | 0ps | 157,302 | 40,143 | 56,966.713 | 207.1ps | 101.2ps |
+
+The three-channel core now meets setup at the same constraints that gave
+−43.2ps at `4de9cb7f`. Only the channel-register and Copy-window modules
+changed in the emitted RTL for that profile. Relative to the preceding
+matched runs, logic area decreased 20.12% on the three-channel profile, 3.03%
+on the default two-channel profile and 0.41% on the default eight-channel
+profile. It increased 1.96% on the narrow one-channel profile. All four
+results are pre-layout logic estimates. The RAM model excludes intrinsic
+SRAM timing, area and power.
+
+Reopening each of the four saved databases reproduced the reported worst
+slack and passed the RAM-load, hierarchy, mapped-cell and crossing checks.
+Tightening the core clock in each restored database produced −100ps worst
+slack and the timing gate rejected all four cases.
 
 ## 2026-11-18 configurable ownership boundaries
 

@@ -165,7 +165,7 @@ fn retired_copy_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
             );
         }
     }
-    assert!(!dma.take_interrupt());
+    assert!(!dma.irq());
     Ok(Fixture {
         dma,
         memory,

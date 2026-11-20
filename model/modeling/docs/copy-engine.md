@@ -169,8 +169,8 @@ management event ring.
 
 **HW-CE-5.** Response-consumption-dependent IOC state is removed with the response
 protocol. Trap, error-event and fatal notifications have explicit cause/mask/ACK
-rules. Mask changes do not replay old notifications, and platform-pending messages
-retain their original owner through reset or reassignment.
+rules. Each hardware source exposes a level. A platform that converts assertions to
+messages preserves a captured message’s original owner through reset or reassignment.
 
 **HW-CE-13.** The execution stage that detects a stopping error invokes its owning
 Channel's reporting operation. Task identity and reset generation are checked
@@ -340,13 +340,18 @@ completion schedules, but each implementation must satisfy the same prefix and
 cleanup guarantees. Tests must not promote the model's unchanged suffix into an
 architectural guarantee for pipelined RTL.
 
-**HW-CE-12.** `irq_cause` exposes current event non-empty, sticky Trap, sticky
-command-error stop and channel fatal. The two routine masks cover event non-empty
-edge and Trap. Error/fatal bypass those masks; `irq_enable` gates all channel
-notifications. Each executed unmasked Trap may emit even if its sticky bit is
-already set. `trap_ack.request=1` clears that bit, not platform-pending delivery;
-zero has no effect. Consuming an event does not ACK Trap. Unmask/enable never
-replays either cause. Software must inspect causes/completion storage before waiting.
+**HW-CE-12.** Each channel owns one active-high IRQ output. Its level is
+`enable && (error || channel_fatal || (event_non_empty && !mask.event_non_empty) || (trap && !mask.trap))`.
+The separate device-fatal line is `global_irq_enable && device_fatal`. The platform
+samples these wires. ISR entry, return and reading CAUSE have no effect on either line.
+
+Event non-empty follows ring occupancy. Trap is sticky until software writes one to
+TRAP_ACK or resets the channel. Multiple Traps before ACK coalesce. A simultaneous
+new Trap wins over ACK. Stopping error and channel fatal persist until reset.
+Enabling or unmasking a live source asserts its line immediately. Software reads the
+event producer before consuming a diagnostic: the stopping cause may precede the
+publication. On a stopped channel it can disable IRQ until reset. An integration
+that captures messages retains a captured notification through later masking or reset.
 
 Fatal codes distinguish CommandRead, EventWrite, EventFull and EventConfiguration.
 They do not rely on event memory being writable. Read-only discovery advertises

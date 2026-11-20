@@ -301,7 +301,7 @@ package pdma_uvm_regs;
     // Number of event slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
     Word capacity_reg;
     // Published event count
-    // Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
+    // Hardware advances this cursor only after writing a complete event. Publication makes the non-empty cause visible; Trap never publishes an event.
     ReadWord producer_reg;
     // Consumed event count
     // Software advances this wrapping cursor after reading and decoding events. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
@@ -491,14 +491,14 @@ package pdma_uvm_regs;
   endclass
 
     // Channel event notification masks
-    // One suppresses that source's future notifications without clearing causes. Unmask does not replay past events; software must check queue and error state before waiting. Error and fatal notifications bypass these two masks.
+    // One gates the corresponding cause off the IRQ line. Clearing a mask immediately exposes a still-active cause when IRQ is enabled. Stopping error and channel fatal bypass these masks.
   class ChannelIrqMask extends uvm_pkg::uvm_reg;
     `uvm_object_utils(ChannelIrqMask)
-    // Mask notifications on event empty-to-non-empty transitions
-    // Mask notifications on event empty-to-non-empty transitions.
+    // Mask the event occupancy contribution to the IRQ line
+    // Mask the event occupancy contribution to the IRQ line.
     uvm_pkg::uvm_reg_field event_non_empty_field;
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
+    // Mask the sticky Trap contribution to the IRQ line
+    // Mask the sticky Trap contribution to the IRQ line.
     uvm_pkg::uvm_reg_field trap_field;
     function new(string name = "ChannelIrqMask");
       super.new(name, 32, uvm_pkg::UVM_NO_COVERAGE);
@@ -535,13 +535,13 @@ package pdma_uvm_regs;
   class ChannelInterrupts extends uvm_pkg::uvm_reg_block;
     `uvm_object_utils(ChannelInterrupts)
     // Channel interrupt enable
-    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+    // One drives the channel IRQ from its current unmasked causes, including stopping error and fatal. Zero lowers the line while retaining causes.
     Switch enable_reg;
     // Event non-empty, Trap, event error and channel fatal causes, visible even while masked
     // Event non-empty, Trap, event error and channel fatal causes, visible even while masked.
     ChannelIrqCause cause_reg;
     // Independent non-empty and Trap notification masks
-    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
+    // Independent masks for event non-empty and Trap. An active cause asserts IRQ when unmasked and enabled.
     ChannelIrqMask mask_reg;
     // Write one to clear sticky Trap cause without retracting platform notifications
     // Write one to clear sticky Trap cause without retracting platform notifications.

@@ -21,11 +21,12 @@ package pdma_vip_pkg;
     `include "env/software/channel_driver.svh"
     `include "env/software/device_driver.svh"
     `include "env/software/irq_handler.svh"
-    `include "env/irq/irq_monitor.svh"
+    `include "env/irq/irq_env.svh"
     `include "env/memory/memory_response.svh"
     `include "env/checking/task_checker.svh"
     `include "env/coverage/performance.svh"
     `include "env/coverage/scenario_coverage.svh"
     `include "env/flow/task_flow.svh"
+    `include "env/channel_env.svh"
     `include "env/environment.svh"
 endpackage

@@ -54,9 +54,9 @@ impl<M> Shared<M> {
             self.to_events.raise();
         }
         drop(control);
-        for index in 0..self.channel_count {
-            let channel = pdma_model_contract::dma::ChannelId::new(index);
-            if hardware.dma.take_channel_interrupt(channel) {
+        hardware.irq_inputs.sample(
+            &hardware.dma,
+            |channel| {
                 let owner = hardware
                     .windows
                     .lock()
@@ -68,11 +68,9 @@ impl<M> Shared<M> {
                 {
                     destination.raise();
                 }
-            }
-        }
-        if hardware.dma.take_device_interrupt() {
-            self.to_firmware.raise();
-        }
+            },
+            || self.to_firmware.raise(),
+        );
     }
 }
 

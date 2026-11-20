@@ -23,9 +23,7 @@ pub module DmaCopy::<
     memory         : modport 'bus       $std::axi4_if::<B>::master                   ,
     awatop         : output  'bus       logic                         <6>            ,
     irq            : output  'core      logic                         <CHANNEL_COUNT>,
-    irq_ready      : input   'core      logic                         <CHANNEL_COUNT>,
     fatal_irq      : output  'core      logic                                        ,
-    fatal_irq_ready: input   'core      logic                                        ,
     fatal          : output  'core      logic                                        ,
 ) {
     initial {
@@ -57,9 +55,7 @@ pub module DmaCopy::<
         cfg            : register_port,
         channels                      ,
         irq                           ,
-        irq_ready                     ,
         fatal_irq                     ,
-        fatal_irq_ready               ,
         fatal                         ,
     );
     inst commands: DmaCommandPath::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS> #(

@@ -1,9 +1,9 @@
-# Linear Copy and Fence RTL slice
+# Linear Copy, Fence and Trap RTL slice
 
 Detailed implemented [microarchitecture](microarchitecture.md) and current
 [performance measurements](performance.md) supplement this scope summary.
 
-This DMA-core slice implements one shared Linear Copy/Fence engine with an
+This DMA-core slice implements one shared engine for Linear Copy, Fence and Trap with an
 instance-configured channel count in 1..8. Its independent bus widths and resource
 capacities are described in [elaboration configuration](configuration.md), including
 the qualification limits. Other command families remain outside this slice.
@@ -89,12 +89,15 @@ still use reset for recovery and resource reuse. See the
 
 Fence32/64 writes an aligned marker with its own context after prior work retires.
 It preserves adjacent lanes and supports retained write-fault recovery. Successful
-commands produce no event. Other opcodes and SG endpoints report Unsupported in
+commands produce no event. A Trap following the Fence executes after the Fence write
+response. It sets its channel's sticky cause and requests an interrupt if enabled
+and unmasked. Software can ACK the cause independently of notification delivery.
+Other opcodes and SG endpoints report Unsupported in
 this slice. A stopping error writes the 24-byte event, splitting at 4KiB when needed;
 producer advances only after the whole record succeeds. Reporting failure is fatal.
-Each channel and the DMA-wide fatal source have independent pending/accept
-notification ports. A channel mask is independent of the global-fatal mask;
-neither replays old causes.
+Each channel and the DMA-wide fatal source drive independent active-high IRQ
+lines. Enable/unmask immediately exposes a live cause. The channel masks and
+independent global-fatal enable have no effect on each other.
 
 Software reset closes admission at core acceptance. It does not reset the FIFOs,
 RAM or endpoint. Every accepted internal request, including queued requests not yet

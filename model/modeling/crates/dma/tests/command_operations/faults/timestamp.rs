@@ -68,7 +68,7 @@ fn timestamp_retains_first_sample_across_repeated_write_faults() -> TestResult {
     assert_eq!(rig.word(0x9010)?, 81);
     assert_eq!(rig.word(0x8000)?, 0xfeed);
     assert_eq!(rig.register(0, EVENT_PRODUCER)?, 0);
-    assert!(!rig.dma.take_interrupt());
+    assert!(!rig.dma.irq());
     Ok(())
 }
 

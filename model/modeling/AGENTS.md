@@ -207,8 +207,8 @@ Firmware can consume DMA and peripheral contracts without owning those interface
 - The replacement models statically configured channels, command/error-event rings,
   Copy/Write/Fill/Wait/Atomic/Semaphore/Fence/Trap/Timestamp and channel/device error/reset boundaries.
   Success writes no Event. Fence publishes completion storage; Trap has an independent
-  sticky IRQ cause and write-one request acknowledgement. Event-non-empty and Trap masks
-  never replay; error/fatal notifications bypass those masks and obey irq_enable.
+  sticky IRQ cause and write-one acknowledgement. Channel IRQ reflects the current causes.
+  Error and fatal bypass the event-non-empty and Trap masks and obey irq_enable.
   DmaConfig selects immutable atomic32/atomic64 capabilities; ordinary constructors default off.
   Atomic has no old-value output. Semaphore counts reject Signal overflow before mutation.
   False Wait/Semaphore Wait yields the grant without a fault bit or RESUME obligation;
@@ -411,7 +411,7 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   advances independent inputs, plans only over completed values, and advances
   selected outputs in separate phases; retain unconsumed values and unfinished
   states until consumed or terminated. No engine/stage object belongs in context.
-- Device notification masks never replay old events when cleared. Platform-pending
+- Unmasking an active cause immediately drives its enabled IRQ line. Platform-pending
   notifications survive device masking/reset until claimed. Stopping errors halt
   the channel before event I/O; reset never rolls back external memory writes.
   Payload PageFault parks the original command without a event or DMA IRQ/event.

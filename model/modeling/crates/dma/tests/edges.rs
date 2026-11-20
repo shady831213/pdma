@@ -150,7 +150,7 @@ fn pending_commands_cannot_exceed_capacity_when_enabled() -> TestResult {
 }
 
 #[test]
-fn unmask_does_not_replay_command_read_fault() -> TestResult {
+fn enable_asserts_a_retained_command_read_fatal() -> TestResult {
     // Given
     let mut device = disabled(0x8000, 2)?;
     device.write(ENABLE, &1_u32.to_le_bytes())?;
@@ -167,7 +167,7 @@ fn unmask_does_not_replay_command_read_fault() -> TestResult {
     assert_eq!(read_word(&mut device, COMMAND_CONSUMER)?, 0);
     assert_eq!(read_word(&mut device, EVENT_PRODUCER)?, 0);
     device.write(IRQ_ENABLE, &1_u32.to_le_bytes())?;
-    assert!(!device.irq());
+    assert!(device.irq());
     Ok(())
 }
 
@@ -271,7 +271,7 @@ fn rings_reuse_slots_in_order_after_wrap() -> TestResult {
         device.write(PRODUCER, &(cursor + 1).to_le_bytes())?;
         run(&mut device)?;
         copied.push(memory.read_buffer::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?);
-        assert!(!device.take_interrupt());
+        assert!(!device.irq());
     }
     // Then
     assert_eq!(copied, [[0; 4], [1; 4], [2; 4], [3; 4], [4; 4]]);

@@ -76,6 +76,6 @@ foreach port {memory.arid memory.awid} {dict set result ports bus_clk output $po
 dict set result ports bus_clk input memory.rdata [dict get $configuration memory_bits]
 dict set result ports bus_clk output memory.wdata [dict get $configuration memory_bits]
 dict set result ports bus_clk output memory.wstrb [dict get $configuration memory_bytes]
-dict set result ports core_clk input [dict create irq_ready $channels fatal_irq_ready 1]
+dict set result ports core_clk input {}
 dict set result ports core_clk output [dict create irq $channels fatal 1 fatal_irq 1]
 return $result

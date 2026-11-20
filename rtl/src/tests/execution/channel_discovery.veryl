@@ -17,13 +17,11 @@ module ChannelDiscoveryTest {
     inst memory  : 'bus       $std::axi4_if::<$std::axi4_pkg::<64, 8, 2, 35, 1, 2, 35, 2>>;
     var channel_irq     : 'core      logic<2>;
     var device_irq      : 'core      logic   ;
-    var device_irq_ready: 'core      logic   ;
     var fatal           : 'core      logic   ;
     inst dut: DmaCopy::<Cfg, $std::axi4_pkg::<64, 8, 2, 35, 1, 2, 35, 2>> #(
         CHANNEL_COUNT: 2,
     ) (
         fatal_irq      : device_irq      ,
-        fatal_irq_ready: device_irq_ready,
         reg_clk                          ,
         reg_rst_n      : reg_rst         ,
         core_clk                         ,
@@ -34,7 +32,6 @@ module ChannelDiscoveryTest {
         memory                           ,
         awatop         : _               ,
         irq            : channel_irq     ,
-        irq_ready      : 1               ,
         fatal          : fatal           ,
     );
     assign memory.awready = 1;
@@ -46,7 +43,6 @@ module ChannelDiscoveryTest {
     assign memory.bresp   = '0;
     assign memory.buser   = 0;
     initial {
-        device_irq_ready = 0;
         memory.arready   = 0;
         memory.rvalid    = 0;
         memory.rresp     = '0;
@@ -159,13 +155,7 @@ module ChannelDiscoveryTest {
             bus_clk.next();
         }
         $assert(fatal && device_irq && channel_irq == 0, "DEVICE_NOTIFICATION_IS_NOT_CHANNEL_ZERO");
-        core_clk.next(5);
-        $assert(device_irq, "DEVICE_NOTIFICATION_RETAINED");
-        device_irq_ready = 1;
-        core_clk.next();
-        device_irq_ready = 0;
-        core_clk.next(5);
-        $assert(fatal && !device_irq && channel_irq == 0, "DEVICE_NOTIFICATION_ACCEPTED_ONCE");
-
+        core_clk.next(12);
+        $assert(fatal && device_irq && channel_irq == 0, "IRQ_HELD_WHILE_FATAL_IS_ACTIVE");
     }
 }

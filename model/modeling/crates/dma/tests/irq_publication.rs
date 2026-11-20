@@ -1,8 +1,9 @@
-//! Notification visibility follows complete event publication.
+//! A stopping error drives IRQ; the producer publishes a complete diagnostic.
 
 use pdma_model_contract::dma::{
-    Command, CopyCommand, CopyCommandDestinationValues, CopyCommandSourceValues, ErrorInfo, Event,
-    EventCode, EventInfoValues, EventRegisters, LinearEndpoint,
+    ChannelBlock, ChannelInterrupts, ChannelIrqCauseValues, ChannelRegisters, Command, CopyCommand,
+    CopyCommandDestinationValues, CopyCommandSourceValues, ErrorInfo, Event, EventCode,
+    EventInfoValues, EventRegisters, LinearEndpoint,
 };
 
 /// Shared raw-bus test fixtures.
@@ -15,7 +16,7 @@ const EVENT_PRODUCER: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
     + EventRegisters::PRODUCER.offset();
 
 #[test]
-fn irq_requires_published_event_on_every_step() -> TestResult {
+fn stopping_irq_and_event_occupancy_follow_their_independent_causes() -> TestResult {
     // Given
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(
@@ -49,8 +50,16 @@ fn irq_requires_published_event_on_every_step() -> TestResult {
         // Then
         let irq = device.irq();
         let published = read_word(&mut device, EVENT_PRODUCER)?;
-        assert_eq!(irq, published == 1);
-        if irq {
+        let cause = ChannelIrqCauseValues::new(read_word(
+            &mut device,
+            ChannelBlock::ALIGNMENT
+                + ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::IRQ.offset()
+                + ChannelInterrupts::CAUSE.offset(),
+        )?);
+        assert_eq!(irq, cause.error() || cause.event_non_empty());
+        assert_eq!(cause.event_non_empty(), published == 1);
+        if published == 1 {
             let mut bytes = [0; Event::RECORD_SIZE];
             memory.read(MemoryAddress::new(0x1100), MemoryAlignment::ONE, &mut bytes)?;
             assert_eq!(
@@ -70,7 +79,8 @@ fn irq_requires_published_event_on_every_step() -> TestResult {
                         .step(&mut pdma_model_dma::Retire, &mut device)?,
                     StepOutcome::Complete(Err(pdma_model_dma::Error::Halted))
                 );
-                assert!(irq);
+                assert!(irq && cause.error());
+                assert_eq!(published, 1);
                 return Ok(());
             }
         }

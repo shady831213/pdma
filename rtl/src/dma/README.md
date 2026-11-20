@@ -94,7 +94,8 @@ decoder. The register access matrix is specified in
 ## Register-to-control boundary
 
 These are the ports of the standalone `DmaRegisterInterface`. `DmaControl`
-connects them to the live `DmaChannels` interface and owns notification delivery.
+connects them to the live `DmaChannels` interface, routes each channel IRQ to
+the top level and drives the separate gated device-fatal IRQ.
 
 - `commands`, `events`, `configurations` expose the actual ring/channel state to
   execution owners. Atomic capability bits are immutable parameters.
@@ -110,7 +111,8 @@ connects them to the live `DmaChannels` interface and owns notification delivery
   completed cleanup. A reset request alone never asserts these or clears state.
   External reset-busy/fatal inputs must block ordinary writes during cleanup.
   IRQ cause is a view of supplied sticky causes and actual event occupancy;
-  notification generation and set-versus-ACK priority remain the IRQ owner's work.
+  each `ChannelRegisters` instance drives its gated IRQ level and gives a new Trap
+  priority over a simultaneous ACK.
 
 The register interface's reg/core cold resets must assert together and release
 synchronously to their respective clocks. `DmaCopy` includes the bus reset in the
@@ -120,7 +122,7 @@ is unsupported. Software channel/DMA reset must leave the transport running.
 The memory endpoint has independent read/write lanes and ordered return tracking.
 
 The register modules alone do not implement transaction drain or execution.
-`DmaCopy` supplies one shared Linear Copy/Fence32/64 engine for 1..8 channels and
+`DmaCopy` supplies one shared Linear Copy, Fence32/64 and Trap engine for 1..8 channels and
 a shared memory endpoint;
 see the [slice boundaries](../../../docs/rtl/minimal-copy.md). Its software reset
 closes the target channel's admission and consumes its accepted memory receipts

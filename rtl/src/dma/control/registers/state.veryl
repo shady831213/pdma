@@ -10,7 +10,6 @@ pub package RegisterState {
         fatal    : logic<32>,
         faulted  : logic    ,
         error    : logic    ,
-        trap     : logic    ,
     }
     struct ChannelConfig {
         enable      : logic    ,
@@ -22,6 +21,5 @@ pub package RegisterState {
     struct ChannelActions {
         reset_request : logic,
         resume_request: logic,
-        trap_ack      : logic,
     }
 }

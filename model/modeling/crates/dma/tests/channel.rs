@@ -34,7 +34,7 @@ fn copy_retires_with_payload_visible_and_no_event_or_notification() -> TestResul
     assert_eq!(destination, [3, 1, 4, 1]);
     support::assert_no_event(&mut device)?;
     assert!(!device.irq());
-    assert!(!device.take_interrupt());
+    assert!(!device.irq());
     Ok(())
 }
 
@@ -79,7 +79,6 @@ fn event_write_fault_is_reported_without_event_memory() -> TestResult {
             + ChannelInterrupts::ENABLE.offset(),
         &0_u32.to_le_bytes(),
     )?;
-    assert!(device.take_interrupt());
     assert!(!device.irq());
     run(&mut device)?;
     assert_eq!(

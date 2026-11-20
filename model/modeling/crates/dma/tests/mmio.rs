@@ -131,7 +131,7 @@ fn rejected_consumption_preserves_trap_and_consumer() -> TestResult {
         }),
     )?;
     run(&mut device)?;
-    assert!(device.take_interrupt());
+    assert!(device.irq());
     // When: software attempts to consume beyond the empty event ring.
     let result = device.write(
         EVENT + EventRegisters::CONSUMER.offset(),
@@ -150,6 +150,6 @@ fn rejected_consumption_preserves_trap_and_consumer() -> TestResult {
         )?,
         2
     );
-    assert!(!device.irq());
+    assert!(device.irq());
     Ok(())
 }

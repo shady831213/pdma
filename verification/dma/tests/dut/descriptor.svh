@@ -8,7 +8,7 @@ class pdma_unsupported_command_test extends pdma_base_test;
         pdma_task job=settings(16);
         job.expect_payload_unchanged=1;
         flow_.open(job);
-        job.opcode=COMMANDHEADER_OPCODE_TRAP;
+        job.opcode=COMMANDHEADER_OPCODE_ATOMIC;
         flow_.submit(); flow_.expect_result(TASK_ERROR,EVENT_CODE_UNSUPPORTED); flow_.close(); cases++;
     endtask
 endclass

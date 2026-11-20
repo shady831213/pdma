@@ -15,7 +15,18 @@ module pdma_vip_top;
     assign host_bus.master_if[0].aresetn=control.reg_rst_n;
     assign memory_bus.slave_if[0].aresetn=control.bus_rst_n;
     pdma_vip_dut dut(host_bus,memory_bus,control);
+    for(genvar ch=0;ch<`PDMA_CHANNEL_COUNT;ch++) begin : channel_irqs
+        jvs_int_if pins();
+        assign pins.clk=core_clk;
+        assign pins.interrupt=`JVS_MAX_INT_PIN_NUM'(control.irq[ch]) << control.irq_vectors[ch];
+        initial uvm_config_db#(virtual jvs_int_if)::set(null,
+            $sformatf("uvm_test_top.env.channel_%0d.irq.jvs_int_agent",ch),"jvs_int_if",pins);
+    end
+    jvs_int_if fatal_irq();
+    assign fatal_irq.clk=core_clk;
+    assign fatal_irq.interrupt=`JVS_MAX_INT_PIN_NUM'(control.fatal_irq) << control.device_irq_vector;
     initial begin
+        uvm_config_db#(virtual jvs_int_if)::set(null,"uvm_test_top.env.device_fatal_irq.jvs_int_agent","jvs_int_if",fatal_irq);
         uvm_config_db#(svt_axi_vif)::set(null,"uvm_test_top.env.host_bus","vif",host_bus);
         uvm_config_db#(svt_axi_vif)::set(null,"uvm_test_top.env.memory_bus","vif",memory_bus);
         uvm_config_db#(virtual pdma_control_if)::set(null,"uvm_test_top.env","control",control);

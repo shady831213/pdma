@@ -22,6 +22,7 @@ class pdma_device_irq_handler extends jvs_irq_handler;
         if(irq_tr.irq_vector!=vector) `uvm_fatal("DEVICE_IRQ_IDENTITY","Wrong device interrupt vector")
         device.read_reg(device.registers.fatal_reg,fatal_code);
         if(fatal_code==0) `uvm_fatal("DEVICE_IRQ_CAUSE","Device notification has no fatal cause")
+        device.write_reg(device.registers.irq_enable_reg,0);
         delivered++;
         irq_tr.handle_state=jvs_irq_trans::FINISH;
     endtask

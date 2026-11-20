@@ -1,5 +1,6 @@
 virtual class pdma_base_test extends uvm_test;
     protected int cases;
+    protected bit interrupt_driven;
     protected int expected_cases=1;
     pdma_env env;
     pdma_configuration platform;
@@ -39,22 +40,25 @@ virtual class pdma_base_test extends uvm_test;
         job.payload_alignment=1<<$clog2(job.length);
         return job;
     endfunction
-    task inject(bit wr,bit page,longint unsigned address);
+    task inject(bit wr,bit [1:0] reason,longint unsigned address);
         platform.fault_enabled=1; platform.fault_write=wr;
-        platform.fault_page=page; platform.fault_address=address;
+        platform.fault_reason=reason; platform.fault_address=address;
     endtask
     pure virtual task run_scenario();
     virtual task main_phase(uvm_phase phase);
         phase.raise_objection(this);
         env.device.enable_notifications();
-        foreach(env.channels[i]) env.channels[i].setup();
+        foreach(env.device.channels[i]) begin
+            env.device.channels[i].interrupt_driven=interrupt_driven;
+            env.device.channels[i].setup();
+        end
         run_scenario();
-        foreach(env.channels[i]) env.channels[i].teardown();
+        foreach(env.device.channels[i]) env.device.channels[i].teardown();
         phase.drop_objection(this);
     endtask
     virtual function void check_phase(uvm_phase phase);
         int checked_tasks=0;
-        foreach(env.checkers[i]) checked_tasks+=env.checkers[i].checked_tasks;
+        foreach(env.channels[i]) checked_tasks+=env.channels[i].checker_.checked_tasks;
         if(cases!=expected_cases || checked_tasks<expected_cases)
             `uvm_error("TEST_INCOMPLETE","Required scenarios or task checks are missing")
     endfunction
@@ -62,9 +66,9 @@ virtual class pdma_base_test extends uvm_test;
         uvm_report_server reports=uvm_report_server::get_server();
         int checked_tasks=0;
         longint unsigned checked_bytes=0;
-        foreach(env.checkers[i]) begin
-            checked_tasks+=env.checkers[i].checked_tasks;
-            checked_bytes+=env.checkers[i].checked_bytes;
+        foreach(env.channels[i]) begin
+            checked_tasks+=env.channels[i].checker_.checked_tasks;
+            checked_bytes+=env.channels[i].checker_.checked_bytes;
         end
         if(cases==expected_cases && reports.get_severity_count(UVM_ERROR)==0 && reports.get_severity_count(UVM_FATAL)==0) begin
             `uvm_info("TEST_RESULT",$sformatf("test=%s scenarios=%0d checked_tasks=%0d checked_bytes=%0d",get_type_name(),cases,

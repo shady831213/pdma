@@ -37,7 +37,7 @@ register_map! {
             #[description = "Number of event slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable."]
             pub capacity: Word,
             #[short_description = "Published event count"]
-            #[description = "Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event."]
+            #[description = "Hardware advances this cursor only after writing a complete event. Publication makes the non-empty cause visible; Trap never publishes an event."]
             pub producer: ReadWord,
             #[short_description = "Consumed event count"]
             #[description = "Software advances this wrapping cursor after reading and decoding events. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault."]
@@ -105,15 +105,15 @@ register_schema! {
 
 register_schema! {
     #[short_description = "Channel event notification masks"]
-    #[description = "One suppresses that source's future notifications without clearing causes. Unmask does not replay past events; software must check queue and error state before waiting. Error and fatal notifications bypass these two masks."]
+    #[description = "One gates the corresponding cause off the IRQ line. Clearing a mask immediately exposes a still-active cause when IRQ is enabled. Stopping error and channel fatal bypass these masks."]
     pub register ChannelIrqMask {
         width: 4, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 3,
         fields: {
-            #[short_description = "Mask notifications on event empty-to-non-empty transitions"]
-            #[description = "Mask notifications on event empty-to-non-empty transitions."]
+            #[short_description = "Mask the event occupancy contribution to the IRQ line"]
+            #[description = "Mask the event occupancy contribution to the IRQ line."]
             event_non_empty: 0..=0,
-            #[short_description = "Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set"]
-            #[description = "Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set."]
+            #[short_description = "Mask the sticky Trap contribution to the IRQ line"]
+            #[description = "Mask the sticky Trap contribution to the IRQ line."]
             trap: 1..=1,
         },
     }
@@ -174,13 +174,13 @@ register_map! {
         alignment: 4,
         placements: [
             #[short_description = "Channel interrupt enable"]
-            #[description = "One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events."]
+            #[description = "One drives the channel IRQ from its current unmasked causes, including stopping error and fatal. Zero lowers the line while retaining causes."]
             pub enable: Switch,
             #[short_description = "Event non-empty, Trap, event error and channel fatal causes, visible even while masked"]
             #[description = "Event non-empty, Trap, event error and channel fatal causes, visible even while masked."]
             pub cause: ChannelIrqCause,
             #[short_description = "Independent non-empty and Trap notification masks"]
-            #[description = "Independent non-empty and Trap notification masks. Unmask does not replay past events."]
+            #[description = "Independent masks for event non-empty and Trap. An active cause asserts IRQ when unmasked and enabled."]
             pub mask: ChannelIrqMask,
             #[short_description = "Write one to clear sticky Trap cause without retracting platform notifications"]
             #[description = "Write one to clear sticky Trap cause without retracting platform notifications."]

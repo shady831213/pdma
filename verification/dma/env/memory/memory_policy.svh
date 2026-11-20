@@ -14,10 +14,10 @@ class pdma_memory_policy extends svt_axi_port_monitor_callback;
         if(inject && writing && item.data_status==svt_sequence_item::ACCEPT) behavior.w_first_faults++;
         if(writing) begin
             item.bresp=inject ? svt_axi_transaction::SLVERR : svt_axi_transaction::OKAY;
-            item.resp_user=inject && behavior.fault_page ? 1 : 0;
+            item.resp_user=inject ? behavior.fault_reason : 0;
         end else begin
             foreach(item.rresp[i]) item.rresp[i]=inject ? svt_axi_transaction::SLVERR : svt_axi_transaction::OKAY;
-            foreach(item.data_user[i]) item.data_user[i]=inject && behavior.fault_page ? 1 : 0;
+            foreach(item.data_user[i]) item.data_user[i]=inject ? behavior.fault_reason : 0;
         end
     endfunction
     virtual function void write_address_phase_ended(svt_axi_port_monitor monitor_,svt_axi_transaction item);

@@ -64,7 +64,7 @@ make their register redesign prerequisites for this phase.
 it does not supersede the system specification under `model/modeling/docs`.
 The DMA register-access slice has native tests: a 32/64-bit AXI4-Lite frontend,
 reg/core CDC and object-owned registers. `DmaCopy` implements configurable 1..8 physical channels with one shared
-Linear Copy and Fence32/64 engine, statically configurable register/memory data widths,
+Linear Copy, Fence32/64 and Trap engine, statically configurable register/memory data widths,
 reserved burst rows per channel, independent read/write outstanding capacities,
 core/bus asynchronous queues, a reg/core mailbox and reset drain. Software
 can submit Copy followed by Fence and poll its memory marker for completion.
@@ -232,7 +232,7 @@ ordinary constructors. Atomic has no old-value destination. Ordinary false Wait 
 Semaphore Wait release the shared grant without setting fault status; same-channel
 successors remain blocked. Stopping errors latch before event I/O; event-full,
 event-write and event-configuration failures are fatal, never admission backpressure.
-Trap has an independent sticky cause and write-one acknowledgement; masks never replay.
+Trap has an independent sticky cause and write-one acknowledgement; the IRQ line reflects all currently enabled, unmasked causes.
 Recoverable payload PageFault parks the original command and both Copy
 cursors, including successful read scratch for a failed write, while peers can run.
 Owner software repairs through its platform, observes FAULT_STATUS.faulted and

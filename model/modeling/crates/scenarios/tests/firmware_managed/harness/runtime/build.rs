@@ -192,6 +192,7 @@ where
         let shared = Arc::new(Shared {
             addresses,
             hardware: Mutex::new(Hardware {
+                irq_inputs: pdma_model_host::runtime::IrqInputs::new(&dma),
                 dma,
                 windows,
                 firmware,
@@ -199,7 +200,6 @@ where
                 contexts,
             }),
             destinations,
-            channel_count,
             to_firmware,
             to_host,
             to_events,

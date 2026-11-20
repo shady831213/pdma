@@ -186,8 +186,7 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
         );
         assert_eq!(completion(&device, index)?, u64::try_from(index)? + 1);
     }
-    assert!(!device.take_interrupt());
-    assert!(!device.take_interrupt());
+    assert!(!device.irq());
     assert_eq!(
         memory.read_buffer::<[u8; 1]>(MemoryAddress::new(0x1500), MemoryAlignment::ONE)?,
         [0]

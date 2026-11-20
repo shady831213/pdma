@@ -116,26 +116,33 @@ endclass
 
 class pdma_multichannel_irq_test extends pdma_base_test;
     `uvm_component_utils(pdma_multichannel_irq_test)
-    function new(string name,uvm_component parent); super.new(name,parent); endfunction
+    function new(string name,uvm_component parent); super.new(name,parent); interrupt_driven=1; endfunction
     virtual function void build_phase(uvm_phase phase);
         super.build_phase(phase); expected_cases=platform.channel_count;
     endfunction
     virtual task run_scenario();
         pdma_task_flow flows[]=new[platform.channel_count];
         foreach(flows[i]) begin
-            pdma_task job=settings(16); job.opcode=COMMANDHEADER_OPCODE_TRAP; job.expect_payload_unchanged=1;
+            pdma_task job=settings(16); job.opcode=COMMANDHEADER_OPCODE_ATOMIC; job.expect_payload_unchanged=1;
             flows[i]=env.task_flow(i); flows[i].open(job);
         end
         // Channel notification enables must not depend on the global-fatal mask.
         env.device.write_reg(env.device.registers.irq_enable_reg,0);
+        // Hold only channel zero's software event consumer while its IRQ is delivered.
+        flows[0].channel.isr_service.get();
         foreach(flows[i]) flows[i].submit();
-        @(negedge env.control.core_clk); env.control.irq_ready='1;
-        foreach(flows[i]) begin
+        foreach(flows[i]) flows[i].channel.await_reg(flows[i].channel.registers.event_block.producer_reg,'1,1);
+        if(env.control.irq[0]!==1) `uvm_fatal("CHANNEL_IRQ_LEVEL","Stopped channel lost its asserted IRQ")
+        for(int i=1;i<flows.size();i++) begin
             flows[i].expect_interrupt(TASK_ERROR,EVENT_CODE_UNSUPPORTED);
+        end
+        if(flows[0].channel.delivered!=0) `uvm_fatal("CHANNEL_ISR_BLOCK","Blocked handler completed early")
+        flows[0].channel.isr_service.put();
+        flows[0].expect_interrupt(TASK_ERROR,EVENT_CODE_UNSUPPORTED);
+        foreach(flows[i]) begin
             if(flows[i].channel.delivered!=1) `uvm_fatal("CHANNEL_IRQ_COUNT","Wrong channel interrupt count")
             flows[i].close(); cases++;
         end
-        @(negedge env.control.core_clk); env.control.irq_ready=0;
         if(env.device_handler.delivered!=0) `uvm_fatal("CHANNEL_IRQ_SCOPE","Channel error delivered as device fatal")
     endtask
 endclass

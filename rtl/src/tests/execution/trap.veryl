@@ -1,0 +1,88 @@
+#[test(trap_waits_for_fence_and_rejects_reserved_bytes)]
+module TrapExecutionTest {
+    inst clk     : $tb::clock_gen #( period: 10 );
+    inst rst     : $tb::reset_gen ( clk );
+    inst channels: DmaChannels;
+    inst memory  : CopyMemoryPort;
+    var head : CommandState::Entry;
+    var valid: logic              ;
+    assign channels.command        = '{'0};
+    assign channels.events         = '{'0};
+    assign channels.configuration  = '{
+        RegisterState::ChannelConfig'{enable: 1, configured: 1, ring_context: 0, irq_enable: 0, irq_mask: 0}
+    };
+    assign channels.actions        = '{'0};
+    assign channels.reset_all      = 0;
+    assign channels.global_blocked = 0;
+    assign channels.global_clear   = 0;
+    assign channels.fatal_in       = 0;
+    assign channels.event_geometry = 1;
+    assign channels.event_ready    = 1;
+    inst engine: CopyEngine (
+        clk                ,
+        rst_n     : rst    ,
+        heads     : '{head},
+        head_valid: valid  ,
+        fetching  : 0      ,
+        channels           ,
+        memory             ,
+    );
+    initial {
+        valid           = 0;
+        head            = '0;
+        memory.ready    = 1;
+        memory.returned = 0;
+        memory.receipt  = '0;
+        rst.assert();
+        // Fence32 followed by a prefetched Trap. Hold the Fence write response.
+        head.descriptor[7:0] = 6;
+        valid                = 1;
+        for timeout in 0..10 {
+            if channels.command_advance {
+                break;
+            }
+            clk.next();
+        }
+        $assert(channels.command_advance, "FENCE_ACCEPTED");
+        clk.next();
+        head.descriptor[7:0] = 7;
+        for timeout in 0..10 {
+            if memory.valid {
+                break;
+            }
+            clk.next();
+        }
+        $assert(memory.valid && memory.request.write, "FENCE_ISSUED");
+        memory.receipt.tag = memory.request.tag;
+        clk.next();
+        for hold in 0..8 {
+            $assert(!channels.command_advance && !channels.trap_executed[0], "TRAP_WAITED_FOR_FENCE");
+            clk.next();
+        }
+        memory.returned = 1;
+        clk.next();
+        memory.returned = 0;
+        for timeout in 0..10 {
+            if channels.command_advance {
+                break;
+            }
+            clk.next();
+        }
+        $assert(channels.command_advance && channels.trap_executed[0], "TRAP_EXECUTED_AT_ACCEPTANCE");
+        clk.next();
+        // Same opcode with a nonzero unused slot tail: CommandRead fatal, no acceptance or IRQ.
+        head.descriptor[767] = 1;
+        for timeout in 0..10 {
+            $assert(
+                !channels.command_advance && !channels.trap_executed[0] && !memory.valid && !channels.event_advance,
+                "NO_MALFORMED_TRAP_EFFECT",
+            );
+            if channels.status[0].fatal != 0 {
+                break;
+            }
+            clk.next();
+        }
+        $assert(channels.status[0].fatal == ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD, "BAD_TRAP_REJECTED");
+        $finish();
+    }
+}

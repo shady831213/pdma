@@ -79,6 +79,6 @@ fn abort_after_retired_copy_has_no_sg_payload_event_or_irq_effects()
     let mut consumer = [0; 4];
     dma.read(base + CommandRegisters::CONSUMER.offset(), &mut consumer)?;
     assert_eq!(u32::from_le_bytes(consumer), 2);
-    assert!(!dma.take_interrupt());
+    assert!(!dma.irq());
     Ok(())
 }

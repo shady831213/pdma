@@ -66,10 +66,12 @@ physical timing/MTBF obligations remain separate.
 Software submits Copy followed by Fence32/64 and polls the real memory marker for
 successful completion. Destination equality is a checker result, never a
 completion signal. Fault, error and fatal results come from software-visible
-registers and error events. Each channel has separate software, IRQ-handler and
-checker instances. The snapshot profile selects 1..8 channels (default 2 for
-iteration). IRQ vectors start at 17 and are distinct from channel IDs; device
-fatal uses its own vector and handler. The memory oracle checks both the channel
+registers and error events. Each channel has its own software driver, IRQ environment and
+checker under `pdma_channel_env`. A task flow uses the same driver that its ISR
+uses to consume the event ring. Device fatal has a separate IRQ environment at
+the device level. The snapshot profile selects 1..8 channels (default 2 for
+iteration). IRQ vectors start at 17 and are distinct from channel IDs; the device-fatal
+vector defaults to 16. The memory oracle checks both the channel
 sideband and context against task/ring allocations. Compile a separate immutable
 binary for each channel count. The final qualification must include 8, with
 intermediate non-power-of-two counts checked for index/reset/ownership behavior.
@@ -120,9 +122,9 @@ The native VIP continues to own transaction assembly and memory effects.
 
 `PDMA_SUITE=dut` is the default. Clock period/jitter selfchecks are not instantiated
 in DUT runs; clock/reset integration lives in `env/clocks.svh`. AXI protocol checks,
-DUT assertions and the IRQ handshake monitor remain active. The environment uses
-`configure_phase` for handler registration and `main_phase` for the IRQ service;
-power-on reset stays in `reset_phase`.
+DUT assertions and per-source JarvisUK level monitors remain active. Each IRQ
+environment registers its handler in `configure_phase` and uses its JarvisUK
+sequencer for delivery. Power-on reset stays in `reset_phase`.
 
 The separate `PDMA_SUITE=tb-selftest` suite contains five independently selectable
 cases: clock/reset-stimulus qualification, IRQ wait success isolation, timeout cleanup,

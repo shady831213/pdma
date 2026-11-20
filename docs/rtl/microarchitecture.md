@@ -1,4 +1,4 @@
-# DMA Copy/Fence 微架构：与当前 RTL 对应
+# DMA Copy、Fence 与 Trap 微架构
 
 本文描述 `DmaCopy` 的当前源码组织。2026-11-18 的配置与职责调整已通过功能
 矩阵及 2/8 channel CDC/RDC 检查。检查点 `4de9cb7f` 的默认 2、8 channel
@@ -11,7 +11,7 @@
 
 ## 1. 范围、层次和边界
 
-当前实现：1..8 个物理 channel、一套共享 Linear Copy/Fence32/64 执行资源，
+当前实现：1..8 个物理 channel、一套共享 Linear Copy、Fence32/64 和 Trap 执行资源，
 三个异步时钟域。配置不可通过软件改变 channel 数。命令记录为 96B，错误事件
 为 24B。正常完成不写 event；软件通过后继 Fence 的内存标记确认完成。
 Fence 保证本 channel 的先前任务已退休再发标记；它不是跨 channel/global barrier，
@@ -22,7 +22,7 @@ Fence 保证本 channel 的先前任务已退休再发标记；它不是跨 chan
 内存口沿用 AXI4 普通事务子集，AWATOP 为零；不是完整 AXI5 atomic 实现。
 数据宽度、burst 上限、每 channel 保留槽、读写 outstanding 和 CDC 深度的依赖
 见 [配置说明](configuration.md)。合法配置与完成物理资格检查是两件事。
-SG、Write/Fill/Wait/Atomic/Semaphore/Trap/Timestamp、外围权限检查、CPU 和
+SG、Write/Fill/Wait/Atomic/Semaphore/Timestamp、外围权限检查、CPU 和
 firmware RTL 仍未在这个切片实现。
 
 ### 1.1 目录是职责分组，不全是实例包含关系
@@ -153,7 +153,7 @@ core 每拍可发一笔请求。执行请求优先，预取请求在 channel 间
 | 描述符 FIFO、组装偏移和在途读 | `ChannelFetch` | 每 channel 独立；每条已开始取数的描述符预留一行 | 收到最后一段或首个错误后标记该行就绪；执行接受或 reset 后释放行 |
 | 执行控制访问 | `contexts[c].phase` | FenceReturn/PublishReturn | 自己的 slot SLOTS+1 回执 |
 | global reset 收集集合 | `DmaControl.global_pending` | C bit | 每 channel clear；集合归零才 global clear |
-| 待交付通知 | `DmaControl.irq/fatal_irq` | C+1 bit | 接收方 ready，或相应 reset clear |
+| IRQ 输出 | channel 寄存器及全局 fatal | C+1 根线 | 由当前 cause、enable 和 mask 组合产生 |
 
 `RegisterState` 是这些对象之间的 live view，不在 `DmaCopy` 再维护一份影子
 register bank。command consumer 的推进表示**描述符已接受**，不是命令已完成；
@@ -268,7 +268,7 @@ stateDiagram-v2
     [*] --> Idle
     Idle --> Copy: 队头获授权，合法非零 Linear Copy
     Idle --> FenceWrite: 合法 Fence32/64
-    Idle --> Idle: 合法零长度 Copy
+    Idle --> Idle: 合法零长度 Copy 或 Trap
     Idle --> PrepareEvent: 可解码但不支持或参数错误
     Idle --> Stopped: 队头取数失败或非法编码
     Copy --> Idle: 全部按序退休
@@ -297,6 +297,7 @@ Copy 的 page fault **不改变外层 phase=Copy**，而是在 window 冻结，�
 | Idle（队头获授权） | 有效编码才 command_advance；malformed 不消费；Unsupported 消费后进入错误路径 |
 | Idle→Copy | 注册 copy_start，window 下一边沿接收初始化 |
 | Copy | 仅启动一次 window；chunk 内循环不经过外部 Fetch/Decode |
+| Idle→Idle（Trap） | 在接受队头的边沿推进 consumer，并向该 channel 发出一次 trap_executed；不占用 payload 端口 |
 | Idle→FenceWrite | 保存目标地址；value/context 留在已接受 descriptor 中 |
 | PrepareEvent | 固定 event 起始地址；与后续请求 FIFO 输入之间有寄存器切点 |
 | PublishReturn | 全部 24B 写成功后才 event_advance；部分写不能提前暴露 producer |
@@ -437,7 +438,7 @@ sequenceDiagram
 | 类别 | 立即动作 | 排空/保留 | 软件观察与恢复 |
 | --- | --- | --- | --- |
 | payload/Fence PageFault | 停止该工作的新 issue | 收齐已承诺请求；保留 descriptor、row 和成功读数据 | safe park 后 faulted=1；不发 fault event/IRQ；修复后 Resume |
-| stopping command error | 固定 error_code，停止新 issue | 固定成功连续前缀；收齐债务再写 event | error 可先于 event 可见；event 发布后通知；需 channel reset |
+| stopping command error | 固定 error_code，停止新 issue | 固定成功连续前缀；收齐债务再写 event | error 及其 IRQ 可先于 event 可见；producer 标记发布；需 channel reset |
 | channel fatal | command read 或错误报告不可用 | 停止该 channel；保留诊断 | fatal 状态及通知；需 channel reset |
 | device fatal | malformed transaction/protocol violation | 全局停止新 issue；继续必要的回执责任处理 | 独立 fatal/notification；需 DMA reset |
 
@@ -502,18 +503,12 @@ sequenceDiagram
 
 ## 9. IRQ 与状态可见性
 
-通知端口是 retained valid/ready，不是存放软件 handler 的对象。每 channel 一个
-pending bit，另有 device fatal pending bit。clear/ready 解除旧 pending，同拍新的
-合法源可再次置位；channel clear 优先禁止该 channel 的新置位。
-
-当前 Copy/Fence 切片的 channel 通知来自 event_advance 或 channel fatal 新出现，
-受该 channel irq_enable 控制；device fatal 使用独立 global_irq_enable。enable
-不会重放旧状态。Error/Fatal 按系统合同绕过 routine source mask。
-
-`irq_mask`、trap_ack 和 trap cause 的寄存器形状已存在，但当前切片不执行 Trap，
-也没有独立正常事件源；不要将寄存器存在当作完整 Trap/mask 执行路径已实现。
-所有错误事件都让 channel 停止；本切片的通知时点以 [copy.veryl][top] 的
-always_ff 为准，不能用未来完整 model 的 IRQ 单元替代当前电路图。
+每个 channel 独立输出一根电平 IRQ。前序 Fence 写成功返回后，后继 Trap 在接受队头时
+退休，置位 `ChannelRegisters` 的 sticky Trap。ACK 写一清除，重复 Trap 合并，
+同拍 Trap 优先于 ACK。事件非空由 event producer 和 consumer 决定。
+`irq_enable` 门控该 channel 的所有来源，两个 routine mask 分别门控非空和 Trap。
+停止错误和 channel fatal 保持到 channel reset。寄存器一旦更新，IRQ 随即反映仍然
+有效的来源。独立的 device-fatal 线由 `global_irq_enable && fatal` 驱动。
 
 ## 10. 流水寄存器切点和关键时序
 
@@ -524,7 +519,7 @@ always_ff 为准，不能用未来完整 model 的 IRQ 单元替代当前电路�
 | F0 | 私有 FIFO 有空间，producer 已发布 | 为一条描述符预留行；各段被跨域队列接受时分别增加在途数 |
 | Fn | 最后一段成功返回，或某段报错 | 标记目标行就绪；仅队头进入仲裁，较年轻的错误等待自己的顺序 |
 | G0 | 引擎空闲，已就绪队头获 grant | owner/locked 注册 |
-| G1 | 队头合法且仍允许接受 | consumer 推进；Copy 注册 copy_start，Fence 保存写地址 |
+| G1 | 队头合法且仍允许接受 | consumer 推进；Copy 注册 copy_start，Fence 保存写地址，Trap 更新 cause 并按 mask 请求通知 |
 
 F0…Fn 可与另一命令执行重叠。各域时钟相位、反压和同一 channel 的前序任务决定实际启动延迟。
 

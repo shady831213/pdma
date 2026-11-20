@@ -12,6 +12,7 @@ pub module ChannelRegisters #(
     maintenance          : input  logic                         ,
     status               : input  RegisterState::ChannelStatus  ,
     command_advance      : input  logic                         ,
+    trap_executed        : input  logic                         ,
     event_advance        : input  logic                         ,
     command_advance_ready: output logic                         ,
     event_advance_ready  : output logic                         ,
@@ -20,6 +21,7 @@ pub module ChannelRegisters #(
     events               : output RegisterState::Ring           ,
     configuration        : output RegisterState::ChannelConfig  ,
     actions              : output RegisterState::ChannelActions ,
+    irq                  : output logic                         ,
     result               : output RegisterAccess::Result        ,
 ) {
     alias package L = ChannelBlockLayout;
@@ -30,10 +32,16 @@ pub module ChannelRegisters #(
     var command_geometry: logic                     ;
     let blocked         : logic                      = global_blocked || status.resetting || clear;
     let locked          : logic                      = configuration.configured || maintenance;
+    var trap_cause: logic;
+    var trap_ack: logic;
     let cause           : logic                 <32> = (((status.fatal != 0) as u32)
             << L::CONTROL_IRQ_CAUSE_CHANNEL_FATAL_LSB) | ((status.error as u32) << L::CONTROL_IRQ_CAUSE_ERROR_LSB)
-        | ((status.trap as u32) << L::CONTROL_IRQ_CAUSE_TRAP_LSB)
+        | ((trap_cause as u32) << L::CONTROL_IRQ_CAUSE_TRAP_LSB)
         | (((events.producer != events.consumer) as u32) << L::CONTROL_IRQ_CAUSE_EVENT_NON_EMPTY_LSB);
+
+    assign irq = configuration.irq_enable && (status.error || status.fatal != 0
+        || (cause[L::CONTROL_IRQ_CAUSE_TRAP_LSB] && !configuration.irq_mask[ChannelIrqMaskLayout::VALUE_TRAP_LSB])
+        || (cause[L::CONTROL_IRQ_CAUSE_EVENT_NON_EMPTY_LSB] && !configuration.irq_mask[ChannelIrqMaskLayout::VALUE_EVENT_NON_EMPTY_LSB]));
 
     inst command_ring: RingRegisters #(
         BASE             : BASE + ChannelBlockLayout::command_offset() as u32,
@@ -174,7 +182,7 @@ pub module ChannelRegisters #(
             L::CONTROL_IRQ_TRAP_ACK_WRITE,
             L::CONTROL_IRQ_TRAP_ACK_WRITABLE,
         );
-        actions.trap_ack = commit && !blocked && candidate.write && candidate.value[0];
+        trap_ack = commit && !blocked && candidate.write && candidate.value[0];
         if candidate.matched {
             control_result = candidate;
         }
@@ -210,6 +218,16 @@ pub module ChannelRegisters #(
         }
         // The decoded admin leaf commits independently of the MMIO response mux.
         actions.reset_request = commit && candidate.write && candidate.value[0];
+    }
+    // A new Trap wins over a simultaneous software ACK.
+    always_ff (clk, rst_n) {
+        if_reset {
+            trap_cause = 0;
+        } else if clear {
+            trap_cause = 0;
+        } else if trap_executed || trap_ack {
+            trap_cause = trap_executed;
+        }
     }
     always_ff (clk, rst_n) {
         if_reset {

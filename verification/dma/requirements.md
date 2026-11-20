@@ -19,6 +19,7 @@ software never substitutes mirrored values for a real hardware read.
 | Linear copy, independent endpoint selectors | `single_channel/cases/linear.rs` | Random bytes, lengths, alignments, nonzero endpoint offsets and selectors; completed-task data and guards; platform memory permissions enforce access ranges and contexts |
 | Byte tails and page boundaries | `single_channel/cases/linear.rs` | Byte/full-width transfers; no access crosses 4 KiB; no over-read/write |
 | Software-visible successful completion | `single_channel/software/mod.rs` | Copy followed by Fence32/64; poll the marker, then check data, guards and identity before task buffer release |
+| Trap after Fence | `single_channel/recovery/mod.rs` | Publish Copy, Fence and Trap together. Check the marker and copied bytes on the channel interrupt, sticky cause and ACK, assertion on unmask/enable, coalescing while sticky, and deassertion on ACK or reset. |
 | Generated register frontdoor | Contract register schemas and MMIO bus contract | Complete reset before changing frozen configuration, round-trip a 64-bit base through AXI4-Lite32, propagate an unmapped read error, restore configuration and complete Copy/Fence |
 | Recoverable read/write faults | `single_channel/recovery` | Park with no error event/IRQ; no retry before Resume; successful read scratch retained across failed writes |
 | Stopping errors | `single_channel/cases/faults.rs` | Error at the next payload page; event identity/code/confirmed prefix and prefix memory; successor Fence remains unpublished |
@@ -27,7 +28,7 @@ software never substitutes mirrored values for a real hardware read.
 | Reporting failures | `single_channel/cases/faults.rs` | Failed event writes retain fatal and do not publish producer |
 | Event publication across a page boundary | `single_channel/cases/faults.rs` | Explicit channel-owned event placement; decode identity, error code and exact progress after the split write; neighboring ring slot remains intact |
 | Reset while accepted memory access is outstanding | `single_channel/harness/lifecycle` | Channel and global reset with suspended VIP B response; reset busy stays set until response is released; no later chunk write; fresh copy after reset |
-| Notification acceptance versus software dispatch | `single_channel/hardware/tests.rs` | Backpressure at IRQ output; exactly one accepted notification dispatched through jarvisuk IRQ service to the channel's own handler; channel zero uses vector 17; ISR reads cause through VIP MMIO; stopping errors bypass routine masks; enable never replays |
+| Level IRQ and software dispatch | `single_channel/hardware/tests.rs` | Sample each channel independently through the stock JarvisUK level monitor. Verify held causes, source masking, diagnostic publication and independent ISR service over shared MMIO. |
 | Three asynchronous domains | RTL-specific | Independently randomized periods, phases and bounded jitter; cold reset released on each domain's own edge |
 | Checker sensitivity | TB selftest | Corrupt payload (`TASK_DATA`), wrong or unknown identity (`TASK_IDENTITY`), suppress completion (`TASK_TIMEOUT`), duplicate completion (`TASK_DUPLICATE`), publish an early Fence during IRQ error (`TASK_COMPLETION`), understate ordered-write progress or report an impossible partial read-error prefix (`TASK_ERROR_INFO`); require the corresponding fatal diagnostic |
 
@@ -39,8 +40,8 @@ submits, waits for completion and explicitly calls the task checker before freei
 its payload and Fence buffers. Error cleanup completes software reset drain first.
 Channels own their command/event rings across tasks. A reset-cancellation flow
 waits for drain, checks the reset result, then frees its resources. Each channel
-owns separate software, IRQ-handler and checker instances; the current DUT has
-only one channel, so this organization does not establish multichannel coverage.
+owns its software driver, IRQ environment and task checker. Multichannel scenarios
+check independent notifications and addressable state on the configured channels.
 The checker derives expected bytes and identity from submitted software inputs.
 Directed error scenarios derive the expected committed prefix from the injected
 failure address, independently of the event's reported count. In the read-error
@@ -63,9 +64,8 @@ PageFault write, in contrast, must have no effects from that failed access befor
 Fault injection is a platform response policy. Payload SLVERR plus USER=1 means
 recoverable PageFault; other errors stop. This does not model page tables or PCIe.
 
-The initial profile implements Linear Copy and Fence32/64. It does not implement
-SG, multi-channel arbitration, Write, Fill, Wait, Atomic, Semaphore, Trap or
-Timestamp. Those Rust scenarios are future
+The RTL implements multichannel Linear Copy, Fence32/64 and Trap. SG, Write,
+Fill, Wait, Atomic, Semaphore and Timestamp remain outside the RTL profile. Those Rust scenarios are future
 coverage obligations, not passed/skipped tests in this regression. Protocol VIP
 and randomized clocks do not establish CDC/RDC or metastability signoff. VC
 SpyGlass CDC and RDC are separate required checks on the actual emitted DMA
@@ -152,11 +152,12 @@ of the driver's period-conversion helpers. Only that selftest retains the requir
 sample counts; DUT test completion depends on scenarios and task checks. No disabled
 observer wakes each cycle to check an enable flag.
 
-Use one task-phase family within each owned component. `pdma_env` registers IRQ
-handlers in `configure_phase` and runs their service in `main_phase`, through
-software teardown. The clock component uses `reset_phase`; the optional clock
-selftest adds `post_reset_phase`. The continuously passive IRQ acceptance monitor
-uses only `run_phase`. Third-party VIP phase implementations remain unchanged.
+Each source registers its handler in `configure_phase`. The JarvisUK level monitor
+samples the corresponding wire on core clock edges and rearms after the handler
+returns. A blocked channel handler can share the RAL frontdoor with peer handlers.
+Trap handlers clear the sticky bit by MMIO. Stopping-error handlers service the
+event and disable channel IRQ until reset. Device fatal has a separate handler and
+enable. The clock component uses `reset_phase` and its selftest adds `post_reset_phase`.
 
 Cancellation belongs to the operation that spawned the competing processes.
 A normal task call creates no process boundary. Each IRQ wait and reset watchdog
@@ -166,11 +167,9 @@ solution for concurrent/reentrant calls. The isolation tests keep a caller-owned
 thread alive across successful and timed-out IRQ waits and across reset; they
 also check that a timed-out receiver cannot consume a later notification.
 
-AXI protocol checks, DUT invariant assertions and IRQ handshake observation remain
-in ordinary verification. IRQ monitoring preserves consecutive accepted notifications
-when the signal stays high. Scenario coverage samples completed observations; the
-memory responder and IRQ service block on transactions. Software MMIO polling and
-cycle-based timeouts retain their behavioral meaning.
+AXI protocol checks, DUT invariant assertions and level monitors remain active in
+ordinary verification. Scenario coverage samples completed observations. Polling
+and cycle-based timeouts remain software-visible checks.
 
 `PDMA_SUITE=dut` is the default regression suite, including the eight checker
 mutation cases. `PDMA_SUITE=tb-selftest` selects the independent cases listed in

@@ -75,7 +75,7 @@ async fn relocated_discovery_routes_data_admin_and_global_controls()
                 control.dma_fatal(&bus).await?,
                 pdma_model_contract::dma::DmaFatalCode::Internal
             );
-            assert!(bus.0.0.lock().map_err(|_| "poisoned DMA")?.take_interrupt());
+            assert!(bus.0.0.lock().map_err(|_| "poisoned DMA")?.irq());
             Ok::<_, Box<dyn std::error::Error>>(())
         })
         .await

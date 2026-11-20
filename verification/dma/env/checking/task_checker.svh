@@ -12,7 +12,7 @@ class pdma_task_checker extends uvm_object;
             `uvm_fatal("TASK_OUTCOME",$sformatf("channel=%0d task=%0d expected=%s/%0d actual=%s/%0d",
                 channel_id,job.id,expected_outcome.name(),expected_code,result.outcome.name(),result.code))
         if(result.outcome==TASK_SUCCESS) begin
-            if(result.value!==job.fence_value() || result.event_producer!==0 || result.cause!==0)
+            if(result.value!==job.fence_value() || result.event_producer!==0 || result.cause!==(job.trap_after_fence ? 1<<pdma_rtl_ChannelIrqCauseLayout::VALUE_TRAP_LSB : 0))
                 `uvm_fatal("TASK_COMPLETION","Invalid Fence completion or unexpected event/cause")
             foreach(job.expected[i]) begin
                 if(memory.read_byte(job.dest_address+i)!==job.expected[i])

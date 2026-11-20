@@ -26,7 +26,6 @@ module CopyEngineTest {
     var observed        : 'bus       logic<64> [128];
     inst dut: DmaCopy (
         fatal_irq      : _       ,
-        fatal_irq_ready: 1       ,
         reg_clk                  ,
         reg_rst_n      : reg_rst ,
         core_clk                 ,
@@ -37,7 +36,6 @@ module CopyEngineTest {
         memory                   ,
         awatop         : atop    ,
         irq                      ,
-        irq_ready      : 1       ,
         fatal                    ,
     );
     inst ram: CopyTestMemory (

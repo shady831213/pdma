@@ -27,15 +27,17 @@ the fixed profile and the default random profile uses constrained values.
 periods and synchronous reset release. Upstream reset completion pools use shared
 short driver names, so the adapter independently awaits all three interfaces'
 reset lifecycles before leaving the power-on `reset_phase`.
-PDMA notifications have a ready/valid acceptance boundary, so the adapter sends
-one transaction to jarvisuk's IRQ sequencer on each handshake. Its level-sensitive
-interrupt monitor is not the same protocol and is not connected directly.
-The adapter maps each channel's accepted notification to its configured vector,
-and jarvisuk dispatches to a separate handler instance bound to that channel's
-software object. Channel zero uses vector 17 to keep those identities distinct.
-Separate checker instances also bind to their channels; the current DUT and
-regression profile still have only one channel.
-Channel reset does not reset the platform IRQ service or its handler registry.
+
+Each DMA channel and the device-fatal output have their own `jvs_int_if` and
+`jvs_irq_env`. Each wire drives the configured vector bit. The stock JarvisUK
+level monitor waits for its handler to finish before sampling again. Every
+source has its own FIFO, sequencer and ISR service.
+
+Channel vectors start at 17. Each handler reads its channel's registers and event
+ring. The device-fatal handler reads the global fatal register. The handlers share
+the frontdoor AXI4-Lite register sequencer. A handler waiting for a software
+resource on one channel leaves the other sources free to deliver. Channel reset
+preserves the platform's handler registration.
 
 The software channel observes completion by polling a Fence32/64 memory marker
 after Copy. The task flow calls its checker before buffer release and waits for

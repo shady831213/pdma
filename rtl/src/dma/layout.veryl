@@ -761,7 +761,7 @@ pub package EventRegistersLayout {
         return 4;
     }
     // Published event count
-    // Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
+    // Hardware advances this cursor only after writing a complete event. Publication makes the non-empty cause visible; Trap never publishes an event.
     function producer_offset() -> u64 {
         return 12;
     }
@@ -805,7 +805,7 @@ pub package EventRegistersLayout {
     const CAPACITY_RESET: u64 = 64'h0000000000000000;
     const CAPACITY_WRITABLE: u64 = 64'h00000000ffffffff;
     // Published event count
-    // Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
+    // Hardware advances this cursor only after writing a complete event. Publication makes the non-empty cause visible; Trap never publishes an event.
     const PRODUCER_OFFSET: u64 = 12;
     const PRODUCER_BYTES: u32 = 4;
     const PRODUCER_ENDIAN_LITTLE: bbool = true;
@@ -1090,7 +1090,7 @@ pub package ChannelIrqCauseLayout {
 #[fmt(skip)]
 pub package ChannelIrqMaskLayout {
     // Channel event notification masks
-    // One suppresses that source's future notifications without clearing causes. Unmask does not replay past events; software must check queue and error state before waiting. Error and fatal notifications bypass these two masks.
+    // One gates the corresponding cause off the IRQ line. Clearing a mask immediately exposes a still-active cause when IRQ is enabled. Stopping error and channel fatal bypass these masks.
     const VALUE_OFFSET: u64 = 0;
     const EXTENT: u64 = 4;
     const VALUE_BYTES: u32 = 4;
@@ -1100,12 +1100,12 @@ pub package ChannelIrqMaskLayout {
     const VALUE_WRITE: bbool = true;
     const VALUE_RESET: u64 = 64'h0000000000000000;
     const VALUE_WRITABLE: u64 = 64'h0000000000000003;
-    // Mask notifications on event empty-to-non-empty transitions
-    // Mask notifications on event empty-to-non-empty transitions.
+    // Mask the event occupancy contribution to the IRQ line
+    // Mask the event occupancy contribution to the IRQ line.
     const VALUE_EVENT_NON_EMPTY_LSB: u32 = 0;
     const VALUE_EVENT_NON_EMPTY_BITS: u32 = 1;
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
+    // Mask the sticky Trap contribution to the IRQ line
+    // Mask the sticky Trap contribution to the IRQ line.
     const VALUE_TRAP_LSB: u32 = 1;
     const VALUE_TRAP_BITS: u32 = 1;
 }
@@ -1137,7 +1137,7 @@ pub package ChannelInterruptsLayout {
     // Independent channel notification enable, causes, masks and Trap acknowledgment.
     const ALIGNMENT: u64 = 4;
     // Channel interrupt enable
-    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+    // One drives the channel IRQ from its current unmasked causes, including stopping error and fatal. Zero lowers the line while retaining causes.
     function enable_offset() -> u64 {
         return 0;
     }
@@ -1159,7 +1159,7 @@ pub package ChannelInterruptsLayout {
         return 4;
     }
     // Independent non-empty and Trap notification masks
-    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
+    // Independent masks for event non-empty and Trap. An active cause asserts IRQ when unmasked and enabled.
     function mask_offset() -> u64 {
         return 8;
     }
@@ -1185,7 +1185,7 @@ pub package ChannelInterruptsLayout {
     }
     const EXTENT: u64 = 16;
     // Channel interrupt enable
-    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+    // One drives the channel IRQ from its current unmasked causes, including stopping error and fatal. Zero lowers the line while retaining causes.
     const ENABLE_OFFSET: u64 = 0;
     const ENABLE_BYTES: u32 = 4;
     const ENABLE_ENDIAN_LITTLE: bbool = true;
@@ -1223,7 +1223,7 @@ pub package ChannelInterruptsLayout {
     const CAUSE_CHANNEL_FATAL_LSB: u32 = 3;
     const CAUSE_CHANNEL_FATAL_BITS: u32 = 1;
     // Independent non-empty and Trap notification masks
-    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
+    // Independent masks for event non-empty and Trap. An active cause asserts IRQ when unmasked and enabled.
     const MASK_OFFSET: u64 = 8;
     const MASK_BYTES: u32 = 4;
     const MASK_ENDIAN_LITTLE: bbool = true;
@@ -1231,12 +1231,12 @@ pub package ChannelInterruptsLayout {
     const MASK_WRITE: bbool = true;
     const MASK_RESET: u64 = 64'h0000000000000000;
     const MASK_WRITABLE: u64 = 64'h0000000000000003;
-    // Mask notifications on event empty-to-non-empty transitions
-    // Mask notifications on event empty-to-non-empty transitions.
+    // Mask the event occupancy contribution to the IRQ line
+    // Mask the event occupancy contribution to the IRQ line.
     const MASK_EVENT_NON_EMPTY_LSB: u32 = 0;
     const MASK_EVENT_NON_EMPTY_BITS: u32 = 1;
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
+    // Mask the sticky Trap contribution to the IRQ line
+    // Mask the sticky Trap contribution to the IRQ line.
     const MASK_TRAP_LSB: u32 = 1;
     const MASK_TRAP_BITS: u32 = 1;
     // Write one to clear sticky Trap cause without retracting platform notifications
@@ -1371,7 +1371,7 @@ pub package ChannelRegistersLayout {
     const RECOVERY_RESUME_REQUEST_LSB: u32 = 0;
     const RECOVERY_RESUME_REQUEST_BITS: u32 = 1;
     // Channel interrupt enable
-    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+    // One drives the channel IRQ from its current unmasked causes, including stopping error and fatal. Zero lowers the line while retaining causes.
     const IRQ_ENABLE_OFFSET: u64 = 20;
     const IRQ_ENABLE_BYTES: u32 = 4;
     const IRQ_ENABLE_ENDIAN_LITTLE: bbool = true;
@@ -1409,7 +1409,7 @@ pub package ChannelRegistersLayout {
     const IRQ_CAUSE_CHANNEL_FATAL_LSB: u32 = 3;
     const IRQ_CAUSE_CHANNEL_FATAL_BITS: u32 = 1;
     // Independent non-empty and Trap notification masks
-    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
+    // Independent masks for event non-empty and Trap. An active cause asserts IRQ when unmasked and enabled.
     const IRQ_MASK_OFFSET: u64 = 28;
     const IRQ_MASK_BYTES: u32 = 4;
     const IRQ_MASK_ENDIAN_LITTLE: bbool = true;
@@ -1417,12 +1417,12 @@ pub package ChannelRegistersLayout {
     const IRQ_MASK_WRITE: bbool = true;
     const IRQ_MASK_RESET: u64 = 64'h0000000000000000;
     const IRQ_MASK_WRITABLE: u64 = 64'h0000000000000003;
-    // Mask notifications on event empty-to-non-empty transitions
-    // Mask notifications on event empty-to-non-empty transitions.
+    // Mask the event occupancy contribution to the IRQ line
+    // Mask the event occupancy contribution to the IRQ line.
     const IRQ_MASK_EVENT_NON_EMPTY_LSB: u32 = 0;
     const IRQ_MASK_EVENT_NON_EMPTY_BITS: u32 = 1;
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
+    // Mask the sticky Trap contribution to the IRQ line
+    // Mask the sticky Trap contribution to the IRQ line.
     const IRQ_MASK_TRAP_LSB: u32 = 1;
     const IRQ_MASK_TRAP_BITS: u32 = 1;
     // Write one to clear sticky Trap cause without retracting platform notifications
@@ -1538,7 +1538,7 @@ pub package ChannelBlockLayout {
     const EVENT_CAPACITY_RESET: u64 = 64'h0000000000000000;
     const EVENT_CAPACITY_WRITABLE: u64 = 64'h00000000ffffffff;
     // Published event count
-    // Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
+    // Hardware advances this cursor only after writing a complete event. Publication makes the non-empty cause visible; Trap never publishes an event.
     const EVENT_PRODUCER_OFFSET: u64 = 36;
     const EVENT_PRODUCER_BYTES: u32 = 4;
     const EVENT_PRODUCER_ENDIAN_LITTLE: bbool = true;
@@ -1632,7 +1632,7 @@ pub package ChannelBlockLayout {
     const CONTROL_RECOVERY_RESUME_REQUEST_LSB: u32 = 0;
     const CONTROL_RECOVERY_RESUME_REQUEST_BITS: u32 = 1;
     // Channel interrupt enable
-    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+    // One drives the channel IRQ from its current unmasked causes, including stopping error and fatal. Zero lowers the line while retaining causes.
     const CONTROL_IRQ_ENABLE_OFFSET: u64 = 64;
     const CONTROL_IRQ_ENABLE_BYTES: u32 = 4;
     const CONTROL_IRQ_ENABLE_ENDIAN_LITTLE: bbool = true;
@@ -1670,7 +1670,7 @@ pub package ChannelBlockLayout {
     const CONTROL_IRQ_CAUSE_CHANNEL_FATAL_LSB: u32 = 3;
     const CONTROL_IRQ_CAUSE_CHANNEL_FATAL_BITS: u32 = 1;
     // Independent non-empty and Trap notification masks
-    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
+    // Independent masks for event non-empty and Trap. An active cause asserts IRQ when unmasked and enabled.
     const CONTROL_IRQ_MASK_OFFSET: u64 = 72;
     const CONTROL_IRQ_MASK_BYTES: u32 = 4;
     const CONTROL_IRQ_MASK_ENDIAN_LITTLE: bbool = true;
@@ -1678,12 +1678,12 @@ pub package ChannelBlockLayout {
     const CONTROL_IRQ_MASK_WRITE: bbool = true;
     const CONTROL_IRQ_MASK_RESET: u64 = 64'h0000000000000000;
     const CONTROL_IRQ_MASK_WRITABLE: u64 = 64'h0000000000000003;
-    // Mask notifications on event empty-to-non-empty transitions
-    // Mask notifications on event empty-to-non-empty transitions.
+    // Mask the event occupancy contribution to the IRQ line
+    // Mask the event occupancy contribution to the IRQ line.
     const CONTROL_IRQ_MASK_EVENT_NON_EMPTY_LSB: u32 = 0;
     const CONTROL_IRQ_MASK_EVENT_NON_EMPTY_BITS: u32 = 1;
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
+    // Mask the sticky Trap contribution to the IRQ line
+    // Mask the sticky Trap contribution to the IRQ line.
     const CONTROL_IRQ_MASK_TRAP_LSB: u32 = 1;
     const CONTROL_IRQ_MASK_TRAP_BITS: u32 = 1;
     // Write one to clear sticky Trap cause without retracting platform notifications

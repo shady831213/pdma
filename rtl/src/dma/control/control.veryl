@@ -10,55 +10,26 @@ pub module DmaControl #(
     cfg            : modport 'registers common_cell::RegisterPort::slave               ,
     channels       : modport 'core      DmaChannels::control                        ,
     irq            : output  'core      logic                        <CHANNEL_COUNT>,
-    irq_ready      : input   'core      logic                        <CHANNEL_COUNT>,
     fatal_irq      : output  'core      logic                                       ,
-    fatal_irq_ready: input   'core      logic                                       ,
     fatal          : output  'core      logic                                       ,
 ) {
     var global_request    : 'core logic               ;
     var global_pending    : 'core logic<CHANNEL_COUNT>;
     var global_irq_enable : 'core logic               ;
-    var fatal_seen        : 'core logic               ;
-    var channel_fatal_seen: 'core logic<CHANNEL_COUNT>;
     let global_busy       : 'core logic                = |global_pending;
     assign channels.reset_all      = global_request && !global_busy;
     assign channels.global_blocked = global_busy || channels.reset_all;
     assign channels.global_clear   = global_busy && (global_pending & ~channels.clear) == 0;
     assign channels.fatal_in       = channels.internal_fatal;
     assign fatal                   = channels.internal_fatal;
-    // Notification acceptance clears a pending delivery. New causes win;
-    // enabling a mask never replays an old cause.
+    assign fatal_irq = global_irq_enable && fatal;
     always_ff (core_clk, core_rst_n) {
         if_reset {
-            irq                = 0;
-            fatal_irq          = 0;
-            fatal_seen         = 0;
-            channel_fatal_seen = 0;
-            global_pending     = 0;
+            global_pending = 0;
+        } else if channels.reset_all {
+            global_pending = '1;
         } else {
-            if channels.reset_all {
-                global_pending = '1;
-            } else {
-                global_pending &= ~channels.clear;
-            }
-            fatal_seen = fatal;
-            if fatal_irq_ready || channels.global_clear {
-                fatal_irq = 0;
-            }
-            if global_irq_enable && fatal && !fatal_seen {
-                fatal_irq = 1;
-            }
-            for channel in 0..CHANNEL_COUNT {
-                channel_fatal_seen[channel] = channels.status[channel].fatal != 0;
-                if irq_ready[channel] || channels.clear[channel] {
-                    irq[channel] = 0;
-                }
-                if !channels.clear[channel] && channels.configuration[channel].irq_enable
-                    && ((channels.status[channel].fatal != 0 && !channel_fatal_seen[channel])
-                        || channels.event_advance[channel]) {
-                    irq[channel] = 1;
-                }
-            }
+            global_pending &= ~channels.clear;
         }
     }
     inst csr: DmaRegisterInterface #(
@@ -74,9 +45,11 @@ pub module DmaControl #(
         global_clear         : channels.global_clear   ,
         global_reset_request : global_request          ,
         global_irq_enable                              ,
+        channel_irq: irq,
         clear_channels       : channels.clear          ,
         maintenance          : 0                       ,
         command_advance      : channels.command_advance,
+        trap_executed        : channels.trap_executed,
         event_advance        : channels.event_advance  ,
         command_advance_ready: _                       ,
         event_advance_ready  : channels.event_ready    ,

@@ -15,7 +15,7 @@ set variants [list \
 # Build each mutation from the actual profile, preserving other dimensions.
 set base [profile::read [file join $root impl/dma/profiles/copy.tcl]]
 set changed $base
-dict set changed ports core_clk input irq_ready 0
+dict set changed ports core_clk output fatal_irq 0
 lappend variants $changed
 set changed $base
 dict set changed ports unknown input data 1
@@ -70,7 +70,7 @@ for {set count 1} {$count <= 8} {incr count} {
     set current [profile::read [file join $root impl/dma/profiles/copy.tcl]]
     if {[dict get $current configuration channels] != $count ||
         [dict get $current memories copy_buffer depth] != 8*$count ||
-        [dict get $current ports core_clk input irq_ready] != $count ||
+        [dict size [dict get $current ports core_clk input]] != 0 ||
         [dict get $current ports core_clk output irq] != $count} {error "Incorrect channel profile $count"}
 }
 foreach invalid {0 9 -1 2.0 02 nope} {

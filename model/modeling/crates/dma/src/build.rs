@@ -104,7 +104,6 @@ impl<M, S> Dma<M, S> {
             memory,
             sideband,
             control,
-            interrupt: false,
             active: None,
             maintenance: None,
             timer: None,

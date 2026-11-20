@@ -28,7 +28,6 @@ pub struct Channel {
     pub(crate) registers: RegisterWindow<ChannelRegisters>,
     pub(crate) admin: RegisterWindow<ChannelAdmin>,
     pub(crate) configured: bool,
-    pub(crate) irq: bool,
     pub(crate) generation: u64,
     pub(crate) work: Option<Accepted>,
     pub(crate) resident: Option<crate::Work>,
@@ -42,7 +41,6 @@ impl Default for Channel {
             registers: RegisterWindow::new(ChannelBlock::CONTROL.offset()),
             admin: RegisterWindow::new(0),
             configured: false,
-            irq: false,
             generation: 0,
             work: None,
             resident: None,
@@ -63,9 +61,17 @@ impl Channel {
         if self.registers.values.recovery.fatal.code() == Ok(ChannelFatalCode::None) {
             self.registers.values.recovery.fatal =
                 self.registers.values.recovery.fatal.with_code(fatal.code());
-            self.irq |= self.registers.values.irq.enable.raw() != 0;
             self.update_irq();
         }
+    }
+
+    pub(crate) fn irq(&self) -> bool {
+        let irq = &self.registers.values.irq;
+        irq.enable.raw() != 0
+            && (irq.cause.error()
+                || irq.cause.channel_fatal()
+                || (irq.cause.trap() && !irq.mask.trap())
+                || (irq.cause.event_non_empty() && !irq.mask.event_non_empty()))
     }
 
     pub(crate) fn update_irq(&mut self) {
@@ -96,7 +102,6 @@ impl Channel {
         self.stop();
         match self.event.push(memory, event) {
             Ok(()) => {
-                self.irq |= self.registers.values.irq.enable.raw() != 0;
                 self.update_irq();
                 crate::Error::Halted
             }
@@ -115,8 +120,6 @@ impl Channel {
     pub(crate) fn trap(&mut self) {
         self.registers.values.irq.cause =
             ChannelIrqCauseValues::new(self.registers.values.irq.cause.raw() | 2);
-        self.irq |=
-            self.registers.values.irq.enable.raw() != 0 && !self.registers.values.irq.mask.trap();
     }
 
     pub(crate) fn request_reset(&mut self) {

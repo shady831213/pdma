@@ -18,6 +18,7 @@ pub interface DmaChannels #(
     var clear          : logic                        <CHANNEL_COUNT>                ;
     var command_advance: logic                        <CHANNEL_COUNT>                ;
     var event_advance  : logic                        <CHANNEL_COUNT>                ;
+    var trap_executed  : logic<CHANNEL_COUNT>;
     modport engine {
         command        : input ,
         events         : input ,
@@ -34,6 +35,7 @@ pub interface DmaChannels #(
         clear          : output,
         command_advance: output,
         event_advance  : output,
+        trap_executed  : output,
     }
     modport control {
         ..converse(engine)

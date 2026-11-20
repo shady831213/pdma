@@ -472,7 +472,7 @@ package EventRegistersLayout;
         return 64'd4;
     endfunction
     // Published event count
-    // Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
+    // Hardware advances this cursor only after writing a complete event. Publication makes the non-empty cause visible; Trap never publishes an event.
     function automatic logic [63:0] producer_offset();
         return 64'd12;
     endfunction
@@ -516,7 +516,7 @@ package EventRegistersLayout;
     localparam logic [63:0] CAPACITY_RESET = 64'h0000000000000000;
     localparam logic [63:0] CAPACITY_WRITABLE = 64'h00000000ffffffff;
     // Published event count
-    // Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
+    // Hardware advances this cursor only after writing a complete event. Publication makes the non-empty cause visible; Trap never publishes an event.
     localparam logic [63:0] PRODUCER_OFFSET = 64'd12;
     localparam int unsigned PRODUCER_BYTES = 32'd4;
     localparam bit PRODUCER_ENDIAN_LITTLE = 1'b1;
@@ -794,7 +794,7 @@ endpackage
 // Generated schema layout; do not edit.
 package ChannelIrqMaskLayout;
     // Channel event notification masks
-    // One suppresses that source's future notifications without clearing causes. Unmask does not replay past events; software must check queue and error state before waiting. Error and fatal notifications bypass these two masks.
+    // One gates the corresponding cause off the IRQ line. Clearing a mask immediately exposes a still-active cause when IRQ is enabled. Stopping error and channel fatal bypass these masks.
     localparam logic [63:0] VALUE_OFFSET = 64'd0;
     localparam logic [63:0] EXTENT = 64'd4;
     localparam int unsigned VALUE_BYTES = 32'd4;
@@ -804,12 +804,12 @@ package ChannelIrqMaskLayout;
     localparam bit VALUE_WRITE = 1'b1;
     localparam logic [63:0] VALUE_RESET = 64'h0000000000000000;
     localparam logic [63:0] VALUE_WRITABLE = 64'h0000000000000003;
-    // Mask notifications on event empty-to-non-empty transitions
-    // Mask notifications on event empty-to-non-empty transitions.
+    // Mask the event occupancy contribution to the IRQ line
+    // Mask the event occupancy contribution to the IRQ line.
     localparam int unsigned VALUE_EVENT_NON_EMPTY_LSB = 32'd0;
     localparam int unsigned VALUE_EVENT_NON_EMPTY_BITS = 32'd1;
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
+    // Mask the sticky Trap contribution to the IRQ line
+    // Mask the sticky Trap contribution to the IRQ line.
     localparam int unsigned VALUE_TRAP_LSB = 32'd1;
     localparam int unsigned VALUE_TRAP_BITS = 32'd1;
 endpackage
@@ -839,7 +839,7 @@ package ChannelInterruptsLayout;
     // Independent channel notification enable, causes, masks and Trap acknowledgment.
     localparam logic [63:0] ALIGNMENT = 64'd4;
     // Channel interrupt enable
-    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+    // One drives the channel IRQ from its current unmasked causes, including stopping error and fatal. Zero lowers the line while retaining causes.
     function automatic logic [63:0] enable_offset();
         return 64'd0;
     endfunction
@@ -861,7 +861,7 @@ package ChannelInterruptsLayout;
         return 64'd4;
     endfunction
     // Independent non-empty and Trap notification masks
-    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
+    // Independent masks for event non-empty and Trap. An active cause asserts IRQ when unmasked and enabled.
     function automatic logic [63:0] mask_offset();
         return 64'd8;
     endfunction
@@ -887,7 +887,7 @@ package ChannelInterruptsLayout;
     endfunction
     localparam logic [63:0] EXTENT = 64'd16;
     // Channel interrupt enable
-    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+    // One drives the channel IRQ from its current unmasked causes, including stopping error and fatal. Zero lowers the line while retaining causes.
     localparam logic [63:0] ENABLE_OFFSET = 64'd0;
     localparam int unsigned ENABLE_BYTES = 32'd4;
     localparam bit ENABLE_ENDIAN_LITTLE = 1'b1;
@@ -925,7 +925,7 @@ package ChannelInterruptsLayout;
     localparam int unsigned CAUSE_CHANNEL_FATAL_LSB = 32'd3;
     localparam int unsigned CAUSE_CHANNEL_FATAL_BITS = 32'd1;
     // Independent non-empty and Trap notification masks
-    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
+    // Independent masks for event non-empty and Trap. An active cause asserts IRQ when unmasked and enabled.
     localparam logic [63:0] MASK_OFFSET = 64'd8;
     localparam int unsigned MASK_BYTES = 32'd4;
     localparam bit MASK_ENDIAN_LITTLE = 1'b1;
@@ -933,12 +933,12 @@ package ChannelInterruptsLayout;
     localparam bit MASK_WRITE = 1'b1;
     localparam logic [63:0] MASK_RESET = 64'h0000000000000000;
     localparam logic [63:0] MASK_WRITABLE = 64'h0000000000000003;
-    // Mask notifications on event empty-to-non-empty transitions
-    // Mask notifications on event empty-to-non-empty transitions.
+    // Mask the event occupancy contribution to the IRQ line
+    // Mask the event occupancy contribution to the IRQ line.
     localparam int unsigned MASK_EVENT_NON_EMPTY_LSB = 32'd0;
     localparam int unsigned MASK_EVENT_NON_EMPTY_BITS = 32'd1;
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
+    // Mask the sticky Trap contribution to the IRQ line
+    // Mask the sticky Trap contribution to the IRQ line.
     localparam int unsigned MASK_TRAP_LSB = 32'd1;
     localparam int unsigned MASK_TRAP_BITS = 32'd1;
     // Write one to clear sticky Trap cause without retracting platform notifications
@@ -1072,7 +1072,7 @@ package ChannelRegistersLayout;
     localparam int unsigned RECOVERY_RESUME_REQUEST_LSB = 32'd0;
     localparam int unsigned RECOVERY_RESUME_REQUEST_BITS = 32'd1;
     // Channel interrupt enable
-    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+    // One drives the channel IRQ from its current unmasked causes, including stopping error and fatal. Zero lowers the line while retaining causes.
     localparam logic [63:0] IRQ_ENABLE_OFFSET = 64'd20;
     localparam int unsigned IRQ_ENABLE_BYTES = 32'd4;
     localparam bit IRQ_ENABLE_ENDIAN_LITTLE = 1'b1;
@@ -1110,7 +1110,7 @@ package ChannelRegistersLayout;
     localparam int unsigned IRQ_CAUSE_CHANNEL_FATAL_LSB = 32'd3;
     localparam int unsigned IRQ_CAUSE_CHANNEL_FATAL_BITS = 32'd1;
     // Independent non-empty and Trap notification masks
-    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
+    // Independent masks for event non-empty and Trap. An active cause asserts IRQ when unmasked and enabled.
     localparam logic [63:0] IRQ_MASK_OFFSET = 64'd28;
     localparam int unsigned IRQ_MASK_BYTES = 32'd4;
     localparam bit IRQ_MASK_ENDIAN_LITTLE = 1'b1;
@@ -1118,12 +1118,12 @@ package ChannelRegistersLayout;
     localparam bit IRQ_MASK_WRITE = 1'b1;
     localparam logic [63:0] IRQ_MASK_RESET = 64'h0000000000000000;
     localparam logic [63:0] IRQ_MASK_WRITABLE = 64'h0000000000000003;
-    // Mask notifications on event empty-to-non-empty transitions
-    // Mask notifications on event empty-to-non-empty transitions.
+    // Mask the event occupancy contribution to the IRQ line
+    // Mask the event occupancy contribution to the IRQ line.
     localparam int unsigned IRQ_MASK_EVENT_NON_EMPTY_LSB = 32'd0;
     localparam int unsigned IRQ_MASK_EVENT_NON_EMPTY_BITS = 32'd1;
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
+    // Mask the sticky Trap contribution to the IRQ line
+    // Mask the sticky Trap contribution to the IRQ line.
     localparam int unsigned IRQ_MASK_TRAP_LSB = 32'd1;
     localparam int unsigned IRQ_MASK_TRAP_BITS = 32'd1;
     // Write one to clear sticky Trap cause without retracting platform notifications
@@ -1238,7 +1238,7 @@ package ChannelBlockLayout;
     localparam logic [63:0] EVENT_CAPACITY_RESET = 64'h0000000000000000;
     localparam logic [63:0] EVENT_CAPACITY_WRITABLE = 64'h00000000ffffffff;
     // Published event count
-    // Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
+    // Hardware advances this cursor only after writing a complete event. Publication makes the non-empty cause visible; Trap never publishes an event.
     localparam logic [63:0] EVENT_PRODUCER_OFFSET = 64'd36;
     localparam int unsigned EVENT_PRODUCER_BYTES = 32'd4;
     localparam bit EVENT_PRODUCER_ENDIAN_LITTLE = 1'b1;
@@ -1332,7 +1332,7 @@ package ChannelBlockLayout;
     localparam int unsigned CONTROL_RECOVERY_RESUME_REQUEST_LSB = 32'd0;
     localparam int unsigned CONTROL_RECOVERY_RESUME_REQUEST_BITS = 32'd1;
     // Channel interrupt enable
-    // One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+    // One drives the channel IRQ from its current unmasked causes, including stopping error and fatal. Zero lowers the line while retaining causes.
     localparam logic [63:0] CONTROL_IRQ_ENABLE_OFFSET = 64'd64;
     localparam int unsigned CONTROL_IRQ_ENABLE_BYTES = 32'd4;
     localparam bit CONTROL_IRQ_ENABLE_ENDIAN_LITTLE = 1'b1;
@@ -1370,7 +1370,7 @@ package ChannelBlockLayout;
     localparam int unsigned CONTROL_IRQ_CAUSE_CHANNEL_FATAL_LSB = 32'd3;
     localparam int unsigned CONTROL_IRQ_CAUSE_CHANNEL_FATAL_BITS = 32'd1;
     // Independent non-empty and Trap notification masks
-    // Independent non-empty and Trap notification masks. Unmask does not replay past events.
+    // Independent masks for event non-empty and Trap. An active cause asserts IRQ when unmasked and enabled.
     localparam logic [63:0] CONTROL_IRQ_MASK_OFFSET = 64'd72;
     localparam int unsigned CONTROL_IRQ_MASK_BYTES = 32'd4;
     localparam bit CONTROL_IRQ_MASK_ENDIAN_LITTLE = 1'b1;
@@ -1378,12 +1378,12 @@ package ChannelBlockLayout;
     localparam bit CONTROL_IRQ_MASK_WRITE = 1'b1;
     localparam logic [63:0] CONTROL_IRQ_MASK_RESET = 64'h0000000000000000;
     localparam logic [63:0] CONTROL_IRQ_MASK_WRITABLE = 64'h0000000000000003;
-    // Mask notifications on event empty-to-non-empty transitions
-    // Mask notifications on event empty-to-non-empty transitions.
+    // Mask the event occupancy contribution to the IRQ line
+    // Mask the event occupancy contribution to the IRQ line.
     localparam int unsigned CONTROL_IRQ_MASK_EVENT_NON_EMPTY_LSB = 32'd0;
     localparam int unsigned CONTROL_IRQ_MASK_EVENT_NON_EMPTY_BITS = 32'd1;
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
-    // Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
+    // Mask the sticky Trap contribution to the IRQ line
+    // Mask the sticky Trap contribution to the IRQ line.
     localparam int unsigned CONTROL_IRQ_MASK_TRAP_LSB = 32'd1;
     localparam int unsigned CONTROL_IRQ_MASK_TRAP_BITS = 32'd1;
     // Write one to clear sticky Trap cause without retracting platform notifications

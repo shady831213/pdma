@@ -1,5 +1,8 @@
 //! PDMA-specific runtime transport; not part of the software channel driver.
 
+mod inputs;
+pub use inputs::IrqInputs;
+
 #[cfg(test)]
 mod tests;
 
@@ -12,10 +15,22 @@ use pdma_model_dma::{Dma, Error};
 use std::{convert::Infallible, sync::Arc};
 use tokio::sync::{Mutex, watch};
 
+#[derive(Debug)]
+struct State<M> {
+    dma: Dma<M>,
+    inputs: IrqInputs,
+}
+impl<M> State<M> {
+    fn sample(&mut self, destination: &InterruptEmitter) {
+        self.inputs
+            .sample(&self.dma, |_| destination.raise(), || destination.raise());
+    }
+}
+
 /// Shared async transport for one device, driven by one retained worker operation.
 #[derive(Debug)]
 pub struct Model<M> {
-    device: Arc<Mutex<Dma<M>>>,
+    device: Arc<Mutex<State<M>>>,
     emitter: InterruptEmitter,
     pending: InterruptReceiver<Irq>,
 }
@@ -32,13 +47,15 @@ impl<M> Clone for Model<M> {
 
 impl<M> Model<M> {
     /// Wraps externally assembled hardware without selecting its memory backend.
-    pub fn new(mut device: Dma<M>) -> Self {
+    pub fn new(device: Dma<M>) -> Self {
         let (emitter, pending) = interrupt_wire(Irq);
-        if device.take_interrupt() {
-            emitter.raise();
-        }
+        let mut state = State {
+            inputs: IrqInputs::new(&device),
+            dma: device,
+        };
+        state.sample(&emitter);
         Self {
-            device: Arc::new(Mutex::new(device)),
+            device: Arc::new(Mutex::new(state)),
             emitter,
             pending,
         }
@@ -48,12 +65,6 @@ impl<M> Model<M> {
     pub fn irq(&self) -> bool {
         self.pending.is_pending()
     }
-
-    fn publish_irq(&self, emitted: bool) {
-        if emitted {
-            self.emitter.raise();
-        }
-    }
 }
 
 impl<M: Send> Model<M> {
@@ -62,8 +73,8 @@ impl<M: Send> Model<M> {
         access: impl FnOnce(&mut Dma<M>) -> Result<(), Error> + Send,
     ) -> Result<(), Error> {
         let mut device = self.device.lock().await;
-        let result = access(&mut device);
-        self.publish_irq(device.take_interrupt());
+        let result = access(&mut device.dma);
+        device.sample(&self.emitter);
         result
     }
 }
@@ -96,8 +107,8 @@ impl<M: Send> AsyncInteractionBackend<Dma<M>> for Model<M> {
         F: FnOnce(&mut Dma<M>) -> StepResult<O, E> + Send,
     {
         let mut device = self.device.lock().await;
-        let outcome = interaction(&mut device);
-        self.publish_irq(device.take_interrupt());
+        let outcome = interaction(&mut device.dma);
+        device.sample(&self.emitter);
         drop(device);
         Ok(outcome)
     }

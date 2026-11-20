@@ -267,7 +267,7 @@ fn event_write_failure_keeps_stop_and_emits_fatal() -> TestResult {
     // Then: no event cursor advances, stop and fatal remain visible, and IRQ is independent.
     assert_eq!(rig.register(0, EVENT_PRODUCER)?, 0);
     assert_eq!(rig.register(0, CAUSE)? & 0b1100, 0b1100);
-    assert!(rig.dma.take_interrupt());
+    assert!(rig.dma.irq());
     assert_eq!(rig.word(0x9000)?, 0);
     Ok(())
 }

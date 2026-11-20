@@ -376,7 +376,7 @@
  */
 /*
  * PRODUCER
- * Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
+ * Hardware advances this cursor only after writing a complete event. Publication makes the non-empty cause visible; Trap never publishes an event.
  */
 
 #define C_HDMA_C_CHANNELS_0_C_EVENT_C_PRODUCER_OFFSET UINT64_C(4132)
@@ -558,7 +558,7 @@
  */
 /*
  * ENABLE
- * One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+ * One drives the channel IRQ from its current unmasked causes, including stopping error and fatal. Zero lowers the line while retaining causes.
  */
 
 /*
@@ -628,24 +628,24 @@
  */
 /*
  * MASK
- * Independent non-empty and Trap notification masks. Unmask does not replay past events.
+ * Independent masks for event non-empty and Trap. An active cause asserts IRQ when unmasked and enabled.
  */
 
 /*
  * event_non_empty
- * Mask notifications on event empty-to-non-empty transitions
+ * Mask the event occupancy contribution to the IRQ line
  */
 /*
  * event_non_empty
- * Mask notifications on event empty-to-non-empty transitions.
+ * Mask the event occupancy contribution to the IRQ line.
  */
 /*
  * trap
- * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
+ * Mask the sticky Trap contribution to the IRQ line
  */
 /*
  * trap
- * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
+ * Mask the sticky Trap contribution to the IRQ line.
  */
 #define C_HDMA_C_CHANNELS_0_C__5BA471A5B97D7D09_OFFSET UINT64_C(4168)
 #define C_HDMA_C_CHANNELS_0_C__5BA471A5B97D7D09_WIDTH UINT64_C(4)
@@ -772,7 +772,7 @@
  */
 /*
  * PRODUCER
- * Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
+ * Hardware advances this cursor only after writing a complete event. Publication makes the non-empty cause visible; Trap never publishes an event.
  */
 
 #define C_HDMA_C_CHANNELS_1_C_EVENT_C_PRODUCER_OFFSET UINT64_C(8228)
@@ -954,7 +954,7 @@
  */
 /*
  * ENABLE
- * One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+ * One drives the channel IRQ from its current unmasked causes, including stopping error and fatal. Zero lowers the line while retaining causes.
  */
 
 /*
@@ -1024,24 +1024,24 @@
  */
 /*
  * MASK
- * Independent non-empty and Trap notification masks. Unmask does not replay past events.
+ * Independent masks for event non-empty and Trap. An active cause asserts IRQ when unmasked and enabled.
  */
 
 /*
  * event_non_empty
- * Mask notifications on event empty-to-non-empty transitions
+ * Mask the event occupancy contribution to the IRQ line
  */
 /*
  * event_non_empty
- * Mask notifications on event empty-to-non-empty transitions.
+ * Mask the event occupancy contribution to the IRQ line.
  */
 /*
  * trap
- * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
+ * Mask the sticky Trap contribution to the IRQ line
  */
 /*
  * trap
- * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
+ * Mask the sticky Trap contribution to the IRQ line.
  */
 #define C_HDMA_C_CHANNELS_1_C__F3507E69BFDCFE02_OFFSET UINT64_C(8264)
 #define C_HDMA_C_CHANNELS_1_C__F3507E69BFDCFE02_WIDTH UINT64_C(4)
@@ -1168,7 +1168,7 @@
  */
 /*
  * PRODUCER
- * Hardware advances this cursor only after writing a complete event. Publication requests an error notification and optionally an empty-to-non-empty notification; Trap never publishes an event.
+ * Hardware advances this cursor only after writing a complete event. Publication makes the non-empty cause visible; Trap never publishes an event.
  */
 
 #define C_HDMA_C_CHANNELS_2_C_EVENT_C_PRODUCER_OFFSET UINT64_C(12324)
@@ -1350,7 +1350,7 @@
  */
 /*
  * ENABLE
- * One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+ * One drives the channel IRQ from its current unmasked causes, including stopping error and fatal. Zero lowers the line while retaining causes.
  */
 
 /*
@@ -1420,24 +1420,24 @@
  */
 /*
  * MASK
- * Independent non-empty and Trap notification masks. Unmask does not replay past events.
+ * Independent masks for event non-empty and Trap. An active cause asserts IRQ when unmasked and enabled.
  */
 
 /*
  * event_non_empty
- * Mask notifications on event empty-to-non-empty transitions
+ * Mask the event occupancy contribution to the IRQ line
  */
 /*
  * event_non_empty
- * Mask notifications on event empty-to-non-empty transitions.
+ * Mask the event occupancy contribution to the IRQ line.
  */
 /*
  * trap
- * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set
+ * Mask the sticky Trap contribution to the IRQ line
  */
 /*
  * trap
- * Mask notifications from Trap commands; each unmasked Trap may emit even with sticky cause already set.
+ * Mask the sticky Trap contribution to the IRQ line.
  */
 #define C_HDMA_C_CHANNELS_2_C__1858B3CEFDB7A8CB_OFFSET UINT64_C(12360)
 #define C_HDMA_C_CHANNELS_2_C__1858B3CEFDB7A8CB_WIDTH UINT64_C(4)

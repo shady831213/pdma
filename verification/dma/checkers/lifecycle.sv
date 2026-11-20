@@ -1,6 +1,6 @@
 module pdma_lifecycle_assertions #(parameter int SLOTS=8, localparam int SLOT_BITS=$clog2(SLOTS+2))(
     input logic clk, rst_n, request, ready, returned, accepted, closing, clear, enabled, has_commands,
-    input logic irq, irq_ready, irq_source, parked, resume_request,
+    input logic irq, irq_source, parked, resume_request,
     input logic [SLOT_BITS-1:0] request_slot, receipt_slot,
     input logic [1023:0] parked_state
 );
@@ -43,10 +43,8 @@ module pdma_lifecycle_assertions #(parameter int SLOTS=8, localparam int SLOT_BI
         else $fatal(1,"DMA_ADMISSION_DURING_RESET");
     assert property(@(posedge clk) disable iff(!rst_n) reset_quiet && !(enabled && has_commands) |-> !request)
         else $fatal(1,"DMA_ACCESS_AFTER_RESET");
-    assert property(@(posedge clk) disable iff(!rst_n) irq && !irq_ready && !clear |=> irq || clear)
-        else $fatal(1,"DMA_NOTIFICATION_DROPPED");
-    assert property(@(posedge clk) disable iff(!rst_n) $rose(irq) |-> irq_source)
-        else $fatal(1,"DMA_NOTIFICATION_WITHOUT_CAUSE");
+    assert property(@(posedge clk) disable iff(!rst_n) irq == irq_source)
+        else $fatal(1,"DMA_CHANNEL_IRQ_LEVEL");
     assert property(@(posedge clk) disable iff(!rst_n) parked && !resume_request && !closing |-> !request)
         else $fatal(1,"DMA_RETRY_WITHOUT_RESUME");
     assert property(@(posedge clk) disable iff(!rst_n)

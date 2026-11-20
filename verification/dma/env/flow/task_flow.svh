@@ -12,7 +12,7 @@ class pdma_task_flow extends uvm_object;
     function new(string name="task_flow"); super.new(name); endfunction
     task open(pdma_task settings);
         job=settings; job.channel_id=channel.channel_id;
-        job.id=channel.next_id; channel.next_id+=2;
+        job.id=channel.next_id; channel.next_id+=job.trap_after_fence ? 3 : 2;
         if(!channel.configured) channel.configure();
         job.allocate(allocator,memory);
     endtask
@@ -46,6 +46,12 @@ class pdma_task_flow extends uvm_object;
         pdma_result result;
         channel.wait_interrupt(result);
         checker_.interrupt_result(result);
+        if(result.outcome==IRQ_NOTIFICATION && outcome==TASK_SUCCESS && job.trap_after_fence) begin
+            // A Trap carries a channel vector. Its preceding Fence supplies the task identity.
+            result.value=job.fence_wide ? memory.read_long(job.fence_address) : memory.read_int(job.fence_address);
+            result.task_id=result.value;
+            result.outcome=TASK_SUCCESS;
+        end
         checker_.check(job,result,outcome,memory,code);
         terminal_outcome=result.outcome;
         publish_observation(result.outcome);

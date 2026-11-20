@@ -15,7 +15,7 @@ class pdma_event_boundary_test extends pdma_base_test;
         int unsigned consumer_before=channel.event_consumer;
         if(address%pdma_configuration::AXI_BOUNDARY_BYTES+EVENT_SIZE<=pdma_configuration::AXI_BOUNDARY_BYTES)
             `uvm_fatal("EVENT_BOUNDARY","Event entry must straddle an AXI page boundary")
-        job.opcode=COMMANDHEADER_OPCODE_TRAP;
+        job.opcode=COMMANDHEADER_OPCODE_ATOMIC;
         job.expect_payload_unchanged=1;
         for(int i=0;i<platform.event_capacity*EVENT_SIZE;i++) env.memory.write_byte(address+i,8'ha5);
         flow_.open(job); flow_.submit(); flow_.expect_result(TASK_ERROR,EVENT_CODE_UNSUPPORTED);

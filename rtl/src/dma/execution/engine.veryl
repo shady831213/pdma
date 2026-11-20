@@ -1,4 +1,4 @@
-// Copy/Fence engine; private accepted-command and retained-data state.
+// Copy/Fence/Trap engine; private accepted-command and retained-data state.
 // Another execution engine can implement the same channel and memory ports.
 pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> #(
     param CHANNEL_COUNT: u32 = 1,
@@ -12,6 +12,9 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
     memory    : modport CopyMemoryPort::<DATA_BYTES, BURST_BEATS, SLOTS>::master                               ,
 ) {
     alias package M = CopyMemory::<DATA_BYTES, BURST_BEATS, SLOTS>;
+    const OP_COPY: u8 = 0;
+    const OP_FENCE: u8 = 6;
+    const OP_TRAP: u8 = 7;
     const CONTROL_SIZE   : u32                                                    = if M::DATA_SIZE <: 3 ?
         M::DATA_SIZE
     :
@@ -48,15 +51,15 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
         + (descriptor[191:128] as 65);
     let   destination_end: logic                <65>                              = destination_sum
         + (descriptor[191:128] as 65);
-    let   fence          : logic                                                  = descriptor[7:0] == 6;
-    // Decode validity is also the acceptance predicate. Padding and inactive
-    // union bytes are reserved zero by the Copy/Fence wire records.
-    let copy_encoding_valid : logic                                = descriptor[15:10] == 0 && descriptor[31:16] == 0
-        && (descriptor[8] || descriptor[511:384] == 0) && (descriptor[9] || descriptor[767:640] == 0);
-    let fence_encoding_valid: logic                                = descriptor[63:8] == 0 && descriptor[255:224] <= 1
-        && descriptor[767:320] == 0;
-    let encoding_valid      : logic                                = descriptor[7:0] <= 8
-        && (if descriptor[7:0] == 0 ? copy_encoding_valid : if fence ? fence_encoding_valid : descriptor[63:8] == 0);
+    let opcode: logic<8> = descriptor[7:0];
+    // Decode and acceptance share the same reserved-byte checks.
+    let encoding_valid: logic = case opcode {
+        OP_COPY: descriptor[15:10] == 0 && descriptor[31:16] == 0
+            && (descriptor[8] || descriptor[511:384] == 0) && (descriptor[9] || descriptor[767:640] == 0),
+        OP_FENCE: descriptor[63:8] == 0 && descriptor[255:224] <= 1 && descriptor[767:320] == 0,
+        OP_TRAP: descriptor[63:8] == 0 && descriptor[767:TrapCommandLayout::EXTENT * 8] == 0,
+        default: opcode <= 8 && descriptor[63:8] == 0,
+    };
     let fence_bytes         : logic<7>                             = if descriptor[255:224] == 0 ? 4 : 8;
     let fence_end           : logic<65>                            = (descriptor[191:128] as 65) + (fence_bytes as 65);
     let event_start         : logic<65>                            = (channels.events[selected].base as 65)
@@ -128,7 +131,6 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
                     || (contexts[channel].phase == CommandState::Phase::Copy && copy_parked[channel]),
                 error: contexts[channel].stopped
                     || (contexts[channel].phase == CommandState::Phase::Copy && copy_error[channel] != 0),
-                trap             : 0                                                                                                              ,
             };
             eligible[channel] = !globally_stopped && !shutdown[channel] && channels.configuration[channel].enable
                 && !contexts[channel].stopped && contexts[channel].fatal == 0
@@ -149,11 +151,13 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
                 payload.accepted
             ;
         }
+        channels.trap_executed   = 0;
         channels.command_advance = 0;
         channels.event_advance   = 0;
         if selected_valid && !shutdown[selected] && !globally_stopped {
             channels.command_advance[selected] = channels.configuration[selected].enable && current.phase
                 == CommandState::Phase::Idle && head_valid[selected] && !heads[selected].failed && encoding_valid;
+            channels.trap_executed[selected] = channels.command_advance[selected] && opcode == OP_TRAP;
             channels.event_advance[selected]   = current.phase == CommandState::Phase::PublishReturn && control_return
                 && !memory.receipt.failed && !memory.receipt.protocol_error && current.event_offset + event_amount
                 == EventLayout::EXTENT;
@@ -213,7 +217,9 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
                     if heads[selected].failed || !encoding_valid {
                         next.fatal = ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD as 32;
                         next.phase = CommandState::Phase::Stopped;
-                    } else if fence {
+                    } else if opcode == OP_TRAP {
+                        next.phase = CommandState::Phase::Idle;
+                    } else if opcode == OP_FENCE {
                         if descriptor[129:128] != 0 || (fence_bytes == 8 && descriptor[130]) || fence_end[64] {
                             next.error_code = 7;
                             next.stopped    = 1;
@@ -222,7 +228,7 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
                             next.control_address = descriptor[191:128];
                             next.phase           = CommandState::Phase::FenceWrite;
                         }
-                    } else if descriptor[7:0] != 0 || descriptor[9:8] != 0 {
+                    } else if opcode != OP_COPY || descriptor[9:8] != 0 {
                         next.error_code = 6;
                         next.stopped    = 1;
                         next.phase      = CommandState::Phase::PrepareEvent;

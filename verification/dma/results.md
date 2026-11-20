@@ -1,5 +1,72 @@
 # Scenario-level verification checkpoints
 
+## Active-high interrupt lines
+
+On the two-channel DUT at seed 41, the stock JarvisUK level monitors verified
+six directed cases. Unmask or enable exposed a retained Trap immediately, W1C
+lowered its line, and two completed batches shared one IRQ while their handler
+was blocked. Channel reset cleared an asserted Trap. Enabling IRQ on a stopped
+channel exposed the error after software had already consumed the event.
+A blocked channel handler left its peer operational, and a device fatal reached
+its own handler. Native Veryl tests passed on both CC and Cranelift (32 each).
+The device-fatal test observed the asserted level for twelve additional core
+cycles. The earlier delivery-handshake evidence below describes its own revision.
+
+## Earlier per-source service on the superseded handshake interface
+
+With one shared IRQ service, holding channel zero's software event-consumer lock
+caused channel one's IRQ wait to time out at seed 41. Both channels had already
+published their error events. With one service per source, the same test passed
+on the two- and eight-channel builds. Every peer consumed its event through
+its own ISR before the test released channel zero.
+
+Two further scenarios passed at one, two and eight channels with the same seed. One accepted
+two Trap notifications on a single channel while its first handler was blocked,
+then checked both Fence markers and both payloads. The other injected a reserved
+memory response reason on a descriptor fetch. It observed the global fatal
+register and exactly one device-fatal ISR while the channel Trap ISR was blocked.
+
+At seed 19 the two- and eight-channel builds each passed all 38 DUT scenarios
+and five TB selftests. Each build rejected all eight checker mutations with
+their expected diagnostics.
+
+## Earlier Trap execution and notification-handshake checkpoint
+
+The Rust system scenario submits Copy, Fence and Trap, observes one channel interrupt,
+and checks the Fence and copied data without consuming an event. The six model IRQ
+tests also pass. In the native RTL test the next Trap is already at the head while the
+preceding Fence write response is withheld. The original RTL failed at
+`TRAP_EXECUTED_AT_ACCEPTANCE` after the response was released. The updated RTL
+passes that check, rejects a Trap with nonzero reserved bytes, and retains a new Trap
+when its cause is acknowledged on the same core edge. CC and Cranelift each ran
+32 native DMA tests with no failures.
+
+The interrupt scenario publishes a three-command batch on every active channel.
+Its watchdog allows one Copy service budget per competing channel. With an
+unscaled budget the eight-channel seed 19 run expired while the shared engine
+was still issuing byte transfers for a peer, before channel zero issued its Fence.
+The same seed reproduced all 650 AXI read/write address issues up to the original
+timeout (direction, ID, address and size), then issued channel zero's Fence32.
+With the per-channel budget it checked 16 tasks and 1,024 payload bytes
+across the two rounds. Each round required an interrupt from every channel.
+At seed 41 both configurations also passed all three directed Trap scenarios.
+They check delivery with the event mask set, sticky cause across repeated delivery,
+no replay on unmask/enable, W1C with a notification pending, coalescing under
+IRQ backpressure, and channel-reset clearing.
+
+At seed 19 each configuration passed all 36 DUT scenarios. Both builds also
+rejected all eight checker mutations with their expected diagnostics.
+
+The aligned 16 KiB Copy on each configuration took 2,048 bus cycles
+in each data direction, with zero bubbles and 2,113 cycles from descriptor to
+Fence. Four prepublished 64-byte Copy/Fence pairs took 285 cycles through the
+last Fence. Both workloads retained the prefetch checkpoint's cycle counts.
+
+The two- and eight-channel CDC/RDC reviews covered the new RTL snapshots. They
+reviewed respectively 99/1,584 and 267/3,054 CDC/RDC findings, with zero unresolved.
+The rules and endpoints matched the prefetch checkpoint. Only the source identities
+in the two review files changed.
+
 ## Channel-owned prefetch and DMA-owned AXI master
 
 The AXI4-Lite register frontend ships in `common_cell 0.2.0`. DMA owns descriptor reservations, AXI memory identity, burst assembly, tracking and lifecycle. PDMA and `tech_cell_generic 0.1.1` resolve the same published common-cell revision. Resolving from an empty dependency cache and without a lockfile reproduced the committed PDMA lockfile.

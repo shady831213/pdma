@@ -171,7 +171,6 @@ module MinimalCopyTest;
     initial begin
         if (`PDMA_REGISTER_BITS != 32 || `PDMA_MEMORY_BITS != 64)
             $fatal(1, "The minimal responder requires 32-bit registers and 64-bit memory");
-        control.irq_ready='1; control.fatal_irq_ready=1;
         cfg.awvalid=0; cfg.wvalid=0; cfg.bready=0; cfg.arvalid=0; cfg.rready=0;
         cfg.awaddr=0; cfg.awprot='0; cfg.awid=0; cfg.wdata=0; cfg.wstrb='1;
         cfg.araddr=0; cfg.arprot='0; cfg.arid=0;

@@ -101,8 +101,8 @@ def project(destination, values):
     bus_clk: input 'bus clock, bus_rst_n: input 'bus reset_async_low,
     cfg: modport 'registers $std::axi4_lite_if::<REG>::slave,
     memory: modport 'bus $std::axi4_if::<BUS>::master,
-{atop_port}    irq: output 'core logic<CHANNELS>, irq_ready: input 'core logic<CHANNELS>,
-    fatal_irq: output 'core logic, fatal_irq_ready: input 'core logic, fatal: output 'core logic,'''
+{atop_port}    irq: output 'core logic<CHANNELS>,
+    fatal_irq: output 'core logic, fatal: output 'core logic,'''
     ports = ports.replace('REG', r).replace('BUS', b).replace('CHANNELS', str(values['channels']))
     knobs = {'CHANNEL_COUNT':'channels', 'PREFETCH_DEPTH':'prefetch_depth', 'READ_OUTSTANDING':'read_outstanding',
              'WRITE_OUTSTANDING':'write_outstanding', 'REQUEST_DEPTH':'request_depth', 'RECEIPT_DEPTH':'receipt_depth'}
@@ -115,7 +115,7 @@ pub module DmaConfigured (
         {parameters},
     ) (
         reg_clk, reg_rst_n, core_clk, core_rst_n, bus_clk, bus_rst_n,
-        cfg, memory, {atop_connection}, irq, irq_ready, fatal_irq, fatal_irq_ready, fatal,
+        cfg, memory, {atop_connection}, irq, fatal_irq, fatal,
     );
 }}
 '''

@@ -36,7 +36,7 @@ async fn emitted_notification_survives_device_reset_and_is_claimed_once() -> Tes
 }
 
 #[tokio::test]
-async fn enabling_after_masked_fatal_does_not_emit_a_notification() -> TestResult {
+async fn enabling_a_still_active_fatal_asserts_the_input() -> TestResult {
     // Given: a fatal event occurred with device notifications disabled.
     let mut device = Dma::new((), 1)?;
     device.signal_fatal();
@@ -52,7 +52,7 @@ async fn enabling_after_masked_fatal_does_not_emit_a_notification() -> TestResul
             &1_u32.to_le_bytes(),
         )
         .await?;
-    // Then: the fault remains readable but no historical notification is replayed.
+    // Then: the retained fault asserts the input on enable.
     let mut bytes = [0; 4];
     model
         .read(
@@ -65,7 +65,7 @@ async fn enabling_after_masked_fatal_does_not_emit_a_notification() -> TestResul
         )
         .await?;
     assert_eq!(u32::from_le_bytes(bytes), 1);
-    assert!(model.claim(()).await?.is_none());
+    assert!(model.claim(()).await?.is_some());
     Ok(())
 }
 

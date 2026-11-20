@@ -462,16 +462,14 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   bypass the routine masks. There is no IOC flag, watermark or success event.
 - `irq_cause` is read-only: bit 0 is current event non-empty, bit 1 is sticky Trap,
   bit 2 is sticky error stop, and bit 3 is channel fatal. Writing TRAP_ACK.request=1
-  clears only Trap; consuming events never clears error stop. Every unmasked Trap can
-  emit even if its sticky cause was already set. Causes remain visible while masked.
-- Device-side unmask/enabling never replays historical events. Software must check
-  events and errors after enabling before it waits. Software drains through fresh
-  producer snapshots until empty, or explicitly schedules further consumption.
-  Notification coalescing does not promise one handler call per Trap.
-- Hardware emits notifications without knowing software handlers. `take_interrupt`
-  hands them to the platform. Runtime retains a pending notification until the existing
-  dispatcher claims it; draining, masking or reset cannot retract a delivered event.
-  `Model::irq()` reports this platform pending state, not a live device level.
+  clears only Trap. Consuming events clears non-empty when the queue empties. Stopping
+  error and channel fatal persist until channel reset. Traps coalesce until W1C.
+- Each channel exposes one active-high IRQ. An active cause becomes visible immediately
+  on enable/unmask. The device-fatal line follows its independent global enable.
+- The direct runtime samples each source separately and converts rising levels to
+  platform messages. `Model::irq()` reports a message awaiting dispatch. A dispatched
+  message does not acknowledge a DMA cause. Already captured messages survive DMA reset.
+
 - Channel and device reset use the same request/cleanup/completion handshake: write one
   requests reset, read one means busy, and hardware clears zero after affected accepted
   work retires. Writing zero is ignored; repeated requests coalesce. Busy scopes reject

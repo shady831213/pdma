@@ -23,7 +23,7 @@ impl<B: RegisterAccess + Send + Sync, M: Send + Sync> Channel<B, M> {
 
     /// Enables or masks all channel interrupt notifications.
     ///
-    /// Enabling does not replay masked events; inspect causes and pending events.
+    /// Enabling asserts IRQ immediately for any active, unmasked cause.
     pub async fn set_irq_enabled(&self, enabled: bool) -> Result<(), Error<B::Error>> {
         self.port
             .control
@@ -33,7 +33,7 @@ impl<B: RegisterAccess + Send + Sync, M: Send + Sync> Channel<B, M> {
 
     /// Masks event-nonempty and Trap notifications; errors and fatals bypass this mask.
     ///
-    /// Clearing a mask does not replay events; inspect causes and pending events.
+    /// Clearing a mask exposes an active cause immediately when IRQ is enabled.
     pub async fn set_irq_mask(&self, mask: ChannelIrqMaskValues) -> Result<(), Error<B::Error>> {
         self.port.control.set_irq_mask(&self.port.bus, mask).await
     }
@@ -68,7 +68,7 @@ impl<B: RegisterAccess + Send + Sync, M: Send + Sync> Channel<B, M> {
 
     /// Enables or masks device-fatal notifications independently of the channel gate.
     ///
-    /// Enabling does not replay masked events; inspect the device fatal afterward.
+    /// Enabling asserts the device IRQ if device fatal is active.
     pub async fn set_dma_irq_enabled(&self, enabled: bool) -> Result<(), Error<B::Error>> {
         self.port
             .control

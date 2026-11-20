@@ -20,6 +20,7 @@ package pdma_tests_pkg;
     `include "tests/dut/descriptor.svh"
     `include "tests/dut/fatal.svh"
     `include "tests/dut/irq.svh"
+    `include "tests/dut/trap.svh"
     `include "tests/dut/ring.svh"
     `include "tests/dut/event.svh"
     `include "tests/dut/registers.svh"

@@ -84,7 +84,8 @@ async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestRe
     let mut hardware = pdma_model_dma::Fetch;
     let mut model = Model::new(device);
     let outcome = {
-        let mut device = model.device.lock().await;
+        let mut state = model.device.lock().await;
+        let device = &mut state.dma;
         for offset in [
             IRQ_ENABLE,
             (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
@@ -119,7 +120,7 @@ async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestRe
                 break;
             }
         }
-        drop(device);
+        drop(state);
         outcome
     };
     assert!(matches!(

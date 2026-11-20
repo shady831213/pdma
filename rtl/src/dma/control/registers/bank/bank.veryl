@@ -13,9 +13,11 @@ pub module DmaRegisterBank #(
     global_clear         : input   logic                                                       ,
     global_reset_request : output  logic                                                       ,
     global_irq_enable    : output  logic                                                       ,
+    channel_irq          : output  logic<CHANNEL_COUNT>                                                       ,
     clear_channels       : input   logic                        <CHANNEL_COUNT>                ,
     maintenance          : input   logic                        <CHANNEL_COUNT>                ,
     command_advance      : input   logic                        <CHANNEL_COUNT>                ,
+    trap_executed        : input   logic                        <CHANNEL_COUNT>                ,
     event_advance        : input   logic                        <CHANNEL_COUNT>                ,
     command_advance_ready: output  logic                        <CHANNEL_COUNT>                ,
     event_advance_ready  : output  logic                        <CHANNEL_COUNT>                ,
@@ -65,6 +67,7 @@ pub module DmaRegisterBank #(
             maintenance          : maintenance[i]                   ,
             status               : statuses[i]                      ,
             command_advance      : command_advance[i]               ,
+            trap_executed        : trap_executed[i],
             event_advance        : event_advance[i]                 ,
             command_advance_ready: command_advance_ready[i]         ,
             event_advance_ready  : event_advance_ready[i]           ,
@@ -73,6 +76,7 @@ pub module DmaRegisterBank #(
             events               : events[i]                        ,
             configuration        : configurations[i]                ,
             actions              : actions[i]                       ,
+            irq                  : channel_irq[i],
             result               : channel_results[i]               ,
         );
     }

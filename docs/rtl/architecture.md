@@ -1,6 +1,6 @@
 # PDMA Copy Engine RTL 架构设计输入
 
-当前 Copy/Fence RTL 的逐模块、状态机、流水和时序说明见 [已实现微架构](microarchitecture.md)，
+当前 Copy/Fence/Trap RTL 的逐模块、状态机、流水和时序说明见 [已实现微架构](microarchitecture.md)，
 最新吞吐/延迟测量见 [性能说明](performance.md)。本文件的目标设计条目不自动代表已实现。
 
 状态：微架构设计草案，2026-11-12 更新。寄存器访问和最小 Linear Copy/Fence32/64 切片已有实现，
@@ -76,7 +76,7 @@ ContextRequest MMIO、context table、Function/window 路由、PF control channe
 | 寄存器访问 | 一个 32/64 位 AXI4-Lite slave，覆盖 DMA discovery/admin/channel map | Function/PF/VF 权限窗口、PF control 与 boot 寄存器 |
 | 内存访问 | 一个 AXI5 master；请求保留 channel 与完整 ContextId，响应保留错误原因 | selector 到 Function/PASID/ch_tag 的映射、MMU、内存实体与 CPU cache 协调 |
 | Context 维护控制 | 完整 ContextId、Drain/Abort、受理/忙状态、结果及失败 channel 集合 | ContextRequest MMIO 编码、context valid/owner 表、Destroy 策略与 firmware 请求队列 |
-| 通知 | channel notification pending/accept 和独立 DMA-wide fatal pending/accept | 中断控制器、CPU ISR、Function 路由与 PCIe MSI |
+| 通知 | 每 channel 一根高有效 IRQ 线及独立的 DMA-wide fatal IRQ 线 | 中断控制器、CPU ISR、Function 路由与 PCIe MSI |
 | 时间 | core 域一致的 64 位外部样本；无 timer 配置下 Timestamp 按既有 Unsupported 语义 | timer 实体、计时单位及异步源的快照适配 |
 | 时钟/复位 | reg/core/bus 三域及各域同步释放；软件 reset 仍走责任排空 | 平台冷复位协调、电源管理与任意单域热复位恢复 |
 
@@ -276,8 +276,8 @@ Intel DSA 将 WQ、engine 和 group 区分配置，并通过能力提供最大�
 来源：[DSA User Guide，3.2.5](https://cdrdv2-public.intel.com/759709/353216-004-intel-data-streaming-accelerator-user-guide.pdf)。
 
 2026-11-13 确认：下一版 RTL 以 `CHANNEL_COUNT` 参数支持 1–8 的所有整数，首版资格
-上限定为 8 channel；这不是修改模型或 contract 的永久上限。当前已实现的完整
-Copy/Fence 切片仍为单 channel。其余维度继续按下表开展资源与验证扫描：
+上限定为 8 channel；这不是修改模型或 contract 的永久上限。各配置的验证状态见
+[验证记录](../../verification/dma/results.md)。其余维度继续按下表开展资源与验证扫描：
 
 | 维度 | 设计与验证候选 |
 | --- | --- |

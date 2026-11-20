@@ -44,9 +44,13 @@ module pdma_vip_dut(svt_axi_if host_bus, svt_axi_if memory_bus, pdma_control_if 
             .request_slot(integration.dma.requests.request.tag.slot),.receipt_slot(integration.dma.requests.receipt.tag.slot),
             .closing(integration.dma.commands.execution.shutdown[c]),.clear(integration.dma.channels.clear[c]),
             .enabled(integration.dma.channels.configuration[c].enable),.has_commands(integration.dma.channels.command[c].producer!=integration.dma.channels.command[c].consumer),
-            .irq(control.irq[c]),.irq_ready(control.irq_ready[c]),
-            .irq_source(integration.dma.channels.status[c].error || integration.dma.channels.status[c].fatal!=0 ||
-                integration.dma.channels.status[c].trap || integration.dma.channels.events[c].producer!=integration.dma.channels.events[c].consumer),
+            .irq(control.irq[c]),
+            .irq_source(integration.dma.channels.configuration[c].irq_enable && (
+                integration.dma.channels.status[c].error || integration.dma.channels.status[c].fatal!=0 ||
+                (!integration.dma.channels.configuration[c].irq_mask[pdma_rtl_ChannelIrqMaskLayout::VALUE_TRAP_LSB] &&
+                    integration.dma.control.csr.owners.channels[c].owner.trap_cause) ||
+                (!integration.dma.channels.configuration[c].irq_mask[pdma_rtl_ChannelIrqMaskLayout::VALUE_EVENT_NON_EMPTY_LSB] &&
+                    integration.dma.channels.events[c].producer!=integration.dma.channels.events[c].consumer))),
             .parked(integration.dma.channels.status[c].faulted),.resume_request(integration.dma.channels.actions[c].resume_request),
             .parked_state({integration.dma.commands.execution.contexts[c].descriptor,integration.dma.commands.execution.copy.next_source[c],integration.dma.commands.execution.copy.next_destination[c],
                 integration.dma.commands.execution.copy.remaining[c],integration.dma.commands.execution.copy.committed[c]})
@@ -59,8 +63,8 @@ module pdma_vip_dut(svt_axi_if host_bus, svt_axi_if memory_bus, pdma_control_if 
         integration.dma.requests.returned |-> integration.dma.requests.receipt.tag.channel<`PDMA_CHANNEL_COUNT)
         else $fatal(1,"DMA_INVALID_RECEIPT_OWNER");
     assert property(@(posedge control.core_clk) disable iff(!control.core_rst_n)
-        control.fatal_irq && !control.fatal_irq_ready && !integration.dma.channels.global_clear |=> control.fatal_irq || integration.dma.channels.global_clear)
-        else $fatal(1,"DMA_FATAL_NOTIFICATION_DROPPED");
+        control.fatal_irq == (integration.dma.control.global_irq_enable && control.fatal))
+        else $fatal(1,"DMA_FATAL_IRQ_LEVEL");
     assign cfg.awaddr=host_bus.master_if[0].awaddr;
     assign cfg.awprot=host_bus.master_if[0].awprot;
     assign cfg.awvalid=host_bus.master_if[0].awvalid;

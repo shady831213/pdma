@@ -111,7 +111,7 @@ fn false_wait_yields_to_peer_and_blocks_own_fence() -> TestResult {
 }
 
 #[test]
-fn trap_ack_preserves_pending_notification() -> TestResult {
+fn trap_ack_releases_irq_after_fence() -> TestResult {
     // Given: a Trap followed by software-visible completion storage.
     let mut rig = Rig::new(1, 0)?;
     rig.submit(
@@ -126,7 +126,7 @@ fn trap_ack_preserves_pending_notification() -> TestResult {
             fence(0x9000),
         ],
     )?;
-    // When: software acknowledges the sticky cause before claiming the IRQ.
+    // When: software acknowledges the sticky cause after observing its Fence.
     rig.drive()?;
     assert_eq!(rig.register(0, CAUSE)? & 2, 2);
     rig.dma.write(
@@ -136,9 +136,9 @@ fn trap_ack_preserves_pending_notification() -> TestResult {
             + ChannelInterrupts::TRAP_ACK.offset(),
         &1_u32.to_le_bytes(),
     )?;
-    // Then: acknowledgement clears the cause but leaves the emitted notification.
+    // Then: acknowledgement clears the cause and releases the line.
     assert_eq!(rig.register(0, CAUSE)? & 2, 0);
-    assert!(rig.dma.take_interrupt());
+    assert!(!rig.dma.irq());
     assert_eq!(rig.register(0, EVENT_PRODUCER)?, 0);
     Ok(())
 }

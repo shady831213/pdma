@@ -140,7 +140,7 @@ fn publication_refreshes_stored_causes_without_irq_stage_or_mmio_read() -> TestR
                 info: EventInfoValues::ReadError(ErrorInfo { bytes_completed: 0 })
             }
         );
-        assert!(dma.take_interrupt());
+        assert!(dma.irq());
     }
     Ok(())
 }
@@ -159,7 +159,7 @@ fn fatal_refreshes_stored_cause_without_irq_stage_or_mmio_read() -> TestResult {
         channel.registers.values.recovery.fatal.code(),
         Ok(pdma_model_contract::dma::ChannelFatalCode::EventWrite)
     );
-    assert!(dma.take_interrupt());
+    assert!(dma.irq());
     Ok(())
 }
 
@@ -257,7 +257,7 @@ fn full_or_corrupt_event_ring_fails_error_publication_without_backpressure() -> 
         assert_eq!(channel.event.pointers().producer, producer);
         assert!(channel.registers.values.irq.cause.error());
         assert!(channel.resident.is_none());
-        assert!(dma.take_interrupt());
+        assert!(dma.irq());
     }
     Ok(())
 }

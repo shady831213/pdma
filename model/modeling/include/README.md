@@ -149,8 +149,8 @@ notification without ring storage. There is no response or IOC compatibility API
 Discovery capabilities are read-only atomic32/atomic64 bits 0/1. Channel IRQ
 causes are event_non_empty/trap/error/channel_fatal in bits 0..3; only the first
 two have mask bits. TRAP_ACK is write-only bit-zero acknowledgment at channel
-offset 76; it does not retract a platform-pending notification. Each unmasked
-Trap can emit, and enable/unmask never replays old notifications. Error stop is
+offset 76; it does not retract a platform-pending notification. Traps coalesce while the cause
+remains set. Enable/unmask immediately asserts IRQ for an active source. Error stop is
 latched before event publication and survives event consumption. The ring_context
 register selects one binding for command and event memory; data selectors remain
 independent. PF ControlResponse and ControlEvent are separate and unchanged.

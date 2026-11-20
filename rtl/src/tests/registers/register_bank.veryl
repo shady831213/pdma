@@ -9,6 +9,7 @@ module DmaRegisterBankTest {
     var global_reset_request : logic                               ;
     var global_irq_enable    : logic                               ;
     var clear_channels       : logic                        <3>    ;
+    var trap_executed: logic<3>;
     var maintenance          : logic                        <3>    ;
     var command_advance      : logic                        <3>    ;
     var event_advance        : logic                        <3>    ;
@@ -32,9 +33,11 @@ module DmaRegisterBankTest {
         global_clear              ,
         global_reset_request      ,
         global_irq_enable         ,
+        channel_irq: _,
         clear_channels            ,
         maintenance               ,
         command_advance           ,
+        trap_executed,
         event_advance             ,
         command_advance_ready     ,
         event_advance_ready       ,
@@ -50,6 +53,7 @@ module DmaRegisterBankTest {
         global_fatal        = 0;
         global_clear        = 0;
         clear_channels      = 0;
+        trap_executed       = 0;
         maintenance         = 0;
         command_advance     = 0;
         event_advance       = 0;
@@ -108,6 +112,18 @@ module DmaRegisterBankTest {
             "LOCK_REJECTS_CHANGE",
         );
         clk.next();
+        // A W1C transfer and an execution on the same edge must preserve the new cause.
+        port.request.address = 8192 + ChannelBlockLayout::CONTROL_IRQ_TRAP_ACK_OFFSET as u32;
+        port.request.data    = 1;
+        port.request_valid   = 1;
+        trap_executed        = 3'b010;
+        clk.next();
+        trap_executed        = 0;
+        port.request.write   = 0;
+        port.request.address = 8192 + ChannelBlockLayout::CONTROL_IRQ_CAUSE_OFFSET as u32;
+        clk.next();
+        $assert(port.response.data == (1 << ChannelIrqCauseLayout::VALUE_TRAP_LSB), "TRAP_WINS_OVER_ACK");
+        port.request.write   = 1;
         // Channel-1 reset is an action, not automatic storage cleanup or a fabricated completion.
         port.request.address = 24;
         port.request.data    = 1;
@@ -131,6 +147,10 @@ module DmaRegisterBankTest {
         statuses[1].resetting = 0;
         $assert(!configurations[1].configured && commands[1].capacity == 0, "OWNER_CLEANUP");
         $assert(commands[0].capacity == 0, "PEER_NOT_REASSIGNED");
+        port.request.address = 8192 + ChannelBlockLayout::CONTROL_IRQ_CAUSE_OFFSET as u32;
+        port.request_valid = 1;
+        clk.next();
+        $assert(port.response.data == 0, "RESET_CLEARS_TRAP");
         $finish();
     }
 }

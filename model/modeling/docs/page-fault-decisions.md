@@ -644,7 +644,7 @@ does not become a separate pipeline merely because it must occur while data is
 stalled. The group implementation, API, callers and group-only tests are removed.
 
 Channel publication, fatal latching and MMIO source changes now refresh IRQ causes
-directly. Notification edges and mask/no-replay rules remain unchanged. Resource
+directly. The subsequent IRQ level contract is specified by HW-CE-12 in `copy-engine.md`. Resource
 retirement belongs to the operations that complete or discard work. Context
 maintenance observes those transitions; unstarted Abort descriptors are consumed
 by Fetch, not a parallel scanner. The ordinary external driver knows only the

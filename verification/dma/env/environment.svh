@@ -9,13 +9,9 @@ class pdma_env extends uvm_env;
     pdma_memory_policy memory_policy;
     jvs_memory_allocator allocator;
     pdma_clocks clocks;
-    jvs_irq_vir_sequencer interrupts;
-    pdma_notification notification;
-    pdma_channel channels[];
+    pdma_channel_env channels[];
     pdma_device device;
-    pdma_irq_handler handlers[];
     pdma_device_irq_handler device_handler;
-    pdma_task_checker checkers[];
     pdma_scenario_coverage coverage_;
     uvm_analysis_port#(pdma_observation) observations;
     virtual pdma_control_if control;
@@ -23,6 +19,7 @@ class pdma_env extends uvm_env;
         super.new(name,parent); observations=new("observations",this);
     endfunction
     virtual function void build_phase(uvm_phase phase);
+        pdma_irq_env device_irq;
         svt_mem backing;
         jvs_memory_cfg allocation=new("allocation");
         super.build_phase(phase);
@@ -52,23 +49,26 @@ class pdma_env extends uvm_env;
         allocation.range.configurate(cfg.heap_base,cfg.heap_size); allocator.configurate(allocation);
         uvm_config_db#(uvm_object_wrapper)::set(this,"memory_bus.slave[0].sequencer.run_phase","default_sequence",pdma_memory_response::type_id::get());
         clocks=pdma_clocks::type_id::create("clocks",this);
-        interrupts=jvs_irq_vir_sequencer::type_id::create("interrupts",this);
-        notification=pdma_notification::type_id::create("notification",this);
-        notification.control=control; notification.sequencer=interrupts;
-        channels=new[cfg.channel_count]; handlers=new[cfg.channel_count]; checkers=new[cfg.channel_count];
+        device=new; device.cfg=cfg; device.registers=registers.admin_block.control_block;
+        channels=new[cfg.channel_count]; device.channels=new[cfg.channel_count];
         foreach(channels[i]) begin
-            channels[i]=new($sformatf("channel_%0d",i));
-            channels[i].bind_registers(registers,i,cfg.irq_vectors[i]);
-            channels[i].allocator=allocator; channels[i].cfg=cfg;
-            channels[i].memory=memory; channels[i].control=control;
-            handlers[i]=new($sformatf("channel_%0d_handler",i)); handlers[i].channel=channels[i];
-            checkers[i]=pdma_task_checker::type_id::create($sformatf("channel_%0d_checker",i));
-            checkers[i].channel_id=i;
+            pdma_channel driver;
+            channels[i]=pdma_channel_env::type_id::create($sformatf("channel_%0d",i),this);
+            if(!(cfg.irq_vectors[i] inside {[0:`JVS_MAX_INT_PIN_NUM-1]}))
+                `uvm_fatal("IRQ_VECTOR","Channel IRQ vector outside controller inputs")
+            control.irq_vectors[i]=cfg.irq_vectors[i];
+            driver=channels[i].driver;
+            driver.bind_registers(registers,i,cfg.irq_vectors[i]);
+            driver.allocator=allocator; driver.cfg=cfg; driver.memory=memory; driver.control=control;
+            device.channels[i]=driver;
         end
-        notification.channels=channels; notification.device_vector=cfg.device_irq_vector;
-        device=new; device.cfg=cfg; device.registers=registers.admin_block.control_block; device.channels=channels;
+        if(!(cfg.device_irq_vector inside {[0:`JVS_MAX_INT_PIN_NUM-1]}))
+            `uvm_fatal("IRQ_VECTOR","Device IRQ vector outside controller inputs")
+        control.device_irq_vector=cfg.device_irq_vector;
         device_handler=new("device_fatal_handler"); device_handler.device=device;
         device_handler.vector=cfg.device_irq_vector;
+        device_irq=pdma_irq_env::type_id::create("device_fatal_irq",this);
+        device_irq.vector=cfg.device_irq_vector; device_irq.handler=device_handler;
         coverage_=pdma_scenario_coverage::type_id::create("coverage",this);
     endfunction
     virtual function void connect_phase(uvm_phase phase);
@@ -78,19 +78,10 @@ class pdma_env extends uvm_env;
         registers.default_map.set_check_on_read(0);
         observations.connect(coverage_.analysis_export);
     endfunction
-    virtual task configure_phase(uvm_phase phase);
-        phase.raise_objection(this);
-        foreach(channels[i]) interrupts.register_irq(channels[i].vector,handlers[i]);
-        interrupts.register_irq(cfg.device_irq_vector,device_handler);
-        phase.drop_objection(this);
-    endtask
-    virtual task main_phase(uvm_phase phase);
-        jvs_irq_vir_seq service=new("irq_service"); service.start(interrupts);
-    endtask
     function pdma_task_flow task_flow(int channel_id=0);
         pdma_task_flow flow_=pdma_task_flow::type_id::create("task_flow");
         if(channel_id>=channels.size()) `uvm_fatal("CHANNEL_CONFIG","Requested an unimplemented channel")
-        flow_.device=device; flow_.channel=channels[channel_id]; flow_.checker_=checkers[channel_id];
+        flow_.device=device; flow_.channel=channels[channel_id].driver; flow_.checker_=channels[channel_id].checker_;
         flow_.memory=memory; flow_.allocator=allocator; flow_.observations=observations;
         return flow_;
     endfunction

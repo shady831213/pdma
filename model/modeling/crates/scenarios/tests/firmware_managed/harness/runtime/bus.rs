@@ -44,6 +44,7 @@ impl<M: Send> RegisterAccess for HostBus<M> {
                      firmware,
                      control,
                      contexts,
+                     ..
                  }| {
                     if let Some(contexts) = contexts {
                         let result = contexts
@@ -99,6 +100,7 @@ impl<M: Send> RegisterAccess for HostBus<M> {
                      firmware,
                      control,
                      contexts,
+                     ..
                  }| {
                     if let Some(contexts) = contexts {
                         let result = contexts

@@ -64,7 +64,7 @@ fn channel_collection_miss_allows_control_in_either_order() -> Result<(), Box<dy
     device.read(count, &mut out)?;
     assert_eq!(u32::from_le_bytes(out), 3);
     device.signal_fatal();
-    assert!(device.take_interrupt());
+    assert!(device.irq());
     Ok(())
 }
 

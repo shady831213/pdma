@@ -73,8 +73,8 @@ the channel, and `[31:0]` retains the full context selector. This fixed maximum
 tag width is independent of the instantiated count; eligibility, address bounds
 and round-robin wrap use the actual count. The channel selector is not a Function/PASID or a platform fault tag.
 The instance count is immutable and reported by discovery; descriptor and register
-semantics remain unchanged. Channel notifications have independent pending/accept
-state, separate from the DMA-wide fatal notification. Platform routing, firmware
+semantics remain unchanged. Each channel drives its own level IRQ,
+with a separate DMA-wide fatal IRQ. Platform routing, firmware
 and CPU implementation remain outside this DMA-only slice.
 
 `CommandState::Context` is a bank of channel-owned registers. The selected row

@@ -35,6 +35,7 @@ use tokio::sync::Mutex;
 #[derive(Debug)]
 struct Hardware<M> {
     dma: Dma<RoutedMemory<M>, DmaAccess>,
+    irq_inputs: pdma_model_host::runtime::IrqInputs,
     windows: Arc<std::sync::Mutex<ChannelWindows>>,
     firmware: FirmwareStatus,
     control: Arc<std::sync::Mutex<ControlChannel>>,
@@ -46,7 +47,6 @@ struct Shared<M> {
     addresses: ManagementAddresses,
     hardware: Mutex<Hardware<M>>,
     destinations: Vec<InterruptEmitter>,
-    channel_count: usize,
     to_firmware: InterruptEmitter,
     to_host: InterruptEmitter,
     to_events: InterruptEmitter,

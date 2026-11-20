@@ -54,7 +54,7 @@ fn linear_fault_is_silent_under_every_notification_mask() -> TestResult {
                     .read(0x180b.into(), MemoryAlignment::ONE, &mut bytes)?;
                 assert_eq!(&bytes[..256], &[0xa5; 256]);
                 assert_eq!(&bytes[256..], &[0; 256]);
-                assert!(!device.take_interrupt());
+                assert!(!device.irq());
                 assert_eq!(
                     read_word(
                         &mut device,
@@ -88,7 +88,7 @@ fn linear_fault_is_silent_under_every_notification_mask() -> TestResult {
                     )?;
                     run(&mut device)?;
                 }
-                assert_eq!(device.take_interrupt(), trap && mask & 2 == 0);
+                assert_eq!(device.irq(), trap && mask & 2 == 0);
                 assert_eq!(
                     read_word(
                         &mut device,
@@ -151,7 +151,7 @@ fn metadata_and_event_faults_keep_stopping_and_fatal_boundaries() -> TestResult 
                 0
             );
         }
-        assert!(device.take_interrupt());
+        assert!(device.irq());
     }
     Ok(())
 }

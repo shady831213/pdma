@@ -121,8 +121,7 @@ async fn software_explicitly_enables_device_and_channel_interrupts()
 }
 
 #[tokio::test]
-async fn masked_trap_cause_remains_visible_without_unmask_catch_up()
--> Result<(), Box<dyn std::error::Error>> {
+async fn unmask_delivers_a_retained_trap_cause() -> Result<(), Box<dyn std::error::Error>> {
     // Given: both routine notification sources are masked.
     let (device, memory, rings) = fixture()?;
     let mut hardware = device.hardware();
@@ -166,8 +165,8 @@ async fn masked_trap_cause_remains_visible_without_unmask_catch_up()
     }
     cpu.run_main(channel.set_irq_mask(ChannelIrqMaskValues::default()))
         .await?;
-    // Then: software sees and acknowledges Trap without a catch-up IRQ.
-    assert!(!model.irq());
+    // Then: software sees and acknowledges Trap after the active cause asserted its IRQ.
+    assert!(model.irq());
     let cause = cpu.run_main(channel.irq_cause()).await?;
     assert!(!cause.event_non_empty());
     assert!(cause.trap());
@@ -178,7 +177,7 @@ async fn masked_trap_cause_remains_visible_without_unmask_catch_up()
 }
 
 #[tokio::test]
-async fn dma_fatal_is_visible_after_unmask_without_replaying_notification()
+async fn dma_fatal_is_visible_after_unmask_and_asserts_irq()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: software has masked the independent device-fatal gate.
     let (device, memory, rings) = fixture()?;
@@ -206,8 +205,8 @@ async fn dma_fatal_is_visible_after_unmask_without_replaying_notification()
         .await?;
     assert!(matches!(outcome, Ok(StepOutcome::Complete(Ok(())))));
     cpu.run_main(channel.set_dma_irq_enabled(true)).await?;
-    // Then: the sticky fault is visible without replay and device reset permits recovery.
-    assert!(!model.irq());
+    // Then: the sticky fault asserts the IRQ and device reset permits recovery.
+    assert!(model.irq());
     assert_eq!(
         cpu.run_main(channel.dma_fatal()).await?,
         DmaFatalCode::Internal

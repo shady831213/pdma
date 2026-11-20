@@ -11,7 +11,6 @@ impl<M, SB> Dma<M, SB> {
         {
             self.active = None;
             self.control.values = DmaControlValues::default();
-            self.interrupt = false;
         }
     }
     pub(crate) fn request_reset(&mut self) {

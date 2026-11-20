@@ -112,24 +112,14 @@ handler 发出的 resume；没有 episode token 可替代软件生命周期同�
 
 ## IRQ 和外部 timer
 
-IRQ cause/mask/ACK 属于各 channel；产生通知是状态更新的一部分，不增加一条顶层
-“IRQ pipeline”。建议 top 提供 core_clk 同步的 notification_pending/accept 接口，
-承载来源和用途，不把单拍脉冲直接跨时钟传递。平台再实现中断线、消息或 MSI 路由。
+每个 channel 输出一根由 core 域状态驱动的高有效电平 IRQ。事件队列非空与 sticky Trap
+分别受各自 mask 控制，停止错误和 channel fatal 仅受 channel IRQ enable 控制。
+解除 mask 或打开 enable 后，仍有效的 cause 立即反映到线上。多个 Trap 在 ACK 前合并，
+同拍有新 Trap 时置位优先。channel reset 清除该 channel 的配置和原因。
 
-DMA 本阶段输出 channel 通知和独立 DMA-wide fatal 通知，testbench 扮演接收方。
-后续 managed 集成将 channel 通知（含 channel fatal）交给受权 owner，DMA-wide fatal
-按现有合同交给 firmware；路由实现不移入 DMA。
-身份路由必须在交付平台前稳定；已交付消息不得因重新绑定而变成新 owner 的通知。
-可合并通知采用 pending 状态记录，背压不丢掉“需要检查”的事实，不要求为每次 Trap
-存无界计数。后到的未屏蔽事件和 ACK 同拍置位优先。软件仍检查原因和队列。
-这里的 notification pending 是已触发通知的锁存，不是 cause 与 mask 的组合电平。
-只有新事件能设置它；unmask 不补发，平台交付 ACK 也不是软件的 Trap ACK 寄存器。
-
-reset 清除尚由设备拥有的 pending；外部已握手接收的消息不撤回。accept 表示本拍
-接收能力，pending && accept 的 core 时钟边沿完成交付，不是稍后返回的旧事件 ACK。
-此端口允许 reset 撤销未交付 pending，不能误当成 VALID 必须保持的 AXI 通道。
-异步或消息型平台适配器在接收边沿锁存身份，随后独立完成交付；不能把迟到 ACK
-接回来清除另一次新 pending。不为尚未交付的通知阻塞 channel reset。
+独立的全局 IRQ 由 device fatal 和全局 enable 驱动。平台完成跨时钟采样、中断路由及
+CPU 分发，DMA 没有 ready 或接收确认输入。若平台将电平转换为消息，采样时锁存的
+owner 必须保留到消息处理结束；平台消息与 DMA 的 Trap ACK 有独立的生命周期。
 
 Timestamp 消费一次一致的 u64 外部时间样本，单位由平台决定。首版 DMA timer 输入
 要求相对 core_clk 稳定/同步；异步 timer 的原子快照由外部适配器用握手提供，不能

@@ -14,11 +14,13 @@ The DMA register and layout tests cover:
 | `RegisterAccessTest` | 32/64-bit lane mapping, full/half configuration access, invalid strobes, permissions and reserved bits |
 | `RegisterCdcTest` | Independent clock advancement, startup and request/response backpressure without duplicate transfer |
 | `RingRegistersTest` | Software/hardware cursor ownership, publication bounds, configuration freeze and cleanup |
-| `DmaRegisterBankTest` | Three-channel isolation, live reset status, request versus cleanup completion |
+| `DmaRegisterBankTest` | Three-channel isolation, live reset status, request versus cleanup completion, Trap set versus W1C priority |
 | `DmaRegisterInterfaceTest` | Complete 32- and 64-bit AXI→CDC→owner paths, nonzero aperture base, read snapshot retention and exactly-once Resume under response backpressure |
 
 The minimal execution slice adds `CopyEngineTest`, `CopyErrorTest` and
 `CopyFaultTest`, plus `FenceTest`, `FenceOrderTest` and `FenceMemoryTest`.
+`TrapExecutionTest` holds the preceding Fence response while a Trap is ready,
+checks the execution pulse on acceptance, and rejects a Trap with nonzero reserved bytes.
 `MemoryStreamTest` checks continuous writes with delayed B responses;
 `CopyWindowTest` checks multi-burst fault/error/reset lifetime;
 `CopyWindowReuseTest` checks receipt-driven slot reuse; `CopyWindowForwardTest`

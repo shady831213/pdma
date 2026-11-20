@@ -117,44 +117,37 @@ pub struct Dma<M, S = ()> {
     pub memory: M,
     sideband: fn(DmaAccess) -> S,
     control: RegisterWindow<DmaControl>,
-    interrupt: bool,
     active: Option<Work>,
     maintenance: Option<Maintenance>,
     timer: Option<std::sync::Arc<dyn Timer>>,
 }
 
 impl<M, S> Dma<M, S> {
-    /// Whether hardware has emitted a notification not yet taken by the platform.
+    /// Active-high IRQ levels in physical channel order.
+    pub fn channel_irqs(&self) -> impl ExactSizeIterator<Item = bool> + '_ {
+        self.channels.iter().map(Channel::irq)
+    }
+
+    /// Level of the selected channel's IRQ output.
+    pub fn channel_irq(&self, id: ChannelId) -> bool {
+        self.channels.get(id.index()).is_some_and(Channel::irq)
+    }
+
+    /// Level of the independent device-fatal IRQ output.
+    pub fn device_irq(&self) -> bool {
+        self.control.values.irq_enable.raw() != 0
+            && self.control.values.fatal.code() != Ok(DmaFatalCode::None)
+    }
+
+    /// Whether any DMA interrupt output is asserted.
     pub fn irq(&self) -> bool {
-        self.channels.iter().any(|channel| channel.irq) || self.interrupt
-    }
-
-    /// Transfers coalesced notification ownership to the platform interrupt controller.
-    pub fn take_interrupt(&mut self) -> bool {
-        let mut pending = std::mem::take(&mut self.interrupt);
-        for channel in &mut self.channels {
-            pending |= std::mem::take(&mut channel.irq);
-        }
-        pending
-    }
-
-    /// Takes only this channel's coalesced pulse for platform-specific routing.
-    pub fn take_channel_interrupt(&mut self, id: ChannelId) -> bool {
-        self.channels
-            .get_mut(id.index())
-            .is_some_and(|channel| std::mem::take(&mut channel.irq))
-    }
-
-    /// Takes the device-wide source independently of channel notifications.
-    pub fn take_device_interrupt(&mut self) -> bool {
-        std::mem::take(&mut self.interrupt)
+        self.device_irq() || self.channel_irqs().any(|level| level)
     }
 
     /// Signals a device-wide internal hardware fault, never a software bus command.
     pub fn signal_fatal(&mut self) {
         if self.control.values.fatal.code() == Ok(DmaFatalCode::None) {
             self.control.values.fatal = self.control.values.fatal.with_code(DmaFatalCode::Internal);
-            self.interrupt |= self.control.values.irq_enable.raw() != 0;
             self.refresh_maintenance();
             for channel in &mut self.channels {
                 if channel.resident.is_none() {

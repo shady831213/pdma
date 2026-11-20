@@ -1,4 +1,4 @@
-typedef enum {TASK_SUCCESS, TASK_FAULT, TASK_ERROR, TASK_FATAL, TASK_RESET} pdma_outcome;
+typedef enum {TASK_SUCCESS, TASK_FAULT, TASK_ERROR, TASK_FATAL, TASK_RESET, IRQ_NOTIFICATION} pdma_outcome;
 
 class pdma_result extends uvm_object;
     int unsigned channel_id;

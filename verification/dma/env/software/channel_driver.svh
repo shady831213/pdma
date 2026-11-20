@@ -11,8 +11,9 @@ class pdma_channel extends pdma_register_access;
     jvs_memory_acc_block command_allocation, event_allocation;
     jvs_memory_allocator allocator;
     int unsigned event_consumer;
+    semaphore isr_service=new(1);
     semaphore producer_lock=new(1), event_lock=new(1);
-    bit configured;
+    bit configured, interrupt_driven;
     function new(string name="channel"); super.new(name); endfunction
     function void bind_registers(DmaRegisters root,int index,int irq_vector);
         channel_id=index; vector=irq_vector;
@@ -38,7 +39,7 @@ class pdma_channel extends pdma_register_access;
         write_reg(registers.event_block.capacity_reg,cfg.event_capacity);
         write_reg(registers.control_block.config_block.ring_context_reg,cfg.ring_context);
         write_reg(registers.control_block.irq_block.enable_reg,
-            1<<registers.control_block.irq_block.enable_reg.enabled_field.get_lsb_pos());
+            int'(interrupt_driven)<<registers.control_block.irq_block.enable_reg.enabled_field.get_lsb_pos());
         write_reg(registers.control_block.config_block.enable_reg,
             1<<registers.control_block.config_block.enable_reg.enabled_field.get_lsb_pos());
         configured=1;
@@ -52,15 +53,17 @@ class pdma_channel extends pdma_register_access;
     endfunction
     task submit(pdma_task job,bit publish_fence=1);
         bit[31:0] consumer;
+        int unsigned count=1+int'(publish_fence)+int'(publish_fence && job.trap_after_fence);
         producer_lock.get();
         if(!configured) `uvm_fatal("CHANNEL_LIFETIME","Submission requires configured channel")
         read_reg(registers.command_block.consumer_reg,consumer);
-        if(producer-consumer+(publish_fence ? 2 : 1)>cfg.command_capacity)
+        if(producer-consumer+count>cfg.command_capacity)
             `uvm_fatal("COMMAND_RING_FULL","No command ring capacity for task")
         publish_record(job.command_record(),producer);
         if(publish_fence) publish_record(job.fence_record(),producer+1);
+        if(publish_fence && job.trap_after_fence) publish_record(job.trap_record(),producer+2);
         job.submitted_at=$realtime;
-        producer+=publish_fence ? 2 : 1;
+        producer+=count;
         write_reg(registers.command_block.producer_reg,producer);
         producer_lock.put();
     endtask
@@ -151,11 +154,30 @@ class pdma_channel extends pdma_register_access;
     task interrupt_snapshot(output pdma_result result);
         bit[31:0] fatal_code;
         bit available;
+        isr_service.get();
         result=new; result.channel_id=channel_id;
         read_reg(registers.control_block.irq_block.cause_reg,result.cause);
         read_reg(registers.event_block.producer_reg,result.event_producer);
         read_reg(registers.control_block.recovery_block.fatal_reg,fatal_code);
+        // Stop may assert before the event write completes. A failed report
+        // instead sets channel fatal. Software owns the consumer cursor.
+        if(result.cause[registers.control_block.irq_block.cause_reg.error_field.get_lsb_pos()] && event_consumer==0) begin
+            for(int n=0; result.event_producer==0 && fatal_code==0; n++) begin
+                if(n==cfg.poll_limit) `uvm_fatal("ERROR_REPORT_TIMEOUT","Stopped channel has no event or fatal status")
+                read_reg(registers.event_block.producer_reg,result.event_producer);
+                read_reg(registers.control_block.recovery_block.fatal_reg,fatal_code);
+            end
+        end
         pop_event(result,available);
-        if(!available) begin result.outcome=TASK_FATAL; result.code=fatal_code; end
+        if(!available) begin
+            result.outcome=fatal_code!=0 ? TASK_FATAL : IRQ_NOTIFICATION;
+            result.code=fatal_code;
+        end
+        if(result.cause[registers.control_block.irq_block.cause_reg.trap_field.get_lsb_pos()])
+            write_reg(registers.control_block.irq_block.trap_ack_reg,1);
+        if(result.cause[registers.control_block.irq_block.cause_reg.channel_fatal_field.get_lsb_pos()] ||
+            result.cause[registers.control_block.irq_block.cause_reg.error_field.get_lsb_pos()])
+            write_reg(registers.control_block.irq_block.enable_reg,0);
+        isr_service.put();
     endtask
 endclass

@@ -117,8 +117,7 @@ fn failing_read_reports_fatal_storage_failure_without_a_publisher() -> TestResul
         )?,
         0
     );
-    assert!(dma.take_interrupt());
-    assert!(!dma.take_interrupt());
+    assert!(dma.irq());
     Ok(())
 }
 

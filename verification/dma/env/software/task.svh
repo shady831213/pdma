@@ -16,6 +16,7 @@ class pdma_task extends uvm_object;
     int unsigned payload_alignment=1;
     logic [7:0] opcode=COMMANDHEADER_OPCODE_COPY;
     byte unsigned expected[], initial_data[];
+    bit trap_after_fence;
     bit terminal_checked;
     bit expect_payload_unchanged;
     longint unsigned expected_error_prefix;
@@ -50,11 +51,11 @@ class pdma_task extends uvm_object;
         CommandHeader_t header='0;
         LinearEndpoint_t source='0, destination='0;
         CommandHeader_set_opcode(header,opcode);
-        if(opcode==COMMANDHEADER_OPCODE_TRAP) begin
-            // A valid unsupported command, not a Copy body with its tag changed.
-            TrapCommand_t trap_value='0;
-            TrapCommand_set_header(trap_value,header); TrapCommand_set_id(trap_value,id);
-            return Command_t'(trap_value);
+        if(opcode==COMMANDHEADER_OPCODE_ATOMIC) begin
+            // A valid Add32 descriptor on a profile advertising no atomic capability.
+            AtomicCommand_t atomic_value='0;
+            AtomicCommand_set_header(atomic_value,header); AtomicCommand_set_id(atomic_value,id);
+            return Command_t'(atomic_value);
         end
         LinearEndpoint_set_address(source,source_base); LinearEndpoint_set_offset(source,source_offset);
         LinearEndpoint_set_address(destination,dest_address-dest_offset); LinearEndpoint_set_offset(destination,dest_offset);
@@ -63,6 +64,13 @@ class pdma_task extends uvm_object;
         CopyCommand_set_source_context(record_value,source_context); CopyCommand_set_destination_context(record_value,dest_context);
         CopyCommand_set_source(record_value,source); CopyCommand_set_destination(record_value,destination);
         return Command_t'(record_value);
+    endfunction
+    function Command_t trap_record();
+        TrapCommand_t trap_value='0;
+        CommandHeader_t header='0;
+        CommandHeader_set_opcode(header,COMMANDHEADER_OPCODE_TRAP);
+        TrapCommand_set_header(trap_value,header); TrapCommand_set_id(trap_value,id+2);
+        return Command_t'(trap_value);
     endfunction
     function Command_t fence_record();
         FenceCommand_t record_value='0;

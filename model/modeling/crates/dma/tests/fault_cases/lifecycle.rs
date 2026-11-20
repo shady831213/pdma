@@ -16,7 +16,7 @@ fn payload_fault_does_not_publish_an_event() -> TestResult {
         read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
         0
     );
-    assert!(!device.take_interrupt());
+    assert!(!device.irq());
     assert_eq!(fault_status(&mut device)?, 1);
     Ok(())
 }
@@ -48,7 +48,7 @@ fn reset_discards_parked_work_and_clears_fault_status() -> TestResult {
             .read_buffer::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
         *b"c-----"
     );
-    assert!(!device.take_interrupt());
+    assert!(!device.irq());
     Ok(())
 }
 
@@ -90,7 +90,7 @@ fn drain_reports_parked_channel_and_abort_discards_without_completion() -> TestR
             read_word(&mut device, EVENT + EventRegisters::PRODUCER.offset())?,
             0
         );
-        assert!(!device.take_interrupt());
+        assert!(!device.irq());
     }
     Ok(())
 }
@@ -124,6 +124,6 @@ fn abort_of_running_task_discards_it_only_when_payload_fault_parks_it() -> TestR
             .read_buffer::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
         *b"c-----"
     );
-    assert!(!device.take_interrupt());
+    assert!(!device.irq());
     Ok(())
 }

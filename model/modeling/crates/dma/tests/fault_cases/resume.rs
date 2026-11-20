@@ -141,7 +141,7 @@ fn repair_and_zero_resume_do_not_retry_or_admit_later_same_channel_work() -> Tes
             .read_buffer::<[u8; 3]>(0x1600.into(), MemoryAlignment::ONE)?,
         [0; 3]
     );
-    assert!(!device.take_interrupt());
+    assert!(!device.irq());
     resume(&mut device, 1)?;
     completed(&mut device, command.id())?;
     assert_eq!(

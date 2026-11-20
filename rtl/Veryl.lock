@@ -7,12 +7,12 @@ name = "common_cell"
 dependencies = []
 
 [projects.source]
-uuid = "87aea849-2cdf-5886-8111-5653c88ffd20"
+uuid = "a4b1c569-5010-5ba0-8193-751a3e4f598f"
 url = "https://github.com/shady831213/my-veryl-cells"
 path = "common_cell"
 project = "common_cell"
-version = "0.1.0"
-revision = "3567d9ad2438afb43bebb54ed2d290947243a70d"
+version = "0.2.0"
+revision = "2fc00651e3e579698f670e42ec67c938a3afe804"
 
 [projects.properties]
 
@@ -20,12 +20,12 @@ revision = "3567d9ad2438afb43bebb54ed2d290947243a70d"
 name = "tech_cell_generic"
 
 [projects.source]
-uuid = "c7a41124-f854-511c-8182-1ad329d0a8d7"
+uuid = "ec2357ff-feca-5c02-bd03-ef94e1ef0661"
 url = "https://github.com/shady831213/my-veryl-cells"
 path = "tech_cell/generic"
 project = "tech_cell_generic"
-version = "0.1.0"
-revision = "cf69458ec42236e8e7fae07138e33d65efe771e3"
+version = "0.1.1"
+revision = "00004a42c080c04a8b6190b204cea2846154cf83"
 
 [projects.properties]
 
@@ -33,9 +33,9 @@ revision = "cf69458ec42236e8e7fae07138e33d65efe771e3"
 name = "common_cell"
 
 [projects.dependencies.source]
-uuid = "87aea849-2cdf-5886-8111-5653c88ffd20"
+uuid = "a4b1c569-5010-5ba0-8193-751a3e4f598f"
 url = "https://github.com/shady831213/my-veryl-cells"
 path = "common_cell"
 project = "common_cell"
-version = "0.1.0"
-revision = "3567d9ad2438afb43bebb54ed2d290947243a70d"
+version = "0.2.0"
+revision = "2fc00651e3e579698f670e42ec67c938a3afe804"

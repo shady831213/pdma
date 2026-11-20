@@ -39,7 +39,7 @@ forwarding boundary; installer integrity tests belong to my-veryl.
 
 ## Shared cells
 
-`rtl/Veryl.toml` selects `common_cell` and `tech_cell_generic` version `=0.1.0`
+`rtl/Veryl.toml` selects `common_cell` version `=0.2.0` and `tech_cell_generic` version `=0.1.1`
 from [my-veryl-cells](https://github.com/shady831213/my-veryl-cells).
 `rtl/Veryl.lock` pins both published source revisions. Veryl resolves their source
 and package-owned constraints/checkers through native metadata. There is no

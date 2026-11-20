@@ -14,12 +14,12 @@ module ChannelDiscoveryTest {
         clk: bus_clk,
     );
     inst cfg     : 'registers $std::axi4_lite_if::<Cfg>;
-    inst memory  : 'bus       $std::axi4_if::<$std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>>;
+    inst memory  : 'bus       $std::axi4_if::<$std::axi4_pkg::<64, 8, 2, 35, 1, 2, 35, 2>>;
     var channel_irq     : 'core      logic<2>;
     var device_irq      : 'core      logic   ;
     var device_irq_ready: 'core      logic   ;
     var fatal           : 'core      logic   ;
-    inst dut: DmaCopy #(
+    inst dut: DmaCopy::<Cfg, $std::axi4_pkg::<64, 8, 2, 35, 1, 2, 35, 2>> #(
         CHANNEL_COUNT: 2,
     ) (
         fatal_irq      : device_irq      ,
@@ -135,7 +135,7 @@ module ChannelDiscoveryTest {
         memory.arready = 0;
         // Reserved response reason is a protocol failure, distinct from a
         // channel memory error. Only the device notification may assert.
-        memory.rresp  = 2 as $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>::resp_t;
+        memory.rresp  = 2 as $std::axi4_pkg::<64, 8, 2, 35, 1, 2, 35, 2>::resp_t;
         memory.ruser  = 2;
         memory.rvalid = 1;
         for beat in 0..8 {

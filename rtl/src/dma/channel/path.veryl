@@ -1,0 +1,92 @@
+// Independent descriptor producers feed one shared execution grant. The
+// execution owner has first choice of the core-to-bus issue port each cycle.
+pub module DmaCommandPath::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> #(
+    param CHANNEL_COUNT : u32 = 1,
+    param PREFETCH_DEPTH: u32 = 2,
+) (
+    clk     : input   clock                                                   ,
+    rst_n   : input   reset_async_low                                         ,
+    channels: modport DmaChannels::engine                                     ,
+    memory  : modport CopyMemoryPort::<DATA_BYTES, BURST_BEATS, SLOTS>::master,
+) {
+    alias package M = CopyMemory::<DATA_BYTES, BURST_BEATS, SLOTS>;
+    var heads     : CommandState::Entry                  [CHANNEL_COUNT];
+    var head_valid: logic              <CHANNEL_COUNT>                  ;
+    var fetching  : logic              <CHANNEL_COUNT>                  ;
+    var requests  : logic              <M::MAX_CHANNELS>                ;
+    var addresses : logic              <64>              [CHANNEL_COUNT];
+    var lengths   : logic              <M::LENGTH_BITS>  [CHANNEL_COUNT];
+    var cursor    : M::Channel                                          ;
+    let grant     : logic              <M::MAX_CHANNELS>                 = common_cell::RoundRobin::<
+        CopyMemory::MAX_CHANNELS,
+    >::select(requests, cursor);
+    let source    : M::Channel                                           = common_cell::BoundedIndex::<
+        CopyMemory::MAX_CHANNELS,
+    >::encode_onehot(grant);
+    inst execution_port: CopyMemoryPort::<DATA_BYTES, BURST_BEATS, SLOTS>;
+    inst execution: CopyEngine::<DATA_BYTES, BURST_BEATS, SLOTS> #(
+        CHANNEL_COUNT  ,
+    ) (
+        clk                       ,
+        rst_n                     ,
+        heads                     ,
+        head_valid                ,
+        fetching                  ,
+        channels                  ,
+        memory    : execution_port,
+    );
+    let fetch_return: logic = !memory.receipt.orphan && memory.receipt.tag.slot == 0;
+    let fetch_debt  : logic = (memory.receipt.tag.channel as u32) <: CHANNEL_COUNT
+        && fetching[memory.receipt.tag.channel];
+    assign execution_port.receipt  = memory.receipt;
+    assign execution_port.returned = memory.returned && (!fetch_return || memory.receipt.protocol_error);
+    assign execution_port.ready    = memory.ready;
+    assign memory.accepted         = if fetch_return ? fetch_debt : execution_port.accepted;
+    assign memory.valid            = execution_port.valid || (|grant);
+    let fetch_request: M::Request = M::Request'{
+        tag          : M::Tag'{channel: source, slot: 0},
+        write        : 0                                           ,
+        address      : addresses[source]                           ,
+        selector     : channels.configuration[source].ring_context ,
+        size         : if M::DATA_SIZE <: 3 ? M::DATA_SIZE as 3 : 3,
+        length       : lengths[source]                             ,
+        data         : 0                                           ,
+    };
+    assign memory.request = if execution_port.valid ? execution_port.request : fetch_request;
+    let issue: logic = !execution_port.valid && (|grant) && memory.ready;
+    for c in 0..M::MAX_CHANNELS :producers {
+        if c <: CHANNEL_COUNT :active {
+            inst fetch: ChannelFetch::<DATA_BYTES, BURST_BEATS> #(
+                DEPTH: PREFETCH_DEPTH,
+            ) (
+                clk                         ,
+                rst_n                       ,
+                ring   : channels.command[c],
+                enabled: channels.configuration[c].enable && !channels.global_blocked && !channels.fatal_in
+                    && !channels.reset_all && !channels.actions[c].reset_request && !channels.status[c].resetting
+                    && channels.status[c].fatal == 0 && !channels.status[c].error && !channels.status[c].faulted,
+                clear   : channels.clear[c]                                                               ,
+                take    : channels.command_advance[c]                                                     ,
+                valid   : head_valid[c]                                                                   ,
+                head    : heads[c]                                                                        ,
+                pending : fetching[c]                                                                     ,
+                request : requests[c]                                                                     ,
+                address : addresses[c]                                                                    ,
+                length  : lengths[c]                                                                      ,
+                issue   : issue && grant[c],
+                returned: memory.returned && fetch_return && fetch_debt && memory.receipt.tag.channel == c,
+                failed  : memory.receipt.failed || memory.receipt.protocol_error,
+                data    : memory.receipt.data                                                             ,
+            );
+        } else {
+            assign requests[c] = 0;
+        }
+    }
+    always_ff (clk, rst_n) {
+        if_reset {
+            cursor = 0;
+        } else if issue {
+            cursor = if (source as u32) + 1 == CHANNEL_COUNT ? 0 : source + 1;
+        }
+    }
+}

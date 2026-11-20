@@ -27,7 +27,7 @@ module FenceTest {
     assign command_advance         = channels.command_advance;
     assign event_advance           = channels.event_advance;
     assign internal_fatal          = channels.internal_fatal;
-    inst dut: CopyEngine (
+    inst dut: DmaCommandPath (
         clk          ,
         rst_n   : rst,
         memory       ,
@@ -61,6 +61,7 @@ module FenceTest {
                 }
                 $assert(memory.valid && !memory.request.write, "FENCE_FETCH");
                 clk.next();
+                memory.ready   = 0;
                 memory.receipt = '0;
                 if part == 0 {
                     memory.receipt.data[7:0]     = 6;
@@ -79,10 +80,17 @@ module FenceTest {
                 memory.returned = 1;
                 clk.next();
                 memory.returned = 0;
+                memory.ready    = 1;
             }
             if scenario >= 7 {
                 $assert(!command_advance, "MALFORMED_FENCE_NOT_CONSUMED");
             } else {
+                for timeout in 0..12 {
+                    if command_advance {
+                        break;
+                    }
+                    clk.next();
+                }
                 $assert(command_advance, "FENCE_ACCEPTED");
                 command.consumer = 1;
             }
@@ -108,6 +116,7 @@ module FenceTest {
                     $assert(status[0].resetting && !clear && !memory.valid, "RESET_DRAINS_FENCE");
                 }
                 memory.receipt            = '0;
+                memory.receipt.tag.slot   = CopyMemory::CONTROL_SLOT as CopyMemory::SLOT_BITS;
                 memory.receipt.failed     = scenario == 2 || scenario == 3;
                 memory.receipt.page_fault = scenario == 2;
                 memory.returned           = 1;
@@ -134,8 +143,9 @@ module FenceTest {
                         "FENCE_RETRY_RETAINS_TARGET_VALUE",
                     );
                     clk.next();
-                    memory.receipt  = '0;
-                    memory.returned = 1;
+                    memory.receipt          = '0;
+                    memory.receipt.tag.slot = CopyMemory::CONTROL_SLOT as CopyMemory::SLOT_BITS;
+                    memory.returned         = 1;
                     clk.next();
                     memory.returned = 0;
                 }
@@ -157,8 +167,9 @@ module FenceTest {
                     "FENCE_ERROR_CODE_ZERO_PROGRESS",
                 );
                 clk.next();
-                memory.receipt  = '0;
-                memory.returned = 1;
+                memory.receipt          = '0;
+                memory.receipt.tag.slot = CopyMemory::CONTROL_SLOT as CopyMemory::SLOT_BITS;
+                memory.returned         = 1;
                 $assert(event_advance, "FENCE_ERROR_PUBLICATION");
                 clk.next();
                 memory.returned = 0;

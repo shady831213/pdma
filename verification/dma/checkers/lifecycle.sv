@@ -1,28 +1,33 @@
-module pdma_lifecycle_assertions #(parameter int SLOTS=8, localparam int SLOT_BITS=$clog2(SLOTS+1))(
+module pdma_lifecycle_assertions #(parameter int SLOTS=8, localparam int SLOT_BITS=$clog2(SLOTS+2))(
     input logic clk, rst_n, request, ready, returned, accepted, closing, clear, enabled, has_commands,
     input logic irq, irq_ready, irq_source, parked, resume_request,
     input logic [SLOT_BITS-1:0] request_slot, receipt_slot,
     input logic [1023:0] parked_state
 );
-    int unsigned outstanding=0;
-    logic [SLOTS:0] owned='0;
+    int unsigned outstanding=0, fetch_debt=0;
+    logic [SLOTS+1:0] owned='0;
     logic reset_quiet=0;
     always @(posedge clk or negedge rst_n) begin
-        if(!rst_n) begin outstanding<=0; owned<='0; reset_quiet<=0; end
+        if(!rst_n) begin outstanding<=0; fetch_debt<=0; owned<='0; reset_quiet<=0; end
         else begin
             if(returned && accepted) begin
-                assert(receipt_slot<=SLOTS) else $fatal(1,"DMA_BAD_RECEIPT_SLOT");
-                assert(outstanding!=0 && owned[receipt_slot]) else $fatal(1,"DMA_UNOWNED_RECEIPT");
-                owned[receipt_slot]<=0;
+                assert(receipt_slot<=SLOTS+1) else $fatal(1,"DMA_BAD_RECEIPT_SLOT");
+                assert(outstanding!=0 && (receipt_slot==0 ? fetch_debt!=0 : owned[receipt_slot])) else $fatal(1,"DMA_UNOWNED_RECEIPT");
+                if(receipt_slot!=0) owned[receipt_slot]<=0;
             end
             if(request && ready) begin
-                assert(request_slot<=SLOTS) else $fatal(1,"DMA_BAD_REQUEST_SLOT");
+                assert(request_slot<=SLOTS+1) else $fatal(1,"DMA_BAD_REQUEST_SLOT");
                 // Read completion can forward a write for the same live chunk
                 // at this edge. Old receipt consumption precedes new ownership.
-                assert(!owned[request_slot] || (returned && accepted && request_slot==receipt_slot))
+                assert(request_slot==0 || !owned[request_slot] || (returned && accepted && request_slot==receipt_slot))
                     else $fatal(1,"DMA_DOUBLE_ACCEPT");
-                owned[request_slot]<=1;
+                if(request_slot!=0) owned[request_slot]<=1;
             end
+            case ({request && ready && request_slot==0,returned && accepted && receipt_slot==0})
+                2'b10: fetch_debt<=fetch_debt+1;
+                2'b01: fetch_debt<=fetch_debt-1;
+                default: ;
+            endcase
             case ({request && ready,returned && accepted})
                 2'b10: outstanding<=outstanding+1;
                 2'b01: outstanding<=outstanding-1;

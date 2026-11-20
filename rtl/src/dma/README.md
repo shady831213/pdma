@@ -29,6 +29,9 @@ control/
       bank.veryl                   Global state and channel address routing
       channel/channel.veryl        ChannelRegisters: channel state and effects
       channel/ring.veryl           RingRegisters: command/event ring state
+channel/
+  fetch.veryl                      ChannelFetch: private descriptor reservations, ordered assembly and outstanding fetches
+  path.veryl                       DmaCommandPath: channel fetchers feeding one engine
 execution/
   engine.veryl                     CopyEngine: shared arbitration/command execution
   command.veryl                    Accepted command context and phases
@@ -36,7 +39,8 @@ execution/
 memory/
   interface.veryl                  Typed memory requests/receipts
   crossing.veryl                   DmaMemoryCrossing: request and receipt CDC queues
-  axi.veryl                        CopyMemoryEndpoint: DMA identity and error encoding
+  axi/{endpoint,read,write}.veryl  CopyMemoryEndpoint: DMA AXI lanes and response classification
+  axi/outstanding.veryl            Global rows linked in issue order per ID
 ```
 
 `DmaCopy` connects the `common_cell` register frontend, control, engine, memory crossing

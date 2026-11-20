@@ -39,7 +39,7 @@ class pdma_configuration extends uvm_object;
         p.axi_interface_type=software_port ? svt_axi_port_configuration::AXI4_LITE : svt_axi_port_configuration::AXI4;
         p.addr_width=software_port ? 32 : 64;
         p.data_width=software_port ? REGISTER_DATA_BITS : MEMORY_DATA_BITS;
-        p.id_width=1;
+        p.id_width=software_port ? 1 : `PDMA_ID_BITS;
         p.wysiwyg_enable=1;
         p.num_outstanding_xact=software_port ? 1 : memory_outstanding;
         p.transaction_coverage_enable=1;
@@ -51,7 +51,12 @@ class pdma_configuration extends uvm_object;
             p.awuser_enable=1; p.aruser_enable=1; p.ruser_enable=1; p.buser_enable=1;
             p.default_awready=memory_default_ready;
             p.default_arready=memory_default_ready; p.default_wready=memory_default_ready;
-            p.read_data_reordering_depth=1; p.write_resp_reordering_depth=1;
+            p.read_data_reordering_depth=memory_outstanding<`SVT_AXI_MAX_READ_DATA_REORDERING_DEPTH
+                ? memory_outstanding : `SVT_AXI_MAX_READ_DATA_REORDERING_DEPTH;
+            p.write_resp_reordering_depth=memory_outstanding<`SVT_AXI_MAX_WRITE_RESP_REORDERING_DEPTH
+                ? memory_outstanding : `SVT_AXI_MAX_WRITE_RESP_REORDERING_DEPTH;
+            p.reordering_algorithm=svt_axi_port_configuration::RANDOM;
+            p.read_interleaving_disabled=0;
             c.set_addr_range(0,0,64'hffff_ffff_ffff_ffff);
         end
         return c;

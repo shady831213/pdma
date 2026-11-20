@@ -12,8 +12,8 @@ pub package CopyMemory::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 =
     const BURST_BYTES : u32                 = DATA_BYTES * BURST_BEATS;
     const BURST_BITS  : u32                 = BURST_BYTES * 8;
     const LENGTH_BITS : u32                 = if BURST_BEATS >: 1 ? $clog2(BURST_BEATS) : 1;
-    const SLOT_BITS   : u32                 = $clog2(SLOTS + 1);
-    const TAG_BITS    : u32                 = CHANNEL_BITS + SLOT_BITS;
+    const SLOT_BITS   : u32                 = $clog2(SLOTS + 2);
+    const CONTROL_SLOT: u32                 = SLOTS + 1;
     const INDEX_BITS  : u32                 = if SLOTS >: 1 ? $clog2(SLOTS) : 1;
     const AMOUNT_BITS : u32                 = $clog2(BURST_BYTES + 1);
     // This fixed transport encoding covers the supported maximum. Eligibility
@@ -31,15 +31,21 @@ pub package CopyMemory::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 =
         length  : logic<LENGTH_BITS>,
         data    : logic<BURST_BITS> ,
     }
+    struct FetchAddress {
+        channel : Channel             ,
+        address : logic  <64>         ,
+        selector: logic  <32>         ,
+        length  : logic  <LENGTH_BITS>,
+    }
     struct Receipt {
         tag           : Tag              ,
         data          : logic<BURST_BITS>,
         failed        : logic            ,
         page_fault    : logic            ,
+        orphan        : logic            ,
         protocol_error: logic            ,
     }
 }
-
 pub interface CopyMemoryPort::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> {
     alias package M = CopyMemory::<DATA_BYTES, BURST_BEATS, SLOTS>;
     var valid   : logic     ;

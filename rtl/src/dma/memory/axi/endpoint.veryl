@@ -1,0 +1,101 @@
+// Independent ordered AXI lanes. Each accepted internal request owns one receipt;
+// software reset closes the producer but never retracts accepted AW/W/AR or R/B.
+pub module CopyMemoryEndpoint::<
+    B          : $std::axi4_prototype = $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>,
+    BURST_BEATS: u32                  = 8                  ,
+    SLOTS      : u32                  = 8                  ,
+> #(
+    param READ_OUTSTANDING : u32 = 8,
+    param WRITE_OUTSTANDING: u32 = 8,
+) (
+    clk        : input   clock                                                              ,
+    rst_n      : input   reset_async_low                                                    ,
+    fetch_valid: input   logic                                                              ,
+    fetch_ready: output  logic                                                              ,
+    fetch      : input   CopyMemory::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>::FetchAddress,
+    port       : modport CopyMemoryPort::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>::slave   ,
+    axi        : modport $std::axi4_if::<B>::master                                         ,
+) {
+    alias package M = CopyMemory::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>;
+    inst reads : CopyMemoryPort::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>;
+    inst writes: CopyMemoryPort::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>;
+    inst lanes : $std::axi4_if::<B>;
+    // A full interface joins disjoint read/write views. Passing the already
+    // restricted master modport as a different modport is illegal SystemVerilog.
+    connect axi <> lanes.slave;
+    // Once ARVALID is stalled its selected address remains stable. W/AW can
+    // advance independently even while an accepted fetch waits on ARREADY.
+    var held_fetch  : logic;
+    let engine_read : logic = port.valid && !port.request.write;
+    let choose_fetch: logic = fetch_valid && (held_fetch || !engine_read);
+    assign reads.valid = engine_read || fetch_valid;
+    assign fetch_ready = choose_fetch && reads.ready;
+    always_ff (clk, rst_n) {
+        if_reset {
+            held_fetch = 0;
+        } else {
+            held_fetch = choose_fetch && lanes.arvalid && !lanes.arready;
+        }
+    }
+    assign writes.valid   = port.valid && port.request.write;
+    assign reads.request  = if choose_fetch ?
+        M::Request'{
+            tag     : M::Tag'{channel: fetch.channel, slot: 0},
+            write   : 0                                           ,
+            address : fetch.address                               ,
+            selector: fetch.selector                              ,
+            size    : if M::DATA_SIZE <: 3 ? M::DATA_SIZE as 3 : 3,
+            length  : fetch.length                                ,
+            data    : 0                                           ,
+        }
+    :
+        port.request
+    ;
+    assign writes.request = port.request;
+    assign port.ready     = if port.request.write ? writes.ready : reads.ready && !choose_fetch;
+    inst reader: CopyReadEndpoint::<B, BURST_BEATS, SLOTS> #(
+        OUTSTANDING: READ_OUTSTANDING,
+    ) (
+        clk         ,
+        rst_n       ,
+        port : reads,
+        axi  : lanes,
+    );
+    inst writer: CopyWriteEndpoint::<B, BURST_BEATS, SLOTS> #(
+        OUTSTANDING: WRITE_OUTSTANDING,
+    ) (
+        clk          ,
+        rst_n        ,
+        port : writes,
+        axi  : lanes ,
+    );
+    var cursor  : logic   ;
+    var selected: logic<2>;
+    var ready   : logic   ;
+    assign selected        = common_cell::RoundRobin::<2>::select({writes.returned, reads.returned}, cursor);
+    assign reads.accepted  = selected[0] && ready;
+    assign writes.accepted = selected[1] && ready;
+    // Register the merged receipt; a newly arriving contender cannot replace a
+    // receipt already offered under downstream backpressure.
+    inst result: common_cell::ReadyValidSlice #(
+        TYPE: M::Receipt                                 ,
+        MODE: common_cell::ReadyValid::SliceMode::Forward,
+    ) (
+        clk                                                      ,
+        rst_n                                                    ,
+        s_valid : |selected                                      ,
+        s_ready : ready                                          ,
+        s_data  : if selected[1] ? writes.receipt : reads.receipt,
+        m_valid : port.returned                                  ,
+        m_ready : port.accepted                                  ,
+        m_data  : port.receipt                                   ,
+        occupied: _                                              ,
+    );
+    always_ff (clk, rst_n) {
+        if_reset {
+            cursor = 0;
+        } else if ready && |selected {
+            cursor = selected[0];
+        }
+    }
+}

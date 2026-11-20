@@ -2,137 +2,20 @@
 module NarrowFenceOrderTest {
     inst clk: $tb::clock_gen #( period: 10 );
     inst rst: $tb::reset_gen ( clk );
-    alias package M = CopyMemory::<4, 4, 3>;
-    inst memory: CopyMemoryPort::<4, 4, 3>;
-    var command        : RegisterState::Ring                           ;
-    var configuration  : RegisterState::ChannelConfig                  ;
-    var status         : RegisterState::ChannelStatus               [1];
-    var command_advance: logic                                         ;
-    var event_advance  : logic                                         ;
-    var clear          : logic                                         ;
-    var internal_fatal : logic                                         ;
-    var held_slot      : logic                       <M::SLOT_BITS>    ;
-    inst channels: DmaChannels #( CHANNEL_COUNT: 1 );
-    assign channels.global_blocked = 0;
-    assign channels.global_clear   = 0;
-    assign channels.command        = '{command};
-    assign channels.events         = '{'0};
-    assign channels.configuration  = '{configuration};
-    assign channels.actions        = '{'0};
-    assign channels.reset_all      = 0;
-    assign channels.fatal_in       = 0;
-    assign channels.event_geometry = 0;
-    assign channels.event_ready    = 0;
-    assign status                  = channels.status;
-    assign clear                   = channels.clear;
-    assign command_advance         = channels.command_advance;
-    assign event_advance           = channels.event_advance;
-    assign internal_fatal          = channels.internal_fatal;
-    inst dut: CopyEngine::<4, 4, 3> (
+    var finished: logic;
+    inst scenario: FenceOrderScenario::<4, 4, 3> (
         clk          ,
         rst_n   : rst,
-        memory       ,
-        channels     ,
+        finished     ,
     );
-    function descriptor_for (
-        operation: input u32,
-    ) -> logic<768> {
-        var descriptor: logic<768>;
-        descriptor = 0;
-        if operation == 0 {
-            descriptor[191:128] = 8;
-            descriptor[319:256] = 64'h200;
-            descriptor[575:512] = 64'h300;
-        } else {
-            descriptor[7:0]     = 6;
-            descriptor[191:128] = 64'h408;
-            descriptor[255:224] = 1;
-            descriptor[319:256] = 64'habcd_9876_1234_5678;
-        }
-        return descriptor;
-    }
     initial {
-        command         = RegisterState::Ring'{base: 0, capacity: 2, producer: 2, consumer: 0};
-        configuration   = '0;
-        memory.ready    = 1;
-        memory.returned = 0;
-        memory.receipt  = '0;
         rst.assert();
-        clk.next(3);
-        configuration.enable = 1;
-        for operation in 0..2 {
-            for part in 0..6 {
-                for timeout in 0..10 {
-                    if memory.valid {
-                        break;
-                    }
-                    clk.next();
-                }
-                $assert(
-                    memory.valid && !memory.request.write && memory.request.address == operation * 96 + part * 16,
-                    "ORDERED_FETCH",
-                );
-                clk.next();
-                memory.receipt      = '0;
-                memory.receipt.data = (descriptor_for(operation) >> (part * 128)) as M::BURST_BITS;
-                memory.returned     = 1;
-                clk.next();
-                memory.returned = 0;
-            }
-            $assert(command_advance, "ORDERED_COMMAND_ACCEPTED");
-            command.consumer = operation + 1;
-            if operation == 0 {
-                for timeout in 0..10 {
-                    if memory.valid {
-                        break;
-                    }
-                    clk.next();
-                }
-                $assert(memory.valid && !memory.request.write && memory.request.address == 64'h200, "COPY_READ");
-                held_slot = memory.request.tag.slot;
-                clk.next();
-                memory.receipt          = '0;
-                memory.receipt.tag.slot = held_slot;
-                memory.receipt.data     = 64'habcdef;
-                memory.ready            = 0;
-                memory.returned         = 1;
-                clk.next();
-                memory.returned = 0;
-                memory.ready    = 1;
-            }
-            for timeout in 0..10 {
-                if memory.valid {
-                    break;
-                }
-                clk.next();
-            }
-            $assert(
-                memory.valid && memory.request.write && memory.request.address == (if operation == 0 ? 64'h300 : 64'h408),
-                "ORDERED_WRITE_TARGET",
-            );
-            if operation == 1 {
-                $assert(
-                    memory.request.size == 2 && memory.request.length == 1 && memory.request.data[63:0] == 64'habcd_9876_1234_5678,
-                    "COMPLETION_WORD",
-                );
-            }
-            held_slot = memory.request.tag.slot;
+        for cycle in 0..200 {
             clk.next();
-            for delay in 0..20 {
-                $assert(!memory.valid && !command_advance, "NO_SUCCESSOR_BEFORE_WRITE_RECEIPT");
-                clk.next();
+            if finished {
+                break;
             }
-            memory.receipt          = '0;
-            memory.receipt.tag.slot = held_slot;
-            memory.returned         = 1;
-            clk.next();
-            memory.returned = 0;
         }
-        clk.next(5);
-        $assert(
-            !memory.valid && !status[0].error && !status[0].faulted && !internal_fatal && !event_advance,
-            "COPY_FENCE_NO_SUCCESS_EVENT",
-        );
-        $finish();
+        $assert(finished, "COPY_PREFETCH_FENCE_COMPLETED");
     }
 }

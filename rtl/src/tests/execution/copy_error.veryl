@@ -25,7 +25,7 @@ module CopyErrorTest {
     assign command_advance         = channels.command_advance;
     assign event_advance           = channels.event_advance;
     assign internal_fatal          = channels.internal_fatal;
-    inst dut: CopyEngine (
+    inst dut: DmaCommandPath (
         clk          ,
         rst_n   : rst,
         memory       ,
@@ -48,6 +48,7 @@ module CopyErrorTest {
             }
             $assert(memory.valid && !memory.request.write, "DESCRIPTOR_REQUEST");
             clk.next();
+            memory.ready   = 0;
             memory.receipt = '0;
             if part == 0 {
                 memory.receipt.data[127:64]  = 9;
@@ -57,6 +58,7 @@ module CopyErrorTest {
             memory.returned = 1;
             clk.next();
             memory.returned = 0;
+            memory.ready    = 1;
         }
         for timeout in 0..10 {
             if memory.valid {
@@ -68,6 +70,7 @@ module CopyErrorTest {
         $assert(memory.valid && memory.request.write && memory.request.address == 64'hfff0, "ERROR_EVENT_ADDRESS");
         $assert(memory.request.length == 1, "EVENT_SPLITS_AT_4K");
         $assert(memory.request.data[63:0] == 9 && memory.request.data[95:64] == 1, "ERROR_ID_AND_CODE");
+        memory.receipt.tag = memory.request.tag;
         clk.next();
         memory.returned = 1;
         $assert(!event_advance, "NO_EARLY_EVENT_PUBLICATION");
@@ -81,6 +84,7 @@ module CopyErrorTest {
         }
         $assert(memory.valid && memory.request.address == 64'h10000 && memory.request.length == 0, "EVENT_FINAL_WORD");
         $assert(memory.request.data[63:0] == 0, "ZERO_COMMITTED_PREFIX");
+        memory.receipt.tag = memory.request.tag;
         clk.next();
         memory.returned = 1;
         $assert(event_advance, "PUBLISH_AFTER_ALL_EVENT_WRITES");

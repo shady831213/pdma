@@ -26,6 +26,7 @@ pdma_zero_delay_ratio_test
 pdma_multichannel_copy_test
 pdma_multichannel_park_test
 pdma_multichannel_reset_test
+pdma_reset_reordered_b_test
 pdma_multichannel_irq_test
 pdma_multichannel_throughput_test
 pdma_global_reset_peer_test

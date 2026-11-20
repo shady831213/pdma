@@ -1,8 +1,24 @@
 # Scenario-level verification checkpoints
 
-## AXI endpoints in common_cell
+## Channel-owned prefetch and DMA-owned AXI master
 
-The local review candidate moves both endpoints, their tests and the passive
+The November 20 local candidate keeps the AXI4-Lite register frontend in the shared package. DMA owns descriptor reservations, AXI memory identity, burst assembly, tracking and lifecycle. The shared package is a local review dependency pending release.
+
+At default FIFO depth two, both native backends ran 31 DMA tests and 12 shared-cell tests each. Directed tests withhold all reads until two descriptor rows are reserved, interleave data beats, reverse B completions, stall AR across a priority change, and reset one channel with two fetch segments outstanding while its peer completes a Fence.
+
+Each 2- and 8-channel configuration passed all 33 DUT scenarios at seed 19 and rejected all eight checker mutations with their expected diagnostics. The multichannel Copy, park, channel reset and global-reset-peer scenarios also passed seeds 7 and 41 on both configurations. The standalone SV Copy/Fence/reset smoke passed on the default profile. All eight channel counts elaborated and ran the multichannel Copy scenario. The one-channel 32-bit profile at depth one and the three-channel 128-bit AXI4 profile at depth three each ran the four focused multichannel scenarios and rejected all eight checker mutations.
+
+With random VIP delays at seed 19, the multichannel Copy scenario reached eight outstanding ARs on both configurations. The 2-channel case recorded 13 out-of-order read completions and seven RID changes within unfinished bursts. At 8 channels these counts were 129 and 89. Maximum outstanding AW was four and seven respectively. These scenarios observed zero B overtakes. A separate DUT scenario holds one old write response across channel reset. A peer completes its Copy and publishes its Fence while that B is still withheld. The reset-busy bit stays asserted until the old B is returned. Both 2 and 8 channels observed two B overtakes at seeds 19 and 41. The AXI endpoint's native test independently checks the returned tags.
+
+Fresh static reviews covered the new descriptor FIFO and the other clock crossings on the exact local snapshots. At two channels, CDC reviewed 99 findings and RDC reviewed 1,584. At eight, the counts were 267 and 3,054. Both had zero unresolved findings. The unconnected RDC sinks were checked bit by bit for zero endpoint fanout; waiver files match native fields and the elaborated source identity.
+
+At two channels the final control-budget synthesis met the 1 GHz core and bus and 500 MHz register setup targets with 0 ps worst slack. Mapped cell area rose from 29,500.674 to 38,980.067 (+32.1%) against the November 19 default two-channel profile. Vectorless power rose from 58.32 to 73.74 mW (+26.4%). These figures exclude the physical Copy SRAM. Workload power and routed timing remain unqualified. The eight-channel result is pending.
+
+See [the measured workload comparison](../../docs/rtl/performance.md) for payload utilization, batch latency and the depth-one comparison.
+
+## Earlier shared-endpoint experiment
+
+The preceding local review candidate moved both endpoints, their tests and the passive
 ready/valid property into `common_cell`. The published 0.1.0 package predates
 these endpoints. These checks used local package sources. Updating the native
 lockfile after release also requires a compatible `tech_cell_generic` dependency.

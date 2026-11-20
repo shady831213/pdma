@@ -1,5 +1,6 @@
 {
   "channels": 2,
+  "prefetch_depth": 2,
   "register_bits": 32,
   "memory_axi_version": 5,
   "memory_bits": 64,

@@ -32,12 +32,14 @@ The configurable-resource tests exercise directional credits, retained rows and 
 
 | Test | Observable behavior |
 | --- | --- |
+| `FetchWindowTest` | Withhold R until two complete descriptors have issued; verify capacity, ordered error delivery and reset |
+| `IndependentFetchTest` | Hold A’s fetch returns while B completes a Fence and reset A between its terminal responses |
+| `FetchArbitrationTest` | Execution wins a free AR; a stalled descriptor AR retains priority and permits an independent write |
 | `MemoryCapacityTest` | Independent one-read/three-write credits, held terminal responses and ordered tag/credit return |
 | `WindowSingleTest`, `WindowThreeTest` | One and three retained rows, wrap/reuse beyond one window and terminal drain |
 | `NarrowFenceOrderTest` | 32-bit memory, three retained rows, bounded descriptor fetch and two-beat Fence64 after Copy |
 
-Standalone AXI4-Lite pairing, wide read/write packing and response classification tests
-live with the endpoints in `my-veryl-cells/common_cell/tests/src/bus`.
+Standalone AXI4-Lite pairing is checked in the shared register cell. DMA-local `tests/memory` exercises wide byte packing, mixed errors, unowned replies, interleaved R beats and reordered B responses.
 
 Run both native CC and Cranelift backends with `VERYL_DUT_REUSE=0`, as shown in
 [the RTL README](../../README.md). These fixtures drive lifecycle and IRQ status

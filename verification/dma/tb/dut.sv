@@ -8,40 +8,48 @@ module pdma_vip_dut(svt_axi_if host_bus, svt_axi_if memory_bus, pdma_control_if 
         integration.dma.register_port.response_valid, integration.dma.register_port.response_ready,
         integration.dma.register_port.response)) else $fatal(1, "register_response changed while stalled");
     burst_request: assert property (held_until_accepted(control.bus_clk, control.bus_rst_n,
-        integration.dma.endpoint.bus_port.valid, integration.dma.endpoint.bus_port.ready,
-        integration.dma.endpoint.bus_port.request)) else $fatal(1, "burst_request changed while stalled");
+        integration.dma.transactions.valid, integration.dma.transactions.ready,
+        integration.dma.transactions.request)) else $fatal(1, "burst_request changed while stalled");
     burst_response: assert property (held_until_accepted(control.bus_clk, control.bus_rst_n,
-        integration.dma.endpoint.bus_port.returned, integration.dma.endpoint.bus_port.accepted,
-        integration.dma.endpoint.bus_port.receipt)) else $fatal(1, "burst_response changed while stalled");
+        integration.dma.transactions.returned, integration.dma.transactions.accepted,
+        integration.dma.transactions.receipt)) else $fatal(1, "burst_response changed while stalled");
+    pdma_axi_activity #(.ID_BITS(`PDMA_ID_BITS)) activity(
+        .clk(control.bus_clk),.rst_n(control.bus_rst_n),
+        .ar(memory.arvalid && memory.arready),.arid(memory.arid),
+        .aw(memory.awvalid && memory.awready),.awid(memory.awid),
+        .r(memory.rvalid && memory.rready),.rid(memory.rid),.rlast(memory.rlast),
+        .b(memory.bvalid && memory.bready),.bid(memory.bid)
+    );
     pdma_pipeline_timing #(.CHANNELS(`PDMA_CHANNEL_COUNT),.SLOTS(`PDMA_COPY_SLOTS)) timing_probe(
         .core_clk(control.core_clk),.core_rst_n(control.core_rst_n),
         .bus_clk(control.bus_clk),.bus_rst_n(control.bus_rst_n),
-        .grant(!integration.dma.engine.locked && |integration.dma.engine.choice),.chosen(integration.dma.engine.chosen),
-        .copy_start(integration.dma.engine.copy_start),
+        .grant(!integration.dma.commands.execution.locked && |integration.dma.commands.execution.choice),.chosen(integration.dma.commands.execution.chosen),
+        .copy_start(integration.dma.commands.execution.copy_start),
         .issued(integration.dma.requests.valid && integration.dma.requests.ready),
         .issue_channel(integration.dma.requests.request.tag.channel),.issue_slot(integration.dma.requests.request.tag.slot),
         .issue_write(integration.dma.requests.request.write),
-        .retired(integration.dma.requests.returned && integration.dma.requests.accepted),
+        .retired(integration.dma.requests.returned && !integration.dma.requests.receipt.orphan && integration.dma.requests.accepted),
         .retire_channel(integration.dma.requests.receipt.tag.channel),.retire_slot(integration.dma.requests.receipt.tag.slot),
+        .fetch_admitted(integration.dma.fetch_valid && integration.dma.fetch_ready), .fetch_channel(integration.dma.fetch.channel),
         .admitted(integration.dma.transactions.valid && integration.dma.transactions.ready),
         .admit_channel(integration.dma.transactions.request.tag.channel),.admit_slot(integration.dma.transactions.request.tag.slot),
-        .returned(integration.dma.transactions.returned && integration.dma.transactions.accepted),
+        .returned(integration.dma.transactions.returned && !integration.dma.transactions.receipt.orphan && integration.dma.transactions.accepted),
         .return_channel(integration.dma.transactions.receipt.tag.channel),.return_slot(integration.dma.transactions.receipt.tag.slot)
     );
     for(genvar c=0;c<`PDMA_CHANNEL_COUNT;c++) begin: channels
         pdma_lifecycle_assertions #(.SLOTS(`PDMA_COPY_SLOTS)) lifecycle(
             .clk(control.core_clk),.rst_n(control.core_rst_n),
             .request(integration.dma.requests.valid && integration.dma.requests.request.tag.channel==c),.ready(integration.dma.requests.ready),
-            .returned(integration.dma.requests.returned && integration.dma.requests.receipt.tag.channel==c),.accepted(integration.dma.requests.accepted),
+            .returned(integration.dma.requests.returned && !integration.dma.requests.receipt.orphan && integration.dma.requests.receipt.tag.channel==c),.accepted(integration.dma.requests.accepted),
             .request_slot(integration.dma.requests.request.tag.slot),.receipt_slot(integration.dma.requests.receipt.tag.slot),
-            .closing(integration.dma.engine.shutdown[c]),.clear(integration.dma.channels.clear[c]),
+            .closing(integration.dma.commands.execution.shutdown[c]),.clear(integration.dma.channels.clear[c]),
             .enabled(integration.dma.channels.configuration[c].enable),.has_commands(integration.dma.channels.command[c].producer!=integration.dma.channels.command[c].consumer),
             .irq(control.irq[c]),.irq_ready(control.irq_ready[c]),
             .irq_source(integration.dma.channels.status[c].error || integration.dma.channels.status[c].fatal!=0 ||
                 integration.dma.channels.status[c].trap || integration.dma.channels.events[c].producer!=integration.dma.channels.events[c].consumer),
             .parked(integration.dma.channels.status[c].faulted),.resume_request(integration.dma.channels.actions[c].resume_request),
-            .parked_state({integration.dma.engine.contexts[c].descriptor,integration.dma.engine.copy.next_source[c],integration.dma.engine.copy.next_destination[c],
-                integration.dma.engine.copy.remaining[c],integration.dma.engine.copy.committed[c]})
+            .parked_state({integration.dma.commands.execution.contexts[c].descriptor,integration.dma.commands.execution.copy.next_source[c],integration.dma.commands.execution.copy.next_destination[c],
+                integration.dma.commands.execution.copy.remaining[c],integration.dma.commands.execution.copy.committed[c]})
         );
     end
     assert property(@(posedge control.core_clk) disable iff(!control.core_rst_n)

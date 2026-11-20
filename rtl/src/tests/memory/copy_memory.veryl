@@ -30,13 +30,14 @@ module CopyTestMemory (
     assign axi.rdata   = observed[(read_address >> 3) as 7];
     assign axi.rlast   = read_beat == read_length;
     assign axi.rresp   = 0 as $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>::resp_t;
-    assign axi.rid     = 0;
+    var read_id: logic;
+    assign axi.rid     = read_id;
     assign axi.ruser   = 0;
     assign axi.awready = !aw_seen && !pending_b && !delay_aw;
     assign axi.wready  = !w_seen && !pending_b && (!backpressure || cycle[1:0] != 1);
     assign axi.bvalid  = pending_b && !hold_b;
     assign axi.bresp   = 0 as $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>::resp_t;
-    assign axi.bid     = 0;
+    assign axi.bid     = 1;
     assign axi.buser   = 0;
     always_ff (clk, rst_n) {
         if_reset {
@@ -86,12 +87,13 @@ module CopyTestMemory (
                 observed[8] = 64'h303;
             }
             if axi.arvalid && axi.arready {
+                read_id      = axi.arid;
                 reading      = 1;
                 read_address = axi.araddr;
                 read_beat    = 0;
                 read_length  = axi.arlen;
                 read_size    = axi.arsize as 3;
-                $assert(axi.arid == 0 && axi.arlen <: 8, "BOUNDED_READ");
+                $assert(axi.arid == (axi.araddr >= 192) && axi.arlen <: 8, "BOUNDED_READ");
                 $assert(
                     (axi.araddr[11:0] as u32) + ((axi.arlen as u32 + 1) << (axi.arsize as 3)) <= 4096,
                     "READ_PAGE_BOUNDARY",

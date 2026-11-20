@@ -13,10 +13,13 @@ module MemoryCapacityTest {
         READ_OUTSTANDING : READ_CAPACITY ,
         WRITE_OUTSTANDING: WRITE_CAPACITY,
     ) (
-        clk       ,
-        rst_n: rst,
-        port      ,
-        axi       ,
+        clk             ,
+        fetch_valid: 0  ,
+        fetch_ready: _  ,
+        fetch      : '0 ,
+        rst_n      : rst,
+        port            ,
+        axi             ,
     );
     var issued   : u32;
     var addresses: u32;
@@ -36,11 +39,11 @@ module MemoryCapacityTest {
             axi.rvalid    = 0;
             axi.rdata     = 0;
             axi.rlast     = 1;
-            axi.rid       = 0;
+            axi.rid       = 1;
             axi.ruser     = 0;
             axi.rresp     = 0 as $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>::resp_t;
             axi.bvalid    = 0;
-            axi.bid       = 0;
+            axi.bid       = 1;
             axi.buser     = 0;
             axi.bresp     = 0 as $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>::resp_t;
             issued        = 0;

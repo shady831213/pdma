@@ -19,11 +19,12 @@ set result [dict create top pdma_rtl_DmaConfigured clocks {
     cold {reg_rst_n core_rst_n bus_rst_n}
 } memories {
     copy_buffer {
-        instance dma/engine/copy/buffers/u_ram provider tech_cell_generic_Ram1R1W
+        instance dma/commands/execution/copy/buffers/u_ram provider tech_cell_generic_Ram1R1W
         kind Ram1R1W clock core_clk
     }
 } crossings {
     dma/control/csr/crossing {provider common_cell cell DuplexMailbox source reg_clk destination core_clk max_delay 0.5}
+    dma/transport/fetch_crossing {provider common_cell cell AsyncQueue source core_clk destination bus_clk max_delay 0.5}
     dma/transport/request_crossing {provider common_cell cell AsyncQueue source core_clk destination bus_clk max_delay 0.5}
     dma/transport/response_crossing {provider common_cell cell AsyncQueue source bus_clk destination core_clk max_delay 0.5}
 } ports {
@@ -61,6 +62,7 @@ set result [dict create top pdma_rtl_DmaConfigured clocks {
 dict set result configuration $configuration
 dict set result memories copy_buffer depth [dict get $configuration rows]
 dict set result memories copy_buffer width [dict get $configuration row_bits]
+dict set result crossings dma/transport/fetch_crossing depth [dict get $configuration request_depth]
 dict set result crossings dma/transport/request_crossing depth [dict get $configuration request_depth]
 dict set result crossings dma/transport/response_crossing depth [dict get $configuration receipt_depth]
 dict set result ports reg_clk input cfg.wdata [dict get $configuration register_bits]
@@ -69,6 +71,8 @@ dict set result ports reg_clk output cfg.rdata [dict get $configuration register
 if {[dict get $configuration memory_axi_version] == 5} {
     dict set result ports bus_clk output awatop 6
 }
+foreach port {memory.rid memory.bid} {dict set result ports bus_clk input $port [dict get $configuration id_bits]}
+foreach port {memory.arid memory.awid} {dict set result ports bus_clk output $port [dict get $configuration id_bits]}
 dict set result ports bus_clk input memory.rdata [dict get $configuration memory_bits]
 dict set result ports bus_clk output memory.wdata [dict get $configuration memory_bits]
 dict set result ports bus_clk output memory.wstrb [dict get $configuration memory_bytes]

@@ -1,0 +1,130 @@
+module CopyReadEndpoint::<
+    B          : $std::axi4_prototype = $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>,
+    BURST_BEATS: u32                  = 8                  ,
+    SLOTS      : u32                  = 8                  ,
+> #(
+    param OUTSTANDING: u32 = 8,
+) (
+    clk  : input   clock                                                           ,
+    rst_n: input   reset_async_low                                                 ,
+    port : modport CopyMemoryPort::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>::slave,
+    axi  : modport $std::axi4_if::<B>::read_master                                 ,
+) {
+    alias package M = CopyMemory::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>;
+    struct ReadTracker {
+        tag   : M::Tag                ,
+        lane  : logic <M::DATA_SIZE>  ,
+        size  : logic <3>             ,
+        length: logic <M::LENGTH_BITS>,
+    }
+    const INDEX_BITS: u32                                       = if OUTSTANDING >: 1 ? $clog2(OUTSTANDING) : 1;
+    var   available : logic                                    ;
+    var   found     : logic                                    ;
+    var   allocation: logic      <INDEX_BITS>                  ;
+    var   oldest    : logic      <INDEX_BITS>                  ;
+    var   trackers  : ReadTracker                 [OUTSTANDING];
+    var   beats     : logic      <M::LENGTH_BITS> [OUTSTANDING];
+    // A single ID can interleave with peers but never with itself. Allocate
+    // scratch per ID when that is cheaper than scratch per tracker row.
+    const BY_ID        : bbool                                      = B::ID_LENGTH <: $clog2(OUTSTANDING);
+    const SCRATCH_ROWS : u32                                        = if BY_ID ? (1 << B::ID_LENGTH) : OUTSTANDING;
+    const SCRATCH_BITS : u32                                        = if SCRATCH_ROWS >: 1 ? $clog2(SCRATCH_ROWS) : 1;
+    let   scratch      : logic      <SCRATCH_BITS>                  = if BY_ID ?
+        axi.rid as SCRATCH_BITS
+    :
+        oldest as SCRATCH_BITS
+    ;
+    var   partial      : M::Receipt                  [SCRATCH_ROWS];
+    let   head         : ReadTracker                                = trackers[oldest];
+    let   beat         : logic      <M::LENGTH_BITS>                = beats[oldest];
+    let   accumulated  : M::Receipt                                 = if beat == 0 ? '0 : partial[scratch];
+    var   next_result  : M::Receipt                                ;
+    var   receipt_ready: logic                                     ;
+    let   lane         : logic      <M::DATA_SIZE>                  = head.lane + ((beat as u32) << head.size);
+    let   all_bits     : logic      <M::DATA_BITS>                  = '1;
+    let   beat_mask    : logic      <M::DATA_BITS>                  = all_bits >> (M::DATA_BITS - (8 << head.size));
+    let   terminal     : logic                                      = axi.rvalid && axi.rready && (axi.rlast || !found);
+    assign axi.arvalid  = port.valid && available;
+    assign port.ready   = axi.arready && available;
+    assign axi.araddr   = port.request.address;
+    assign axi.arlen    = port.request.length as 8;
+    assign axi.arsize   = port.request.size as B::size_t;
+    assign axi.arburst  = 2'b01 as B::burst_t;
+    assign axi.aruser   = (port.request.selector as M::USER_BITS)
+        | ((port.request.tag.channel as M::USER_BITS) << M::CONTEXT_BITS);
+    assign axi.arcache  = 0;
+    assign axi.arprot   = 0;
+    assign axi.arid     = {port.request.tag.channel, port.request.tag.slot != 0} as B::id_t;
+    assign axi.arlock   = 0;
+    assign axi.arqos    = 0;
+    assign axi.arregion = 0;
+    assign axi.rready   = (found && !axi.rlast) || receipt_ready;
+    let issue: logic = axi.arvalid && axi.arready;
+    inst order: AxiOutstanding #(
+        DEPTH  : OUTSTANDING ,
+        ID_BITS: B::ID_LENGTH,
+    ) (
+        clk                          ,
+        rst_n                        ,
+        issue                        ,
+        issue_id  : axi.arid         ,
+        available                    ,
+        allocation                   ,
+        reply_id  : axi.rid          ,
+        found                        ,
+        oldest                       ,
+        retire    : terminal && found,
+    );
+    always_comb {
+        next_result        = accumulated;
+        next_result.tag    = head.tag;
+        next_result.orphan = !found;
+        // AXI lanes wrap at the bus word; the retained payload is densely packed.
+        next_result.data = accumulated.data | (((axi.rdata >> (lane * 8)) & beat_mask) as M::BURST_BITS)
+            << (((beat as u32) << head.size) << 3);
+        if (axi.rresp as 2) != 0 {
+            next_result.failed     = 1;
+            next_result.page_fault = (!accumulated.failed || accumulated.page_fault) && axi.ruser == 1
+                && (axi.rresp as 2) >= 2;
+        }
+        next_result.protocol_error = accumulated.protocol_error || axi.rlast != (beat == head.length)
+            || (axi.rresp as 2) == 1 || (axi.ruser != 0 && (axi.ruser != 1 || (axi.rresp as 2) <: 2));
+        if !found {
+            next_result                = '0;
+            next_result.orphan         = 1;
+            next_result.protocol_error = 1;
+        }
+    }
+    inst receipt: common_cell::ReadyValidSlice #(
+        TYPE: M::Receipt                                 ,
+        MODE: common_cell::ReadyValid::SliceMode::Forward,
+    ) (
+        clk                    ,
+        rst_n                  ,
+        s_valid : terminal     ,
+        s_ready : receipt_ready,
+        s_data  : next_result  ,
+        m_valid : port.returned,
+        m_ready : port.accepted,
+        m_data  : port.receipt ,
+        occupied: _            ,
+    );
+    always_ff (clk) {
+        if issue {
+            trackers[allocation] = ReadTracker'{
+                tag                 : port.request.tag                    ,
+                lane                : port.request.address as M::DATA_SIZE,
+                size                : port.request.size                   ,
+                length              : port.request.length                 ,
+            };
+            beats[allocation]    = 0;
+        }
+        if axi.rvalid && axi.rready && found && !axi.rlast {
+            partial[scratch] = next_result;
+            // An overdue RLAST must never wrap back to a fresh accumulator.
+            if !(&beat) {
+                beats[oldest] = beat + 1;
+            }
+        }
+    }
+}

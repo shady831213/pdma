@@ -69,8 +69,8 @@ class pdma_multichannel_reset_test extends pdma_base_test;
         flows[0].channel.request_reset();
         flows[0].channel.read_reg(flows[0].channel.admin.reset_reg,busy);
         if(!busy[0]) `uvm_fatal("RESET_DRAIN","Target reset completed with an outstanding write")
-        // Queue peers while the old owner's responses are still retained. Shared
-        // AXI ID ordering can backpressure them, but must never misroute receipts.
+        // Queue peers while the old owner's responses are still retained. Their IDs
+        // are independent while they still share the bounded response trackers.
         for(int i=1;i<flows.size();i++) flows[i].submit();
         platform.hold_write=0;
         foreach(platform.held[i]) platform.held[i].suspend_response=0;
@@ -78,6 +78,39 @@ class pdma_multichannel_reset_test extends pdma_base_test;
         for(int i=1;i<flows.size();i++) begin flows[i].expect_result(TASK_SUCCESS); flows[i].close(); cases++; end
         flows[0]=env.task_flow(0); flows[0].open(settings(64)); flows[0].submit();
         flows[0].expect_result(TASK_SUCCESS); flows[0].close(); cases++;
+    endtask
+endclass
+
+// Hold exactly one old B. A peer Fence becomes observable only after the peer
+// Copy's B, so its marker proves real BID overtaking with the target in reset.
+class pdma_reset_reordered_b_test extends pdma_base_test;
+    `uvm_component_utils(pdma_reset_reordered_b_test)
+    function new(string name,uvm_component parent); super.new(name,parent); endfunction
+    virtual function void build_phase(uvm_phase phase);
+        super.build_phase(phase); platform.memory_outstanding=8;
+        expected_cases=2;
+    endfunction
+    virtual task run_scenario();
+        pdma_task_flow old=env.task_flow(0);
+        int peer_id=platform.channel_count>1 ? 1 : 0;
+        pdma_task_flow peer=env.task_flow(peer_id);
+        bit independent=peer_id!=0 && `PDMA_WRITE_OUTSTANDING>1;
+        uvm_reg_data_t busy;
+        old.open(single_burst_copy()); platform.hold_write=1; old.submit();
+        wait(platform.held.size()==1);
+        platform.hold_write=0;
+        old.channel.request_reset();
+        if(independent) begin
+            peer.open(single_burst_copy()); peer.submit(); peer.expect_result(TASK_SUCCESS);
+        end
+        old.channel.read_reg(old.channel.admin.reset_reg,busy);
+        if(!busy[0]) `uvm_fatal("RESET_DRAIN","Reset completed while its B was withheld")
+        platform.held[0].suspend_response=0; platform.held.delete();
+        old.cancel(); cases++;
+        if(!independent) begin
+            peer.open(single_burst_copy()); peer.submit(); peer.expect_result(TASK_SUCCESS);
+        end
+        peer.close(); cases++;
     endtask
 endclass
 
@@ -129,7 +162,7 @@ class pdma_multichannel_throughput_test extends pdma_throughput_test;
             flows[i].submit();
         end
         foreach(flows[i]) begin
-            flows[i].expect_result(TASK_SUCCESS); metrics[i].finish(write_latency_budget());
+            flows[i].expect_result(TASK_SUCCESS); metrics[i].finish(write_latency_budget(),1);
             flows[i].close(); cases++;
         end
         begin

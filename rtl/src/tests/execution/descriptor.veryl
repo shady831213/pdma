@@ -21,7 +21,7 @@ module DescriptorTest {
     assign status                  = channels.status;
     assign advance                 = channels.command_advance;
     assign event_advance           = channels.event_advance;
-    inst dut: CopyEngine (
+    inst dut: DmaCommandPath (
         clk          ,
         rst_n   : rst,
         memory       ,
@@ -46,6 +46,7 @@ module DescriptorTest {
                 }
                 $assert(memory.valid && !memory.request.write, "MALFORMED_COPY_FETCH");
                 clk.next();
+                memory.ready   = 0;
                 memory.receipt = '0;
                 if part == 0 {
                     memory.receipt.data[127:64]  = 9;
@@ -69,9 +70,16 @@ module DescriptorTest {
                 memory.returned = 1;
                 clk.next();
                 memory.returned = 0;
+                memory.ready    = 1;
             }
             $assert(!advance, "MALFORMED_COPY_NOT_CONSUMED");
-            clk.next();
+            for timeout in 0..12 {
+                if status[0].fatal != 0 {
+                    break;
+                }
+                $assert(!advance, "NO_BAD_ACCEPT");
+                clk.next();
+            }
             for quiet in 0..5 {
                 $assert(
                     status[0].fatal == ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD && !advance && !memory.valid && !event_advance,

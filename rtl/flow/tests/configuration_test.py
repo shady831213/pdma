@@ -61,7 +61,7 @@ class ConfigurationTest(unittest.TestCase):
             native = (dst / 'src/profile.veryl').read_text()
             self.assertIn('DmaCopy::<', native)
             self.assertIn('CHANNEL_COUNT: 8', native)
-            self.assertIn('64, 16, 1, 35, 1, 2, 35, 2', native)
+            self.assertIn('64, 16, 4, 35, 1, 2, 35, 2', native)
             self.assertIn('32, 8, 1', native)
             self.assertIn('"channels": 8', (dst / 'configuration.json').read_text())
             self.assertFalse((dst / 'src/dma').exists(), 'must not duplicate design sources')

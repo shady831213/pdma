@@ -1,0 +1,71 @@
+// One shared pool per direction. Each ID links only its own live transactions.
+// A terminal response releases the oldest row of its ID independently of peers.
+module AxiOutstanding #(
+    param DEPTH     : u32 = 8                                ,
+    param ID_BITS   : u32 = 1                                ,
+    const INDEX_BITS: u32 = if DEPTH >: 1 ? $clog2(DEPTH) : 1,
+) (
+    clk       : input  clock                      ,
+    rst_n     : input  reset_async_low            ,
+    issue     : input  logic                      ,
+    issue_id  : input  logic          <ID_BITS>   ,
+    available : output logic                      ,
+    allocation: output logic          <INDEX_BITS>,
+    reply_id  : input  logic          <ID_BITS>   ,
+    found     : output logic                      ,
+    oldest    : output logic          <INDEX_BITS>,
+    retire    : input  logic                      ,
+) {
+    var live     : logic<DEPTH>             ;
+    var first    : logic<DEPTH>             ;
+    var last     : logic<DEPTH>             ;
+    var ids      : logic<ID_BITS>    [DEPTH];
+    var successor: logic<INDEX_BITS> [DEPTH];
+    var append   : logic<DEPTH>             ;
+    assign available = !(&live);
+    always_comb {
+        allocation = 0;
+        oldest     = 0;
+        found      = 0;
+        for row in 0..DEPTH {
+            if !live[row] {
+                allocation = row as INDEX_BITS;
+            }
+            if live[row] && first[row] && ids[row] == reply_id {
+                oldest = row as INDEX_BITS;
+                found  = 1;
+            }
+        }
+    }
+    always_comb {
+        for row in 0..DEPTH {
+            append[row] = live[row] && last[row] && ids[row] == issue_id && !(retire && oldest == row);
+        }
+    }
+    always_ff (clk, rst_n) {
+        if_reset {
+            live  = 0;
+            first = 0;
+            last  = 0;
+        } else {
+            if retire {
+                live[oldest] = 0;
+                if !last[oldest] {
+                    first[successor[oldest]] = 1;
+                }
+            }
+            if issue {
+                for row in 0..DEPTH {
+                    if append[row] {
+                        last[row]      = 0;
+                        successor[row] = allocation;
+                    }
+                }
+                live[allocation]  = 1;
+                first[allocation] = !(|append);
+                last[allocation]  = 1;
+                ids[allocation]   = issue_id;
+            }
+        }
+    }
+}

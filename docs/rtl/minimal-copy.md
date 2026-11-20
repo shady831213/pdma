@@ -17,7 +17,10 @@ bits 31:0; Function/PASID translation remains outside DMA.
 ```mermaid
 flowchart LR
   SW[AXI-Lite] --> CSR[Register mailbox and register owners]
-  CSR --> CMD[CopyEngine: channel contexts and shared execution]
+  CSR --> FETCH[ChannelFetch: private descriptor rows]
+  FETCH --> CMD[CopyEngine: ready heads and shared execution]
+  FETCH --> FQ[Descriptor address FIFO]
+  FQ --> RD
   CMD --> WIN[CopyWindow: SLOTS retained chunks per channel]
   WIN --> REQ[Request FIFO]
   CMD --> REQ
@@ -32,9 +35,10 @@ flowchart LR
   MERGE --> RESP[Receipt FIFO]
   RESP --> WIN
   RESP --> CMD
+  RESP --> FETCH
 ```
 
-The core fetches and accepts the current 96-byte descriptor once. Copy owns an
+Each channel reserves space for its published 96-byte descriptors. The engine accepts a ready head once. Copy owns its
 configured retained window until that command completes, stops or is reset. Each
 chunk is at most `memory_bytes * burst_beats`, is bounded by both address ranges
 and does not cross 4KiB. In the default profile, aligned ranges use up to eight
@@ -45,21 +49,14 @@ channel yields shared execution to an eligible peer.
 
 | Owner | State and release boundary |
 | --- | --- |
-| `CopyEngine` | One descriptor/lifecycle context per channel, one round-robin selected shared Fetch/Fence/error-publication datapath |
+| `CopyEngine` | One descriptor/lifecycle context per channel, one round-robin selected shared decode/Fence/error-publication datapath |
 | `CopyWindow` | `SLOTS` source/destination/length entries per channel, access states and retained read bytes; reuses a slot only after successful write and in-order retirement |
 | Core RAM/read offer | `channels * slots` rows of `memory_bits * burst_beats` shared 1R1W storage, one synchronous read and one write port; a separate register holds the prepared write under backpressure |
 | Request/receipt FIFOs | Independently configured depths, registered Gray pointers and two-stage synchronization; enqueue transfers custody, not transaction completion |
-| Read endpoint | Configured AR tracking capacity, one ordered R-burst assembly and a held receipt |
-| Write endpoint | Separately advancing AW, W and B queues; admission reserves all three, and B consumes the oldest completed AW/W responsibility |
+| Read endpoint | Configured AR tracking capacity, interleaved R-burst assembly and a held receipt |
+| Write endpoint | Separately advancing AW, W and B queues; admission reserves all three, and B consumes the oldest AW/W responsibility for its BID |
 
-Internal channel/slot identities accompany requests and receipts; slot zero belongs to
-serialized Fetch/Fence/event accesses and slots 1..SLOTS to the Copy window. They are
-not architectural context IDs. External reads use AXI ID zero, as do external
-writes. AXI's ordering within each direction supplies receipt association; R and B
-may complete independently. A fair registered merger feeds the receipt FIFO.
-The request FIFO is shared: its head may backpressure later work when the selected
-AXI direction stalls. This profile does not claim independent ingress queues or
-out-of-order external response support.
+Slot zero identifies the channel prefetch, slots 1..SLOTS identify retained Copy rows and SLOTS+1 identifies Fence/event writes. The bus sees separate fetch and execution IDs per channel. Each ID keeps issue order, with independent cross-ID responses and beat-interleaved reads. A fair registered R/B merger feeds the receipt FIFO.
 
 The registered request FIFO, independent bus lanes and retained core window allow
 reads and writes of different chunks to overlap. A successful read can forward

@@ -38,7 +38,7 @@ module MultiChannelTest {
     assign advance                 = channels.command_advance;
     assign event_advance           = channels.event_advance;
     assign fatal                   = channels.internal_fatal;
-    inst dut: CopyEngine #(
+    inst dut: DmaCommandPath #(
         CHANNEL_COUNT  ,
     ) (
         clk          ,
@@ -131,7 +131,7 @@ module MultiChannelTest {
                             "PAYLOAD_READ_OWNER",
                         );
                         response.data = (64'h12340000 + channel + (if changed ? 256 : 0)) as 512;
-                    } else if held.tag.slot != 0 {
+                    } else if held.tag.slot != CopyMemory::CONTROL_SLOT {
                         $assert(
                             held.address == 64'h200000 + (channel as 64) * 4096 && held.selector == channel + 95,
                             "PAYLOAD_WRITE_OWNER",

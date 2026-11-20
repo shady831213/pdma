@@ -18,6 +18,7 @@ new configuration results are tracked separately.
 
 | Resource | Owner and capacity | Release |
 | --- | --- | --- |
+| Prefetched descriptors | Private FIFO per channel. Each descriptor reserves a row before its first AR; later rows can issue while earlier R beats are outstanding | Successful head acceptance or reset cleanup |
 | Accepted descriptor, control-request address and command progress | One retained context per channel | Terminal command handling or completed reset cleanup |
 | Retained burst metadata and read data | `slots` rows of `memory_bytes * burst_beats` bytes per channel (default eight 64-byte rows) | Successful write retirement or safe cancellation |
 | Data RAM | One shared 1R1W provider, `channels * slots` rows of `memory_bits * burst_beats` bits | Row validity follows its channel/slot owner; contents need no reset |
@@ -48,14 +49,9 @@ there is no combinational arbitration bypass into address generation. A healthy 
 the channel consumer advances once at valid descriptor acceptance. Resuming a
 parked command reacquires a grant and uses its stored descriptor/progress/data.
 
-Descriptor fetch and error-event publication calculate their ring start address
-before issuing a request. The channel context retains the current control-request
-address and advances it only after a successful partial transfer. Fence decode
-captures its target into the same address state and preserves it across parking.
-Event preparation checks geometry, capacity and address overflow before entering
-publication. These register cuts separate ring arithmetic from request-FIFO input
-timing; they add admission/preparation latency without inserting payload-burst
-stages. Software still observes the same acceptance, error, fault and reset rules.
+A channel prefetches published descriptors while its private FIFO has room. The issue and fill cursors advance independently. A return needs no new reservation. Reset counts one obligation per accepted burst, including fragments queued for transport. An ordinary descriptor read error marks that FIFO entry failed and takes effect when it reaches the head. A bus protocol violation follows the device-fatal path immediately. The engine decodes one selected head and advances the architectural consumer on acceptance. Fence and event writes retain their addresses until their terminal receipts.
+
+A ready prefetched head is still unaccepted. Resuming a parked Copy uses its retained execution state. Future RTL context Abort must inspect an unaccepted head at admission under the existing [context maintenance contract](../../model/modeling/docs/context-contract.md). Fetch completion by itself gives no authority to touch payload memory.
 
 Closing an owner immediately blocks its new requests. Requests already accepted
 by the core-to-bus queue remain obligations even before AXI handshakes. Return
@@ -68,11 +64,7 @@ Only that channel's outstanding work gates its clear; unrelated pending work doe
 not gate an idle/parked channel's reset. Shared queues are never reset or flushed
 by a channel reset. DMA reset collects every channel's cleanup acknowledgement.
 
-The ordinary bus profile retains ID-zero ordering separately for reads and writes.
-Channel identity is independent of AXI ID. Shared queue/endpoint backpressure and
-external ordering can delay peers; no independent external response-ordering or
-zero-interference guarantee is claimed. A parked channel must nevertheless leave
-healthy peers a usable retained-data reservation and shared execution opportunity.
+AXI ID is twice the channel index for descriptor reads and one greater for all engine accesses. Reads preserve order within an ID and can interleave across IDs. B responses may overtake writes of other IDs. The single engine still preserves program order per channel.
 
 ## Integration boundary
 
@@ -99,7 +91,7 @@ snapshot can elaborate different counts, but its qualification is configuration-
 
 ## Crossing review boundaries
 
-The native source-bound gates for the current 2-channel and 8-channel elaborations
+The native source-bound gates for released 2-channel and 8-channel elaborations
 are recorded separately in `impl/dma/reviews/copy.tcl` and `copy-8.tcl`. They retain
 raw findings and require every exact native endpoint to match before applying a
 review. A changed source/configuration cannot inherit approval by a finding count.

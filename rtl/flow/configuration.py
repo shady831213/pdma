@@ -52,7 +52,8 @@ def resolve(overrides=None):
         raise ValueError('a retained burst must hold one Fence64 value')
     values['rows'] = values['channels'] * values['slots']
     values['row_bits'] = values['burst_bytes'] * 8
-    values['slot_bits'] = values['slots'].bit_length()
+    values['slot_bits'] = (values['slots'] + 1).bit_length()
+    values['id_bits'] = (2*values['channels'] - 1).bit_length()
     if max(values.values()) >= 2**31:
         raise ValueError('profile exceeds RTL integer geometry')
     return values
@@ -86,12 +87,12 @@ def project(destination, values):
     (destination / 'configuration.json').write_text(json.dumps(values, indent=2) + '\n')
     (destination / 'configuration.tcl').write_text(tcl(values))
     defines = {'CHANNEL_COUNT': 'channels', 'REGISTER_BITS': 'register_bits', 'MEMORY_BITS': 'memory_bits',
-               'BURST_BEATS': 'burst_beats', 'COPY_SLOTS': 'slots', 'SLOT_BITS': 'slot_bits',
+               'BURST_BEATS': 'burst_beats', 'COPY_SLOTS': 'slots', 'ID_BITS': 'id_bits', 'SLOT_BITS': 'slot_bits',
                'READ_OUTSTANDING': 'read_outstanding', 'WRITE_OUTSTANDING': 'write_outstanding'}
     (destination / 'configuration.svh').write_text('`ifndef PDMA_CONFIGURATION_SVH\n`define PDMA_CONFIGURATION_SVH\n'
         + ''.join(f'`define PDMA_{k} {values[v]}\n' for k, v in defines.items()) + '`endif\n')
     r = f'$std::axi4_lite_pkg::<32, {values["register_bytes"]}, 1>'
-    b = f'$std::axi4_pkg::<64, {values["memory_bytes"]}, 1, 35, 1, 2, 35, 2>'
+    b = f'$std::axi4_pkg::<64, {values["memory_bytes"]}, {values["id_bits"]}, 35, 1, 2, 35, 2>'
     axi5 = values['memory_axi_version'] == 5
     atop_port = "    awatop: output 'bus logic<6>,\n" if axi5 else ''
     atop_connection = 'awatop' if axi5 else 'awatop: _'
@@ -103,7 +104,7 @@ def project(destination, values):
 {atop_port}    irq: output 'core logic<CHANNELS>, irq_ready: input 'core logic<CHANNELS>,
     fatal_irq: output 'core logic, fatal_irq_ready: input 'core logic, fatal: output 'core logic,'''
     ports = ports.replace('REG', r).replace('BUS', b).replace('CHANNELS', str(values['channels']))
-    knobs = {'CHANNEL_COUNT':'channels', 'READ_OUTSTANDING':'read_outstanding',
+    knobs = {'CHANNEL_COUNT':'channels', 'PREFETCH_DEPTH':'prefetch_depth', 'READ_OUTSTANDING':'read_outstanding',
              'WRITE_OUTSTANDING':'write_outstanding', 'REQUEST_DEPTH':'request_depth', 'RECEIPT_DEPTH':'receipt_depth'}
     parameters = ',\n        '.join(f'{name}: {values[key]}' for name, key in knobs.items())
     native = f'''// Generated static integration binding; no added state or latency.

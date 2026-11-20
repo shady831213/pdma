@@ -7,6 +7,7 @@ pub module DmaCopy::<
     SLOTS      : u32                       = 8                       ,
 > #(
     param CHANNEL_COUNT    : u32 = 1,
+    param PREFETCH_DEPTH   : u32 = 2,
     param READ_OUTSTANDING : u32 = 8,
     param WRITE_OUTSTANDING: u32 = 8,
     param REQUEST_DEPTH    : u32 = 8,
@@ -27,10 +28,18 @@ pub module DmaCopy::<
     fatal_irq_ready: input   'core      logic                                        ,
     fatal          : output  'core      logic                                        ,
 ) {
+    initial {
+        if B::ID_LENGTH <: $clog2(2 * CHANNEL_COUNT) || PREFETCH_DEPTH == 0 {
+            $fatal(1, "Invalid command depth or AXI ID width");
+        }
+    }
     inst channels     : 'core      DmaChannels #( CHANNEL_COUNT );
     inst requests     : 'core      CopyMemoryPort::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>;
     inst register_port: 'registers common_cell::RegisterPort;
     inst transactions : 'bus       CopyMemoryPort::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>;
+    var fetch_valid: 'bus       logic                                                              ;
+    var fetch_ready: 'bus       logic                                                              ;
+    var fetch      : 'bus       CopyMemory::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>::FetchAddress;
     assign awatop = 0;
     inst frontend: common_cell::AxiLiteRegisterFrontend::<R> (
         clk  : reg_clk      ,
@@ -53,8 +62,9 @@ pub module DmaCopy::<
         fatal_irq_ready               ,
         fatal                         ,
     );
-    inst engine: CopyEngine::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS> #(
-        CHANNEL_COUNT  ,
+    inst commands: DmaCommandPath::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS> #(
+        CHANNEL_COUNT   ,
+        PREFETCH_DEPTH  ,
     ) (
         clk     : core_clk  ,
         rst_n   : core_rst_n,
@@ -71,14 +81,20 @@ pub module DmaCopy::<
         bus_rst_n             ,
         requests    : requests,
         transactions          ,
+        fetch_valid           ,
+        fetch_ready           ,
+        fetch                 ,
     );
     inst endpoint: CopyMemoryEndpoint::<B, BURST_BEATS, SLOTS> #(
         READ_OUTSTANDING   ,
         WRITE_OUTSTANDING  ,
     ) (
-        clk  : bus_clk     ,
-        rst_n: bus_rst_n   ,
-        port : transactions,
-        axi  : memory      ,
+        clk        : bus_clk     ,
+        rst_n      : bus_rst_n   ,
+        port       : transactions,
+        fetch_valid              ,
+        fetch_ready              ,
+        fetch                    ,
+        axi        : memory      ,
     );
 }

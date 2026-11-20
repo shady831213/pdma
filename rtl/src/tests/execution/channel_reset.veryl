@@ -30,7 +30,7 @@ module ChannelResetTest {
     assign advance                 = channels.command_advance;
     assign event_advance           = channels.event_advance;
     assign fatal                   = channels.internal_fatal;
-    inst dut: CopyEngine #(
+    inst dut: DmaCommandPath #(
         CHANNEL_COUNT  ,
     ) (
         clk          ,

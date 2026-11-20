@@ -30,21 +30,22 @@ module MinimalCopyTest;
     assign memory.rvalid = reading;
     assign memory.rdata = words[read_addr >> 3];
     assign memory.rlast = read_beat == read_len;
-    assign memory.rid = 0;
+    logic [`PDMA_ID_BITS-1:0] read_id, write_id;
+    assign memory.rid = read_id;
     assign memory.rresp = '0;
     assign memory.ruser = 0;
     assign memory.awready = !hold_aw && !aw_seen && !b_pending;
     assign memory.wready = !w_seen && !b_pending;
     assign memory.bvalid = b_pending && !hold_b;
     assign memory.bresp = '0;
-    assign memory.bid = 0;
+    assign memory.bid = write_id;
     assign memory.buser = 0;
     always @(posedge bus_clk) if (bus_rst_n) begin
         if(quiet && (memory.arvalid || memory.awvalid || memory.wvalid ||
                      reading || aw_seen || w_seen || b_pending))
             $fatal(1,"Old memory access survived reset completion");
         if (memory.arvalid && memory.arready) begin
-            if (memory.arlen >= BURST_BYTES/WORD_BYTES || memory.arsize != $clog2(WORD_BYTES) || memory.arid != 0)
+            if (memory.arlen >= BURST_BYTES/WORD_BYTES || memory.arsize != $clog2(WORD_BYTES) || memory.arid != (memory.araddr >= RING_BYTES))
                 $fatal(1, "Unexpected read geometry");
             if (memory.aruser != (memory.araddr < RING_BYTES ? RING_CONTEXT : SOURCE_CONTEXT))
                 $fatal(1, "Read context mismatch");
@@ -53,7 +54,7 @@ module MinimalCopyTest;
             end else if(memory.araddr<SOURCE_ADDRESS ||
                         memory.araddr+(memory.arlen+1)*WORD_BYTES>SOURCE_ADDRESS+COPY_BYTES)
                 $fatal(1,"Payload read outside scenario range");
-            read_addr <= memory.araddr;
+            read_id <= memory.arid; read_addr <= memory.araddr;
             read_len <= memory.arlen;
             read_beat <= 0;
             reading <= 1;
@@ -69,7 +70,8 @@ module MinimalCopyTest;
                memory.awaddr+(memory.awlen+1)*WORD_BYTES>DEST_ADDRESS+COPY_BYTES))
                 $fatal(1,"Payload write outside scenario range");
             if(memory.awaddr==FENCE_ADDRESS && memory.awlen!=0) $fatal(1,"Fence write overflow");
-            aw_seen <= 1; write_addr <= memory.awaddr; write_len <= memory.awlen;
+            if(memory.awid != 1) $fatal(1,"Wrong execution ID");
+            write_id <= memory.awid; aw_seen <= 1; write_addr <= memory.awaddr; write_len <= memory.awlen;
         end
         if (memory.wvalid && memory.wready) begin
             if(write_beat>=BURST_BYTES/WORD_BYTES) $fatal(1,"Write burst exceeded responder capacity");

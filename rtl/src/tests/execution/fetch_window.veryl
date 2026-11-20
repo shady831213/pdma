@@ -1,0 +1,85 @@
+// A slow first R must not serialize AR for an already published successor.
+// At depth two the third descriptor needs the consumer to release a row.
+#[test(ordered_prefetch_window)]
+module FetchWindowTest {
+    inst clk: $tb::clock_gen #( period: 10 );
+    inst rst: $tb::reset_gen ( clk );
+    var ring    : RegisterState::Ring                         ;
+    var take    : logic                                       ;
+    var clear   : logic                                       ;
+    var enabled : logic                                       ;
+    var valid   : logic                                       ;
+    var head    : CommandState::Entry                         ;
+    var pending : logic                                       ;
+    var request : logic                                       ;
+    var address : logic              <64>                     ;
+    var length  : logic              <CopyMemory::LENGTH_BITS>;
+    var returned: logic                                       ;
+    var failed  : logic                                       ;
+    var data    : logic              <CopyMemory::BURST_BITS> ;
+    inst dut: ChannelFetch #(
+        DEPTH: 2,
+    ) (
+        clk              ,
+        rst_n   : rst    ,
+        ring             ,
+        enabled          ,
+        clear            ,
+        take             ,
+        valid            ,
+        head             ,
+        pending          ,
+        request          ,
+        address          ,
+        length           ,
+        issue   : request,
+        returned         ,
+        failed           ,
+        data             ,
+    );
+    var issues: u32;
+    initial {
+        ring     = RegisterState::Ring'{base: 0, capacity: 4, producer: 3, consumer: 0};
+        take     = 0;
+        clear    = 0;
+        enabled  = 0;
+        returned = 0;
+        failed   = 0;
+        data     = 0;
+        issues   = 0;
+        rst.assert();
+        clk.next(3);
+        enabled  = 1;
+        for cycle in 0..20 {
+            if request {
+                $assert(issues <: 4 && address == (issues / 2) * 96 + (issues % 2) * 64, "FIFO_RESERVATION");
+                issues += 1;
+            }
+            clk.next();
+        }
+        $assert(issues == 4 && pending && !valid, "BOTH_DESCRIPTORS_ISSUED_BEFORE_FIRST_R");
+        returned = 1;
+        data     = 27;
+        clk.next();
+        data     = 19;
+        clk.next();
+        $assert(valid && !head.failed && head.descriptor[31:0] == 27 && head.descriptor[543:512] == 19, "FIRST_HEAD");
+        failed   = 1;
+        clk.next();
+        returned = 0;
+        failed   = 0;
+        $assert(valid && !head.failed && !request, "YOUNGER_FAILURE_STAYS_ORDERED");
+        take     = 1;
+        clk.next();
+        take     = 0;
+        returned = 1;
+        clk.next();
+        returned = 0;
+        $assert(valid && head.failed && !pending && !request, "ERROR_HEAD_AND_NO_DEBT");
+        clear   = 1;
+        enabled = 0;
+        clk.next();
+        clear   = 0;
+        $assert(!valid && !pending, "RESET_EMPTIES_WINDOW");
+    }
+}

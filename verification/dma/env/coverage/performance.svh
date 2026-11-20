@@ -22,6 +22,9 @@ class pdma_performance extends uvm_subscriber#(svt_axi_transaction);
     int unsigned beats[2], bubbles[2], max_gap[2];
     int unsigned read_beats[longint unsigned], write_beats[longint unsigned];
     realtime read_ended[longint unsigned], minimum_handoff, maximum_handoff;
+    // Count only accepted descriptor R beats of other channels between two
+    // observed payload beats. Trailing activity after the payload is excluded.
+    int unsigned competing_since_read, competing_read_beats;
     int handoffs;
     bit enabled;
     pdma_performance_phases phases;
@@ -38,6 +41,7 @@ class pdma_performance extends uvm_subscriber#(svt_axi_transaction);
         foreach(beats[i]) begin beats[i]=0; bubbles[i]=0; max_gap[i]=0; first[i]=0; last[i]=0; end
         read_beats.delete(); write_beats.delete(); read_ended.delete();
         minimum_handoff=0; maximum_handoff=0; handoffs=0;
+        competing_since_read=0; competing_read_beats=0;
         enabled=1;
     endfunction
     local function int cycles(realtime interval_);
@@ -52,7 +56,11 @@ class pdma_performance extends uvm_subscriber#(svt_axi_transaction);
         int gap;
         if(!enabled) return;
         start_=writing ? job.dest_address : job.source_address;
-        if(item.addr<start_ || item.addr>=start_+job.length) return;
+        if(item.addr<start_ || item.addr>=start_+job.length) begin
+            if(!writing && beats[0]!=0 && item.id[0]==0 && (item.id>>1)!=job.channel_id)
+                competing_since_read++;
+            return;
+        end
         offset=item.addr-start_;
         if(!writing) begin
             if(!read_beats.exists(offset)) read_beats[offset]=0;
@@ -72,6 +80,11 @@ class pdma_performance extends uvm_subscriber#(svt_axi_transaction);
         else begin
             gap=cycles($realtime-last[writing])-1;
             if(gap<0) `uvm_fatal("PERF_BEAT","Duplicate beat observation")
+            if(!writing) begin
+                if(competing_since_read>gap) `uvm_fatal("PERF_BEAT","More competing R beats than bus cycles")
+                competing_read_beats+=competing_since_read;
+                competing_since_read=0;
+            end
             bubbles[writing]+=gap;
             if(gap>max_gap[writing]) max_gap[writing]=gap;
             if(gap!=0 && bubbles[writing]<=8)
@@ -87,7 +100,8 @@ class pdma_performance extends uvm_subscriber#(svt_axi_transaction);
         if(enabled && item.xact_type==svt_axi_transaction::WRITE && item.addr==job.fence_address)
             fence_at=$realtime;
     endfunction
-    function void finish(int unsigned write_latency_budget=0);
+    function void finish(int unsigned write_latency_budget=0, bit concurrent_channels=0);
+        int competing=concurrent_channels ? competing_read_beats : 0;
         int expected_beats=job.length/pdma_configuration::MEMORY_BEAT_BYTES;
         if(!enabled || descriptor_at==0 || fence_at==0 || expected_beats==0 ||
             beats[0]!=expected_beats || beats[1]!=expected_beats)
@@ -103,8 +117,8 @@ class pdma_performance extends uvm_subscriber#(svt_axi_transaction);
         if(handoffs!=0)
             `uvm_info("COPY_HANDOFF",$sformatf("bursts=%0d last_R_to_first_W_min=%0d max=%0d bus_cycles",
                 handoffs,cycles(minimum_handoff),cycles(maximum_handoff)),UVM_NONE)
-        `uvm_info("COPY_BUBBLE_BUDGET",$sformatf("read=0 write=%0d cycles over the entire payload",write_latency_budget),UVM_NONE)
-        if(bubbles[0]!=0 || bubbles[1]>write_latency_budget)
+        `uvm_info("COPY_BUBBLE_BUDGET",$sformatf("peer_descriptor_beats=%0d permitted_idle_R=0 transport_write_allowance=%0d",competing,write_latency_budget),UVM_NONE)
+        if(bubbles[0]!=competing || bubbles[1]>competing+write_latency_budget)
             `uvm_fatal("PERF_PAYLOAD_BUBBLE","Payload gaps exceed the declared transport-latency budget")
     endfunction
 endclass

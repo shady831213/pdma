@@ -59,7 +59,7 @@ mapped logic from excluded SRAM cost; the generic array mode remains available.
 | `src/dma/memory/` | Typed memory port, CDC queues and DMA-to-bus attribute mapping |
 | `src/hw_components/` | Deferred placeholder for managed peripheral hardware; outside the first RTL phase |
 | `src/tests/` | Native Veryl block tests and their local support |
-| `common_cell` dependency | Storage and transport primitives, bus endpoints, constraints and passive checkers from my-veryl-cells |
+| `common_cell` dependency | Storage and transport primitives, AXI4-Lite register frontend, constraints and passive checkers from my-veryl-cells |
 | `tech_cell_generic` dependency | Generic RAM providers from my-veryl-cells |
 
 Keep DMA in one native project, with reusable cells in their own library project;

@@ -1,0 +1,193 @@
+module CopyWriteEndpoint::<
+    B          : $std::axi4_prototype = $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>,
+    BURST_BEATS: u32                  = 8                  ,
+    SLOTS      : u32                  = 8                  ,
+> #(
+    param OUTSTANDING: u32 = 8                                            ,
+    const INDEX_BITS : u32 = if OUTSTANDING >: 1 ? $clog2(OUTSTANDING) : 1,
+) (
+    clk  : input   clock                                                           ,
+    rst_n: input   reset_async_low                                                 ,
+    port : modport CopyMemoryPort::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>::slave,
+    axi  : modport $std::axi4_if::<B>::write_master                                ,
+) {
+    alias package M = CopyMemory::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>;
+    struct WritePayload {
+        data  : logic<M::BURST_BITS> ,
+        lane  : logic<M::DATA_SIZE>  ,
+        size  : logic<3>             ,
+        length: logic<M::LENGTH_BITS>,
+    }
+    struct Address {
+        channel : M::Channel                ,
+        address : logic     <64>            ,
+        selector: logic     <32>            ,
+        size    : logic     <3>             ,
+        length  : logic     <M::LENGTH_BITS>,
+    }
+    struct AddressEntry {
+        row  : logic  <INDEX_BITS>,
+        value: Address            ,
+    }
+    var address_entry: AddressEntry            ;
+    struct WritePayloadEntry {
+        row          : logic       <INDEX_BITS>,
+        value        : WritePayload            ,
+    }
+    var payload_entry: WritePayloadEntry                              ;
+    var address_full : logic                                          ;
+    var data_full    : logic                                          ;
+    var address_empty: logic                                          ;
+    var data_empty   : logic                                          ;
+    var address      : Address                                        ;
+    var payload      : WritePayload                                   ;
+    var beat         : logic            <M::LENGTH_BITS>              ;
+    var addressed    : logic            <OUTSTANDING>                 ;
+    var written      : logic            <OUTSTANDING>                 ;
+    var allocation   : logic            <INDEX_BITS>                  ;
+    var oldest       : logic            <INDEX_BITS>                  ;
+    var address_row  : logic            <INDEX_BITS>                  ;
+    var data_row     : logic            <INDEX_BITS>                  ;
+    var tags         : M::Tag                            [OUTSTANDING];
+    var available    : logic                                          ;
+    var found        : logic                                          ;
+    var receipt_ready: logic                                          ;
+    assign address     = address_entry.value;
+    assign address_row = address_entry.row;
+    assign payload     = payload_entry.value;
+    assign data_row    = payload_entry.row;
+    let accept           : logic = port.valid && port.ready;
+    let data_complete    : logic = axi.wvalid && axi.wready && axi.wlast;
+    let response_complete: logic = axi.bvalid && axi.bready;
+    assign port.ready   = !(address_full || data_full) && available;
+    assign axi.awvalid  = !address_empty;
+    assign axi.awaddr   = address.address;
+    assign axi.awlen    = address.length as 8;
+    assign axi.awsize   = address.size as B::size_t;
+    assign axi.awburst  = 2'b01 as B::burst_t;
+    assign axi.awuser   = (address.selector as M::USER_BITS) | ((address.channel as M::USER_BITS) << M::CONTEXT_BITS);
+    assign axi.awcache  = 0;
+    assign axi.awprot   = 0;
+    assign axi.awid     = {address.channel, 1'b1} as B::id_t;
+    assign axi.awlock   = 0;
+    assign axi.awqos    = 0;
+    assign axi.awregion = 0;
+    assign axi.wvalid   = !data_empty;
+    assign axi.wlast    = beat == payload.length;
+    assign axi.wuser    = 0;
+    let lane     : logic<M::DATA_SIZE>        = payload.lane + ((beat as u32) << payload.size);
+    let all_lanes: logic<B::DATA_WIDTH_BYTES> = '1;
+    assign axi.wdata  = ((payload.data >> (((beat as u32) << payload.size) << 3)) as M::DATA_BITS) << (lane * 8);
+    assign axi.wstrb  = (all_lanes >> (B::DATA_WIDTH_BYTES - (1 << payload.size))) << lane;
+    assign axi.bready = receipt_ready && (!found || (addressed[oldest] && written[oldest]));
+    inst addresses: $std::fifo #(
+        TYPE         : AddressEntry,
+        DEPTH        : OUTSTANDING ,
+        RESET_DATA_FF: false       ,
+    ) (
+        i_clk        : clk                       ,
+        i_rst        : rst_n                     ,
+        i_clear      : 0                         ,
+        o_empty      : address_empty             ,
+        o_full       : address_full              ,
+        o_almost_full: _                         ,
+        o_word_count : _                         ,
+        i_push       : accept                    ,
+        i_pop        : axi.awvalid && axi.awready,
+        o_data       : address_entry             ,
+        i_data       : AddressEntry'{
+            row     : allocation                                ,
+            value   : Address'{
+                channel : port.request.tag.channel,
+                address : port.request.address                      ,
+                selector: port.request.selector                     ,
+                size    : port.request.size                         ,
+                length  : port.request.length
+            }
+        },
+    );
+    inst data: $std::fifo #(
+        TYPE         : WritePayloadEntry,
+        DEPTH        : OUTSTANDING      ,
+        RESET_DATA_FF: false            ,
+    ) (
+        i_clk        : clk          ,
+        i_rst        : rst_n        ,
+        i_clear      : 0            ,
+        o_empty      : data_empty   ,
+        o_full       : data_full    ,
+        o_almost_full: _            ,
+        o_word_count : _            ,
+        i_push       : accept       ,
+        i_pop        : data_complete,
+        o_data       : payload_entry,
+        i_data       : WritePayloadEntry'{
+            row   : allocation                           ,
+            value : WritePayload'{
+                data  : port.request.data,
+                lane  : port.request.address as M::DATA_SIZE ,
+                size  : port.request.size                    ,
+                length: port.request.length
+            }
+        },
+    );
+    inst order: AxiOutstanding #(
+        DEPTH  : OUTSTANDING ,
+        ID_BITS: B::ID_LENGTH,
+    ) (
+        clk                                                    ,
+        rst_n                                                  ,
+        issue     : accept                                     ,
+        issue_id  : {port.request.tag.channel, 1'b1} as B::id_t,
+        available                                              ,
+        allocation                                             ,
+        reply_id  : axi.bid                                    ,
+        found                                                  ,
+        oldest                                                 ,
+        retire    : response_complete && found,
+    );
+    inst receipt: common_cell::ReadyValidSlice #(
+        TYPE: M::Receipt                                 ,
+        MODE: common_cell::ReadyValid::SliceMode::Forward,
+    ) (
+        clk                       ,
+        rst_n                     ,
+        s_valid: response_complete,
+        s_ready: receipt_ready    ,
+        s_data : M::Receipt'{
+            orphan        : !found                                 ,
+            tag           : if found ? tags[oldest] : '0,
+            data          : '0                                     ,
+            failed        : (axi.bresp as 2) != 0,
+            page_fault    : axi.buser == 1 && (axi.bresp as 2) >= 2,
+            protocol_error: !found || (axi.bresp as 2) == 1
+                || (axi.buser != 0 && (axi.buser != 1 || (axi.bresp as 2) <: 2))
+        },
+        m_valid : port.returned,
+        m_ready : port.accepted,
+        m_data  : port.receipt ,
+        occupied: _            ,
+    );
+    always_ff (clk, rst_n) {
+        if_reset {
+            beat = 0;
+        } else {
+            if accept {
+                tags[allocation]      = port.request.tag;
+                addressed[allocation] = 0;
+                written[allocation]   = 0;
+            }
+            if axi.awvalid && axi.awready {
+                addressed[address_row] = 1;
+            }
+            if axi.wvalid && axi.wready {
+                if axi.wlast {
+                    beat              = 0;
+                    written[data_row] = 1;
+                } else {
+                    beat += 1;
+                }
+            }
+        }
+    }
+}

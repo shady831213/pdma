@@ -1,0 +1,172 @@
+// Each reservation owns a FIFO row until command acceptance or reset.
+// Descriptor AR and R advance independently, in order on this channel ID.
+module ChannelFetch::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8> #(
+    param DEPTH     : u32 = 2                                ,
+    const INDEX_BITS: u32 = if DEPTH >: 1 ? $clog2(DEPTH) : 1,
+) (
+    clk     : input  clock                                                                  ,
+    rst_n   : input  reset_async_low                                                        ,
+    ring    : input  RegisterState::Ring                                                    ,
+    enabled : input  logic                                                                  ,
+    clear   : input  logic                                                                  ,
+    take    : input  logic                                                                  ,
+    valid   : output logic                                                                  ,
+    head    : output CommandState::Entry                                                    ,
+    pending : output logic                                                                  ,
+    request : output logic                                                                  ,
+    address : output logic              <64>                                                ,
+    length  : output logic              <CopyMemory::<DATA_BYTES, BURST_BEATS>::LENGTH_BITS>,
+    issue   : input  logic                                                                  ,
+    returned: input  logic                                                                  ,
+    failed  : input  logic                                                                  ,
+    data    : input  logic              <DATA_BYTES * BURST_BEATS * 8>                      ,
+) {
+    alias package M = CopyMemory::<DATA_BYTES, BURST_BEATS>;
+    const SIZE       : u32 = if M::DATA_SIZE <: 3 ? M::DATA_SIZE : 3;
+    const BYTES      : u32 = (1 << SIZE) * BURST_BEATS;
+    const OFFSET_BITS: u32 = $clog2(CommandLayout::EXTENT + 1);
+
+    var entries        : CommandState::Entry                                                            [DEPTH];
+    var start_lane     : logic              <12>                                                        [DEPTH];
+    var complete       : logic              <DEPTH>                                                            ;
+    var occupied       : logic              <$clog2(DEPTH + 1)>                                                ;
+    var reader         : logic              <INDEX_BITS>                                                       ;
+    var writer         : logic              <INDEX_BITS>                                                       ;
+    var fill           : logic              <INDEX_BITS>                                                       ;
+    var started        : logic                                                                                 ;
+    var cursor         : logic              <32>                                                               ;
+    var issuing        : logic                                                                                 ;
+    var stop_issue     : logic                                                                                 ;
+    var discard_returns: logic                                                                                 ;
+    var base           : logic              <64>                                                               ;
+    var issued_bytes   : logic              <OFFSET_BITS>                                                      ;
+    var received_bytes : logic              <OFFSET_BITS>                                                      ;
+    var debt           : logic              <$clog2(DEPTH * (CommandLayout::EXTENT / (1 << SIZE)) + 1)>        ;
+    assign valid   = complete[reader];
+    assign head    = entries[reader];
+    assign pending = debt != 0;
+    let position       : logic<32> = if started ? cursor : ring.consumer;
+    let start          : logic<65> = (ring.base as 65) + ((position & (ring.capacity - 1)) as 65)
+        * CommandLayout::EXTENT;
+    let end_address    : logic<65> = start + CommandLayout::EXTENT;
+    let bus_failure    : logic     = returned && failed && !discard_returns;
+    let reserve        : logic     = enabled && !issuing && !stop_issue && !bus_failure && occupied <: DEPTH && position
+        != ring.producer;
+    let invalid_address: logic     = reserve && end_address[64];
+    assign address = base + issued_bytes;
+    function segment (
+        offset: input logic<7> ,
+        lane  : input logic<12>,
+    ) -> logic<7> {
+        let remaining  : logic<7>  = (CommandLayout::EXTENT - offset) as 7;
+        let bounded    : logic<7>  = if remaining <: BYTES ? remaining : BYTES as 7;
+        let to_boundary: logic<13> = 13'd4096 - (lane as 13);
+        return if bounded <= to_boundary ? bounded : to_boundary as 7;
+    }
+    function advance (
+        index: input logic<INDEX_BITS>,
+    ) -> logic<INDEX_BITS> {
+        return if (index as u32) + 1 == DEPTH ? 0 : index + 1;
+    }
+
+    let issue_bytes: logic<OFFSET_BITS> = segment(issued_bytes, address[11:0]);
+    let reply_bytes: logic<OFFSET_BITS> = segment(received_bytes, start_lane[fill] + received_bytes);
+    assign length  = ((issue_bytes >> SIZE) - 1) as M::LENGTH_BITS;
+    assign request = enabled && issuing && !bus_failure && !stop_issue;
+    let filled: logic = returned && !discard_returns
+        && (failed || received_bytes + reply_bytes == CommandLayout::EXTENT);
+
+    always_ff (clk, rst_n) {
+        if_reset {
+            complete        = 0;
+            occupied        = 0;
+            reader          = 0;
+            writer          = 0;
+            fill            = 0;
+            cursor          = 0;
+            started         = 0;
+            issuing         = 0;
+            stop_issue      = 0;
+            discard_returns = 0;
+            debt            = 0;
+            issued_bytes    = 0;
+            received_bytes  = 0;
+        } else if clear {
+            complete        = 0;
+            occupied        = 0;
+            reader          = 0;
+            writer          = 0;
+            fill            = 0;
+            cursor          = 0;
+            started         = 0;
+            issuing         = 0;
+            stop_issue      = 0;
+            discard_returns = 0;
+            debt            = 0;
+            issued_bytes    = 0;
+            received_bytes  = 0;
+        } else {
+            if reserve {
+                issuing      = !invalid_address;
+                issued_bytes = 0;
+                cursor       = position + 1;
+                started      = 1;
+                writer       = advance(writer);
+            }
+            if issue {
+                issued_bytes += issue_bytes;
+                if issued_bytes + issue_bytes == CommandLayout::EXTENT {
+                    issuing      =  0;
+                }
+            }
+            if returned && !discard_returns {
+                if filled {
+                    complete[fill] =  1;
+                    fill           =  advance(fill);
+                    received_bytes =  0;
+                } else {
+                    received_bytes += reply_bytes;
+                }
+            }
+            if bus_failure {
+                discard_returns  = 1;
+            }
+            if invalid_address {
+                complete[writer] = 1;
+            }
+            if bus_failure || invalid_address {
+                stop_issue       = 1;
+            }
+            if take {
+                complete[reader] = 0;
+                reader           = advance(reader);
+            }
+            case {reserve, take} {
+                2'b10  : occupied += 1;
+                2'b01  : occupied -= 1;
+                default: {}
+            }
+            case {issue, returned} {
+                2'b10  : debt += 1;
+                2'b01  : debt -= 1;
+                default: {}
+            }
+        }
+    }
+    always_ff (clk) {
+        if reserve {
+            base               = start as 64;
+            start_lane[writer] = start as 12;
+        }
+        if returned && !discard_returns {
+            entries[fill].descriptor = (if received_bytes == 0 ? 768'd0 : entries[fill].descriptor)
+                | ((data as 768) << (received_bytes * 8));
+            if filled {
+                entries[fill].failed     = failed;
+            }
+        }
+        if invalid_address {
+            entries[writer].failed = 1;
+        }
+    }
+}

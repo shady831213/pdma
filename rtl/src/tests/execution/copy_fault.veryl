@@ -28,7 +28,7 @@ module CopyFaultTest {
     assign command_advance         = channels.command_advance;
     assign event_advance           = channels.event_advance;
     assign internal_fatal          = channels.internal_fatal;
-    inst dut: CopyEngine (
+    inst dut: DmaCommandPath (
         clk          ,
         rst_n   : rst,
         memory       ,
@@ -53,6 +53,7 @@ module CopyFaultTest {
             }
             $assert(memory.valid && !memory.request.write, "FETCH");
             clk.next();
+            memory.ready   = 0;
             memory.receipt = '0;
             if part == 0 {
                 memory.receipt.data[191:128] = 8;
@@ -63,6 +64,13 @@ module CopyFaultTest {
             memory.returned = 1;
             clk.next();
             memory.returned = 0;
+            memory.ready    = 1;
+        }
+        for timeout in 0..12 {
+            if command_advance {
+                break;
+            }
+            clk.next();
         }
         $assert(command_advance, "ACCEPTED_COMMAND");
         command.consumer = 1;

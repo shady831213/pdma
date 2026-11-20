@@ -28,7 +28,8 @@ class pdma_memory_response extends svt_axi_slave_base_sequence;
                         wready_delay[i]==local::behavior.write_data_ready_delay;
                     else wready_delay[i] inside {[0:local::behavior.delay_max]};
                 foreach(rvalid_delay[i]) rvalid_delay[i] inside {[0:local::behavior.delay_max]};
-                enable_interleave==0;
+                enable_interleave==(xact_type==svt_axi_transaction::READ &&
+                    local::behavior.memory_outstanding>1 && local::behavior.delay_max>0);
                 resp_user==0;
                 foreach(data_user[i]) data_user[i]==0;
             }) `uvm_fatal("MEMORY_RANDOMIZE","Cannot generate a legal memory response")

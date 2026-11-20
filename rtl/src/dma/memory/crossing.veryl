@@ -2,28 +2,55 @@ pub module DmaMemoryCrossing::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS:
     param REQUEST_DEPTH: u32 = 8,
     param RECEIPT_DEPTH: u32 = 8,
 ) (
-    core_clk    : input   'core clock                                                   ,
-    core_rst_n  : input   'core reset_async_low                                         ,
-    bus_clk     : input   'bus  clock                                                   ,
-    bus_rst_n   : input   'bus  reset_async_low                                         ,
-    requests    : modport 'core CopyMemoryPort::<DATA_BYTES, BURST_BEATS, SLOTS>::slave ,
-    transactions: modport 'bus  CopyMemoryPort::<DATA_BYTES, BURST_BEATS, SLOTS>::master,
+    core_clk    : input   'core clock                                                     ,
+    core_rst_n  : input   'core reset_async_low                                           ,
+    bus_clk     : input   'bus  clock                                                     ,
+    bus_rst_n   : input   'bus  reset_async_low                                           ,
+    requests    : modport 'core CopyMemoryPort::<DATA_BYTES, BURST_BEATS, SLOTS>::slave   ,
+    fetch_valid : output  'bus  logic                                                     ,
+    fetch_ready : input   'bus  logic                                                     ,
+    fetch       : output  'bus  CopyMemory::<DATA_BYTES, BURST_BEATS, SLOTS>::FetchAddress,
+    transactions: modport 'bus  CopyMemoryPort::<DATA_BYTES, BURST_BEATS, SLOTS>::master  ,
 ) {
     alias package M = CopyMemory::<DATA_BYTES, BURST_BEATS, SLOTS>;
+    var engine_ready: 'core logic;
+    var fetch_space : 'core logic;
+    let descriptor  : 'core logic = !requests.request.write && requests.request.tag.slot == 0;
+    assign requests.ready = if descriptor ? fetch_space : engine_ready;
+    inst fetch_crossing: common_cell::AsyncQueue #(
+        TYPE : M::FetchAddress,
+        DEPTH: REQUEST_DEPTH  ,
+    ) (
+        s_clk  : core_clk                    ,
+        s_rst_n: core_rst_n                  ,
+        s_valid: requests.valid && descriptor,
+        s_ready: fetch_space                 ,
+        s_data : M::FetchAddress'{
+            channel : requests.request.tag.channel,
+            address : requests.request.address    ,
+            selector: requests.request.selector   ,
+            length  : requests.request.length
+        },
+        d_clk  : bus_clk    ,
+        d_rst_n: bus_rst_n  ,
+        d_valid: fetch_valid,
+        d_ready: fetch_ready,
+        d_data : fetch      ,
+    );
     inst request_crossing: common_cell::AsyncQueue #(
         TYPE : M::Request   ,
         DEPTH: REQUEST_DEPTH,
     ) (
-        s_clk  : core_clk            ,
-        s_rst_n: core_rst_n          ,
-        s_valid: requests.valid      ,
-        s_ready: requests.ready      ,
-        s_data : requests.request    ,
-        d_clk  : bus_clk             ,
-        d_rst_n: bus_rst_n           ,
-        d_valid: transactions.valid  ,
-        d_ready: transactions.ready  ,
-        d_data : transactions.request,
+        s_clk  : core_clk                     ,
+        s_rst_n: core_rst_n                   ,
+        s_valid: requests.valid && !descriptor,
+        s_ready: engine_ready                 ,
+        s_data : requests.request             ,
+        d_clk  : bus_clk                      ,
+        d_rst_n: bus_rst_n                    ,
+        d_valid: transactions.valid           ,
+        d_ready: transactions.ready           ,
+        d_data : transactions.request         ,
     );
     inst response_crossing: common_cell::AsyncQueue #(
         TYPE : M::Receipt   ,

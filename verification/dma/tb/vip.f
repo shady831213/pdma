@@ -23,5 +23,6 @@ tb/clock_domain.sv
 checkers/lifecycle.sv
 tb/bindings.sv
 env/coverage/pipeline_timing.sv
+env/coverage/axi_activity.sv
 tb/dut.sv
 tb/top.sv

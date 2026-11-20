@@ -1,8 +1,6 @@
 # DMA elaboration configuration
 
-The control plane, execution engine and memory transport have separate owners.
-`DmaCopy` statically connects `DmaControl`, `CopyEngine` and `DmaMemoryCrossing` to the bus endpoints.
-These boundaries add wires and hierarchy, not storage, arbitration or cycle delay.
+`DmaCopy` connects the register frontend, `DmaControl`, `DmaCommandPath`, clock crossing and memory endpoint. Within the command path, each channel owns descriptor reservations and the shared engine selects a ready head.
 An alternative engine implements the same channel-resource and memory protocols;
 it does not have to reproduce the register bridge, notifications or CDC queues.
 Channel registers remain owned by the channel register modules. Engine-private
@@ -29,9 +27,7 @@ An alternative engine preserves these obligations:
   returns one terminal receipt on `returned && accepted`. Identity survives CDC
   and external transaction completion. Acceptance creates the drain obligation,
   even when the AXI address has not yet left the queue.
-- The current engine reserves slot zero for descriptor/Fence/event traffic and
-  slots 1..SLOTS for retained Copy rows. The bridge treats these tags as receipt
-  identities; it does not schedule channels or interpret command phases.
+- Slot zero belongs to descriptor reads. The engine uses slots 1..SLOTS for retained Copy rows and SLOTS+1 for Fence/event writes. At its boundary the engine receives one head and a valid indication per channel, plus a per-channel fetch-outstanding indication for reset. A terminal receipt retains its original tag.
 
 Integration selects one implementation statically in the top-level composition.
 It instantiates the shared channel interface and memory interface with the same
@@ -51,12 +47,10 @@ then perform the operation and its side effects exactly once.
 
 The memory clock crossing carries DMA requests and receipts. In the bus domain
 `CopyMemoryEndpoint` packs the channel and context selector into address
-attributes and classifies response USER. The shared `common_cell::AxiMemoryMaster`
-owns AXI handshakes, beat assembly, directional credits and receipt merging.
-A different memory transport can implement `CopyMemoryPort` at that same
-boundary. It must retain the caller's tag and return the terminal outcome
-even when the channel enters reset after admission. Neither adapter adds a
-clock crossing or a pipeline stage.
+attributes and classifies response USER. The DMA-local read and write endpoints
+own AXI handshakes, beat assembly, directional credits and receipt merging.
+A replacement in the bus clock domain services the descriptor address port and the execution `CopyMemoryPort`, and merges their terminal receipts. It must retain the caller's tag and return the terminal outcome
+even when the channel enters reset after admission. The clock crossing retains custody in independent descriptor and execution request FIFOs and one return FIFO.
 
 ## Inputs and dependencies
 
@@ -66,6 +60,7 @@ JSON supplies any subset of these independent inputs. None is software writable.
 | Input | Meaning | Default |
 | --- | --- | --- |
 | `channels` | Physical channels, 1..8 | 2 |
+| `prefetch_depth` | Descriptor reservations per channel, including queued and partially returned descriptors | 2 |
 | `register_bits` | AXI4-Lite data width, 32 or 64 | 32 |
 | `memory_axi_version` | 4 selects the AXI4 port; 5 also exposes the six-bit AWATOP output, tied low for ordinary transfers | 5 |
 | `memory_bits` | Ordinary AXI data width, 32/64/128/256/512/1024 | 64 |
@@ -87,7 +82,7 @@ RAM row count and slot-tag width. RTL derives pointer/counter widths and uses an
 explicit wrap for non-binary slot counts. The retained RAM is one
 `channels * slots` by `memory_bits * burst_beats` 1R1W resource; the per-channel
 partition does not imply one physical memory or engine per channel. Slot zero
-identifies control traffic, so slot tags cover the inclusive range `0..slots`.
+identifies fetch traffic; slot tags cover `0..slots+1`. AXI ID width is derived as `ceil(log2(2*channels))`.
 
 These capacities are independent because they cover different lifetimes:
 retained rows survive faults; AXI credits cover accepted external transactions;
@@ -100,15 +95,14 @@ Capacity choices also have different physical costs. The retained Copy RAM grows
 as `channels * slots * memory_bits * burst_beats`, alongside per-row metadata and
 selection logic. Request/receipt CDC storage grows with its own depth and retained
 burst width. Write tracking retains queued payloads as well as addresses and tags;
-read tracking retains metadata, with one current burst assembly buffer. Increasing
+read tracking retains metadata, with separate partial bursts for interleaving IDs. Increasing
 read credits therefore does not have the same storage cost as increasing write
 credits. The control-budget synthesis model excludes only the inventoried Copy
 RAM; FIFO storage and endpoint assembly remain synthesized logic.
 
 These knobs can hide platform latency by allowing more work in flight, but cannot
 create another bus port or engine. The current shared request FIFO still has
-head-of-line blocking, and the AXI endpoint preserves each direction's ID-zero
-response order. Capacity changes need workload-specific throughput and timing
+head-of-line blocking, and the AXI endpoint preserves same-ID response order and accepts cross-ID interleaving/reordering. Capacity changes need workload-specific throughput and timing
 checks; larger values are not unconditionally better.
 
 Register addresses remain 32 bits, memory addresses 64 bits, and selectors 32

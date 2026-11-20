@@ -1,0 +1,91 @@
+// Ch0 payload and ch1 descriptor bursts may alternate R beats. B can overtake
+// across IDs while W follows issue order. A stalled receipt retains its owner.
+#[test(memory_interleaved_ids)]
+module MemoryInterleaveTest {
+    alias package B = $std::axi4_pkg::<64, 8, 2, 35, 1, 2, 35, 2>;
+    inst clk : $tb::clock_gen #( period: 10 );
+    inst rst : $tb::reset_gen ( clk );
+    inst port: CopyMemoryPort;
+    inst axi : $std::axi4_if::<B>;
+    inst dut: CopyMemoryEndpoint::<B> (
+        clk             ,
+        fetch_valid: 0  ,
+        fetch_ready: _  ,
+        fetch      : '0 ,
+        rst_n      : rst,
+        port            ,
+        axi             ,
+    );
+    initial {
+        port.valid    = 0;
+        port.accepted = 0;
+        port.request  = '0;
+        axi.arready   = 1;
+        axi.awready   = 1;
+        axi.wready    = 1;
+        axi.rvalid    = 0;
+        axi.bvalid    = 0;
+        axi.rresp     = 0 as B::resp_t;
+        axi.bresp     = 0 as B::resp_t;
+        axi.ruser     = 0;
+        axi.buser     = 0;
+        rst.assert();
+        clk.next(3);
+        for i in 0..2 {
+            port.valid               = 1;
+            port.request.tag.channel = i as 3;
+            port.request.tag.slot    = if i == 0 ? 1 : 0;
+            port.request.length      = 1;
+            port.request.size        = 3;
+            $assert(port.ready && axi.arvalid && axi.arid == i + 1, "INDEPENDENT_FETCH_AND_ENGINE_IDS");
+            clk.next();
+        }
+        port.valid = 0;
+        for j in 0..4 {
+            axi.rid    = if j % 2 == 0 ? 2 : 1;
+            axi.rdata  = (10 + j) as 64;
+            axi.rvalid = 1;
+            axi.rlast  = j >= 2;
+            $assert(axi.rready, "INTERLEAVED_BEAT_ACCEPTED");
+            clk.next();
+        }
+        axi.rvalid = 0;
+        clk.next(3);
+        for i in 0..2 {
+            $assert(port.returned && !port.receipt.protocol_error, "READ_RECEIPT");
+            $assert(port.receipt.tag.channel == 1 - i, "READ_OWNER");
+            $assert(port.receipt.data[63:0] == 10 + i && port.receipt.data[127:64] == 12 + i, "READ_ASSEMBLY");
+            port.accepted = 1;
+            clk.next();
+        }
+        port.accepted = 0;
+        for i in 0..2 {
+            port.valid               = 1;
+            port.request.tag.channel = i as 3;
+            port.request.tag.slot    = (i + 1) as 4;
+            port.request.write       = 1;
+            port.request.length      = 0;
+            port.request.data        = (20 + i) as 512;
+            $assert(port.ready, "WRITE_ACCEPT");
+            clk.next();
+            $assert(axi.awvalid && axi.awid == 2 * i + 1 && axi.wvalid && axi.wdata == 20 + i, "WRITE_ORDER");
+        }
+        port.valid = 0;
+        clk.next();
+        for i in 0..2 {
+            axi.bid    = if i == 0 ? 3 : 1;
+            axi.bvalid = 1;
+            $assert(axi.bready, "REORDERED_B");
+            clk.next();
+        }
+        axi.bvalid = 0;
+        clk.next(3);
+        for i in 0..2 {
+            $assert(port.returned && !port.receipt.protocol_error, "WRITE_RECEIPT");
+            $assert(port.receipt.tag.channel == 1 - i && port.receipt.tag.slot == 2 - i, "WRITE_OWNER");
+            port.accepted = 1;
+            clk.next();
+        }
+        $assert(!port.returned, "NO_DUPLICATE_RECEIPT");
+    }
+}

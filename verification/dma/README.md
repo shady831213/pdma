@@ -268,6 +268,8 @@ snapshot configuration for ports, memory geometry and crossing depths. See
 
 ## Optional internal timing
 
+`+PDMA_AXI_ACTIVITY` enables an independent probe at the memory pins. Its peak AR and AW counts span address acceptance through RLAST or B. It counts completions overtaking older addresses of another ID, and switches of RID after a nonterminal R beat. Without the plusarg the probe exits at time zero.
+
 `flow/run.sh ... +PDMA_INTERNAL_TIMING` enables the passive module in
 `env/coverage/pipeline_timing.sv`, wired only by `tb/dut.sv`. It samples handshake
 boundaries, matches receipts by channel/slot (including same-edge R-to-W reuse),

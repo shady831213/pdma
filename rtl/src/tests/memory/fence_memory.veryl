@@ -6,10 +6,13 @@ module FenceMemoryTest {
     inst axi : $std::axi4_if::<$std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>>;
     var observed: logic<64>;
     inst dut: CopyMemoryEndpoint (
-        clk       ,
-        rst_n: rst,
-        port      ,
-        axi       ,
+        clk             ,
+        fetch_valid: 0  ,
+        fetch_ready: _  ,
+        fetch      : '0 ,
+        rst_n      : rst,
+        port            ,
+        axi             ,
     );
     initial {
         port.valid    = 0;
@@ -26,7 +29,7 @@ module FenceMemoryTest {
         axi.wready    = 0;
         axi.bvalid    = 0;
         axi.bresp     = 0 as $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>::resp_t;
-        axi.bid       = 0;
+        axi.bid       = 1;
         axi.buser     = 0;
         rst.assert();
         clk.next(3);

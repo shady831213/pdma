@@ -121,6 +121,11 @@ handler 发出的 resume；没有 episode token 可替代软件生命周期同�
 CPU 分发，DMA 没有 ready 或接收确认输入。若平台将电平转换为消息，采样时锁存的
 owner 必须保留到消息处理结束；平台消息与 DMA 的 Trap ACK 有独立的生命周期。
 
+DMA 端口的时序参考是 `core_clk`。channel IRQ 包含 event producer/consumer 的
+组合比较，合同保证接收方在满足时序的采样边沿读到正确电平。若中断控制器使用
+其它时钟，集成端可以先在 core 域寄存电平，再同步到接收域。软件若在接收方采样前
+清除或屏蔽原因，该次短暂断言可能不会被观察到。
+
 Timestamp 消费一次一致的 u64 外部时间样本，单位由平台决定。首版 DMA timer 输入
 要求相对 core_clk 稳定/同步；异步 timer 的原子快照由外部适配器用握手提供，不能
 逐位同步 free-running 二进制计数器。DMA reset 不清平台时钟，fault 不重新采样。

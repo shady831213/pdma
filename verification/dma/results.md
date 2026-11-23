@@ -12,6 +12,42 @@ its own handler. Native Veryl tests passed on both CC and Cranelift (32 each).
 The device-fatal test observed the asserted level for twelve additional core
 cycles. The earlier delivery-handshake evidence below describes its own revision.
 
+At `11508d89`, the 2- and 8-channel seed 19 runs each passed all 38 DUT
+scenarios and rejected all eight checker mutations with their expected diagnostic.
+Fresh snapshots reproduced all 49 compiled SystemVerilog files per configuration.
+With zero AXI delay and one active channel, both configurations transferred an
+aligned 16 KiB Copy at 8 bytes per bus cycle in each direction. Each payload
+stream used 2,048 cycles with zero bubbles. Descriptor to Fence took 2,113
+cycles, and four prepublished 64-byte Copy/Fence pairs took 285 cycles from
+first descriptor to last Fence. These match the earlier handshake checkpoint.
+
+The CDC and RDC checks on the regenerated snapshots completed as follows.
+
+| Channels | CDC findings reviewed | RDC findings reviewed | Unresolved CDC / RDC |
+| ---: | ---: | ---: | ---: |
+| 2 | 99 | 1,584 | 0 / 0 |
+| 8 | 267 | 3,054 | 0 / 0 |
+
+Each channel IRQ and the fatal IRQ are outputs timed against `core_clk`. The
+port constraints follow the removal of the ready inputs. Each check first
+rejected the prior review's source identity, then passed with the same reviewed
+endpoints and reasons bound to the current snapshot. In each configuration,
+a fanout query on the elaborated design confirmed zero downstream sequential
+endpoints for all 625 bit selections in the unconnected RDC groups. The external
+interrupt controller and its clock crossing are outside this DMA boundary.
+
+At two channels the level-IRQ control-budget synthesis met the 1 GHz core
+and bus and 500 MHz register setup targets with 0 ps worst slack. Mapped
+cell area was 38,460.174 and vectorless power was 73.211 mW, compared with
+38,443.733 and 73.378 mW on the two-channel Trap handshake design.
+The worst path to each channel IRQ starts at an event-ring pointer flop.
+Channels 0 and 1 had 69.8 ps and 87.2 ps of setup margin, versus 446.9 ps on
+both registered handshake outputs. The fatal IRQ margin was 403.5 ps. All ten crossing,
+five held-payload and ten local synchronizer timing checks passed. The area
+and power estimates exclude physical Copy SRAM. The slack values are pre-route.
+The eight-channel run reached its wall-clock limit during mapping. A fresh
+synthesis from the same snapshot with a longer time budget is pending.
+
 ## Earlier per-source service on the superseded handshake interface
 
 With one shared IRQ service, holding channel zero's software event-consumer lock
@@ -79,7 +115,13 @@ With random VIP delays at seed 19, the multichannel Copy scenario reached eight 
 
 Fresh CDC/RDC runs against the published two-channel snapshot reviewed 99 CDC and 1,584 RDC findings. At eight channels the counts were 267 and 3,054. All four runs had zero unresolved findings. Only the source identity changed in the review files. Their endpoint lists, including the unconnected RDC sinks checked bit by bit for zero fanout, and their acceptance criteria stayed the same.
 
-At two channels the final control-budget synthesis met the 1 GHz core and bus and 500 MHz register setup targets with 0 ps worst slack. Mapped cell area rose from 29,500.674 to 38,980.067 (+32.1%) against the November 19 default two-channel profile. Vectorless power rose from 58.32 to 73.74 mW (+26.4%). These figures exclude the physical Copy SRAM. Workload power and routed timing remain unqualified. The eight-channel result is pending.
+The prefetch control-budget synthesis met the 1 GHz core and bus and 500 MHz
+register setup targets at both two and eight channels, with 0 ps worst slack.
+At two channels, mapped cell area rose from 29,500.674 to 38,980.067 (+32.1%)
+against the November 19 default two-channel profile. Vectorless power rose from
+58.32 to 73.74 mW (+26.4%). At eight channels the mapped area was 86,309.130
+and vectorless power was 141.23 mW. These figures exclude the physical Copy
+SRAM. Workload power and routed timing remain unqualified.
 
 See [the measured workload comparison](../../docs/rtl/performance.md) for payload utilization, batch latency and the depth-one comparison.
 

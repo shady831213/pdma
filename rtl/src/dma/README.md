@@ -35,6 +35,7 @@ channel/
 execution/
   engine.veryl                     CopyEngine: shared arbitration/command execution
   command.veryl                    Accepted command context and phases
+  copy/segments.veryl              CopySegments: validate tables and zip endpoint spans
   copy/window.veryl                CopyWindow: reserved rows and shared payload RAM
 memory/
   interface.veryl                  Typed memory requests/receipts
@@ -122,7 +123,7 @@ is unsupported. Software channel/DMA reset must leave the transport running.
 The memory endpoint has independent read/write lanes and ordered return tracking.
 
 The register modules alone do not implement transaction drain or execution.
-`DmaCopy` supplies one shared Linear Copy, Fence32/64 and Trap engine for 1..8 channels and
+`DmaCopy` supplies one shared linear/SG Copy, Fence32/64 and Trap engine for 1..8 channels and
 a shared memory endpoint;
 see the [slice boundaries](../../../docs/rtl/minimal-copy.md). Its software reset
 closes the target channel's admission and consumes its accepted memory receipts

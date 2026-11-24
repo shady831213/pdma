@@ -1,0 +1,223 @@
+// A Copy with at least one SG endpoint validates source, then destination, before
+// releasing any payload span. Walk the stable tables again for execution, keeping
+// only the two current segments. Each channel retains its cursors across a fault.
+module CopySegments::<DATA_BYTES: u32, BURST_BEATS: u32, SLOTS: u32> #(
+    param CHANNEL_COUNT: u32 = 1,
+) (
+    clk        : input   clock                                                                  ,
+    rst_n      : input   reset_async_low                                                        ,
+    selected   : input   CopyMemory::Channel                                                    ,
+    walk       : input   logic                                                                  ,
+    start      : input   logic                                                                  ,
+    cancel     : input   logic                                                   <CHANNEL_COUNT>,
+    clear      : input   logic                                                   <CHANNEL_COUNT>,
+    descriptor : input   logic                                                   <768>          ,
+    span_done  : input   logic                                                                  ,
+    waiting    : output  logic                                                   <CHANNEL_COUNT>,
+    offer      : output  logic                                                                  ,
+    source     : output  u64                                                                    ,
+    destination: output  u64                                                                    ,
+    length     : output  u64                                                                    ,
+    last       : output  logic                                                                  ,
+    prefix     : output  u64                                                                    ,
+    error_code : output  u32                                                                    ,
+    memory     : modport CopyMemoryPort::<DATA_BYTES, BURST_BEATS, SLOTS>::master               ,
+) {
+    alias package M = CopyMemory::<DATA_BYTES, BURST_BEATS, SLOTS>;
+    enum Phase: logic<3> {
+        SelectSide,
+        Locate,
+        Read,
+        Receive,
+        Decode,
+        Offer,
+        Payload,
+    }
+    struct Cursor {
+        index    : u64,
+        address  : u64,
+        available: u64,
+    }
+    struct WalkState {
+        phase      : Phase ,
+        checking   : logic ,
+        dst        : logic ,
+        remaining  : u64   ,
+        source     : Cursor,
+        destination: Cursor,
+    }
+    var states   : WalkState      [CHANNEL_COUNT];
+    let state    : WalkState                      = states[selected];
+    var next     : WalkState                     ;
+    let side     : Cursor                         = if state.dst ? state.destination : state.source;
+    let endpoint : logic    <256>                 = if state.dst ? descriptor[767:512] : descriptor[511:256];
+    let is_list  : logic                          = if state.dst ? descriptor[9] : descriptor[8];
+    let total    : u64                            = descriptor[191:128];
+    let offset   : u64                            = if !is_list ?
+        endpoint[127:64]
+    : if side.index == endpoint[191:128] ?
+        endpoint[255:192]
+    :
+        0
+    ;
+    let entry    : logic    <65>                  = (endpoint[63:0] as 65) + ((side.index as 65) << 4);
+    let entry_end: logic    <65>                  = entry + SegmentLayout::EXTENT;
+    // The selected engine owns this scratch until it has decoded the complete
+    // entry. A closing owner's late receipt drains its debt without touching it.
+    const SIZE         : u32        = if M::DATA_SIZE <: 3 ? M::DATA_SIZE : 3;
+    const BYTES        : u32        = 1 << SIZE;
+    var   entry_address: u64       ;
+    var   byte_offset  : logic<4>  ;
+    var   record       : logic<128>;
+    let   base         : u64        = if is_list ? record[63:0] : endpoint[63:0];
+    let   available    : u64        = if is_list ? record[127:64] - offset : total;
+    let   take         : u64        = if available <: state.remaining ? available : state.remaining;
+    let   first        : logic<65>  = (base as 65) + (offset as 65);
+    let   limit        : logic<65>  = first + (take as 65);
+    assign source      = state.source.address;
+    assign destination = state.destination.address;
+    assign length      = if state.source.available <: state.destination.available ?
+        state.source.available
+    :
+        state.destination.available
+    ;
+    assign last        = length == state.remaining;
+    assign prefix      = if state.checking ? 0 : total - state.remaining;
+    assign offer       = walk && state.phase == Phase::Offer;
+    let reply  : M::Channel = memory.receipt.tag.channel;
+    let receive: logic      = memory.returned && memory.accepted;
+    assign memory.accepted = (reply as u32) <: CHANNEL_COUNT && waiting[reply];
+    assign memory.valid    = walk && state.phase == Phase::Read;
+    assign memory.request  = M::Request'{
+        tag     : M::Tag'{channel: selected, slot: M::CONTROL_SLOT as M::SLOT_BITS},
+        address : entry_address + byte_offset,
+        selector: descriptor[63:32]              ,
+        write   : 0                              ,
+        data    : 0                              ,
+        length  : 0                              ,
+        size    : SIZE as 3                      ,
+    };
+    always_comb {
+        next       = state;
+        error_code = 0;
+        if start {
+            next                   = '0 as WalkState;
+            next.checking          = 1;
+            next.remaining         = total;
+            next.source.index      = descriptor[447:384];
+            next.destination.index = descriptor[703:640];
+        } else if span_done {
+            next.source.address        += length;
+            next.destination.address   += length;
+            next.source.available      -= length;
+            next.destination.available -= length;
+            next.remaining             -= length;
+            next.phase                 =  Phase::SelectSide;
+        } else if walk {
+            case state.phase {
+                Phase::SelectSide: {
+                    if !state.checking && state.source.available != 0 && state.destination.available != 0 {
+                        next.phase = Phase::Offer;
+                    } else {
+                        if !state.checking {
+                            next.dst = state.source.available != 0;
+                        }
+                        next.phase = Phase::Locate;
+                    }
+                }
+                Phase::Locate: {
+                    if !is_list {
+                        next.phase = Phase::Decode;
+                    } else if side.index >= endpoint[127:64] {
+                        error_code = 4;
+                    } else if side.index[63:60] != 0 || entry[64] || entry_end[64] {
+                        error_code = 1;
+                    } else if (entry as u64) % SegmentLayout::ALIGNMENT != 0 {
+                        error_code = 5;
+                    } else {
+                        next.phase = Phase::Read;
+                    }
+                }
+                Phase::Read                  : if memory.ready {
+                    next.phase = Phase::Receive;
+                }
+                Phase::Receive               : if receive && reply == selected {
+                    if memory.receipt.failed {
+                        error_code = 5;
+                    } else if (byte_offset as u32) + BYTES == SegmentLayout::EXTENT {
+                        next.phase = Phase::Decode;
+                    } else {
+                        next.phase = Phase::Read;
+                    }
+                }
+                Phase::Decode                : {
+                    if (is_list && offset >: record[127:64]) || (take != 0 && (first[64] || limit[64])) {
+                        error_code = 1;
+                    } else {
+                        let decoded  : Cursor = Cursor'{
+                            index    : side.index + (is_list as u64),
+                            address  : first as 64                  ,
+                            available: take                         ,
+                        };
+                        if state.dst {
+                            next.destination = decoded;
+                        } else {
+                            next.source = decoded;
+                        }
+                        next.phase = Phase::SelectSide;
+                        if state.checking {
+                            next.remaining -= take;
+                            if state.remaining == take {
+                                next.remaining = total;
+                                next.dst       = !state.dst;
+                                if state.dst {
+                                    next.checking              = 0;
+                                    next.source.index          = descriptor[447:384];
+                                    next.destination.index     = descriptor[703:640];
+                                    next.source.available      = 0;
+                                    next.destination.available = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+                Phase::Offer: {
+                    next.phase = Phase::Payload;
+                }
+                Phase::Payload: {}
+            }
+        }
+    }
+    always_ff (clk, rst_n) {
+        if_reset {
+            states        = '{default: '0 as WalkState};
+            waiting       = 0;
+            record        = 0;
+            entry_address = 0;
+            byte_offset   = 0;
+        } else {
+            if start || walk || span_done {
+                states[selected] = next;
+            }
+            for c in 0..CHANNEL_COUNT {
+                if clear[c] {
+                    states[c] = '0 as WalkState;
+                }
+            }
+            if walk && state.phase == Phase::Locate {
+                entry_address = entry as 64;
+                byte_offset   = 0;
+            }
+            if memory.valid && memory.ready {
+                waiting[selected] = 1;
+            }
+            if receive {
+                waiting[reply] = 0;
+                if reply == selected && !cancel[reply] {
+                    record[byte_offset * 8+:BYTES * 8] =  memory.receipt.data[BYTES * 8 - 1:0];
+                    byte_offset                        += BYTES as 4;
+                }
+            }
+        }
+    }
+}

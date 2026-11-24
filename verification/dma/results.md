@@ -1,5 +1,51 @@
 # Scenario-level verification checkpoints
 
+## Independent scatter/gather Copy
+
+With the upgraded compiler at PDMA checkpoint `9f2ee362`, the pre-SG
+two-channel snapshot passed review of 99 CDC and 1,584 RDC findings. The
+eight-channel snapshot passed review of 267 CDC and 3,054 RDC findings.
+Each pass used its own RTL identity and flattened endpoint evidence.
+
+The SG RTL passed 34 native tests on each of CC (validation stride 1) and
+Cranelift at seed 23. The direct engine tests exercise independent list starts,
+four endpoint combinations, a permanent write error after 16 committed bytes,
+a zero-length SG command, and channel reset with an accepted list read still
+outstanding. The late failed list receipt permitted channel cleanup and a fresh
+Trap. The model checks passed for SG copies (3), range validation (3),
+SG faults (4), multichannel SG reset (1) and single-channel scenarios (3).
+
+With the 64-bit memory port at seed 19, the 2- and 8-channel UVM suites each
+passed all 42 DUT tests and rejected nine checker mutations with their expected
+diagnostics. In both configurations all three SG tests also passed at seeds
+11 and 97 with independently randomized clock timing. They further passed for a
+1-channel 32-bit memory port (one slot, two beats) and a 3-channel 128-bit port
+at seed 41. The source and destination place their logical first fragment at
+different physical offsets. The memory monitor denies access to unselected
+table entries. A late destination validation error permits no payload read or
+write. A faulting payload write retains its bytes across source mutation;
+a peer can complete before the owner resumes or resets.
+
+For both 64-bit configurations the zero-delay long, short, batch, clock-ratio
+and multichannel throughput measurements matched the pre-SG toolchain baseline
+at the same seed. An aligned 16 KiB linear Copy on one active channel took
+2,048 beats and 2,048 bus cycles per payload direction. First descriptor AR to
+Fence B took 2,113 cycles. Four 64-byte Copy/Fence pairs took 285 cycles.
+These measurements cover the linear path. SG additionally pays for list
+validation, traversal and span boundaries.
+
+| SG configuration | Design digest (prefix) | Emitted RTL digest (prefix) | CDC reviewed | RDC reviewed | Unresolved CDC / RDC |
+| --- | --- | --- | ---: | ---: | ---: |
+| 2 channels | `9ce3260ae1e8f610` | `a1034f07b4c90645` | 99 | 2,067 | 0 / 0 |
+| 8 channels | `275843cda5db6573` | `810e3035e4935562` | 267 | 4,080 | 0 / 0 |
+
+The walker introduces no clock crossing. RDC reports additional paths to the
+three 64-bit fields of its local decoded cursor and changes the path counts
+for existing sinks. In each configuration a flattened connectivity query
+confirmed zero downstream sequential endpoints for every one of the 817 bit
+selections reported as unconnected. The review matches the exact endpoint,
+source reset, destination clock classification and path count for each group.
+
 ## Active-high interrupt lines
 
 On the two-channel DUT at seed 41, the stock JarvisUK level monitors verified

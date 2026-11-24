@@ -2,6 +2,7 @@
 pub package CommandState {
     enum Phase: logic<4> {
         Idle,
+        WalkSegments,
         Copy,
         FenceWrite,
         FenceReturn,

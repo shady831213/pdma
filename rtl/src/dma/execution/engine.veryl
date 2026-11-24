@@ -85,6 +85,31 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
     var resumes             : logic<CHANNEL_COUNT>                ;
     inst payload: CopyMemoryPort::<DATA_BYTES, BURST_BEATS, SLOTS>;
     let copying: logic = selected_valid && current.phase == CommandState::Phase::Copy;
+    let segmented: logic = descriptor[9:8] != 0;
+    var segment_debt: logic<CHANNEL_COUNT>;
+    var span_ready: logic;
+    var span_last: logic;
+    var span_source: u64;
+    var span_destination: u64;
+    var span_length: u64;
+    var span_prefix: u64;
+    var segment_error: u32;
+    inst metadata: CopyMemoryPort::<DATA_BYTES,BURST_BEATS,SLOTS>;
+    let walking: logic = selected_valid && current.phase == CommandState::Phase::WalkSegments
+        && !shutdown[selected] && !globally_stopped;
+    assign metadata.ready = memory.ready && channels.configuration[selected].enable;
+    assign metadata.receipt = memory.receipt;
+    assign metadata.returned = memory.returned && !memory.receipt.orphan
+        && memory.receipt.tag.slot == M::CONTROL_SLOT;
+    inst segments: CopySegments::<DATA_BYTES,BURST_BEATS,SLOTS> #(CHANNEL_COUNT) (
+        clk, rst_n, selected, descriptor, walk: walking,
+        start: channels.command_advance[selected] && opcode == OP_COPY && segmented && descriptor[191:128] != 0,
+        cancel: copy_cancel, clear: channels.clear,
+        span_done: copying && segmented && copy_done[selected] && !copy_cancel[selected],
+        waiting: segment_debt, offer: span_ready, last: span_last, prefix: span_prefix,
+        source: span_source, destination: span_destination, length: span_length,
+        error_code: segment_error, memory: metadata,
+    );
     assign payload.ready    = memory.ready && copying && channels.configuration[selected].enable && !globally_stopped;
     assign payload.returned = memory.returned && memory.receipt.tag.slot != 0 && memory.receipt.tag.slot <= SLOTS
         && !memory.receipt.orphan;
@@ -100,9 +125,9 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
         cancel             : copy_cancel          ,
         clear              : channels.clear       ,
         resume             : resumes              ,
-        source             : source_sum as 64     ,
-        destination        : destination_sum as 64,
-        length             : descriptor[191:128]  ,
+        source             : if segmented ? span_source : source_sum as 64     ,
+        destination        : if segmented ? span_destination : destination_sum as 64,
+        length             : if segmented ? span_length : descriptor[191:128]  ,
         source_context     : descriptor[223:192]  ,
         destination_context: descriptor[255:224]  ,
         done               : copy_done            ,
@@ -123,7 +148,7 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
             copy_cancel[channel]     = shutdown[channel] || channels.fatal_in || protocol_failure;
             resumes[channel]         = channels.actions[channel].resume_request;
             channels.clear[channel]  = closing[channel] && !CommandState::waiting(contexts[channel].phase)
-                && copy_drained[channel] && !fetching[channel];
+                && copy_drained[channel] && !fetching[channel] && !segment_debt[channel];
             channels.status[channel] = RegisterState::ChannelStatus'{
                 resetting               : closing[channel]       ,
                 fatal                   : contexts[channel].fatal,
@@ -136,6 +161,7 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
                 && !contexts[channel].stopped && contexts[channel].fatal == 0
                 && ((contexts[channel].phase == CommandState::Phase::Idle && head_valid[channel])
                     || (contexts[channel].phase == CommandState::Phase::Copy && !copy_parked[channel])
+                    || contexts[channel].phase == CommandState::Phase::WalkSegments
                     || contexts[channel].phase == CommandState::Phase::FenceWrite);
         }
         choice = common_cell::RoundRobin::<CopyMemory::MAX_CHANNELS>::select(eligible, cursor);
@@ -146,7 +172,7 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
         memory.accepted = memory.receipt.orphan;
         if memory.returned && !memory.receipt.orphan && (memory.receipt.tag.channel as u32) <: CHANNEL_COUNT {
             memory.accepted = if memory.receipt.tag.slot == M::CONTROL_SLOT ?
-                CommandState::waiting(contexts[memory.receipt.tag.channel].phase)
+                CommandState::waiting(contexts[memory.receipt.tag.channel].phase) || metadata.accepted
             :
                 payload.accepted
             ;
@@ -194,6 +220,10 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
             && (current.phase == CommandState::Phase::FenceWrite
                 || (current.phase == CommandState::Phase::Publish && channels.event_geometry[selected]
                     && channels.event_ready[selected]));
+        if walking {
+            memory.request = metadata.request;
+            memory.valid = metadata.valid && channels.configuration[selected].enable;
+        }
         if copying {
             memory.request = payload.request;
             memory.valid   = payload.valid && channels.configuration[selected].enable && !globally_stopped;
@@ -228,12 +258,14 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
                             next.control_address = descriptor[191:128];
                             next.phase           = CommandState::Phase::FenceWrite;
                         }
-                    } else if opcode != OP_COPY || descriptor[9:8] != 0 {
+                    } else if opcode != OP_COPY {
                         next.error_code = 6;
                         next.stopped    = 1;
                         next.phase      = CommandState::Phase::PrepareEvent;
                     } else if descriptor[191:128] == 0 {
                         next.phase = CommandState::Phase::Idle;
+                    } else if segmented {
+                        next.phase = CommandState::Phase::WalkSegments;
                     } else if source_sum[64] || destination_sum[64] || source_end[64] || destination_end[64] {
                         next.error_code = 1;
                         next.stopped    = 1;
@@ -242,16 +274,26 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
                         next.phase = CommandState::Phase::Copy;
                     }
                 }
+                CommandState::Phase::WalkSegments: {
+                    if segment_error != 0 {
+                        next.error_code = segment_error;
+                        next.error_prefix = span_prefix;
+                        next.stopped = 1;
+                        next.phase = CommandState::Phase::PrepareEvent;
+                    } else if span_ready {
+                        next.phase = CommandState::Phase::Copy;
+                    }
+                }
                 CommandState::Phase::Copy: {
                     if copy_protocol_error[selected] && copy_drained[selected] {
                         next.phase = CommandState::Phase::Stopped;
                     } else if copy_error[selected] != 0 && copy_error_ready[selected] && copy_drained[selected] {
-                        next.error_prefix = copy_prefix[selected];
+                        next.error_prefix = copy_prefix[selected] + (if segmented ? span_prefix : 0);
                         next.error_code   = copy_error[selected];
                         next.stopped      = 1;
                         next.phase        = CommandState::Phase::PrepareEvent;
                     } else if copy_done[selected] {
-                        next.phase = CommandState::Phase::Idle;
+                        next.phase = if segmented && !span_last ? CommandState::Phase::WalkSegments : CommandState::Phase::Idle;
                     }
                 }
                 CommandState::Phase::FenceWrite : if memory.valid && memory.ready {
@@ -348,7 +390,7 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
                     closing[channel] = channels.actions[channel].reset_request || channels.reset_all;
                 } else if selected_valid && selected == channel {
                     contexts[channel] = next;
-                    if current.phase == CommandState::Phase::Idle && next.phase == CommandState::Phase::Copy
+                    if (current.phase == CommandState::Phase::Idle || current.phase == CommandState::Phase::WalkSegments) && next.phase == CommandState::Phase::Copy
                         && !shutdown[channel] && !globally_stopped {
                         copy_start[channel] = 1;
                     }

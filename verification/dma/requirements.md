@@ -25,6 +25,7 @@ software never substitutes mirrored values for a real hardware read.
 | Stopping errors | `single_channel/cases/faults.rs` | Error at the next payload page; event identity/code/confirmed prefix and prefix memory; successor Fence remains unpublished |
 | Ring progress and reuse | `single_channel/software` | Copy/Fence pairs reuse a four-slot ring without reset; consumer progression and correct descriptor slot |
 | Descriptor decode and zero-length Copy | `dma/tests/edges.rs`, `dma/src/channel/command.rs` (under `crates`) | Malformed encoding is CommandRead fatal, valid unsupported opcode is an Unsupported event, zero length succeeds without payload/event |
+| Independent SG endpoints | `dma/tests/scatter_gather.rs`, `dma/tests/scatter_gather_faults.rs` | Correct logical bytes across unequal physical splits, validation before payload, no access to unused list entries, retained write data on Resume, and peer progress during recovery |
 | Reporting failures | `single_channel/cases/faults.rs` | Failed event writes retain channel fatal and leave the producer unchanged; observe the reporting failure through the channel ISR |
 | Event publication across a page boundary | `single_channel/cases/faults.rs` | Explicit channel-owned event placement; decode identity, error code and exact progress after the split write; neighboring ring slot remains intact |
 | Reset while accepted memory access is outstanding | `single_channel/harness/lifecycle` | Channel and global reset with suspended VIP B response; reset busy stays set until response is released; no later chunk write; fresh copy after reset |
@@ -69,7 +70,7 @@ PageFault write, in contrast, must have no effects from that failed access befor
 Fault injection is a platform response policy. Payload SLVERR plus USER=1 means
 recoverable PageFault; other errors stop. This does not model page tables or PCIe.
 
-The RTL implements multichannel Linear Copy, Fence32/64 and Trap. SG, Write,
+The RTL implements multichannel linear and scatter/gather Copy, Fence32/64 and Trap. Write,
 Fill, Wait, Atomic, Semaphore and Timestamp remain outside the RTL profile. Those Rust scenarios are future
 coverage obligations, not passed/skipped tests in this regression. Protocol VIP
 and randomized clocks do not establish CDC/RDC or metastability signoff. VC

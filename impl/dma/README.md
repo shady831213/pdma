@@ -132,6 +132,15 @@ PDMA_STATIC_REVIEW="$PWD/impl/dma/reviews/copy.tcl" \
     bash impl/dma/flow/crossings.sh "$PDMA_RUN_ROOT/snapshot" "$PDMA_RUN_ROOT/cdc-reviewed" cdc
 ```
 
+For the eight-channel profile, select `copy-8.tcl`. The SG snapshot took
+about 18 minutes to enumerate raw RDC paths. Set the wall-clock limit on
+that invocation, for example:
+
+```sh
+PDMA_STATIC_TIMEOUT=3600 PDMA_STATIC_REVIEW="$PWD/impl/dma/reviews/copy-8.tcl" \
+    bash impl/dma/flow/crossings.sh "$PDMA_RUN_ROOT/snapshot-8" "$PDMA_RUN_ROOT/rdc-8-reviewed" rdc
+```
+
 The same policy supports `rdc`. Raw findings are reported before exceptions;
 `reviewed.rpt`, `unresolved.rpt` and `finding-counts.txt` distinguish the results.
 The success marker is `PDMA_STATIC_REVIEWED`, never a claim of raw zero findings.

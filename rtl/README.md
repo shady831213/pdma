@@ -10,7 +10,7 @@ outside the first RTL phase; see the [project overview](../README.md).
 
 The first implemented slice is the DMA register-access path: AXI4-Lite 32/64,
 reg/core CDC and channel/ring register owners. DMA integration tests cover it alongside the standalone frontend test in `common_cell/tests`.
-The [minimal Linear Copy and Fence slice](../docs/rtl/minimal-copy.md) now connects
+The [Copy, Fence and Trap slice](../docs/rtl/minimal-copy.md) now connects
 this path to one execution owner and an ordinary AXI memory endpoint. Fence32/64
 writes a software-observable memory marker after prior channel work. It is not a
 complete DMA or a physically qualified design; the remaining command families,

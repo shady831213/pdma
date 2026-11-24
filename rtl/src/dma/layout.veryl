@@ -251,6 +251,19 @@ pub package CommandLayout {
 
 // Generated schema layout; do not edit.
 #[fmt(skip)]
+pub package SegmentLayout {
+    const EXTENT: u64 = 16;
+    const ALIGNMENT: u64 = 8;
+    // Scatter/gather segment
+    // One contiguous payload span in a software-owned scatter/gather list. The 16-byte little-endian record is eight-byte aligned. Software keeps lists and payload buffers stable until the command completes.
+    // Payload address
+    // First payload byte in the attached memory address space. Zero-length segments perform no payload access and require no usable address.
+    // Segment byte length
+    // Number of bytes contributed to the endpoint stream. Zero-length segments are skipped. Hardware checks arithmetic only for the selected copy range.
+}
+
+// Generated schema layout; do not edit.
+#[fmt(skip)]
 pub package ErrorInfoLayout {
     const EXTENT: u64 = 8;
     const ALIGNMENT: u64 = 8;

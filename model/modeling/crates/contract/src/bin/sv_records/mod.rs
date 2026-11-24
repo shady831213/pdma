@@ -4,7 +4,7 @@ use hw_model_schema::{
     ast::SchemaSet,
     export::{prepare_entries, record},
 };
-use pdma_model_contract::dma::{Command, Event};
+use pdma_model_contract::dma::{Command, Event, Segment};
 use std::{error::Error, io::Write};
 
 /// Exports the DMA record roots and their recursively discovered dependencies.
@@ -12,6 +12,7 @@ pub fn generate() -> Result<String, Box<dyn Error>> {
     let mut definitions = SchemaSet::new();
     definitions.add::<Command>();
     definitions.add::<Event>();
+    definitions.add::<Segment>();
     render(definitions)
 }
 

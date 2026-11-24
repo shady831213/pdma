@@ -16,7 +16,7 @@ class pdma_task_checker extends uvm_object;
             if(result.value!==job.fence_value())
                 `uvm_fatal("TASK_COMPLETION","Invalid Fence marker")
             foreach(job.expected[i]) begin
-                if(memory.read_byte(job.dest_address+i)!==job.expected[i])
+                if(memory.read_byte(job.destination_byte(i))!==job.expected[i])
                     `uvm_fatal("TASK_DATA",$sformatf("channel=%0d task=%0d destination byte=%0d",channel_id,job.id,i))
                 checked_bytes++;
             end
@@ -29,7 +29,7 @@ class pdma_task_checker extends uvm_object;
             if(result.prefix!==job.expected_error_prefix && !(job.allow_zero_error_prefix && result.prefix===0))
                 `uvm_fatal("TASK_ERROR_INFO","Committed prefix differs from the scenario expectation")
             for(int i=0;i<result.prefix;i++)
-                if(memory.read_byte(job.dest_address+i)!==job.expected[i])
+                if(memory.read_byte(job.destination_byte(i))!==job.expected[i])
                     `uvm_fatal("TASK_DATA","Confirmed committed prefix does not match memory")
         end
         if(result.outcome==TASK_FAULT && result.cause!==0)
@@ -41,7 +41,7 @@ class pdma_task_checker extends uvm_object;
         if(result.outcome inside {TASK_FAULT,TASK_FATAL} && result.event_producer!==0)
             `uvm_fatal("TASK_EVENT","Fault or failed report published an event")
         if(job.expect_payload_unchanged) foreach(job.initial_data[i])
-            if(memory.read_byte(job.dest_address+i)!==job.initial_data[i])
+            if(memory.read_byte(job.destination_byte(i))!==job.initial_data[i])
                 `uvm_fatal("TASK_DATA","Rejected command changed payload memory")
         if(memory.read_byte(job.dest_address-1)!==8'ha6 || memory.read_byte(job.dest_address+job.length)!==8'h59)
             `uvm_fatal("TASK_GUARD","Destination boundary was overwritten")

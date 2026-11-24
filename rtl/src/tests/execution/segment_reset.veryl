@@ -1,0 +1,93 @@
+#[test(channel_reset_drains_accepted_segment_read)]
+module SegmentResetTest {
+    inst clk     : $tb::clock_gen #( period: 10 );
+    inst rst     : $tb::reset_gen ( clk );
+    inst mem     : CopyMemoryPort;
+    inst channels: DmaChannels #( CHANNEL_COUNT: 1 );
+    var action: RegisterState::ChannelActions;
+    var head  : CommandState::Entry          ;
+    var valid : logic                        ;
+    assign channels.global_blocked = 0;
+    assign channels.global_clear   = 0;
+    assign channels.command        = '{'0};
+    assign channels.events         = '{'0};
+    assign channels.configuration  = '{
+        RegisterState::ChannelConfig'{enable: 1, configured: 1, ring_context: 0, irq_enable: 0, irq_mask: 0}
+    };
+    assign channels.actions        = '{action};
+    assign channels.reset_all      = 0;
+    assign channels.fatal_in       = 0;
+    assign channels.event_geometry = 0;
+    assign channels.event_ready    = 0;
+    let take     : logic = channels.command_advance;
+    let clear    : logic = channels.clear;
+    let resetting: logic = channels.status[0].resetting;
+    let trap     : logic = channels.trap_executed;
+    inst dut: CopyEngine (
+        clk                ,
+        rst_n     : rst    ,
+        heads     : '{head},
+        head_valid: valid  ,
+        fetching  : 0      ,
+        channels           ,
+        memory    : mem    ,
+    );
+    initial {
+        action                   = '0;
+        head                     = '0;
+        head.descriptor[8]       = 1;
+        head.descriptor[191:128] = 24;
+        head.descriptor[319:256] = 'h400;
+        head.descriptor[383:320] = 1;
+        mem.ready                = 1;
+        mem.returned             = 0;
+        mem.receipt              = '0;
+        valid                    = 0;
+        rst.assert();
+        clk.next(3);
+        valid                    = 1;
+        for i in 0..12 {
+            if take {
+                break;
+            }
+            clk.next();
+        }
+        $assert(take, "SG_ADMIT_BEFORE_RESET");
+        clk.next();
+        valid = 0;
+        for i in 0..20 {
+            if mem.valid {
+                break;
+            }
+            clk.next();
+        }
+        $assert(mem.valid && !mem.request.write && mem.request.address == 'h400, "SG_ACCEPTED_LIST_READ");
+        mem.receipt.tag = mem.request.tag;
+        clk.next();
+        action.reset_request = 1;
+        clk.next();
+        action.reset_request = 0;
+        for i in 0..10 {
+            $assert(resetting && !clear && !mem.valid, "SG_RESET_RETAINS_LIST_DEBT");
+            clk.next();
+        }
+        mem.receipt.failed = 1;
+        mem.returned       = 1;
+        $assert(mem.accepted, "SG_CLOSING_OWNER_ACCEPTS_LIST_REPLY");
+        clk.next();
+        mem.returned = 0;
+        $assert(clear && !mem.valid, "SG_RESET_WITHOUT_POST_RESET_METADATA_OR_PAYLOAD");
+        clk.next();
+        head                 = '0;
+        head.descriptor[7:0] = 7;
+        valid                = 1;
+        for i in 0..12 {
+            if take {
+                break;
+            }
+            clk.next();
+        }
+        $assert(!resetting && take && trap, "SG_CHANNEL_REUSABLE_AFTER_RESET");
+        $finish();
+    }
+}

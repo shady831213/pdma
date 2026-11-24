@@ -11,7 +11,7 @@
 
 ## 1. 范围、层次和边界
 
-当前实现：1..8 个物理 channel、一套共享 Linear Copy、Fence32/64 和 Trap 执行资源，
+当前实现：1..8 个物理 channel、一套共享 linear/SG Copy、Fence32/64 和 Trap 执行资源，
 三个异步时钟域。配置不可通过软件改变 channel 数。命令记录为 96B，错误事件
 为 24B。正常完成不写 event；软件通过后继 Fence 的内存标记确认完成。
 Fence 保证本 channel 的先前任务已退休再发标记；它不是跨 channel/global barrier，
@@ -22,7 +22,7 @@ Fence 保证本 channel 的先前任务已退休再发标记；它不是跨 chan
 内存口沿用 AXI4 普通事务子集，AWATOP 为零；不是完整 AXI5 atomic 实现。
 数据宽度、burst 上限、每 channel 保留槽、读写 outstanding 和 CDC 深度的依赖
 见 [配置说明](configuration.md)。合法配置与完成物理资格检查是两件事。
-SG、Write/Fill/Wait/Atomic/Semaphore/Timestamp、外围权限检查、CPU 和
+Write/Fill/Wait/Atomic/Semaphore/Timestamp、外围权限检查、CPU 和
 firmware RTL 仍未在这个切片实现。
 
 ### 1.1 目录是职责分组，不全是实例包含关系
@@ -58,6 +58,7 @@ DmaConfigured                               由静态 profile 生成，无状态
    ├─ commands: DmaCommandPath                channel/path.veryl
    │  ├─ producers[c].active.fetch           ChannelFetch，私有描述符 FIFO
    │  └─ execution: CopyEngine               execution/engine.veryl
+   │     ├─ segments: CopySegments            execution/copy/segments.veryl
    │     └─ copy: CopyWindow                 execution/copy/window.veryl
    │        └─ buffers: Ram1R1W              按 channel 保留行的共享 RAM
    ├─ transport: DmaMemoryCrossing
@@ -267,6 +268,10 @@ sequenceDiagram
 stateDiagram-v2
     [*] --> Idle
     Idle --> Copy: 队头获授权，合法非零 Linear Copy
+    Idle --> WalkSegments: 任一端为 SG，长度非零
+    WalkSegments --> Copy: 两端已验证，当前连续区间就绪
+    Copy --> WalkSegments: 当前区间成功退休，命令仍有剩余字节
+    WalkSegments --> PrepareEvent: 列表几何、范围或读取错误
     Idle --> FenceWrite: 合法 Fence32/64
     Idle --> Idle: 合法零长度 Copy 或 Trap
     Idle --> PrepareEvent: 可解码但不支持或参数错误
@@ -296,11 +301,19 @@ Copy 的 page fault **不改变外层 phase=Copy**，而是在 window 冻结，�
 | ChannelFetch | 预取位置与软件可见 consumer 独立。各描述符的 AR 可先于前一条的 R 发出。同一 ID 的 R 按序填充；成功的最后一段或首个错误标记该行就绪。发生错误时停止发起新读，已发出的后继读仍须退债 |
 | Idle（队头获授权） | 有效编码才 command_advance；malformed 不消费；Unsupported 消费后进入错误路径 |
 | Idle→Copy | 注册 copy_start，window 下一边沿接收初始化 |
-| Copy | 仅启动一次 window；chunk 内循环不经过外部 Fetch/Decode |
+| Copy | Linear/Linear 对整条命令启动一次 window；SG 对每对连续区间启动一次。同一区间内的 burst 不经过 Fetch/Decode 或列表遍历。 |
 | Idle→Idle（Trap） | 在接受队头的边沿推进 consumer，并向该 channel 发出一次 trap_executed；不占用 payload 端口 |
 | Idle→FenceWrite | 保存目标地址；value/context 留在已接受 descriptor 中 |
 | PrepareEvent | 固定 event 起始地址；与后续请求 FIFO 输入之间有寄存器切点 |
 | PublishReturn | 全部 24B 写成功后才 event_advance；部分写不能提前暴露 producer |
+
+### SG 遍历与退休边界
+
+任一端选择 SG 时，`CopySegments` 先验证源范围，再验证目的范围。对 SG 从描述符指定的 index 和段内 offset 开始，只检查覆盖 copy length 的条目。空段跳过；计数不足报 LengthMismatch，加法溢出或段内 offset 越界报 InvalidLength。列表读使用 sg_context，按自然对齐的 4 或 8 字节读拼出一条 16 字节记录。未对齐或列表读失败（包括总线返回 PageFault）报 ListReadError。长度为零时直接退休。
+
+每个 channel 保存两个 192-bit 游标、64-bit 命令余量、遍历状态和一个未归还的列表读标志。16B 表项拼装寄存器、读地址和片内偏移在执行资源上共享。旧 channel 的 reset 可以释放 grant；晚到的列表回执按 channel 消除原来的读债务，不能写入新 owner 的拼装寄存器。
+
+验证完成后从原始位置重新遍历，软件须保持表项稳定。两个游标独立保留当前段地址、有效余量和下一条索引。取两端有效余量的最小值交给原有 CopyWindow；只有该区间所有写回执成功退休才推进两个游标。后续区间的 stopping error 前缀等于已完成区间长度加上当前 window 的成功前缀。payload 写缺页时保留 RAM 内数据，peer 可获授权；Resume 重试已有写，既不重读 payload 也不重取描述符。reset 发起后，即使旧 grant 已释放，尚未返回的 metadata 读也必须退债，才能清理 channel。
 
 默认 profile 的 descriptor fetch 通常为 64B+32B 两个串行读；遇 4KiB 边界继续切分，始终不越界。
 控制访问每 beat 为 `min(DATA_BYTES,8)` 字节，每笔不超过 BURST_BEATS；32-bit

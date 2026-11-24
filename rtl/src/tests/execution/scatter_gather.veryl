@@ -1,0 +1,167 @@
+// Independent SG tables select different starts and boundaries. Only addresses in
+// the selected ranges and the corresponding context are legal memory accesses.
+#[test(copy_independent_scatter_gather_endpoints)]
+module ScatterGatherCopyTest {
+    inst clk     : $tb::clock_gen #( period: 10 );
+    inst rst     : $tb::reset_gen ( clk );
+    inst mem     : CopyMemoryPort;
+    inst channels: DmaChannels #( CHANNEL_COUNT: 1 );
+    var head    : CommandState::Entry;
+    var valid   : logic              ;
+    var accepted: logic              ;
+    assign channels.global_blocked = 0;
+    assign channels.global_clear   = 0;
+    assign channels.command        = '{'0};
+    assign channels.events         = '{RegisterState::Ring'{base: 64'h800, capacity: 2, producer: 0, consumer: 0}};
+    assign channels.configuration  = '{
+        RegisterState::ChannelConfig'{enable: 1, configured: 1, ring_context: 0, irq_enable: 0, irq_mask: 0}
+    };
+    assign channels.actions        = '{'0};
+    assign channels.reset_all      = 0;
+    assign channels.fatal_in       = 0;
+    assign channels.event_geometry = 1;
+    assign channels.event_ready    = 1;
+    assign accepted                = channels.command_advance;
+    inst dut: CopyEngine (
+        clk                ,
+        rst_n     : rst    ,
+        heads     : '{head},
+        head_valid: valid  ,
+        fetching  : 0      ,
+        channels           ,
+        memory    : mem    ,
+    );
+    initial {
+        for scenario in 0..6 {
+            let modes                   : logic<2>  = if scenario >= 4 ? 3 : scenario as 2;
+            let fail_write              : logic     = scenario == 4;
+            let empty                   : logic     = scenario == 5;
+            var event_seen              : logic    ;
+            var written                 : logic<24>;
+            event_seen               = 0;
+            written                  = 0;
+            head                     = '0;
+            head.descriptor[9:8]     = modes as 2;
+            head.descriptor[63:32]   = 41;
+            head.descriptor[191:128] = if empty ? 0 : 24;
+            head.descriptor[223:192] = 11;
+            head.descriptor[255:224] = 22;
+            head.descriptor[319:256] = if modes[0] ? 'h100 : 'h400;
+            head.descriptor[575:512] = if modes[1] ? 'h200 : 'h600;
+            if modes[0] {
+                head.descriptor[383:320] = 3;
+                head.descriptor[447:384] = 1;
+                head.descriptor[511:448] = 8;
+            }
+            if modes[1] {
+                head.descriptor[639:576] = 2;
+                head.descriptor[767:704] = 8;
+            }
+            valid        = 0;
+            mem.ready    = 0;
+            mem.returned = 0;
+            mem.receipt  = '0;
+            rst.assert();
+            clk.next(3);
+            valid = 1;
+            for tick in 0..12 {
+                if accepted {
+                    break;
+                }
+                clk.next();
+            }
+            $assert(accepted, "SG_COPY_ACCEPTED");
+            clk.next();
+            valid = 0;
+            for tick in 0..350 {
+                var response : CopyMemory::Receipt;
+                response  = '0;
+                mem.ready = 1;
+                if empty {
+                    $assert(!mem.valid, "EMPTY_SG_NO_METADATA_OR_PAYLOAD");
+                    head                 = '0;
+                    head.descriptor[7:0] = 7;
+                    valid                = 1;
+                    if accepted {
+                        break;
+                    }
+                }
+                if mem.valid {
+                    let addr        : u64 = mem.request.address;
+                    let bytes       : u32 = (1 << mem.request.size) * ((mem.request.length as u32) + 1);
+                    response.tag = mem.request.tag;
+                    if mem.request.selector == 41 {
+                        $assert(!mem.request.write && addr >= 'h110 && addr <: 'h220, "SG_METADATA_ADDRESS");
+                        for lane in 0..64 {
+                            if lane <: bytes {
+                                let pos : u64 = addr + lane;
+                                let word: u64 = case pos >> 3 {
+                                    'h22   : 'h3f8,
+                                    'h23   : 16,
+                                    'h24   : 'h480,
+                                    'h25   : 16,
+                                    'h40   : 'h5f8,
+                                    'h41   : 24,
+                                    'h42   : 'h680,
+                                    'h43   : 8,
+                                    default: '1,
+                                };
+                                response.data[lane * 8+:8] = (word >> (pos[2:0] * 8)) as 8;
+                            }
+                        }
+                    } else if mem.request.selector == 11 {
+                        $assert(!mem.request.write, "SG_PAYLOAD_READ");
+                        for lane in 0..64 {
+                            if lane <: bytes {
+                                let pos  : u64 = addr + lane;
+                                let index: u64 = if modes[0] && pos >= 'h480 ? pos - 'h480 + 8 : pos - 'h400;
+                                $assert(index <: 24 && !(modes[0] && pos >= 'h408 && pos <: 'h480), "SG_SOURCE_SPAN");
+                                response.data[lane * 8+:8] = (index + 1) as 8;
+                            }
+                        }
+                    } else if fail_write && mem.request.selector == 0 {
+                        $assert(
+                            mem.request.write && addr == 'h800 && mem.request.data[95:64] == 3 && mem.request.data[191:128] == 16,
+                            "SG_ERROR_PREFIX_INCLUDES_PRIOR_SPANS",
+                        );
+                        event_seen = 1;
+                    } else {
+                        response.failed = fail_write && addr == 'h680;
+                        $assert(mem.request.selector == 22 && mem.request.write, "SG_PAYLOAD_WRITE");
+                        for lane in 0..64 {
+                            if lane <: bytes {
+                                let pos  : u64 = addr + lane;
+                                let index: u64 = if modes[1] && pos >= 'h680 ? pos - 'h680 + 16 : pos - 'h600;
+                                $assert(index <: 24 && !(modes[1] && pos >= 'h610 && pos <: 'h680), "SG_DEST_SPAN");
+                                $assert(mem.request.data[lane * 8+:8] == (index + 1) as 8, "SG_ZIPPED_BYTES");
+                                if !response.failed {
+                                    written[index] = 1;
+                                }
+                            }
+                        }
+                    }
+                    clk.next();
+                    mem.ready    = 0;
+                    mem.receipt  = response;
+                    mem.returned = 1;
+                    $assert(mem.accepted, "SG_RECEIPT_OWNER");
+                    clk.next();
+                    mem.returned = 0;
+                } else {
+                    clk.next();
+                }
+                if written == '1 || event_seen {
+                    break;
+                }
+            }
+            if fail_write {
+                $assert(event_seen && written == 'hffff, "SG_PERMANENT_WRITE_ERROR");
+            } else if empty {
+                $assert(accepted && channels.trap_executed != 0, "EMPTY_SG_RETIRES");
+            } else {
+                $assert(written == '1, "SG_ALL_DESTINATIONS_WRITTEN");
+            }
+        }
+        $finish();
+    }
+}

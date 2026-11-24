@@ -17,6 +17,13 @@ The DMA register and layout tests cover:
 | `DmaRegisterBankTest` | Three-channel isolation, live reset status, request versus cleanup completion, Trap set versus W1C priority |
 | `DmaRegisterInterfaceTest` | Complete 32- and 64-bit AXI→CDC→owner paths, nonzero aperture base, read snapshot retention and exactly-once Resume under response backpressure |
 
+The SG tests drive the accepted descriptor and memory receipt interfaces directly.
+`ScatterGatherCopyTest` checks all four endpoint combinations with different
+source/destination boundaries, the committed prefix on a late write error, and
+retirement of a zero-length SG Copy without a metadata access. `SegmentResetTest`
+holds a metadata read outstanding across reset, returns a failed receipt and then
+executes a new Trap on the same channel.
+
 The minimal execution slice adds `CopyEngineTest`, `CopyErrorTest` and
 `CopyFaultTest`, plus `FenceTest`, `FenceOrderTest` and `FenceMemoryTest`.
 `TrapExecutionTest` holds the preceding Fence response while a Trap is ready,

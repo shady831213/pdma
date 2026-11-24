@@ -109,7 +109,9 @@ Register addresses remain 32 bits, memory addresses 64 bits, and selectors 32
 bits. The external address sideband retains the contract's selector plus channel
 identity. Those protocol widths are not free capacity settings. Descriptor and
 register layout, error/fault behavior and software reset obligations are unchanged.
-SG and the other command families remain outside this RTL slice.
+Linear and SG Copy use the same memory port and retained Copy rows. SG list
+reads use the descriptor's metadata selector and assemble a 16-byte entry in
+4-byte accesses on a 32-bit port or 8-byte accesses on wider ports.
 
 ## One resolved profile
 

@@ -1,9 +1,9 @@
-# Linear Copy, Fence and Trap RTL slice
+# Copy, Fence and Trap RTL slice
 
 Detailed implemented [microarchitecture](microarchitecture.md) and current
 [performance measurements](performance.md) supplement this scope summary.
 
-This DMA-core slice implements one shared engine for Linear Copy, Fence and Trap with an
+This DMA-core slice implements one shared engine for linear/scatter-gather Copy, Fence and Trap with an
 instance-configured channel count in 1..8. Its independent bus widths and resource
 capacities are described in [elaboration configuration](configuration.md), including
 the qualification limits. Other command families remain outside this slice.
@@ -22,6 +22,9 @@ flowchart LR
   FETCH --> FQ[Descriptor address FIFO]
   FQ --> RD
   CMD --> WIN[CopyWindow: SLOTS retained chunks per channel]
+  CMD --> SG[CopySegments: walk selected ranges]
+  SG --> WIN
+  SG --> REQ
   WIN --> REQ[Request FIFO]
   CMD --> REQ
   REQ --> RD[Read endpoint]
@@ -49,6 +52,7 @@ channel yields shared execution to an eligible peer.
 
 | Owner | State and release boundary |
 | --- | --- |
+| `CopySegments` | Two endpoint cursors per accepted SG Copy, one shared 16-byte metadata assembly register, and one pending metadata receipt bit per channel. Reset waits for that receipt before releasing the channel. |
 | `CopyEngine` | One descriptor/lifecycle context per channel, one round-robin selected shared decode/Fence/error-publication datapath |
 | `CopyWindow` | `SLOTS` source/destination/length entries per channel, access states and retained read bytes; reuses a slot only after successful write and in-order retirement |
 | Core RAM/read offer | `channels * slots` rows of `memory_bits * burst_beats` shared 1R1W storage, one synchronous read and one write port; a separate register holds the prepared write under backpressure |
@@ -92,8 +96,7 @@ It preserves adjacent lanes and supports retained write-fault recovery. Successf
 commands produce no event. A Trap following the Fence executes after the Fence write
 response. It sets its channel's sticky cause and requests an interrupt if enabled
 and unmasked. Software can ACK the cause independently of notification delivery.
-Other opcodes and SG endpoints report Unsupported in
-this slice. A stopping error writes the 24-byte event, splitting at 4KiB when needed;
+Other opcodes report Unsupported in this slice. A stopping error writes the 24-byte event, splitting at 4KiB when needed;
 producer advances only after the whole record succeeds. Reporting failure is fatal.
 Each channel and the DMA-wide fatal source drive independent active-high IRQ
 lines. Enable/unmask immediately exposes a live cause. The channel masks and

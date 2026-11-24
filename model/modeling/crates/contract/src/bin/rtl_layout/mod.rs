@@ -7,7 +7,7 @@ use hw_model_schema::{
         record, register,
     },
 };
-use pdma_model_contract::dma::{Command, DmaRegisters, Event};
+use pdma_model_contract::dma::{Command, DmaRegisters, Event, Segment};
 use std::{error::Error, io::Write};
 
 #[cfg(test)]
@@ -18,6 +18,7 @@ pub fn generate() -> Result<String, Box<dyn Error>> {
     let mut definitions = SchemaSet::new();
     definitions.add::<Command>();
     definitions.add::<Event>();
+    definitions.add::<Segment>();
     definitions.add::<DmaRegisters>();
     let schema = AnalyzedSchema::analyze(definitions, &Bindings::new())?;
     let mut bytes = Vec::new();

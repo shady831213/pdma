@@ -1452,6 +1452,60 @@ package pdma_contract_records;
     // Complete copy-engine command union
     // Untagged 96-byte union of complete command records. PDMA selects a member using the shared header opcode at byte zero.
 
+  localparam logic [63:0] SEGMENT_SIZE = 64'd16;
+  localparam logic [63:0] SEGMENT_ALIGNMENT = 64'd8;
+  typedef logic [SEGMENT_SIZE*8-1:0] Segment_t;
+    // Scatter/gather segment
+    // One contiguous payload span in a software-owned scatter/gather list. The 16-byte little-endian record is eight-byte aligned. Software keeps lists and payload buffers stable until the command completes.
+    // Payload address
+    // First payload byte in the attached memory address space. Zero-length segments perform no payload access and require no usable address.
+  localparam logic [63:0] SEGMENT_ADDRESS_OFFSET = 0;
+  localparam logic [63:0] SEGMENT_ADDRESS_SIZE = 8;
+  function automatic logic [63:0] Segment_get_address(input Segment_t record_value);
+    Segment_get_address[0 +: 8] = record_value[(SEGMENT_ADDRESS_OFFSET+0)*8 +: 8];
+    Segment_get_address[8 +: 8] = record_value[(SEGMENT_ADDRESS_OFFSET+1)*8 +: 8];
+    Segment_get_address[16 +: 8] = record_value[(SEGMENT_ADDRESS_OFFSET+2)*8 +: 8];
+    Segment_get_address[24 +: 8] = record_value[(SEGMENT_ADDRESS_OFFSET+3)*8 +: 8];
+    Segment_get_address[32 +: 8] = record_value[(SEGMENT_ADDRESS_OFFSET+4)*8 +: 8];
+    Segment_get_address[40 +: 8] = record_value[(SEGMENT_ADDRESS_OFFSET+5)*8 +: 8];
+    Segment_get_address[48 +: 8] = record_value[(SEGMENT_ADDRESS_OFFSET+6)*8 +: 8];
+    Segment_get_address[56 +: 8] = record_value[(SEGMENT_ADDRESS_OFFSET+7)*8 +: 8];
+  endfunction
+  function automatic void Segment_set_address(inout Segment_t record_value, input logic [63:0] value);
+    record_value[(SEGMENT_ADDRESS_OFFSET+0)*8 +: 8] = value[0 +: 8];
+    record_value[(SEGMENT_ADDRESS_OFFSET+1)*8 +: 8] = value[8 +: 8];
+    record_value[(SEGMENT_ADDRESS_OFFSET+2)*8 +: 8] = value[16 +: 8];
+    record_value[(SEGMENT_ADDRESS_OFFSET+3)*8 +: 8] = value[24 +: 8];
+    record_value[(SEGMENT_ADDRESS_OFFSET+4)*8 +: 8] = value[32 +: 8];
+    record_value[(SEGMENT_ADDRESS_OFFSET+5)*8 +: 8] = value[40 +: 8];
+    record_value[(SEGMENT_ADDRESS_OFFSET+6)*8 +: 8] = value[48 +: 8];
+    record_value[(SEGMENT_ADDRESS_OFFSET+7)*8 +: 8] = value[56 +: 8];
+  endfunction
+    // Segment byte length
+    // Number of bytes contributed to the endpoint stream. Zero-length segments are skipped. Hardware checks arithmetic only for the selected copy range.
+  localparam logic [63:0] SEGMENT_LENGTH_OFFSET = 8;
+  localparam logic [63:0] SEGMENT_LENGTH_SIZE = 8;
+  function automatic logic [63:0] Segment_get_length(input Segment_t record_value);
+    Segment_get_length[0 +: 8] = record_value[(SEGMENT_LENGTH_OFFSET+0)*8 +: 8];
+    Segment_get_length[8 +: 8] = record_value[(SEGMENT_LENGTH_OFFSET+1)*8 +: 8];
+    Segment_get_length[16 +: 8] = record_value[(SEGMENT_LENGTH_OFFSET+2)*8 +: 8];
+    Segment_get_length[24 +: 8] = record_value[(SEGMENT_LENGTH_OFFSET+3)*8 +: 8];
+    Segment_get_length[32 +: 8] = record_value[(SEGMENT_LENGTH_OFFSET+4)*8 +: 8];
+    Segment_get_length[40 +: 8] = record_value[(SEGMENT_LENGTH_OFFSET+5)*8 +: 8];
+    Segment_get_length[48 +: 8] = record_value[(SEGMENT_LENGTH_OFFSET+6)*8 +: 8];
+    Segment_get_length[56 +: 8] = record_value[(SEGMENT_LENGTH_OFFSET+7)*8 +: 8];
+  endfunction
+  function automatic void Segment_set_length(inout Segment_t record_value, input logic [63:0] value);
+    record_value[(SEGMENT_LENGTH_OFFSET+0)*8 +: 8] = value[0 +: 8];
+    record_value[(SEGMENT_LENGTH_OFFSET+1)*8 +: 8] = value[8 +: 8];
+    record_value[(SEGMENT_LENGTH_OFFSET+2)*8 +: 8] = value[16 +: 8];
+    record_value[(SEGMENT_LENGTH_OFFSET+3)*8 +: 8] = value[24 +: 8];
+    record_value[(SEGMENT_LENGTH_OFFSET+4)*8 +: 8] = value[32 +: 8];
+    record_value[(SEGMENT_LENGTH_OFFSET+5)*8 +: 8] = value[40 +: 8];
+    record_value[(SEGMENT_LENGTH_OFFSET+6)*8 +: 8] = value[48 +: 8];
+    record_value[(SEGMENT_LENGTH_OFFSET+7)*8 +: 8] = value[56 +: 8];
+  endfunction
+
   localparam logic [63:0] ERRORINFO_SIZE = 64'd8;
   localparam logic [63:0] ERRORINFO_ALIGNMENT = 64'd8;
   typedef logic [ERRORINFO_SIZE*8-1:0] ErrorInfo_t;

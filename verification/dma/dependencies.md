@@ -29,12 +29,13 @@ short driver names, so the adapter independently awaits all three interfaces'
 reset lifecycles before leaving the power-on `reset_phase`.
 
 Each DMA channel and the device-fatal output have their own `jvs_int_if` and
-`jvs_irq_env`. Each wire drives the configured vector bit. The stock JarvisUK
+`jvs_irq_env`. Both explicitly select one pin, so each monitor observes one
+physical wire and dispatches local pin 0. The stock JarvisUK
 level monitor waits for its handler to finish before sampling again. Every
 source has its own FIFO, sequencer and ISR service.
 
-Channel vectors start at 17. Each handler reads its channel's registers and event
-ring. The device-fatal handler reads the global fatal register. The handlers share
+Each channel driver reads its own registers and event ring in its ISR.
+The device driver reads the global fatal register in its ISR. The drivers share
 the frontdoor AXI4-Lite register sequencer. A handler waiting for a software
 resource on one channel leaves the other sources free to deliver. Channel reset
 preserves the platform's handler registration.

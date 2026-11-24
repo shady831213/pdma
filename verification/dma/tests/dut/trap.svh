@@ -6,13 +6,13 @@ class pdma_trap_completion_test extends pdma_base_test;
         super.build_phase(phase);
         expected_cases=2*platform.channel_count;
         // One shared engine can run each peer's byte-wise Copy before this Trap.
-        platform.irq_timeout_cycles*=platform.channel_count;
+        platform.irq_timeout_ns*=platform.channel_count;
     endfunction
     virtual task run_scenario();
         pdma_task_flow flows[]=new[platform.channel_count];
         foreach(flows[i]) begin
             ChannelIrqMask mask_reg;
-            flows[i]=env.task_flow(i);
+            flows[i]=env.device.task_flow(i);
             mask_reg=flows[i].channel.registers.control_block.irq_block.mask_reg;
             flows[i].channel.write_reg(mask_reg,1<<mask_reg.event_non_empty_field.get_lsb_pos());
         end
@@ -46,21 +46,21 @@ class pdma_trap_busy_handler_test extends pdma_base_test;
     endfunction
     virtual task run_scenario();
         pdma_task_flow flows[2];
-        pdma_channel ch=env.device.channels[0];
+        pdma_channel ch=env.device.driver.channels[0];
         ch.isr_service.get();
         foreach(flows[i]) begin
             pdma_task job=settings(16);
             job.trap_after_fence=1;
-            flows[i]=env.task_flow(0);
+            flows[i]=env.device.task_flow(0);
             flows[i].open(job); flows[i].submit(); ch.await_consumed();
-            flows[i].expect_result(TASK_SUCCESS); flows[i].close(); cases++;
+            flows[i].expect_fence(); flows[i].close(); cases++;
             if(env.control.irq[0]!==1 || ch.delivered!=0)
                 `uvm_fatal("TRAP_BUSY_HANDLER","Expected two completed batches to share a held IRQ")
         end
         ch.isr_service.put();
         begin
             pdma_result wake;
-            ch.wait_interrupt(wake); flows[0].checker_.interrupt_result(wake);
+            flows[0].wait_irq_result(wake); flows[0].checker_.interrupt_result(wake);
         end
         if(ch.delivered!=1 || env.control.irq[0]!==0) `uvm_fatal("TRAP_IRQ_COUNT","One ACK must clear both Traps")
     endtask
@@ -73,7 +73,7 @@ class pdma_trap_mask_test extends pdma_base_test;
         super.build_phase(phase); expected_cases=2;
     endfunction
     virtual task run_scenario();
-        pdma_task_flow flow_=env.task_flow();
+        pdma_task_flow flow_=env.device.task_flow();
         pdma_channel ch=flow_.channel;
         ChannelInterrupts irq=ch.registers.control_block.irq_block;
         // Hold software service while observing the physical line.
@@ -103,14 +103,14 @@ class pdma_trap_pending_test extends pdma_base_test;
         super.build_phase(phase); expected_cases=1;
     endfunction
     virtual task run_scenario();
-        pdma_task_flow flow_=env.task_flow();
+        pdma_task_flow flow_=env.device.task_flow();
         pdma_channel ch=flow_.channel;
         ChannelInterrupts irq=ch.registers.control_block.irq_block;
         pdma_task job=settings();
         job.trap_after_fence=1;
         ch.isr_service.get();
         flow_.open(job); flow_.submit(); ch.await_consumed();
-        flow_.expect_result(TASK_SUCCESS); flow_.close(); cases++;
+        flow_.expect_fence(); flow_.close(); cases++;
         if(env.control.irq[0]!==1) `uvm_fatal("TRAP_LEVEL","Missing retained IRQ before reset")
         ch.request_reset(); ch.finish_reset();
         begin

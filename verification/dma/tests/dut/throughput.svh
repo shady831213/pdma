@@ -29,12 +29,12 @@ virtual class pdma_throughput_test extends pdma_base_test;
 `endif
     endfunction
     virtual task run_scenario();
-        pdma_task_flow flow_=env.task_flow();
+        pdma_task_flow flow_=env.device.task_flow();
         pdma_task job=settings(transfer_bytes);
         job.payload_alignment=pdma_configuration::AXI_BOUNDARY_BYTES;
         flow_.open(job);
         performance.begin_task(job,clocks.period_ns[2]*1ns,flow_.channel.next_command_address());
-        flow_.submit(); flow_.expect_result(TASK_SUCCESS);
+        flow_.submit(); flow_.expect_fence();
         performance.finish(write_latency_budget());
         flow_.close(); cases++;
     endtask
@@ -65,21 +65,21 @@ class pdma_zero_delay_batch_test extends pdma_throughput_test;
     endfunction
     virtual task run_scenario();
         pdma_task_flow flows[4];
-        pdma_channel channel=env.device.channels[0];
+        pdma_channel channel=env.device.driver.channels[0];
         // Prepublish the whole batch while disabled, so software MMIO latency
         // cannot starve hardware at any measured command boundary.
         channel.write_reg(channel.registers.control_block.config_block.enable_reg,0);
         foreach(flows[i]) begin
             pdma_task job=settings(64);
             job.payload_alignment=pdma_configuration::AXI_BOUNDARY_BYTES;
-            flows[i]=env.task_flow(); flows[i].open(job);
+            flows[i]=env.device.task_flow(); flows[i].open(job);
             metrics[i].begin_task(job,clocks.period_ns[2]*1ns,channel.next_command_address());
             flows[i].submit();
         end
         channel.write_reg(channel.registers.control_block.config_block.enable_reg,
             1<<channel.registers.control_block.config_block.enable_reg.enabled_field.get_lsb_pos());
         foreach(flows[i]) begin
-            flows[i].expect_result(TASK_SUCCESS); metrics[i].finish(write_latency_budget()); cases++;
+            flows[i].expect_fence(); metrics[i].finish(write_latency_budget()); cases++;
         end
         `uvm_info("COPY_BATCH",$sformatf("tasks=4 payload_bytes=256 first_descriptor_to_last_fence_cycles=%0.0f",
             (metrics[3].fence_at-metrics[0].descriptor_at)/(clocks.period_ns[2]*1ns)),UVM_NONE)

@@ -22,6 +22,7 @@ pdma_trap_busy_handler_test
 pdma_trap_mask_test
 pdma_trap_pending_test
 pdma_ring_wrap_test
+pdma_same_channel_lifetime_test
 pdma_event_boundary_test
 pdma_register_model_test
 pdma_zero_delay_long_test

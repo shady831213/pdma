@@ -25,6 +25,9 @@ class pdma_task extends uvm_object;
     function new(string name="task"); super.new(name); fence_wide=1; endfunction
     function longint unsigned fence_value(); return id; endfunction
     function int unsigned fence_bytes(); return fence_wide ? $bits(longint)/8 : $bits(int)/8; endfunction
+    function longint unsigned read_fence(pdma_memory memory);
+        return fence_wide ? memory.read_long(fence_address) : memory.read_int(fence_address);
+    endfunction
     task allocate(jvs_memory_allocator allocator,pdma_memory memory);
         source_buffer=new; dest_buffer=new; fence_buffer=new;
         source_buffer.allocate(allocator,length,payload_alignment,cross_page,source_lane);

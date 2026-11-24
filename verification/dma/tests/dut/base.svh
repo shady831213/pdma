@@ -12,9 +12,10 @@ virtual class pdma_base_test extends uvm_test;
         platform.ring_context=$urandom;
         void'($value$plusargs("clock_mode=%s",clock_mode));
         clocks.select_mode(clock_mode);
+        platform.irq_timeout_ns=4000*clocks.period_ns[1];
         if($value$plusargs("checker_mutation=%s",mutation)) begin
             if(!(mutation inside {"data","identity","unknown_identity","missing_completion","duplicate_completion",
-                "early_fence","underreported_prefix","fractional_prefix"}))
+                "early_fence","fatal_fence","underreported_prefix","fractional_prefix"}))
                 `uvm_fatal("MUTATION_CONFIG","Unknown mutation")
             pdma_task_checker::type_id::set_type_override(pdma_negative_checker::get_type());
             if(mutation=="missing_completion") pdma_task_flow::type_id::set_type_override(pdma_missing_fence::get_type());
@@ -47,18 +48,30 @@ virtual class pdma_base_test extends uvm_test;
     pure virtual task run_scenario();
     virtual task main_phase(uvm_phase phase);
         phase.raise_objection(this);
-        env.device.enable_notifications();
-        foreach(env.device.channels[i]) begin
-            env.device.channels[i].interrupt_driven=interrupt_driven;
-            env.device.channels[i].setup();
+        env.device.driver.enable_notifications();
+        foreach(env.device.driver.channels[i]) begin
+            env.device.driver.channels[i].interrupt_driven=interrupt_driven;
+            env.device.driver.channels[i].setup();
         end
         run_scenario();
-        foreach(env.device.channels[i]) env.device.channels[i].teardown();
+        foreach(env.device.driver.channels[i]) begin
+            pdma_channel channel=env.device.driver.channels[i];
+            if(channel.configured) begin
+                // The scenario has joined all flows. These belong to the channel,
+                // so a later command's status is never attributed to an earlier Fence.
+                uvm_reg_data_t cause, producer;
+                channel.read_reg(channel.registers.control_block.irq_block.cause_reg,cause);
+                channel.read_reg(channel.registers.event_block.producer_reg,producer);
+                if(cause!==0 || producer!==channel.event_consumer)
+                    `uvm_fatal("CHANNEL_QUIESCENCE","Unexpected IRQ cause or unconsumed event at teardown")
+            end
+            channel.teardown();
+        end
         phase.drop_objection(this);
     endtask
     virtual function void check_phase(uvm_phase phase);
         int checked_tasks=0;
-        foreach(env.channels[i]) checked_tasks+=env.channels[i].checker_.checked_tasks;
+        foreach(env.device.channels[i]) checked_tasks+=env.device.channels[i].checker_.checked_tasks;
         if(cases!=expected_cases || checked_tasks<expected_cases)
             `uvm_error("TEST_INCOMPLETE","Required scenarios or task checks are missing")
     endfunction
@@ -66,9 +79,9 @@ virtual class pdma_base_test extends uvm_test;
         uvm_report_server reports=uvm_report_server::get_server();
         int checked_tasks=0;
         longint unsigned checked_bytes=0;
-        foreach(env.channels[i]) begin
-            checked_tasks+=env.channels[i].checker_.checked_tasks;
-            checked_bytes+=env.channels[i].checker_.checked_bytes;
+        foreach(env.device.channels[i]) begin
+            checked_tasks+=env.device.channels[i].checker_.checked_tasks;
+            checked_bytes+=env.device.channels[i].checker_.checked_bytes;
         end
         if(cases==expected_cases && reports.get_severity_count(UVM_ERROR)==0 && reports.get_severity_count(UVM_FATAL)==0) begin
             `uvm_info("TEST_RESULT",$sformatf("test=%s scenarios=%0d checked_tasks=%0d checked_bytes=%0d",get_type_name(),cases,

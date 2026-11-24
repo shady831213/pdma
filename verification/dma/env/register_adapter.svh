@@ -22,8 +22,8 @@ class pdma_register_adapter extends svt_axi_reg_adapter;
         end
         return item;
     endfunction
-    virtual function void bus2reg(uvm_sequence_item item, ref uvm_reg_bus_op rw);
-        super.bus2reg(item,rw);
+    virtual function void bus2reg(uvm_sequence_item bus_item, ref uvm_reg_bus_op rw);
+        super.bus2reg(bus_item,rw);
         rw.data >>= (rw.addr%(p_cfg.data_width/8))*8;
     endfunction
 endclass

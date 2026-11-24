@@ -5,15 +5,16 @@ class pdma_task_checker extends uvm_object;
     function new(string name="task_checker"); super.new(name); endfunction
     virtual function void check(pdma_task job,pdma_result result,pdma_outcome expected_outcome,
         pdma_memory memory,int expected_code=0);
-        if(result.channel_id!==channel_id || job.channel_id!==channel_id || result.task_id!==job.id)
+        if(result.channel_id!==channel_id || job.channel_id!==channel_id ||
+            (expected_outcome inside {TASK_SUCCESS,TASK_ERROR} && result.task_id!==job.id))
             `uvm_fatal("TASK_IDENTITY","Result belongs to another channel or task")
         if(job.terminal_checked) `uvm_fatal("TASK_DUPLICATE","Task result checked more than once")
         if(result.outcome!==expected_outcome || result.code!==expected_code)
             `uvm_fatal("TASK_OUTCOME",$sformatf("channel=%0d task=%0d expected=%s/%0d actual=%s/%0d",
                 channel_id,job.id,expected_outcome.name(),expected_code,result.outcome.name(),result.code))
         if(result.outcome==TASK_SUCCESS) begin
-            if(result.value!==job.fence_value() || result.event_producer!==0 || result.cause!==(job.trap_after_fence ? 1<<pdma_rtl_ChannelIrqCauseLayout::VALUE_TRAP_LSB : 0))
-                `uvm_fatal("TASK_COMPLETION","Invalid Fence completion or unexpected event/cause")
+            if(result.value!==job.fence_value())
+                `uvm_fatal("TASK_COMPLETION","Invalid Fence marker")
             foreach(job.expected[i]) begin
                 if(memory.read_byte(job.dest_address+i)!==job.expected[i])
                     `uvm_fatal("TASK_DATA",$sformatf("channel=%0d task=%0d destination byte=%0d",channel_id,job.id,i))
@@ -31,9 +32,9 @@ class pdma_task_checker extends uvm_object;
                 if(memory.read_byte(job.dest_address+i)!==job.expected[i])
                     `uvm_fatal("TASK_DATA","Confirmed committed prefix does not match memory")
         end
-        if(result.outcome inside {TASK_FAULT,TASK_ERROR} && result.value!==0)
-            `uvm_fatal("TASK_COMPLETION","Incomplete task published its successor Fence")
-        if(result.outcome inside {TASK_FAULT,TASK_ERROR})
+        if(result.outcome==TASK_FAULT && result.cause!==0)
+            `uvm_fatal("TASK_EVENT","Recoverable fault raised a channel interrupt cause")
+        if(result.outcome inside {TASK_FAULT,TASK_ERROR,TASK_FATAL})
             for(int i=0;i<job.fence_bytes();i++)
                 if(memory.read_byte(job.fence_address+i)!==8'b0)
                     `uvm_fatal("TASK_COMPLETION","Incomplete task wrote its successor Fence memory")

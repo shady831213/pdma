@@ -17,13 +17,21 @@ The reproducible simulator flows are in `flow/`. Deployment configuration and
 raw logs stay outside version control.
 
 The DMA bench is under `tb/`, with protocol VIP agents and jarvisuk memory,
-clock and IRQ components assembled under `env/`. Software channel and IRQ
-handler objects under `env/software/` own software operations. Scenarios under
+clock and IRQ components assembled under `env/`. The device and channel drivers
+under `env/software/` service their respective interrupts through MMIO. Scenarios under
 `tests/dut/` orchestrate task flows under `env/flow/`. Each task flow explicitly
 invokes its checker under `env/checking/` before releasing buffers. Successful
-tasks observe Fence completion; error/cancellation cleanup waits for reset drain.
-The software device driver owns global reset and the device notification mask;
-channel reconfiguration cannot change that mask. After global busy clears, it
+tasks release their own buffers after Fence completion. After a stopping error
+the scenario resets the affected channel before closing its task. Closing a
+task does not reset a channel or wait for unrelated submissions.
+The platform environment connects the AXI agents, clocks, memory and coverage
+to `env.device`. This device environment builds the register model, the global
+fatal IRQ service and one channel environment per physical channel. Scenarios
+obtain task flows from `env.device.task_flow(channel_id)`. The software device
+driver creates each channel driver once. Its channel environment uses that
+same instance for IRQ service, and its task checker observes that channel.
+The software device driver owns global reset and the device notification mask.
+Channel reconfiguration leaves that mask intact. After global busy clears, it
 invalidates every channel's software cursors/configuration state while retaining
 ring allocations. A fresh task can then reconfigure any channel. Channel reset
 updates only its own software state, after its own hardware acknowledgement.
@@ -63,15 +71,16 @@ fatal diagnostic and absence of the success marker. Timeout and signal exits do
 not qualify. This monitor checks digital protocol invariants; static CDC/RDC and
 physical timing/MTBF obligations remain separate.
 
-Software submits Copy followed by Fence32/64 and polls the real memory marker for
-successful completion. Destination equality is a checker result, never a
-completion signal. Fault, error and fatal results come from software-visible
-registers and error events. Each channel has its own software driver, IRQ environment and
-checker under `pdma_channel_env`. A task flow uses the same driver that its ISR
-uses to consume the event ring. Device fatal has a separate IRQ environment at
-the device level. The snapshot profile selects 1..8 channels (default 2 for
-iteration). IRQ vectors start at 17 and are distinct from channel IDs; the device-fatal
-vector defaults to 16. The memory oracle checks both the channel
+Software can submit Copy followed by Fence32/64 and poll that task's memory
+marker. The polling interval advances simulation time without MMIO traffic.
+A following Trap lets software wait on its channel handler and read the preceding
+Fence once to identify the completed task. A parked task is observed through
+fault status. Scenarios with channel interrupts disabled can read the error ring
+or channel fatal status directly. Each channel IRQ wire connects to a one-bit
+`jvs_int_if` under its own `pdma_channel_env`; device fatal has its own one-bit
+interface and IRQ environment. All handlers register local pin 0.
+The snapshot profile selects 1..8 channels (default 2 for iteration).
+The memory oracle checks both the channel
 sideband and context against task/ring allocations. Compile a separate immutable
 binary for each channel count. The final qualification must include 8, with
 intermediate non-power-of-two counts checked for index/reset/ownership behavior.
@@ -123,8 +132,14 @@ The native VIP continues to own transaction assembly and memory effects.
 `PDMA_SUITE=dut` is the default. Clock period/jitter selfchecks are not instantiated
 in DUT runs; clock/reset integration lives in `env/clocks.svh`. AXI protocol checks,
 DUT assertions and per-source JarvisUK level monitors remain active. Each IRQ
-environment registers its handler in `configure_phase` and uses its JarvisUK
-sequencer for delivery. Power-on reset stays in `reset_phase`.
+environment registers its handler in `configure_phase`. JarvisUK dispatches the
+ISR and queues its result. The scenario reads that result with `get_irq_result`
+after the driver services the causes sampled from its channel. A Trap-only
+interrupt acknowledges Trap. A stopping-error interrupt can arrive before
+the diagnostic write finishes, so the ISR waits for the event or fatal status. The device
+fatal scenario also waits for its own handler result and checks the fatal code
+read by that handler.
+Power-on reset stays in `reset_phase`.
 
 The separate `PDMA_SUITE=tb-selftest` suite contains five independently selectable
 cases: clock/reset-stimulus qualification, IRQ wait success isolation, timeout cleanup,
@@ -143,7 +158,7 @@ output is rejected. The regression also runs deliberately corrupted
 observations and requires the exact checker diagnostic: `data` / `TASK_DATA`,
 `identity` and `unknown_identity` / `TASK_IDENTITY`, `missing_completion` / `TASK_TIMEOUT`, and
 `duplicate_completion` / `TASK_DUPLICATE`, early Fence publication during an IRQ
-error / `TASK_COMPLETION`, and understated or impossible fractional error progress /
+error or channel fatal / `TASK_COMPLETION`, and understated or impossible fractional error progress /
 `TASK_ERROR_INFO`. The latter cases run against directed error tests. It does not count these negative tests
 as DUT failures or include them in coverage.
 Timeouts and signal exits remain failures even if a negative run printed its
@@ -252,7 +267,7 @@ zero tests, stale artifacts and timeouts do not establish a pass.
 the snapshot also supplies the DUT binding and shared environment macros.
 The channel count sizes DUT channels, IRQ wiring,
 per-channel handlers/checkers, software channels and the generated RAL instance.
-Environment construction rejects a different channel count or IRQ-vector count;
+Environment construction rejects a different channel count;
 the register-access tests exercise the discovery register through RAL. Reusing a compiled
 simulation does not change its channel count when the caller changes the environment
 variable: generate a new snapshot and compile a new build for another count.

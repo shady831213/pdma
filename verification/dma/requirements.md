@@ -25,22 +25,26 @@ software never substitutes mirrored values for a real hardware read.
 | Stopping errors | `single_channel/cases/faults.rs` | Error at the next payload page; event identity/code/confirmed prefix and prefix memory; successor Fence remains unpublished |
 | Ring progress and reuse | `single_channel/software` | Copy/Fence pairs reuse a four-slot ring without reset; consumer progression and correct descriptor slot |
 | Descriptor decode and zero-length Copy | `dma/tests/edges.rs`, `dma/src/channel/command.rs` (under `crates`) | Malformed encoding is CommandRead fatal, valid unsupported opcode is an Unsupported event, zero length succeeds without payload/event |
-| Reporting failures | `single_channel/cases/faults.rs` | Failed event writes retain fatal and do not publish producer |
+| Reporting failures | `single_channel/cases/faults.rs` | Failed event writes retain channel fatal and leave the producer unchanged; observe the reporting failure through the channel ISR |
 | Event publication across a page boundary | `single_channel/cases/faults.rs` | Explicit channel-owned event placement; decode identity, error code and exact progress after the split write; neighboring ring slot remains intact |
 | Reset while accepted memory access is outstanding | `single_channel/harness/lifecycle` | Channel and global reset with suspended VIP B response; reset busy stays set until response is released; no later chunk write; fresh copy after reset |
 | Level IRQ and software dispatch | `single_channel/hardware/tests.rs` | Sample each channel independently through the stock JarvisUK level monitor. Verify held causes, source masking, diagnostic publication and independent ISR service over shared MMIO. |
 | Three asynchronous domains | RTL-specific | Independently randomized periods, phases and bounded jitter; cold reset released on each domain's own edge |
-| Checker sensitivity | TB selftest | Corrupt payload (`TASK_DATA`), wrong or unknown identity (`TASK_IDENTITY`), suppress completion (`TASK_TIMEOUT`), duplicate completion (`TASK_DUPLICATE`), publish an early Fence during IRQ error (`TASK_COMPLETION`), understate ordered-write progress or report an impossible partial read-error prefix (`TASK_ERROR_INFO`); require the corresponding fatal diagnostic |
+| Checker sensitivity | TB selftest | Corrupt payload (`TASK_DATA`), wrong or unknown identity (`TASK_IDENTITY`), suppress completion (`TASK_TIMEOUT`), duplicate completion (`TASK_DUPLICATE`), publish an early Fence during IRQ error or channel fatal (`TASK_COMPLETION`), understate ordered-write progress or report an impossible partial read-error prefix (`TASK_ERROR_INFO`); require the corresponding fatal diagnostic |
 
 These are scenario translations, not assertions that RTL must follow the Rust
-model's tick sequence. Scenarios orchestrate task flows; software channel and IRQ
-objects own MMIO. Physical power-on reset runs only in `reset_phase`, while
+model's tick sequence. Scenarios orchestrate task flows; the software device
+and channel drivers own MMIO. Physical power-on reset runs only in `reset_phase`, while
 software reset is part of the scenario. A resource-owning task flow allocates,
 submits, waits for completion and explicitly calls the task checker before freeing
-its payload and Fence buffers. Error cleanup completes software reset drain first.
-Channels own their command/event rings across tasks. A reset-cancellation flow
-waits for drain, checks the reset result, then frees its resources. Each channel
-owns its software driver, IRQ environment and task checker. Multichannel scenarios
+its payload and Fence buffers. A task that has observed its own Fence can release
+its buffers while a later command on the same channel is stopped. The command
+consumer reports descriptor acceptance. The channel retains its command and
+event storage. For a stopped task the scenario explicitly resets the channel
+before releasing buffers. A reset-cancellation flow
+waits for drain, checks the reset result, then frees its resources. The software
+device owns the channel drivers. Each channel environment uses its corresponding
+driver and owns its IRQ service and task checker. Multichannel scenarios
 check independent notifications and addressable state on the configured channels.
 The checker derives expected bytes and identity from submitted software inputs.
 Directed error scenarios derive the expected committed prefix from the injected
@@ -50,8 +54,9 @@ may not finish before the later read error, so only zero or that whole fragment
 is permitted. The ordered write-error case requires the exact preceding prefix.
 Native window tests control receipt ordering and check the exact error-time
 snapshot. No error test assumes that bytes beyond the prefix remain unchanged.
-Fault/error checks
-read Fence storage even when the result arrived through the interrupt handler.
+Fault, stopping-error and channel-fatal checks read Fence storage directly and
+reject writes by the incomplete task's successor. Fence and error events supply
+task identity. Fault and channel-fatal registers identify only the channel.
 Passive subscribers receive channel-tagged scenario outcomes for coverage and
 submission-to-observation latency. They neither inspect payload transactions nor
 own task resources. Polling rejects missing completion; the checker rejects
@@ -152,24 +157,26 @@ of the driver's period-conversion helpers. Only that selftest retains the requir
 sample counts; DUT test completion depends on scenarios and task checks. No disabled
 observer wakes each cycle to check an enable flag.
 
-Each source registers its handler in `configure_phase`. The JarvisUK level monitor
+Each source registers its driver on local pin 0 in `configure_phase`. The JarvisUK level monitor
 samples the corresponding wire on core clock edges and rearms after the handler
 returns. A blocked channel handler can share the RAL frontdoor with peer handlers.
 Trap handlers clear the sticky bit by MMIO. Stopping-error handlers service the
 event and disable channel IRQ until reset. Device fatal has a separate handler and
 enable. The clock component uses `reset_phase` and its selftest adds `post_reset_phase`.
 
-Cancellation belongs to the operation that spawned the competing processes.
-A normal task call creates no process boundary. Each IRQ wait and reset watchdog
-therefore runs inside its own forked process; its `disable fork` can terminate
-only that invocation's children. Do not substitute a named block as a general
-solution for concurrent/reentrant calls. The isolation tests keep a caller-owned
-thread alive across successful and timed-out IRQ waits and across reset; they
-also check that a timed-out receiver cannot consume a later notification.
+JarvisUK queues each ISR's observation after MMIO service completes. Channel
+error and device fatal IRQ tests wait on that result directly. For a stopping
+error the channel ISR can receive the interrupt before the event write finishes.
+It waits for a diagnostic or fatal status when the diagnostic is still outstanding.
+The scenario consumes it with `get_irq_result`. The testbench supplies its wait
+budget in simulation nanoseconds, derived from the nominal core period; the
+library polls its FIFO at 100 ns intervals. The IRQ selftests check isolation of
+concurrent waits, survival of a caller-owned thread and delivery of a notification
+that arrives after timeout. The power-on reset watchdog has a separate fork owner
+so cancelling it affects only that reset operation.
 
 AXI protocol checks, DUT invariant assertions and level monitors remain active in
-ordinary verification. Scenario coverage samples completed observations. Polling
-and cycle-based timeouts remain software-visible checks.
+ordinary verification. Scenario coverage samples completed observations.
 
 `PDMA_SUITE=dut` is the default regression suite, including the eight checker
 mutation cases. `PDMA_SUITE=tb-selftest` selects the independent cases listed in

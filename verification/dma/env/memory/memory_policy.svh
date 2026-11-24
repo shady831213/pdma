@@ -20,7 +20,7 @@ class pdma_memory_policy extends svt_axi_port_monitor_callback;
             foreach(item.data_user[i]) item.data_user[i]=inject ? behavior.fault_reason : 0;
         end
     endfunction
-    virtual function void write_address_phase_ended(svt_axi_port_monitor monitor_,svt_axi_transaction item);
+    virtual function void write_address_phase_ended(svt_axi_port_monitor axi_monitor,svt_axi_transaction item);
         apply_access(item);
     endfunction
 endclass

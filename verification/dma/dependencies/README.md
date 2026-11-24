@@ -5,11 +5,12 @@ clock/reset and interrupt library. Its Apache-2.0 license remains applicable.
 
 The allocator free/coalescing correction and its regression are upstream on
 [master at bd24e3891d502d9fca8b85993260174f032bca3a](https://github.com/shady831213/jarvisuk/commit/bd24e3891d502d9fca8b85993260174f032bca3a).
-`jarvisuk.lock.json` pins that revision and the allocator's SHA-256. There is no
-PDMA allocator patch.
+The dependency lock pins the selected JarvisUK revision and the allocator's
+SHA-256. The DMA bench uses instance-sized pin interfaces from that revision.
 
 ```sh
-GIT_MASTER=1 git -C "$JVSUK_HOME" fetch origin master
+revision=$(python3 -c 'import json; print(json.load(open("verification/dma/dependencies/jarvisuk.lock.json"))["revision"])')
+GIT_MASTER=1 git -C "$JVSUK_HOME" fetch origin "$revision"
 bash verification/dma/flow/prepare-jarvisuk.sh "$JVSUK_HOME" "$BUILD/jarvisuk"
 export JVSUK_HOME="$BUILD/jarvisuk"
 ```

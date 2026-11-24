@@ -22,12 +22,6 @@ virtual class pdma_tb_test extends uvm_test;
         if(!uvm_config_db#(virtual pdma_control_if)::get(this,"env","control",control))
             `uvm_fatal("CONTROL_BINDING","Missing selftest control interface")
     endfunction
-    function pdma_channel make_channel(string name);
-        pdma_channel channel=new(name);
-        channel.cfg=new;
-        channel.control=control;
-        return channel;
-    endfunction
     pure virtual task check_tb();
     virtual task main_phase(uvm_phase phase);
         phase.raise_objection(this);

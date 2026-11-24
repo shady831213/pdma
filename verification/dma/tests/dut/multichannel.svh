@@ -11,9 +11,9 @@ class pdma_multichannel_copy_test extends pdma_base_test;
         repeat(3) begin
             pdma_task_flow flows[]=new[platform.channel_count];
             foreach(flows[i]) begin
-                flows[i]=env.task_flow(i); flows[i].open(settings(0,1)); flows[i].submit();
+                flows[i]=env.device.task_flow(i); flows[i].open(settings(0,1)); flows[i].submit();
             end
-            foreach(flows[i]) begin flows[i].expect_result(TASK_SUCCESS); flows[i].close(); cases++; end
+            foreach(flows[i]) begin flows[i].expect_fence(); flows[i].close(); cases++; end
         end
     endtask
 endclass
@@ -30,11 +30,12 @@ class pdma_multichannel_park_test extends pdma_base_test;
         // Park every owner except the final peer, retaining a full write burst.
         foreach(flows[i]) begin
             pdma_task job=single_burst_copy();
-            flows[i]=env.task_flow(i); flows[i].open(job);
+            flows[i]=env.device.task_flow(i); flows[i].open(job);
             if(i+1<flows.size()) inject(1,1,job.dest_address);
             else platform.fault_enabled=0;
             flows[i].submit();
-            flows[i].expect_result(i+1<flows.size() ? TASK_FAULT : TASK_SUCCESS);
+            if(i+1<flows.size()) flows[i].expect_fault();
+            else flows[i].expect_fence();
         end
         platform.fault_enabled=0;
         if(flows.size()>1) begin
@@ -45,11 +46,11 @@ class pdma_multichannel_park_test extends pdma_base_test;
             foreach(flows[i].job.expected[b]) env.memory.write_byte(flows[i].job.source_address+b,~flows[i].job.expected[b]);
             flows[i].channel.resume_task();
             flows[i].channel.await_reg(flows[i].channel.registers.control_block.recovery_block.fault_status_reg,1,0);
-            flows[i].expect_result(TASK_SUCCESS); flows[i].close(); cases++;
+            flows[i].expect_fence(); flows[i].close(); cases++;
         end
         if(flows.size()>1) begin flows[flows.size()-1].close(); cases++; end
-        flows[0]=env.task_flow(0); flows[0].open(settings(128)); flows[0].submit();
-        flows[0].expect_result(TASK_SUCCESS); flows[0].close(); cases++;
+        flows[0]=env.device.task_flow(0); flows[0].open(settings(128)); flows[0].submit();
+        flows[0].expect_fence(); flows[0].close(); cases++;
     endtask
 endclass
 
@@ -63,7 +64,7 @@ class pdma_multichannel_reset_test extends pdma_base_test;
     virtual task run_scenario();
         pdma_task_flow flows[]=new[platform.channel_count];
         bit[31:0] busy;
-        foreach(flows[i]) begin flows[i]=env.task_flow(i); flows[i].open(settings(512)); end
+        foreach(flows[i]) begin flows[i]=env.device.task_flow(i); flows[i].open(settings(512)); end
         platform.hold_write=1; flows[0].submit();
         wait(platform.held.size()!=0);
         flows[0].channel.request_reset();
@@ -75,9 +76,9 @@ class pdma_multichannel_reset_test extends pdma_base_test;
         platform.hold_write=0;
         foreach(platform.held[i]) platform.held[i].suspend_response=0;
         platform.held.delete(); flows[0].cancel(); cases++;
-        for(int i=1;i<flows.size();i++) begin flows[i].expect_result(TASK_SUCCESS); flows[i].close(); cases++; end
-        flows[0]=env.task_flow(0); flows[0].open(settings(64)); flows[0].submit();
-        flows[0].expect_result(TASK_SUCCESS); flows[0].close(); cases++;
+        for(int i=1;i<flows.size();i++) begin flows[i].expect_fence(); flows[i].close(); cases++; end
+        flows[0]=env.device.task_flow(0); flows[0].open(settings(64)); flows[0].submit();
+        flows[0].expect_fence(); flows[0].close(); cases++;
     endtask
 endclass
 
@@ -91,9 +92,9 @@ class pdma_reset_reordered_b_test extends pdma_base_test;
         expected_cases=2;
     endfunction
     virtual task run_scenario();
-        pdma_task_flow old=env.task_flow(0);
+        pdma_task_flow old=env.device.task_flow(0);
         int peer_id=platform.channel_count>1 ? 1 : 0;
-        pdma_task_flow peer=env.task_flow(peer_id);
+        pdma_task_flow peer=env.device.task_flow(peer_id);
         bit independent=peer_id!=0 && `PDMA_WRITE_OUTSTANDING>1;
         uvm_reg_data_t busy;
         old.open(single_burst_copy()); platform.hold_write=1; old.submit();
@@ -101,14 +102,14 @@ class pdma_reset_reordered_b_test extends pdma_base_test;
         platform.hold_write=0;
         old.channel.request_reset();
         if(independent) begin
-            peer.open(single_burst_copy()); peer.submit(); peer.expect_result(TASK_SUCCESS);
+            peer.open(single_burst_copy()); peer.submit(); peer.expect_fence();
         end
         old.channel.read_reg(old.channel.admin.reset_reg,busy);
         if(!busy[0]) `uvm_fatal("RESET_DRAIN","Reset completed while its B was withheld")
         platform.held[0].suspend_response=0; platform.held.delete();
         old.cancel(); cases++;
         if(!independent) begin
-            peer.open(single_burst_copy()); peer.submit(); peer.expect_result(TASK_SUCCESS);
+            peer.open(single_burst_copy()); peer.submit(); peer.expect_fence();
         end
         peer.close(); cases++;
     endtask
@@ -124,14 +125,19 @@ class pdma_multichannel_irq_test extends pdma_base_test;
         pdma_task_flow flows[]=new[platform.channel_count];
         foreach(flows[i]) begin
             pdma_task job=settings(16); job.opcode=COMMANDHEADER_OPCODE_ATOMIC; job.expect_payload_unchanged=1;
-            flows[i]=env.task_flow(i); flows[i].open(job);
+            flows[i]=env.device.task_flow(i); flows[i].open(job);
         end
         // Channel notification enables must not depend on the global-fatal mask.
-        env.device.write_reg(env.device.registers.irq_enable_reg,0);
+        env.device.driver.write_reg(env.device.driver.registers.irq_enable_reg,0);
         // Hold only channel zero's software event consumer while its IRQ is delivered.
         flows[0].channel.isr_service.get();
         foreach(flows[i]) flows[i].submit();
-        foreach(flows[i]) flows[i].channel.await_reg(flows[i].channel.registers.event_block.producer_reg,'1,1);
+        // Channel zero's ISR is deliberately held. Observe its asserted pin
+        // while peer software waits on the independent handler result queues.
+        repeat(platform.poll_limit) begin
+            if(env.control.irq[0]===1) break;
+            @(posedge env.control.core_clk);
+        end
         if(env.control.irq[0]!==1) `uvm_fatal("CHANNEL_IRQ_LEVEL","Stopped channel lost its asserted IRQ")
         for(int i=1;i<flows.size();i++) begin
             flows[i].expect_interrupt(TASK_ERROR,EVENT_CODE_UNSUPPORTED);
@@ -141,9 +147,9 @@ class pdma_multichannel_irq_test extends pdma_base_test;
         flows[0].expect_interrupt(TASK_ERROR,EVENT_CODE_UNSUPPORTED);
         foreach(flows[i]) begin
             if(flows[i].channel.delivered!=1) `uvm_fatal("CHANNEL_IRQ_COUNT","Wrong channel interrupt count")
-            flows[i].close(); cases++;
+            flows[i].channel.reset(); flows[i].close(); cases++;
         end
-        if(env.device_handler.delivered!=0) `uvm_fatal("CHANNEL_IRQ_SCOPE","Channel error delivered as device fatal")
+        if(env.device.driver.fatal_irqs_serviced!=0) `uvm_fatal("CHANNEL_IRQ_SCOPE","Channel error delivered as device fatal")
     endtask
 endclass
 
@@ -164,12 +170,12 @@ class pdma_multichannel_throughput_test extends pdma_throughput_test;
         pdma_task_flow flows[]=new[platform.channel_count];
         foreach(flows[i]) begin
             pdma_task job=settings(transfer_bytes); job.payload_alignment=pdma_configuration::AXI_BOUNDARY_BYTES;
-            flows[i]=env.task_flow(i); flows[i].open(job);
+            flows[i]=env.device.task_flow(i); flows[i].open(job);
             metrics[i].begin_task(job,clocks.period_ns[2]*1ns,flows[i].channel.next_command_address());
             flows[i].submit();
         end
         foreach(flows[i]) begin
-            flows[i].expect_result(TASK_SUCCESS); metrics[i].finish(write_latency_budget(),1);
+            flows[i].expect_fence(); metrics[i].finish(write_latency_budget(),1);
             flows[i].close(); cases++;
         end
         begin

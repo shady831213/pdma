@@ -2,11 +2,11 @@ virtual class pdma_fault_test extends pdma_base_test;
     protected bit writing, fence_target;
     function new(string name,uvm_component parent); super.new(name,parent); endfunction
     virtual task run_scenario();
-        pdma_task_flow flow_=env.task_flow();
+        pdma_task_flow flow_=env.device.task_flow();
         pdma_task job=single_burst_copy();
         flow_.open(job);
         inject(writing,1,fence_target ? job.fence_address : (writing ? job.dest_address : job.source_address));
-        flow_.submit(); flow_.expect_result(TASK_FAULT);
+        flow_.submit(); flow_.expect_fault();
         if(writing && !fence_target)
             foreach(job.initial_data[i])
                 if(env.memory.read_byte(job.dest_address+i)!==job.initial_data[i])
@@ -17,7 +17,7 @@ virtual class pdma_fault_test extends pdma_base_test;
         flow_.channel.resume_task();
         flow_.channel.await_reg(flow_.channel.registers.control_block.recovery_block.fault_status_reg,
             32'b1 << flow_.channel.registers.control_block.recovery_block.fault_status_reg.faulted_field.get_lsb_pos(),0);
-        flow_.expect_result(TASK_SUCCESS); flow_.close(); cases++;
+        flow_.expect_fence(); flow_.close(); cases++;
     endtask
 endclass
 

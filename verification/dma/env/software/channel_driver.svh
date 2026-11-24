@@ -1,11 +1,9 @@
 class pdma_channel extends pdma_register_access;
-    int unsigned channel_id, vector, producer;
+    int unsigned channel_id, producer;
     longint unsigned next_id=1;
     pdma_memory memory;
-    virtual pdma_control_if control;
     ChannelBlock registers;
     ChannelAdmin admin;
-    mailbox#(pdma_result) interrupts=new;
     int unsigned delivered;
     longint unsigned command_address, event_address;
     jvs_memory_acc_block command_allocation, event_allocation;
@@ -15,8 +13,8 @@ class pdma_channel extends pdma_register_access;
     semaphore producer_lock=new(1), event_lock=new(1);
     bit configured, interrupt_driven;
     function new(string name="channel"); super.new(name); endfunction
-    function void bind_registers(DmaRegisters root,int index,int irq_vector);
-        channel_id=index; vector=irq_vector;
+    function void bind_registers(DmaRegisters root,int index);
+        channel_id=index;
         registers=root.channels_block[index];
         admin=root.admin_block.channels_block[index];
     endfunction
@@ -71,7 +69,7 @@ class pdma_channel extends pdma_register_access;
         await_reg(registers.command_block.consumer_reg,'1,producer);
     endtask
     task teardown();
-        request_reset(); finish_reset();
+        reset();
         memory.release_regions(command_address); memory.release_regions(event_address);
         allocator.free(command_allocation); allocator.free(event_allocation);
     endtask
@@ -82,13 +80,14 @@ class pdma_channel extends pdma_register_access;
         longint unsigned address;
         event_lock.get();
         read_reg(registers.event_block.producer_reg,published);
+        result.event_producer=published;
         available=published!=event_consumer;
         if(available) begin
             address=event_address+(event_consumer%cfg.event_capacity)*EVENT_SIZE;
             for(int i=0;i<EVENT_SIZE;i++) event_value[i*8+:8]=memory.read_byte(address+i);
             result.outcome=TASK_ERROR; result.task_id=Event_get_id(event_value);
             result.code=Event_get_code(event_value); info=Event_get_info(event_value);
-            result.prefix=ErrorInfo_get_bytes_completed(info); result.event_producer=published;
+            result.prefix=ErrorInfo_get_bytes_completed(info); result.event_address=address;
             event_consumer++;
             write_reg(registers.event_block.consumer_reg,event_consumer);
         end
@@ -105,73 +104,39 @@ class pdma_channel extends pdma_register_access;
         await_reg(admin.reset_reg,1<<admin.reset_reg.request_field.get_lsb_pos(),0);
         invalidate_after_reset();
     endtask
+    task reset();
+        request_reset(); finish_reset();
+    endtask
     task resume_task();
         write_reg(registers.control_block.recovery_block.resume_reg,
             1<<registers.control_block.recovery_block.resume_reg.request_field.get_lsb_pos());
     endtask
-    task observe(pdma_task job,output pdma_result result);
-        bit[31:0] fatal_code, faulted, producer_value, cause;
-        longint unsigned value;
-        bit available;
-        result=null;
-        read_reg(registers.control_block.recovery_block.fatal_reg,fatal_code);
-        read_reg(registers.control_block.recovery_block.fault_status_reg,faulted);
-        read_reg(registers.event_block.producer_reg,producer_value);
-        read_reg(registers.control_block.irq_block.cause_reg,cause);
-        value=job.fence_wide ? memory.read_long(job.fence_address) : memory.read_int(job.fence_address);
-        if(fatal_code!=0 || producer_value!=event_consumer || faulted!=0 || value!=0) begin
-            result=new; result.channel_id=channel_id; result.task_id=job.id;
-            result.cause=cause; result.event_producer=producer_value; result.value=value;
-            if(fatal_code!=0) begin result.outcome=TASK_FATAL; result.code=fatal_code; end
-            else if(producer_value!=event_consumer) begin
-                pop_event(result,available);
-                if(!available) result=null;
-            end else if(faulted!=0) result.outcome=TASK_FAULT;
-            else result.outcome=TASK_SUCCESS;
-        end
-    endtask
-    task wait_result(pdma_task job,output pdma_result result);
-        for(int n=0;n<cfg.poll_limit;n++) begin
-            observe(job,result);
-            if(result!=null) return;
-        end
-        `uvm_fatal("TASK_TIMEOUT",$sformatf("channel=%0d task=%0d has no completion",channel_id,job.id))
-    endtask
-    task wait_interrupt(output pdma_result result);
-        result=null;
-        // A task call does not isolate processes. Give each wait its own fork owner.
-        fork begin
-            fork
-                interrupts.get(result);
-                begin
-                    repeat(cfg.irq_timeout_cycles) @(posedge control.core_clk);
-                    `uvm_fatal("TASK_TIMEOUT",$sformatf("channel=%0d IRQ did not arrive",channel_id))
-                end
-            join_any
-            disable fork;
-        end join
-    endtask
-    task interrupt_snapshot(output pdma_result result);
-        bit[31:0] fatal_code;
+    task service_irq(output pdma_result result);
+        uvm_reg_data_t fatal_code;
         bit available;
         isr_service.get();
         result=new; result.channel_id=channel_id;
         read_reg(registers.control_block.irq_block.cause_reg,result.cause);
-        read_reg(registers.event_block.producer_reg,result.event_producer);
-        read_reg(registers.control_block.recovery_block.fatal_reg,fatal_code);
-        // Stop may assert before the event write completes. A failed report
-        // instead sets channel fatal. Software owns the consumer cursor.
-        if(result.cause[registers.control_block.irq_block.cause_reg.error_field.get_lsb_pos()] && event_consumer==0) begin
-            for(int n=0; result.event_producer==0 && fatal_code==0; n++) begin
-                if(n==cfg.poll_limit) `uvm_fatal("ERROR_REPORT_TIMEOUT","Stopped channel has no event or fatal status")
-                read_reg(registers.event_block.producer_reg,result.event_producer);
+        result.outcome=IRQ_NOTIFICATION;
+        // Dispatch from the cause snapshot. A Trap-only ISR must leave a
+        // subsequently published diagnostic for the next interrupt service.
+        if(result.cause[registers.control_block.irq_block.cause_reg.error_field.get_lsb_pos()] ||
+            result.cause[registers.control_block.irq_block.cause_reg.event_non_empty_field.get_lsb_pos()] ||
+            result.cause[registers.control_block.irq_block.cause_reg.channel_fatal_field.get_lsb_pos()]) begin
+            // A stopping error can assert before the event write completes. Only
+            // one diagnostic is produced per stop, including when software read it
+            // before unmasking the retained IRQ. Reset clears the consumer cursor.
+            for(int n=0;n<cfg.poll_limit;n++) begin
+                pop_event(result,available);
+                if(available) break;
                 read_reg(registers.control_block.recovery_block.fatal_reg,fatal_code);
+                result.code=fatal_code;
+                result.outcome=fatal_code!=0 ? TASK_FATAL : IRQ_NOTIFICATION;
+                if(fatal_code!=0 || event_consumer!=0 ||
+                    !result.cause[registers.control_block.irq_block.cause_reg.error_field.get_lsb_pos()]) break;
+                if(n+1==cfg.poll_limit)
+                    `uvm_fatal("ERROR_REPORT_TIMEOUT","Stopped channel has no event or fatal status")
             end
-        end
-        pop_event(result,available);
-        if(!available) begin
-            result.outcome=fatal_code!=0 ? TASK_FATAL : IRQ_NOTIFICATION;
-            result.code=fatal_code;
         end
         if(result.cause[registers.control_block.irq_block.cause_reg.trap_field.get_lsb_pos()])
             write_reg(registers.control_block.irq_block.trap_ack_reg,1);
@@ -179,5 +144,6 @@ class pdma_channel extends pdma_register_access;
             result.cause[registers.control_block.irq_block.cause_reg.error_field.get_lsb_pos()])
             write_reg(registers.control_block.irq_block.enable_reg,0);
         isr_service.put();
+        delivered++;
     endtask
 endclass

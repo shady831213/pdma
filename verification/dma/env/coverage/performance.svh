@@ -4,13 +4,13 @@ typedef class pdma_performance;
 class pdma_performance_phases extends svt_axi_port_monitor_callback;
     pdma_performance performance;
     function new(string name="performance_phases"); super.new(name); endfunction
-    virtual function void read_address_phase_ended(svt_axi_port_monitor monitor_,svt_axi_transaction item);
+    virtual function void read_address_phase_ended(svt_axi_port_monitor axi_monitor,svt_axi_transaction item);
         performance.read_address(item);
     endfunction
-    virtual function void read_data_phase_ended(svt_axi_port_monitor monitor_,svt_axi_transaction item);
+    virtual function void read_data_phase_ended(svt_axi_port_monitor axi_monitor,svt_axi_transaction item);
         performance.beat(0,item);
     endfunction
-    virtual function void write_data_phase_ended(svt_axi_port_monitor monitor_,svt_axi_transaction item);
+    virtual function void write_data_phase_ended(svt_axi_port_monitor axi_monitor,svt_axi_transaction item);
         performance.beat(1,item);
     endfunction
 endclass
@@ -96,8 +96,8 @@ class pdma_performance extends uvm_subscriber#(svt_axi_transaction);
     function void read_address(svt_axi_transaction item);
         if(enabled && descriptor_at==0 && item.addr==command_address) descriptor_at=$realtime;
     endfunction
-    virtual function void write(svt_axi_transaction item);
-        if(enabled && item.xact_type==svt_axi_transaction::WRITE && item.addr==job.fence_address)
+    virtual function void write(svt_axi_transaction t);
+        if(enabled && t.xact_type==svt_axi_transaction::WRITE && t.addr==job.fence_address)
             fence_at=$realtime;
     endfunction
     function void finish(int unsigned write_latency_budget=0, bit concurrent_channels=0);

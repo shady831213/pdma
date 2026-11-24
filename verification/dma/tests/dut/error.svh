@@ -2,7 +2,7 @@ virtual class pdma_error_irq_test extends pdma_base_test;
     protected bit writing;
     function new(string name,uvm_component parent); super.new(name,parent); interrupt_driven=1; endfunction
     virtual task run_scenario();
-        pdma_task_flow flow_=env.task_flow();
+        pdma_task_flow flow_=env.device.task_flow();
         // The fault targets the first byte after the page boundary. Keep a
         // second beat in range when the memory bus is wider than the payload.
         localparam int unsigned BEAT_BYTES=pdma_configuration::MEMORY_BEAT_BYTES;
@@ -24,10 +24,9 @@ virtual class pdma_error_irq_test extends pdma_base_test;
             (32'b1 << channel.registers.control_block.irq_block.mask_reg.event_non_empty_field.get_lsb_pos()) |
             (32'b1 << channel.registers.control_block.irq_block.mask_reg.trap_field.get_lsb_pos()));
         flow_.submit();
-        channel.await_reg(channel.registers.event_block.producer_reg,'1,1);
         flow_.expect_interrupt(TASK_ERROR,writing ? EVENT_CODE_WRITEERROR : EVENT_CODE_READERROR);
         if(channel.delivered!=delivered_before+1) `uvm_fatal("IRQ_DELIVERY","Unexpected channel notification count")
-        platform.fault_enabled=0; flow_.close(); cases++;
+        platform.fault_enabled=0; flow_.channel.reset(); flow_.close(); cases++;
     endtask
 endclass
 

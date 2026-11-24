@@ -13,6 +13,7 @@ package pdma_tests_pkg;
     `include "tests/dut/base.svh"
     `include "tests/dut/copy.svh"
     `include "tests/dut/scatter_gather.svh"
+    `include "tests/dut/mixed_copy.svh"
     `include "tests/dut/throughput.svh"
     `include "tests/dut/multichannel.svh"
     `include "tests/dut/fault.svh"

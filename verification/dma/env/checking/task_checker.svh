@@ -2,7 +2,16 @@ class pdma_task_checker extends uvm_object;
     `uvm_object_utils(pdma_task_checker)
     int unsigned channel_id, checked_tasks;
     longint unsigned checked_bytes;
-    function new(string name="task_checker"); super.new(name); endfunction
+    covergroup irq_service with function sample(pdma_outcome outcome);
+        option.per_instance=1;
+        observed: coverpoint outcome {
+            bins notification={IRQ_NOTIFICATION};
+            bins diagnostic={TASK_ERROR};
+            bins fatal={TASK_FATAL};
+            illegal_bins non_irq=default;
+        }
+    endgroup
+    function new(string name="task_checker"); super.new(name); irq_service=new; endfunction
     virtual function void check(pdma_task job,pdma_result result,pdma_outcome expected_outcome,
         pdma_memory memory,int expected_code=0);
         if(result.channel_id!==channel_id || job.channel_id!==channel_id ||
@@ -50,5 +59,6 @@ class pdma_task_checker extends uvm_object;
     function void interrupt_result(pdma_result result);
         if(result.channel_id!==channel_id || $isunknown(result.cause) || result.cause==0)
             `uvm_fatal("TASK_IDENTITY","IRQ handler result has wrong channel or no cause")
+        irq_service.sample(result.outcome);
     endfunction
 endclass

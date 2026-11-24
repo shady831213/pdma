@@ -1,5 +1,140 @@
 # Scenario-level verification checkpoints
 
+## Mixed Copy traffic and channel configuration lifetime
+
+Each mixed run submits eight checked tasks per physical channel. Each channel
+uses every Linear/SG endpoint pair with Fence polling and with a Trap after the
+Fence. The order, source and destination split points, contexts and AXI delays
+vary with the seed. The register case separately verifies that disabling a
+configured channel retains its ring-context lock. It checks the actual write
+error, retained value, reset clearing and a subsequent DMA fetch using a
+replacement context on every channel.
+
+At seeds 1, 97 and 211 the mixed runs also measured memory-pin handshakes.
+Across those three runs, two channels produced 95 RLAST overtakes and 81
+switches of RID after a nonterminal beat. Eight channels produced 662 and 588
+respectively. Both profiles reached eight outstanding reads. The mixed runs
+saw zero B overtakes. The independent reset case at seed 41 held one
+channel's B and observed two peer B overtakes on each profile before releasing
+the held response. The peer Fence, target reset-busy state and eventual reset
+completion were checked in that case.
+
+The first run with separate IRQ service coverage reached 3/3 result bins
+across the design. The per-instance report showed only channel zero had
+serviced a fatal interrupt. The fatal tests now trigger command-read and
+event-write failures on each channel in turn and require a healthy peer to
+finish before software resets the failed channel. Group detail is generated
+for fully covered group types as well, so a missing instance bin stays visible
+even when the type-level percentage reaches 100%.
+
+The final testbench manifest starts with `04570a4cfcec9f76`. Against the
+same RTL snapshots as the AXI receipt checkpoint below, all 44 DUT tests
+passed at seeds 19 and 41 on each profile. Each coverage merge contains 88
+passing runs. Each profile also rejected all nine checker mutations.
+
+| Channels | Checked endpoint pair × completion path × channel | IRQ results across instances | Line | Branch | Condition | Extracted FSM transitions | RTL toggle | External port toggle |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 | 16/16 | 6/6 | 96.14% | 91.34% | 80.82% | 26.54% | 54.86% | 64.08% |
+| 8 | 64/64 | 24/24 | 94.88% | 90.46% | 77.18% | 19.96% | 41.95% | 66.23% |
+
+The IRQ counts require all three checked service results on each physical
+channel. On eight channels the control/register subtree's branch coverage
+increased from 85.14% to 87.74%. Extracted FSM coverage stayed at 364/1,824
+transitions. Explicit coverage of command and SG lifecycle transitions across
+stall, fault, resume and reset remains open.
+
+## AXI read/write receipt arbitration
+
+The eight-channel run at seed 41 exposed a one-cycle delay between a payload
+RLAST and its dependent write. At burst index 29 the endpoint accepted RLAST
+and B on the same edge. Its previous uncontended read grant had given the next
+tie to B. The read receipt waited a cycle before crossing to the core. With
+continuous traffic thereafter the write stream could sustain one beat per
+cycle, but could never recover that cycle. At seed 11 an immediately following
+descriptor RLAST also saw RVALID high and RREADY low while the B won the grant.
+
+The merger now records when a B actually waits behind a read. An initial tie
+forwards R and a waiting B takes the next available grant, including after a
+downstream stall. `ReceiptPriorityTest` reproduced the dropped RREADY cycle
+on the previous RTL. As a sensitivity check, unconditional read priority
+failed its deferred-write assertion. All 35 native tests passed on CC (stride
+1 validation) and Cranelift with the fix.
+
+On the corrected eight-channel DUT, burst 29 at seed 41 went from 13 to 12
+bus cycles between its last R and first W handshake. At seed 11 the blocked
+RLAST cycle disappeared. The original write budget and Fence/data checks were
+unchanged. Of 11 matched throughput seeds (1, 7, 11, 19, 23, 41, 53, 97, 211,
+503, 997), five had failed before the fix (1, 11, 23, 41, 97). All 11 passed
+afterward. In each run channel 0 transferred 2,048 beats in 2,216 cycles per
+direction with 168 peer descriptor R beats. All eight tasks passed the memory
+and Fence checks, and their 128 KiB batch took 16,988 bus cycles from first
+descriptor to last Fence.
+
+Both profiles passed all 42 DUT scenarios at seeds 19 and 41 and rejected all
+nine checker mutations per profile. The whole-DMA instance reports each merge
+84 passing runs. The design digests below identify the corrected snapshots.
+
+| Channels | Design digest (prefix) | Line | Branch | Condition | Extracted FSM transitions | RTL toggle | External port toggle |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 | `61f559b1de2d8b29` | 95.94% | 90.97% | 80.30% | 26.54% | 53.05% | 62.90% |
+| 8 | `ebdfd68f862fbe12` | 93.85% | 88.27% | 75.14% | 19.96% | 38.77% | 65.07% |
+
+## Whole-DMA coverage at `a26e1f99`
+
+The 32-bit register / 64-bit memory profiles ran the same 42 DUT tests at
+seeds 19 and 41. The two-channel regression passed 84/84. The eight-channel
+regression passed 83/84 and failed one throughput check. Each profile also
+rejected all nine checker mutations. Only passing DUT runs contributed
+coverage, with a separate native merge per elaboration.
+
+| Metric (covered / measured) | 2 channels, 84 runs | 8 channels, 83 passing runs |
+| --- | ---: | ---: |
+| Line | 1,890 / 1,970 (95.94%) | 3,172 / 3,380 (93.85%) |
+| Branch | 735 / 808 (90.97%) | 1,407 / 1,594 (88.27%) |
+| Condition | 1,385 / 1,728 (80.15%) | 2,307 / 3,078 (74.95%) |
+| Extracted FSM transitions | 121 / 456 (26.54%) | 364 / 1,824 (19.96%) |
+| Toggle across the RTL instance tree | 70,044 / 132,052 (53.04%) | 107,692 / 277,830 (38.76%) |
+| External DMA port toggle | 746 / 1,186 (62.90%) | 790 / 1,214 (65.07%) |
+| Current scenario covergroup | 18 / 19 bins | 18 / 19 bins |
+
+RTL counts span the AXI-Lite frontend, per-channel registers, command fetch
+and arbitration, shared execution, CDC transport and memory bus endpoint,
+including their shared-cell instances. External port counts combine direct
+top ports, register bus signals and memory bus signals. For eight channels
+these contribute 29/44, 182/312 and 579/858 toggle directions respectively.
+Unused port bits remain in the denominator. The [report guide](README.md)
+describes the instance scope and how to locate missing bins.
+
+| Eight-channel RTL instance | Line | Branch | Condition | Toggle |
+| --- | ---: | ---: | ---: | ---: |
+| AXI-Lite frontend | 97.80% | 90.62% | 82.18% | 41.43% |
+| Control and channel registers | 89.36% | 85.14% | 66.42% | 19.70% |
+| Commands and execution | 95.90% | 90.50% | 78.59% | 30.98% |
+| CDC transport | 100.00% | 100.00% | 98.35% | 90.82% |
+| Memory bus endpoint | 96.99% | 89.26% | 87.18% | 82.02% |
+
+The eight-channel `pdma_multichannel_throughput_test` at seed 41 observed
+2,048 payload beats in each direction. There were 168 read gaps, 169 write
+gaps, 168 competing descriptor beats and zero additional write-cycle allowance.
+An isolated replay at this revision and at the pre-SG revision `9f2ee362`
+reproduced the same counts and failure. The receipt arbitration fix above
+closes this failure on subsequent RTL.
+
+Three gaps matter for subsequent regression work.
+
+- One unexercised control case is changing a locked channel's ring
+  context. A frontdoor check can verify the access error and the retained value.
+- Native FSM extraction found only `CopyWindow` state variables. It saw
+  84/102 states with two channels and 284/408 with eight. Command and SG
+  phases held in packed contexts need explicit transition coverage.
+- `IRQ_NOTIFICATION` was the sole missing scenario bin. Software checks the
+  interrupt cause and resolves a successful Trap/Fence to a task success
+  before that collector samples. Channel IRQ service needs its own observation
+  point. Directed scenarios passed for ring wrap, peer IRQ, global reset and
+  a peer write response overtaking a retained response during reset. The 19
+  task bins do not measure combinations of these behaviors. See the
+  [whole-DMA coverage requirements](requirements.md#whole-dma-coverage-review).
+
 ## Independent scatter/gather Copy
 
 With the upgraded compiler at PDMA checkpoint `9f2ee362`, the pre-SG

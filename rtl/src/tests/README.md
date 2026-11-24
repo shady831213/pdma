@@ -44,6 +44,7 @@ The configurable-resource tests exercise directional credits, retained rows and 
 | `FetchWindowTest` | Withhold R until two complete descriptors have issued; verify capacity, ordered error delivery and reset |
 | `IndependentFetchTest` | Hold A’s fetch returns while B completes a Fence and reset A between its terminal responses |
 | `FetchArbitrationTest` | Execution wins a free AR; a stalled descriptor AR retains priority and permits an independent write |
+| `ReceiptPriorityTest` | Simultaneous R/B after an uncontended read; the next RLAST transfers back-to-back and the deferred B receives the next grant after backpressure |
 | `MemoryCapacityTest` | Independent one-read/three-write credits, held terminal responses and ordered tag/credit return |
 | `WindowSingleTest`, `WindowThreeTest` | One and three retained rows, wrap/reuse beyond one window and terminal drain |
 | `NarrowFenceOrderTest` | 32-bit memory, three retained rows, bounded descriptor fetch and two-beat Fence64 after Copy |

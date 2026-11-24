@@ -69,10 +69,12 @@ pub module CopyMemoryEndpoint::<
         port : writes,
         axi  : lanes ,
     );
-    var cursor  : logic   ;
-    var selected: logic<2>;
-    var ready   : logic   ;
-    assign selected        = common_cell::RoundRobin::<2>::select({writes.returned, reads.returned}, cursor);
+    var write_deferred: logic   ;
+    var selected      : logic<2>;
+    var ready         : logic   ;
+    // Free the read lane for the next RLAST and forward Copy data on the first
+    // tie. A write that actually waited takes the next available grant.
+    assign selected        = common_cell::RoundRobin::<2>::select({writes.returned, reads.returned}, write_deferred);
     assign reads.accepted  = selected[0] && ready;
     assign writes.accepted = selected[1] && ready;
     // Register the merged receipt; a newly arriving contender cannot replace a
@@ -93,9 +95,9 @@ pub module CopyMemoryEndpoint::<
     );
     always_ff (clk, rst_n) {
         if_reset {
-            cursor = 0;
+            write_deferred = 0;
         } else if ready && |selected {
-            cursor = selected[0];
+            write_deferred = selected[0] && writes.returned;
         }
     }
 }

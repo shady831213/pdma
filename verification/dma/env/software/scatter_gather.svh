@@ -5,14 +5,21 @@ class pdma_sg_task extends pdma_task;
     bit source_sg=1, dest_sg=1, short_destination;
     localparam int START=1, EMPTY=2, SECOND=3, COUNT=5;
     localparam int BEAT=pdma_configuration::MEMORY_BEAT_BYTES;
-    bit[31:0] list_context;
+    rand bit[31:0] list_context;
+    rand int unsigned source_first, dest_first;
+    constraint fragments {
+        source_first>0; source_first<length;
+        dest_first>0; dest_first<length;
+        solve length before source_first, dest_first;
+    }
     pdma_buffer tables[2];
     function new(string name="sg_task");
         super.new(name); length=3*BEAT; payload_alignment=BEAT;
+        source_first=BEAT; dest_first=2*BEAT;
         source_context=11; dest_context=22; list_context=33;
     endfunction
     function int unsigned first_length(bit dst);
-        return dst ? 2*BEAT : BEAT;
+        return dst ? dest_first : source_first;
     endfunction
     function longint unsigned address_at(bit dst,int unsigned index);
         longint unsigned base=dst ? dest_address : source_address;

@@ -28,8 +28,12 @@ main() {
     printf '%s\n' "$test_name" > test.txt
     mkdir tmp
     export TMPDIR="$run/tmp"
+    metrics=line+cond+tgl+branch
+    if [[ -f $build/coverage-metrics.txt ]]; then
+        metrics=$(<"$build/coverage-metrics.txt")
+    fi
     command=("$build/simv" "+ntb_random_seed=$seed" "+UVM_TESTNAME=$test_name"
-        +UVM_VERBOSITY=UVM_LOW -cm line+cond+tgl+branch -cm_dir "$run/coverage.vdb"
+        +UVM_VERBOSITY=UVM_LOW -cm "$metrics" -cm_dir "$run/coverage.vdb"
         -l simulation.log "$@")
     printf '%q ' "${command[@]}" > invocation.txt
     printf '\n' >> invocation.txt

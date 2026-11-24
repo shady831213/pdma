@@ -1,16 +1,30 @@
 virtual class pdma_fatal_test extends pdma_base_test;
     protected bit event_failure;
     function new(string name,uvm_component parent); super.new(name,parent); endfunction
+    virtual function void build_phase(uvm_phase phase);
+        super.build_phase(phase);
+        expected_cases=platform.channel_count*(platform.channel_count>1 ? 2 : 1);
+    endfunction
     virtual task run_scenario();
-        pdma_task_flow flow_=env.device.task_flow();
-        pdma_task job=settings(16);
-        flow_.open(job);
-        if(event_failure) job.opcode=COMMANDHEADER_OPCODE_ATOMIC;
-        inject(event_failure,0,event_failure ? flow_.channel.event_address : flow_.channel.next_command_address());
-        flow_.submit();
-        if(event_failure) flow_.expect_interrupt(TASK_FATAL,pdma_rtl_ChannelRecoveryLayout::FATAL_CODE_EVENTWRITE);
-        else flow_.expect_fatal(pdma_rtl_ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD);
-        platform.fault_enabled=0; flow_.channel.reset(); flow_.close(); cases++;
+        foreach(env.device.channels[i]) begin
+            pdma_task_flow failed=env.device.task_flow(i);
+            pdma_task job=settings(16);
+            job.expect_payload_unchanged=1;
+            if(event_failure) job.opcode=COMMANDHEADER_OPCODE_ATOMIC;
+            failed.open(job);
+            inject(event_failure,0,event_failure ? failed.channel.event_address : failed.channel.next_command_address());
+            failed.submit();
+            if(event_failure) failed.expect_interrupt(TASK_FATAL,pdma_rtl_ChannelRecoveryLayout::FATAL_CODE_EVENTWRITE);
+            else failed.expect_fatal(pdma_rtl_ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD);
+            platform.fault_enabled=0;
+            if(platform.channel_count>1) begin
+                pdma_task_flow peer=env.device.task_flow((i+1)%platform.channel_count);
+                peer.open(settings()); peer.submit(); peer.expect_fence(); peer.close(); cases++;
+            end
+            if(env.control.fatal_irq!==0 || env.device.driver.fatal_irqs_serviced!=0)
+                `uvm_fatal("FATAL_SCOPE","Channel failure raised a device fatal interrupt")
+            failed.channel.reset(); failed.close(); cases++;
+        end
     endtask
 endclass
 

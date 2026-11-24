@@ -199,7 +199,7 @@ control-budget 综合只给 RAM 保留边界负载模型；不能把 placeholder
 | [CopyEngine][engine]：`eligible/choice/chosen` | 合法 Idle 新任务、可运行 Copy、待重试 FenceWrite | `RoundRobin<8>::select(eligible,cursor)`；超出实例数的 bit 恒零 | grant 时锁存 owner，并按实际 C 回绕 cursor；健康 command 保持授权 |
 | [CopyWindow][window]：`read_choice/write_choice` | 当前 channel 的 Read/Write 行 | 从退休 head 起找第一个对应状态行 | head 只在按序写退休时前进；这是有序优先选择，不是每 cycle 轮换 slot |
 | [CopyWindow][window]：`selected_slot/memory.valid` | prepared write、可直接转发的 R、候选读 | prepared write 优先；可用返回直通其次；然后发读 | 写数据尚在同步 RAM 加载中时，可继续发其它读；stop_issue 关闭所有新发射 |
-| `CopyMemoryEndpoint`：`selected/cursor/result` | reader receipt、writer receipt | 2 路 RR | 只有合并入口实际握手才前进；result 寄存器负责稳定保持 |
+| `CopyMemoryEndpoint`：`selected/write_deferred/result` | reader receipt、writer receipt | 首次竞争选 R；若 B 因这次握手等待，下一个可用 grant 给 B | 两路持续有效时交替；合并入口停顿时保留优先权，result 寄存器保持已选回执 |
 
 寄存器 bank 的 `matched` 选择是**地址译码**，地址窗口互斥，不是多个请求者争抢
 一个资源，因此不应叫仲裁。
@@ -554,6 +554,11 @@ bus t=12     第一拍 W 握手
 12 bus cycles。其它 burst 的 R/W 可以并行，所以交接延迟 12 并不等于每个 burst
 之间存在 12 拍 bubble。一次 shared return 仲裁竞争、RAM 回退、异步相位变化或
 任意下游背压都会改变单笔延迟；详见 [实测与指标定义](performance.md)。
+
+两个回执第一次同时就绪时，先释放 reader 的单项缓冲，下一拍 RLAST 可以连续握手，
+当前 Copy 的数据也能及时送向写端。此时 B 仍保存在 writer 的回执缓冲中。
+合并入口记录这笔实际被延后的 B；即使入口随后反压，它也会在入口恢复时优先交付。
+单独交付一个 R 不改变下一次首次竞争的优先级。
 
 ### 10.3 同拍退休/复用与背压保持
 

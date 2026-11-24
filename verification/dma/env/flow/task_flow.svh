@@ -20,8 +20,13 @@ class pdma_task_flow extends uvm_object;
     virtual task submit();
         channel.submit(job); published=1;
     endtask
-    function void publish_observation(pdma_result result);
+    function void publish_observation(pdma_result result,bit via_irq=0);
         pdma_observation item=new;
+        pdma_sg_task sg;
+        if($cast(sg,job)) begin
+            item.source_sg=sg.source_sg; item.dest_sg=sg.dest_sg;
+        end
+        item.via_irq=via_irq;
         item.channel_id=job.channel_id; item.task_id=job.id; item.outcome=result.outcome;
         item.length=job.length;
         item.source_lane=job.source_address%pdma_configuration::MEMORY_BEAT_BYTES;
@@ -35,10 +40,10 @@ class pdma_task_flow extends uvm_object;
         item.latency=$realtime-job.submitted_at;
         observations.write(item);
     endfunction
-    local function void check_result(pdma_result result,pdma_outcome expected_outcome,int code=0);
+    local function void check_result(pdma_result result,pdma_outcome expected_outcome,int code=0,bit via_irq=0);
         checker_.check(job,result,expected_outcome,memory,code);
         terminal_outcome=result.outcome;
-        publish_observation(result);
+        publish_observation(result,via_irq);
     endfunction
     task expect_fence();
         pdma_result result=new;
@@ -107,7 +112,7 @@ class pdma_task_flow extends uvm_object;
             result.task_id=result.value;
             result.outcome=TASK_SUCCESS;
         end
-        check_result(result,outcome,code);
+        check_result(result,outcome,code,1);
     endtask
     task close();
         if(published && !job.terminal_checked)

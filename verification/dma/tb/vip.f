@@ -2,7 +2,7 @@
 +incdir+${SVT_COMMON_HOME}/sverilog/src/vcs
 +incdir+${SVT_AMBA_HOME}/sverilog/include
 +incdir+${SVT_AMBA_HOME}/sverilog/src/vcs
-+incdir+.
++incdir+${PDMA_TB_ROOT}
 +define+SVT_AMBA_ENABLE_C_BASED_MEM
 +define+SVT_AXI_EXCLUDE_ICN_VIP
 +define+SVT_AXI_MAX_ADDR_USER_WIDTH=35
@@ -14,15 +14,15 @@ ${SVT_COMMON_HOME}/sverilog/include/svt_mem.uvm.pkg
 ${SVT_COMMON_HOME}/sverilog/include/svt_svc.uvm.pkg
 ${SVT_AMBA_HOME}/sverilog/include/svt_axi.uvm.pkg
 -f ${JVSUK_HOME}/etc/jvs.f
-tb/control_if.sv
-tb/generated/contract_records.sv
-tb/generated/register_model.sv
-env/package.sv
-tests/package.sv
-tb/clock_domain.sv
-checkers/lifecycle.sv
-tb/bindings.sv
-env/coverage/pipeline_timing.sv
-env/coverage/axi_activity.sv
-tb/dut.sv
-tb/top.sv
+${PDMA_TB_ROOT}/tb/control_if.sv
+${PDMA_TB_ROOT}/tb/generated/contract_records.sv
+${PDMA_TB_ROOT}/tb/generated/register_model.sv
+${PDMA_TB_ROOT}/env/package.sv
+${PDMA_TB_ROOT}/tests/package.sv
+${PDMA_TB_ROOT}/tb/clock_domain.sv
+${PDMA_TB_ROOT}/checkers/lifecycle.sv
+${PDMA_TB_ROOT}/tb/bindings.sv
+${PDMA_TB_ROOT}/env/coverage/pipeline_timing.sv
+${PDMA_TB_ROOT}/env/coverage/axi_activity.sv
+${PDMA_TB_ROOT}/tb/dut.sv
+${PDMA_TB_ROOT}/tb/top.sv

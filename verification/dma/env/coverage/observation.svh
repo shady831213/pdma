@@ -4,5 +4,6 @@ class pdma_observation extends uvm_object;
     pdma_outcome outcome;
     realtime latency;
     bit cross_page, event_cross_page, fence_wide;
+    bit source_sg, dest_sg, via_irq;
     function new(string name="observation"); super.new(name); endfunction
 endclass

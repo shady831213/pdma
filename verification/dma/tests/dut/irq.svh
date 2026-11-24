@@ -15,6 +15,7 @@ class pdma_irq_enable_level_test extends pdma_base_test;
         channel.write_reg(channel.registers.control_block.irq_block.enable_reg,
             32'b1 << channel.registers.control_block.irq_block.enable_reg.enabled_field.get_lsb_pos());
         flow_.wait_irq_result(wake);
+        flow_.checker_.interrupt_result(wake);
         if(!wake.cause[channel.registers.control_block.irq_block.cause_reg.error_field.get_lsb_pos()] || env.control.irq[channel.channel_id]!==0)
             `uvm_fatal("IRQ_REPLAY","ISR must observe the retained stopping error and disable its IRQ")
         channel.reset(); flow_.close(); cases++;

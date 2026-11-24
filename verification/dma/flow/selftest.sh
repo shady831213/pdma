@@ -131,9 +131,30 @@ cat > "$fixture/urg" <<'URG'
 #!/usr/bin/env python3
 # Launcher/input-selection fixture only; native merge semantics are tested with URG.
 from pathlib import Path
+import os
 import sys
 import xml.etree.ElementTree as ET
 args=sys.argv[1:]
+if '-metric' in args and args[args.index('-metric')+1]=='group':
+    result=Path(args[args.index('-report')+1])
+    result.mkdir()
+    # Native brief reports omit groups whose type-level bins are all covered.
+    detail='Group : pdma_vip_pkg::partial\n'
+    if 'brief' not in args:
+        detail+='Group : pdma_vip_pkg::complete\n'
+    (result/'grpinfo.txt').write_text(detail)
+    sys.exit(0)
+if '-hier' in args:
+    result=Path(args[args.index('-report')+1])
+    result.mkdir()
+    instances=['cfg','memory'] if result.name=='bus-ports' else ['dma','frontend','control','commands','transport','endpoint']
+    if os.getenv('FIXTURE_MISSING_CONTROL') and result.name=='rtl':
+        instances.remove('control')
+    root_count=2 if result.name=='bus-ports' else 1
+    (result/'hierarchy.txt').write_text(f'100.00 100.00 {root_count}/{root_count} pdma_vip_top\n'+
+        ''.join(f'100.00 100.00 1/1 {name}\n' for name in instances))
+    (result/'modinfo.txt').write_text('fixture coverage detail\n')
+    sys.exit(0)
 start=args.index('-dir')+1
 end=args.index('-dbname')
 merged=ET.Element('test')
@@ -149,12 +170,21 @@ if '-report' in args:
     report=Path(args[args.index('-report')+1])
     report.mkdir()
     (report/'dashboard.txt').write_text('fixture coverage report\n')
+    (report/'groups.txt').write_text('COVERED EXPECTED AUTO BIN MAX\n1 2 pdma_vip_pkg::partial\n1 1 pdma_vip_pkg::complete\n')
 URG
 chmod +x "$fixture/urg"
 if PDMA_COVERAGE_TOOL="$fixture/urg" bash "$flow/coverage.sh" "$fixture/build" "$evidence/tb" "$evidence/tb-coverage" > "$evidence/tb-coverage.log" 2>&1; then exit 1; fi
 [[ ! -e $evidence/tb-coverage ]]
 printf 'PASS TB selftest coverage excluded from DUT reports\n' >> "$evidence/suite-assertions.txt"
 PDMA_COVERAGE_TOOL="$fixture/urg" bash "$flow/coverage.sh" "$fixture/build" "$evidence/failure" "$evidence/coverage" > "$evidence/coverage.log" 2>&1
+cmp "$evidence/failure/results.txt" "$evidence/coverage/regression-results.txt"
+grep -Fxq 'total  3/3  100.00%' "$evidence/coverage/dma/external-ports.txt"
+grep -Fxq 'Group : pdma_vip_pkg::complete' "$evidence/coverage/dma/functional.txt"
+mkdir "$evidence/missing-control"
+if FIXTURE_MISSING_CONTROL=1 python3 "$flow/dut_coverage.py" "$evidence/missing-control" \
+    --tool "$fixture/urg" --metrics line+cond+tgl+branch > "$evidence/missing-control.log" 2>&1; then exit 1; fi
+grep -Fq "no measured coverage for ['control']" "$evidence/missing-control.log"
+printf 'PASS coverage rejects a report missing the control subtree\n' >> "$evidence/assertions.txt"
 [[ $(wc -l < "$evidence/coverage/databases.list") == 3 ]]
 ! grep -Eq '/negative-|/pdma_aligned_copy_test/seed-1/' "$evidence/coverage/databases.list"
 python3 - "$evidence/coverage/merge-result.json" <<'PY'
@@ -189,6 +219,6 @@ while read -r group; do
     printf 'group=%s live_members=0\n' "$group" >> "$evidence/cancel-observed.txt"
 done < <(cat "$evidence/cancel/pdma_aligned_copy_test"/seed-*/group.txt)
 printf 'PASS cancellation exit=143 all simulator/TERM-resistant descendant processes stopped\n'  >> "$evidence/assertions.txt"
-sha256sum "$flow"/*.sh "$flow"/*.list > "$evidence/source.sha256"
+sha256sum "$flow"/*.sh "$flow"/*.py "$flow"/*.list > "$evidence/source.sha256"
 printf 'PDMA_FLOW_SELFTEST_PASS\n'
 cat "$evidence/assertions.txt"

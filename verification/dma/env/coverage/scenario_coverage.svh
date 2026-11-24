@@ -5,7 +5,10 @@ class pdma_scenario_coverage extends uvm_subscriber#(pdma_observation);
     realtime latency_sum, latency_min=1s, latency_max;
     covergroup scenarios with function sample(pdma_observation item);
         option.per_instance=1;
-        outcome: coverpoint item.outcome;
+        outcome: coverpoint item.outcome {
+            bins task_results[]={TASK_SUCCESS,TASK_FAULT,TASK_ERROR,TASK_FATAL,TASK_RESET};
+            illegal_bins service_only={IRQ_NOTIFICATION};
+        }
         length: coverpoint item.length {bins short_length={[0:16]}; bins medium_length={[17:64]}; bins long_length={[65:$]};}
         source_alignment: coverpoint item.source_lane {bins aligned={0}; bins unaligned={[1:pdma_configuration::MEMORY_BEAT_BYTES-1]};}
         dest_alignment: coverpoint item.dest_lane {bins aligned={0}; bins unaligned={[1:pdma_configuration::MEMORY_BEAT_BYTES-1]};}
@@ -13,10 +16,21 @@ class pdma_scenario_coverage extends uvm_subscriber#(pdma_observation);
         event_boundary: coverpoint item.event_cross_page iff(item.outcome==TASK_ERROR);
         fence_width: coverpoint item.fence_wide;
     endgroup
-    function new(string name,uvm_component parent); super.new(name,parent); scenarios=new; endfunction
+    covergroup completed_copies with function sample(pdma_observation item);
+        option.per_instance=1;
+        channel: coverpoint item.channel_id {bins owners[]={[0:`PDMA_CHANNEL_COUNT-1]};}
+        source_sg: coverpoint item.source_sg;
+        dest_sg: coverpoint item.dest_sg;
+        via_irq: coverpoint item.via_irq;
+        checked_paths: cross channel, source_sg, dest_sg, via_irq;
+    endgroup
+    function new(string name,uvm_component parent);
+        super.new(name,parent); scenarios=new; completed_copies=new;
+    endfunction
     virtual function void write(pdma_observation t);
         scenarios.sample(t); observations++;
         if(t.outcome==TASK_SUCCESS) begin
+            completed_copies.sample(t);
             completions++; bytes+=t.length; latency_sum+=t.latency;
             if(t.latency<latency_min) latency_min=t.latency;
             if(t.latency>latency_max) latency_max=t.latency;

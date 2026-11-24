@@ -22,13 +22,16 @@ main() {
     export JVSUK_HOME SVT_COMMON_HOME SVT_AMBA_HOME
     pdma_new_run "$build"
     cp "$snapshot/configuration.json" "$build/configuration.txt"
+    metrics=line+cond+tgl+branch+fsm
+    printf '%s\n' "$metrics" > "$build/coverage-metrics.txt"
     bash "$root/verification/dma/flow/prepare-jarvisuk.sh" "$JVSUK_HOME" "$build/jarvisuk"
     export JVSUK_HOME="$build/jarvisuk"
     (cd "$snapshot" && sha256sum --check --status snapshot.sha256)
     custody=$(python3 "$root/tools/rtl-flow/ip/bundle.py" locate "$snapshot" common_cell verification/cdc_custody.sv)
     transfer=$(python3 "$root/tools/rtl-flow/ip/bundle.py" locate "$snapshot" common_cell verification/ready_valid.sv)
-    cd "$root/verification/dma"
-    find tb env tests checkers -type f -print0 | sort -z | xargs -0 sha256sum > "$build/testbench.sha256"
+    export PDMA_TB_ROOT="$root/verification/dma"
+    (cd "$PDMA_TB_ROOT" && find tb env tests checkers -type f -print0 | sort -z | xargs -0 sha256sum) > "$build/testbench.sha256"
+    cd "$build"
     find "$JVSUK_HOME/src" "$JVSUK_HOME/include" "$JVSUK_HOME/interfaces" "$JVSUK_HOME/pkg" "$JVSUK_HOME/etc" \
         -type f -print0 | sort -z | xargs -0 sha256sum > "$build/jarvisuk.sha256"
     find "$SVT_COMMON_HOME/sverilog" "$SVT_AMBA_HOME/sverilog" \
@@ -37,15 +40,15 @@ main() {
         "$root/tools/rtl-flow/ip/bundle.py" \
         "$root/verification/dma/flow/prepare-jarvisuk.sh" \
         "$root/verification/dma/dependencies/jarvisuk.lock.json" \
-        "$snapshot/snapshot.sha256" "$build/configuration.txt" > "$build/flow.sha256"
+        "$snapshot/snapshot.sha256" "$build/configuration.txt" "$build/coverage-metrics.txt" > "$build/flow.sha256"
     pdma_execute "${PDMA_COMPILE_TIMEOUT:-1200}" "$build/console.log" "${PDMA_SIM_COMPILER:-vcs}" \
         -full64 -sverilog -ntb_opts uvm-1.2 -timescale=1ns/1ps -j4 \
         "+incdir+$snapshot" \
         "+define+DESIGNWARE_INCDIR=$DESIGNWARE_HOME" \
-        -cm line+cond+tgl+branch -cm_dir "$build/coverage.vdb" \
-        -f "$snapshot/sources.f" "$custody" "$transfer" -f tb/vip.f -top pdma_vip_top \
+        -cm "$metrics" -cm_dir "$build/coverage.vdb" \
+        -f "$snapshot/sources.f" "$custody" "$transfer" -f "$PDMA_TB_ROOT/tb/vip.f" -top pdma_vip_top \
         -Mdir="$build/csrc" -o "$build/simv" -l "$build/compile.log"
-    sha256sum --check --status "$build/testbench.sha256"
+    (cd "$PDMA_TB_ROOT" && sha256sum --check --status "$build/testbench.sha256")
     sha256sum --check --status "$build/jarvisuk.sha256"
     sha256sum --check --status "$build/vip.sha256"
     sha256sum --check --status "$build/flow.sha256"

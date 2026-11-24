@@ -172,6 +172,50 @@ records the original source count. Summary reporting avoids the installed tool's
 detailed-report failure without excluding metrics or bins. See the latest
 [results](results.md) for native merge equivalence and remaining coverage gaps.
 
+Use the following files under the coverage output to review the **entire DMA**.
+Each configuration has a separate merged database and report.
+
+| Report | Measured objects |
+| --- | --- |
+| `dma/rtl/hierarchy.txt` | Line, condition, branch, toggle and compiler-extracted FSM coverage for `pdma_vip_top.dut.integration.dma` and its descendants. Includes the AXI-Lite frontend, control/registers, command fetch and execution, transport, AXI endpoint, and their instantiated shared cells. The two verification-only bound checker types are excluded. |
+| `dma/logic-holes/modinfo.txt` | Uncovered lines, conditions, branches and extracted FSM bins with emitted source locations. Each module page also identifies its instances. |
+| `dma/module-ports/hierarchy.txt` | Port-only toggle across that same hierarchy, including the ports between modules. |
+| `dma/top-ports/hierarchy.txt` | Direct HDL ports of the top DMA instance, including clocks, reset, interrupts, fatal and ATOP. |
+| `dma/bus-ports/hierarchy.txt` | Toggle directions for each AXI-Lite and memory interface instance. The simulator attributes the modport signals to `dut.cfg` and `dut.memory` in the wrapper. |
+| `dma/external-ports.txt` | External DMA port toggle, summed over the direct top ports and the two bus interfaces. |
+| `dma/functional.txt` | Task outcomes, checked Copy paths and channel IRQ service results from the successful runs. The original `report/groups.txt` also contains VIP groups. |
+
+The `dma` row of the RTL hierarchy aggregates the descendant **instances**.
+Use its child rows for diagnosis. Counts for a parent and its children overlap.
+The coverage directory retains the complete run list in `regression-results.txt`.
+A report can summarize the successful cases of a failing regression. Check the
+run list for failures and `databases.list` for the inputs to that report.
+FSM extraction depends on the elaborated state representation; inspect the
+detected state variables before using the FSM score to close a requirement.
+Older coverage builds have no FSM instrumentation. Unused and static port bits
+remain in the measured denominator.
+
+`pdma_mixed_copy_test` gives each physical channel all four source/destination
+endpoint pairs with both Fence polling and Trap delivery. Each seed shuffles
+the combinations, submission and collection order, and varies the two SG split
+points, byte alignment, page placement, transfer size and Fence width. The
+`completed_copies.checked_paths` cross samples after the Fence, payload and
+guard checks. A separate per-channel IRQ covergroup samples the handler result
+after its owner and cause have been checked, before the flow resolves a Trap
+to the preceding task's Fence. Run the mixed test with `+PDMA_AXI_ACTIVITY`
+to measure the actual memory bus ordering under that traffic.
+
+`pdma_ring_context_lock_test` tries to change every channel's ring selector
+through the register bus while enabled and again while disabled. It checks the
+error response and retained value, completes channel reset, and rebinds the
+rings under a different selector. A subsequent Copy and Fence must complete
+using the new ring permissions.
+
+The command-read and event-write fatal tests target every channel in turn.
+On a multichannel DUT the next channel must finish a Copy and Fence before
+software resets the affected channel. Software polls the command-read fatal code
+and obtains the event-write fatal code from the affected channel's handler.
+
 `tb/generated/contract_records.sv` is generated directly from the contract's schema through
 the public export API. Typed byte images, field accessors, enum values, sizes and
 alignments replace handwritten descriptor offsets. Regenerate with

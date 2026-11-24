@@ -10,6 +10,7 @@ class pdma_channel_env extends uvm_env;
         super.build_phase(phase);
         checker_=pdma_task_checker::type_id::create("checker",this);
         checker_.channel_id=driver.channel_id;
+        checker_.irq_service.set_inst_name(get_full_name());
         irq=pdma_irq_env#(pdma_channel)::type_id::create("irq",this);
         irq.handler=new(driver);
     endfunction

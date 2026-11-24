@@ -1,0 +1,70 @@
+#[test(memory_contended_read_and_write_receipts)]
+module ReceiptPriorityTest {
+    alias package B = $std::axi4_pkg::<64, 8, 1, 35, 1, 2, 35, 2>;
+    inst clk : $tb::clock_gen #( period: 10 );
+    inst rst : $tb::reset_gen ( clk );
+    inst port: CopyMemoryPort;
+    inst axi : $std::axi4_if::<B>;
+    inst dut: CopyMemoryEndpoint::<B> (
+        clk             ,
+        rst_n      : rst,
+        fetch_valid: 0  ,
+        fetch_ready: _  ,
+        fetch      : '0 ,
+        port            ,
+        axi             ,
+    );
+    initial {
+        port.valid    = 0;
+        port.accepted = 1;
+        port.request  = '0;
+        axi.arready   = 1;
+        axi.awready   = 1;
+        axi.wready    = 1;
+        axi.rvalid    = 0;
+        axi.rid       = 1;
+        axi.rlast     = 1;
+        axi.rresp     = 0 as B::resp_t;
+        axi.ruser     = 0;
+        axi.bvalid    = 0;
+        axi.bid       = 1;
+        axi.bresp     = 0 as B::resp_t;
+        axi.buser     = 0;
+        rst.assert();
+        clk.next(3);
+        port.valid        = 1;
+        port.request.size = 3;
+        for tag in 1..5 {
+            port.request.tag.slot = tag as CopyMemory::SLOT_BITS;
+            port.request.write    = tag == 4;
+            port.request.address  = (tag * 8) as 64;
+            $assert(port.ready, "ADMIT_TRANSFER");
+            clk.next();
+        }
+        port.valid = 0;
+        clk.next();
+        axi.rvalid = 1;
+        axi.rdata  = 1;
+        clk.next();
+        axi.rdata  = 2;
+        axi.bvalid = 1;
+        $assert(axi.rready && axi.bready, "SIMULTANEOUS_TERMINALS");
+        clk.next();
+        axi.bvalid = 0;
+        axi.rdata  = 3;
+        $assert(port.returned && port.receipt.tag.slot == 1, "FIRST_READ");
+        $assert(axi.rready, "ISOLATED_TIE_MUST_NOT_STALL_NEXT_RLAST");
+        clk.next();
+        axi.rvalid    = 0;
+        port.accepted = 0;
+        clk.next(3);
+        $assert(port.returned && port.receipt.tag.slot == 2 && port.receipt.data == 2, "SECOND_READ_HELD");
+        port.accepted = 1;
+        clk.next();
+        $assert(port.returned && port.receipt.tag.slot == 4, "DEFERRED_WRITE_GETS_NEXT_GRANT");
+        clk.next();
+        $assert(port.returned && port.receipt.tag.slot == 3 && port.receipt.data == 3, "THIRD_READ");
+        clk.next();
+        $assert(!port.returned, "NO_EXTRA_RECEIPT");
+    }
+}

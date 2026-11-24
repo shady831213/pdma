@@ -25,6 +25,7 @@ pdma_ring_wrap_test
 pdma_same_channel_lifetime_test
 pdma_event_boundary_test
 pdma_register_model_test
+pdma_ring_context_lock_test
 pdma_zero_delay_long_test
 pdma_zero_delay_short_test
 pdma_zero_delay_batch_test
@@ -40,3 +41,4 @@ pdma_global_irq_owner_test
 pdma_sg_endpoints_test
 pdma_sg_validation_test
 pdma_sg_recovery_test
+pdma_mixed_copy_test

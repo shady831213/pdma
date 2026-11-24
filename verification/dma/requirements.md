@@ -83,6 +83,27 @@ functional and code coverage. A pass marker alone is insufficient: reject UVM
 errors/fatals, timeouts, missing test completion and vacuous activity. Coverage
 reports combine only successful seeds, excluding checker mutation runs.
 
+### Whole-DMA coverage review
+
+Review the implementation instance tree for each elaborated profile and sample
+software-visible behavior at task and channel boundaries. The following crosses
+guide constrained-random traffic and directed corner cases. Each needs observed
+evidence before it can be counted as covered.
+
+| Owner | Behaviors to distinguish |
+| --- | --- |
+| Register frontend and control | Access size and byte enables, independent AW/W arrival, channel selection, enable and mask changes with a pending cause, W1C, and channel versus global reset |
+| Command rings, fetch and grant | Empty/full, pointer wrap and refill, competing ready channels, delayed descriptor returns, and reset of a channel with accepted fetches |
+| Execution and retained data | Linear/SG endpoints, unequal boundaries, Fence and Trap ordering, payload read/write fault, Resume/reset, and completion by a peer while the owner is parked |
+| Transport and memory endpoint | Backpressure at issue and return, independent AW/W stalls, same-ID order, cross-ID completions, interleaved read beats, and reset with outstanding debt |
+| End-to-end software contract | Confirm payload and Fence memory, event contents and committed prefix, per-channel IRQ cause/level, reset drain, and resource reuse |
+
+Sample actual outcomes in the functional coverage model. A randomized setting
+for reorder, for example, is evidence of stimulus configuration; a returned
+younger transaction observed ahead of an older transaction is evidence of
+reordering. Attribute structural holes to the responsible instance and keep
+constant or unreachable bins visible with their rationale.
+
 ## Throughput and bubble qualification
 
 ### Multichannel qualification
@@ -179,7 +200,7 @@ so cancelling it affects only that reset operation.
 AXI protocol checks, DUT invariant assertions and level monitors remain active in
 ordinary verification. Scenario coverage samples completed observations.
 
-`PDMA_SUITE=dut` is the default regression suite, including the eight checker
+`PDMA_SUITE=dut` is the default regression suite, including the nine checker
 mutation cases. `PDMA_SUITE=tb-selftest` selects the independent cases listed in
 `flow/tb-selftests.list`; they do not run DMA task flows or contribute DUT coverage.
 The coverage flow rejects that suite. The same bounded parallel runner and

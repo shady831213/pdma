@@ -77,6 +77,10 @@ def main():
              ['-hier', 'rtl.hier', '-metric', logic, '-show', 'brief', logic])
     if not (output / 'logic-holes/modinfo.txt').is_file():
         raise ValueError('Missing DMA logic coverage detail')
+    if 'fsm' in args.metrics.split('+'):
+        generate(tool, output, 'fsm', ['-hier', 'rtl.hier', '-metric', 'fsm'])
+        if 'Summary for FSM ::' not in (output / 'fsm/modinfo.txt').read_text():
+            raise ValueError('Missing extracted DMA state machines')
     ports = ['-metric', 'tgl', '-tgl', 'portsonly']
     report(tool, output, 'module-ports', RTL, ports, ['dma'])
     top = report(tool, output, 'top-ports', [f'+tree {DUT} 1'], ports, ['dma'], ('brief', 'tgl'))

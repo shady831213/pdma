@@ -179,6 +179,7 @@ Each configuration has a separate merged database and report.
 | --- | --- |
 | `dma/rtl/hierarchy.txt` | Line, condition, branch, toggle and compiler-extracted FSM coverage for `pdma_vip_top.dut.integration.dma` and its descendants. Includes the AXI-Lite frontend, control/registers, command fetch and execution, transport, AXI endpoint, and their instantiated shared cells. The two verification-only bound checker types are excluded. |
 | `dma/logic-holes/modinfo.txt` | Uncovered lines, conditions, branches and extracted FSM bins with emitted source locations. Each module page also identifies its instances. |
+| `dma/fsm/modinfo.txt` | All automatically extracted machines and their individual states and transitions, including hits. Available for FSM-instrumented builds. |
 | `dma/module-ports/hierarchy.txt` | Port-only toggle across that same hierarchy, including the ports between modules. |
 | `dma/top-ports/hierarchy.txt` | Direct HDL ports of the top DMA instance, including clocks, reset, interrupts, fatal and ATOP. |
 | `dma/bus-ports/hierarchy.txt` | Toggle directions for each AXI-Lite and memory interface instance. The simulator attributes the modport signals to `dut.cfg` and `dut.memory` in the wrapper. |
@@ -215,6 +216,15 @@ The command-read and event-write fatal tests target every channel in turn.
 On a multichannel DUT the next channel must finish a Copy and Fence before
 software resets the affected channel. Software polls the command-read fatal code
 and obtains the event-write fatal code from the affected channel's handler.
+
+`pdma_execution_coverage` samples changes to the stored command and SG phase
+of each channel on adjacent core-clock edges. Its command bins track dispatch,
+completion, Fence park/replay and diagnostic publication. Its SG bins track
+endpoint selection, entry reads, decode and span handoff. Reset cleanup and SG
+restart are filtered at the updating edge so that clearing or reusing a context
+cannot count as ordinary progress. A parked payload can stay in the Copy
+phase for many clocks. The window replay scenario checks that behavior with a
+real memory fault followed by Resume and a byte-checked Fence completion.
 
 `tb/generated/contract_records.sv` is generated directly from the contract's schema through
 the public export API. Typed byte images, field accessors, enum values, sizes and

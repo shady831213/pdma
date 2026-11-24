@@ -1,8 +1,14 @@
 virtual class pdma_error_irq_test extends pdma_base_test;
     protected bit writing;
     function new(string name,uvm_component parent); super.new(name,parent); interrupt_driven=1; endfunction
+    virtual function void build_phase(uvm_phase phase);
+        super.build_phase(phase); expected_cases=platform.channel_count;
+    endfunction
     virtual task run_scenario();
-        pdma_task_flow flow_=env.device.task_flow();
+        foreach(env.device.channels[i]) check_error(i);
+    endtask
+    local task check_error(int owner);
+        pdma_task_flow flow_=env.device.task_flow(owner);
         // The fault targets the first byte after the page boundary. Keep a
         // second beat in range when the memory bus is wider than the payload.
         localparam int unsigned BEAT_BYTES=pdma_configuration::MEMORY_BEAT_BYTES;

@@ -62,3 +62,36 @@ class pdma_fence_fault_test extends pdma_fault_test;
         super.new(name,parent); writing=1; fence_target=1;
     endfunction
 endclass
+
+// The failing Fence writes a separate allocation. Its successor's marker
+// must remain untouched, and the diagnostic must identify the first Fence.
+class pdma_error_fence extends pdma_task;
+    virtual function Command_t command_record();
+        FenceCommand_t cmd=FenceCommand_t'(fence_record());
+        WordWrite_t word_value=FenceCommand_get_word(cmd);
+        WordTarget_t target=WordWrite_get_target(word_value);
+        WordTarget_set_address(target,dest_address); WordTarget_set_context(target,dest_context);
+        WordWrite_set_target(word_value,target); FenceCommand_set_word(cmd,word_value);
+        FenceCommand_set_id(cmd,id);
+        return Command_t'(cmd);
+    endfunction
+endclass
+
+class pdma_fence_write_error_test extends pdma_base_test;
+    `uvm_component_utils(pdma_fence_write_error_test)
+    function new(string name,uvm_component parent); super.new(name,parent); endfunction
+    virtual function void build_phase(uvm_phase phase);
+        super.build_phase(phase); expected_cases=platform.channel_count;
+    endfunction
+    virtual task run_scenario();
+        foreach(env.device.channels[i]) begin
+            pdma_task_flow flow_=env.device.task_flow(i);
+            pdma_error_fence job=new;
+            job.length=job.fence_bytes(); job.payload_alignment=job.length;
+            job.expect_payload_unchanged=1;
+            flow_.open(job); inject(1,0,job.dest_address);
+            flow_.submit(); flow_.expect_error(EVENT_CODE_WRITEERROR);
+            platform.fault_enabled=0; flow_.channel.reset(); flow_.close(); cases++;
+        end
+    endtask
+endclass

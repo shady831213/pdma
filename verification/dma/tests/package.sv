@@ -17,6 +17,7 @@ package pdma_tests_pkg;
     `include "tests/dut/throughput.svh"
     `include "tests/dut/multichannel.svh"
     `include "tests/dut/fault.svh"
+    `include "tests/dut/window_replay.svh"
     `include "tests/dut/error.svh"
     `include "tests/dut/reset.svh"
     `include "tests/dut/descriptor.svh"

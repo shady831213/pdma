@@ -63,3 +63,28 @@ class pdma_device_fatal_irq_test extends pdma_base_test;
         platform.fault_enabled=0; env.device.driver.request_reset(); failed.cancel(1); cases++;
     endtask
 endclass
+
+class pdma_invalid_event_geometry_test extends pdma_base_test;
+    `uvm_component_utils(pdma_invalid_event_geometry_test)
+    function new(string name,uvm_component parent); super.new(name,parent); endfunction
+    virtual function void build_phase(uvm_phase phase);
+        super.build_phase(phase);
+        // Backing exists, but three entries cannot form a valid ring.
+        platform.event_capacity=3; expected_cases=platform.channel_count;
+    endfunction
+    virtual task run_scenario();
+        foreach(env.device.channels[i]) begin
+            pdma_task_flow flow_=env.device.task_flow(i);
+            pdma_task job=settings(16);
+            job.opcode=COMMANDHEADER_OPCODE_ATOMIC; job.expect_payload_unchanged=1;
+            flow_.open(job);
+            for(int b=0;b<platform.event_capacity*EVENT_SIZE;b++)
+                env.memory.write_byte(flow_.channel.event_address+b,8'ha5);
+            flow_.submit(); flow_.expect_fatal(pdma_rtl_ChannelRecoveryLayout::FATAL_CODE_EVENTCONFIGURATION);
+            for(int b=0;b<platform.event_capacity*EVENT_SIZE;b++)
+                if(env.memory.read_byte(flow_.channel.event_address+b)!==8'ha5)
+                    `uvm_fatal("EVENT_GEOMETRY","DMA wrote an event to an invalid ring")
+            flow_.channel.reset(); flow_.close(); cases++;
+        end
+    endtask
+endclass

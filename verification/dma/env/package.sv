@@ -18,6 +18,7 @@ package pdma_vip_pkg;
     `include "env/software/task.svh"
     `include "env/software/scatter_gather.svh"
     `include "env/coverage/observation.svh"
+    `include "env/coverage/execution_phases.svh"
     `include "env/software/register_access.svh"
     `include "env/software/channel_driver.svh"
     `include "env/software/device_driver.svh"

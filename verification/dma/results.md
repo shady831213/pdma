@@ -1,5 +1,40 @@
 # Scenario-level verification checkpoints
 
+## Execution state coverage
+
+At `4dc13e46` the automatic FSM report covers two families in `CopyWindow`.
+Each retained payload row contributes 28 candidate edges. Each channel also
+contributes four error-code edges (enter/clear a permanent read or write error).
+The same 44 tests and seeds 19 and 41 give the following breakdown.
+
+| Channels | Row state values hit | Row transitions hit | Error-code transitions hit | Total transitions hit |
+| ---: | ---: | ---: | ---: | ---: |
+| 2 | 80/96 | 117/448 | 4/8 | 121/456 |
+| 8 | 274/384 | 360/1,792 | 4/32 | 364/1,824 |
+
+Two effects account for the low score. For example, the eight-channel report
+counts ten edges per row that conflict with the row update guards. Only a
+row in Read can issue a read and become Reading. Only a successful response
+to Writing can produce Done. Only a receipt for Reading or Writing can set
+Write. The report includes four, three and three incompatible source states
+respectively for those destinations, spanning 640 candidate edges across the
+64 rows. All remain in the native denominator.
+
+There are also real stimulus gaps. At this checkpoint all 64 rows exercised
+read issue, but only two exercised the Reading-to-Read retry edge. Only channel
+zero exercised the permanent payload read/write errors. The expanded cases
+target those errors on every channel and replay reads and writes after a full
+window of payload. The independent command and SG phase covergroups record
+per-owner transitions that native extraction misses in packed contexts.
+
+At seed 7 the two- and eight-channel profiles both passed the permanent Fence
+write error, invalid event-ring geometry and window replay scenarios. Window
+replay checked 4,352 and 17,408 payload bytes respectively. A separate SG
+fault/resume/reset run on each profile hit 8/20 command edges and 9/10 SG
+edges across the design. That scenario uses two SG endpoints, so it did not
+exercise the walker's linear-endpoint decode edge. These focused runs verify
+the new probes; the table above remains the earlier full-suite baseline.
+
 ## Mixed Copy traffic and channel configuration lifetime
 
 Each mixed run submits eight checked tasks per physical channel. Each channel

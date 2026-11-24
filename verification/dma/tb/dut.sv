@@ -37,6 +37,32 @@ module pdma_vip_dut(svt_axi_if host_bus, svt_axi_if memory_bus, pdma_control_if 
         .return_channel(integration.dma.transactions.receipt.tag.channel),.return_slot(integration.dma.transactions.receipt.tag.slot)
     );
     for(genvar c=0;c<`PDMA_CHANNEL_COUNT;c++) begin: channels
+        // Follow this channel's stored context even while a peer owns the engine.
+        `define PDMA_EXEC integration.dma.commands.execution
+        pdma_vip_pkg::pdma_execution_coverage phases;
+        pdma_rtl_CommandState::Phase prior_command;
+        int unsigned prior_segment;
+        bit sample_command, sample_segment;
+        initial phases=new($sformatf("channel_%0d",c),
+            `PDMA_EXEC.segments.Phase_SelectSide,`PDMA_EXEC.segments.Phase_Locate,
+            `PDMA_EXEC.segments.Phase_Read,`PDMA_EXEC.segments.Phase_Receive,
+            `PDMA_EXEC.segments.Phase_Decode,`PDMA_EXEC.segments.Phase_Offer,`PDMA_EXEC.segments.Phase_Payload);
+        always @(posedge control.core_clk or negedge control.core_rst_n) begin
+            if(!control.core_rst_n) begin
+                sample_command=0; sample_segment=0;
+            end else begin
+                if(sample_command && prior_command!=`PDMA_EXEC.contexts[c].phase)
+                    phases.commands.sample(prior_command,`PDMA_EXEC.contexts[c].phase);
+                if(sample_segment && prior_segment!=`PDMA_EXEC.segments.states[c].phase)
+                    phases.segments.sample(prior_segment,`PDMA_EXEC.segments.states[c].phase);
+                prior_command=`PDMA_EXEC.contexts[c].phase;
+                prior_segment=`PDMA_EXEC.segments.states[c].phase;
+                sample_command=!`PDMA_EXEC.copy_cancel[c] && !integration.dma.channels.clear[c];
+                sample_segment=sample_command &&
+                    !(`PDMA_EXEC.segments.start && `PDMA_EXEC.selected==c);
+            end
+        end
+        `undef PDMA_EXEC
         pdma_lifecycle_assertions #(.SLOTS(`PDMA_COPY_SLOTS)) lifecycle(
             .clk(control.core_clk),.rst_n(control.core_rst_n),
             .request(integration.dma.requests.valid && integration.dma.requests.request.tag.channel==c),.ready(integration.dma.requests.ready),

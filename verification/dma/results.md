@@ -36,17 +36,30 @@ a fanout query on the elaborated design confirmed zero downstream sequential
 endpoints for all 625 bit selections in the unconnected RDC groups. The external
 interrupt controller and its clock crossing are outside this DMA boundary.
 
-At two channels the level-IRQ control-budget synthesis met the 1 GHz core
-and bus and 500 MHz register setup targets with 0 ps worst slack. Mapped
-cell area was 38,460.174 and vectorless power was 73.211 mW, compared with
-38,443.733 and 73.378 mW on the two-channel Trap handshake design.
-The worst path to each channel IRQ starts at an event-ring pointer flop.
-Channels 0 and 1 had 69.8 ps and 87.2 ps of setup margin, versus 446.9 ps on
-both registered handshake outputs. The fatal IRQ margin was 403.5 ps. All ten crossing,
-five held-payload and ten local synchronizer timing checks passed. The area
-and power estimates exclude physical Copy SRAM. The slack values are pre-route.
-The eight-channel run reached its wall-clock limit during mapping. A fresh
-synthesis from the same snapshot with a longer time budget is pending.
+Both configurations met the pre-route setup targets of 1 GHz for core and bus
+and 500 MHz for registers. The first eight-channel run timed out during
+mapping. A fresh run completed from the same snapshot with the same synthesis
+and timing settings and a longer wall-clock budget. Each configuration passed
+all ten crossing, five held-payload and ten local synchronizer timing checks.
+The control-budget area and vectorless power estimates exclude physical Copy SRAM.
+
+| Channels | Worst setup slack (ps) | Worst channel IRQ slack (ps) | Fatal IRQ slack (ps) | Mapped cell area | Vectorless power (mW) |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 | 0.0 | 69.8 | 403.5 | 38,460.174 | 73.211 |
+| 8 | 0.0 | 0.0 | 336.2 | 90,445.824 | 147.636 |
+
+In both configurations the worst path to each channel IRQ starts at its event
+ring's producer or consumer pointer. At two channels the output margins were
+69.8 and 87.2 ps, compared with 446.9 ps on each registered handshake output.
+At eight channels the tightest paths ran from the channel 3 consumer pointer
+to `irq[3]` and the channel 4 producer pointer to `irq[4]`. Both reported
+0.0 ps of slack, and `irq[1]` had 0.1 ps. All three clock groups had zero
+setup violations. These IRQ paths warrant a post-route check.
+
+The two-channel Trap handshake baseline measured 38,443.733 in cell area
+and 73.378 mW. The available eight-channel baseline predates Trap and measured
+86,309.130 and 141.226 mW. Its deltas of +4.79% in area and +4.54% in power
+cover both the addition of Trap and the change to level IRQs.
 
 ## Earlier per-source service on the superseded handshake interface
 

@@ -190,7 +190,7 @@ seed 唯一、注入计数非零及不同的延迟序列。没有修改 payload 
 共同断言、分别同步释放，并明确排除普通单域 warm reset；这与我们的当前适用范围
 吻合。它同时要求异步数据/控制路径的最大延迟约束，说明握手并不免除物理约束。
 
-[当前固定版本 Veryl handshake](https://github.com/veryl-lang/veryl/blob/8521c8c21e495916ca33648ddab746320953e11d/crates/std/veryl/src/async_handshake/async_handshake.veryl)
+[本次 CDC 评审使用的 Veryl handshake](https://github.com/veryl-lang/veryl/blob/8521c8c21e495916ca33648ddab746320953e11d/crates/std/veryl/src/async_handshake/async_handshake.veryl)
 在发送接受时锁存 payload、翻转 request，在接收握手后翻转 ACK；接收端捕获期间
 发送端持有数据。上述单元证明检验的是它在本设计实际类型/配置下的实例。
 

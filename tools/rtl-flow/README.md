@@ -15,13 +15,13 @@ bash tools/rtl-flow/veryl.sh --version
 export PATH="$(bash tools/rtl-flow/veryl.sh --print-bin-dir):$PATH"
 ```
 
-The selected recipe is `0.22.1-generic-wide-struct`: upstream Veryl 0.22.1 at
-`8521c8c21e495916ca33648ddab746320953e11d`, Rust 1.97.0, locked Cargo dependencies
-and `release-verylup`, with generic-parameter, wide-array and struct-member-width
-fixes. This is the same compiler recipe as before extraction, not an upgrade to a
-different fix set. The submodule commit pins its launcher and ordered patch bytes;
-see its [provenance](../../external/my-veryl/PROVENANCE.md) and
-[upstream tracking](../../external/my-veryl/UPSTREAM.md).
+The selected recipe is `upstream-75c47070-generic-struct`. It builds post-0.22.1
+Veryl commit `75c47070ca1f89428390229c3502df409e139645` with Rust 1.97.0,
+locked Cargo dependencies and the `release-verylup` profile. This upstream
+revision includes the wide-array fix. The recipe still applies the
+generic-parameter and struct-member-width fixes. The submodule pins the
+launcher, source hash and ordered patches. See the
+[candidate comparison](../../external/my-veryl/CANDIDATE-75c47070.md).
 
 The upstream installer verifies source, patches and cached executable bytes and
 serializes installation. PDMA defaults its cache to `tools/rtl-flow/.run/tools`,
@@ -36,6 +36,21 @@ for this pin. Compiler regressions now live in the helper's `regressions/` nativ
 projects; run those with the selected compiler on PATH. DMA's native tests remain
 in `rtl/src/tests`. `node --test tools/rtl-flow/tests/veryl_test.mjs` checks PDMA's
 forwarding boundary; installer integrity tests belong to my-veryl.
+
+### PDMA qualification for upstream-75c47070
+
+With native DUT reuse disabled and seed 23, the old and new compilers matched on
+all 32 DMA tests by name, status and reported output on both requested backends
+(CC and Cranelift). The CC runs enabled backend validation on every step.
+
+For the 2- and 8-channel profiles, 48 emitted SystemVerilog files matched
+byte-for-byte, including all PDMA modules. The standard library added its utility
+package and changed its RAM to use a clipped address width and a packed
+initial-value parameter. All six packaged constraint and checker files matched.
+Fresh UVM builds using the two new filelists each passed all 39 DUT scenarios
+at seed 19 and rejected all nine checker mutations with the expected diagnostics.
+Physical implementation results and crossing reviews retain their original
+snapshot identities.
 
 ## Shared cells
 

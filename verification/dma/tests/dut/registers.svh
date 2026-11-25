@@ -23,6 +23,40 @@ class pdma_register_model_test extends pdma_base_test;
     endtask
 endclass
 
+class pdma_command_geometry_test extends pdma_base_test;
+    `uvm_component_utils(pdma_command_geometry_test)
+    function new(string name,uvm_component parent); super.new(name,parent); endfunction
+    virtual function void build_phase(uvm_phase phase);
+        super.build_phase(phase); expected_cases=platform.channel_count;
+    endfunction
+    local task reject_geometry(pdma_channel ch,longint unsigned base,int unsigned capacity);
+        uvm_reg enable=ch.registers.control_block.config_block.enable_reg;
+        uvm_status_e status;
+        uvm_reg_data_t observed;
+        ch.write_reg(ch.registers.command_block.base_reg,base);
+        ch.write_reg(ch.registers.command_block.capacity_reg,capacity);
+        enable.write(status,1,UVM_FRONTDOOR);
+        if(status!==UVM_NOT_OK)
+            `uvm_fatal("COMMAND_GEOMETRY",$sformatf("Accepted base=%h capacity=%h",base,capacity))
+        ch.read_reg(enable,observed);
+        if(observed!==0) `uvm_fatal("COMMAND_GEOMETRY","Rejected enable changed the channel state")
+    endtask
+    virtual task run_scenario();
+        foreach(env.device.channels[i]) begin
+            pdma_task_flow flow_=env.device.task_flow(i);
+            pdma_channel ch=flow_.channel;
+            ch.reset();
+            reject_geometry(ch,ch.command_address,0);
+            reject_geometry(ch,ch.command_address,3);
+            reject_geometry(ch,ch.command_address,32'h8000_0000);
+            reject_geometry(ch,ch.command_address+1,2);
+            reject_geometry(ch,~(longint'(COMMAND_ALIGNMENT)-1),2);
+            // A rejected enable must leave the geometry writable.
+            flow_.open(settings()); flow_.submit(); flow_.expect_fence(); flow_.close(); cases++;
+        end
+    endtask
+endclass
+
 class pdma_ring_context_lock_test extends pdma_base_test;
     `uvm_component_utils(pdma_ring_context_lock_test)
     function new(string name,uvm_component parent); super.new(name,parent); endfunction

@@ -13,10 +13,16 @@ endclass
 
 class pdma_sg_validation_test extends pdma_base_test;
     `uvm_component_utils(pdma_sg_validation_test)
-    function new(string name,uvm_component parent); super.new(name,parent); expected_cases=2; endfunction
+    function new(string name,uvm_component parent); super.new(name,parent); endfunction
+    virtual function void build_phase(uvm_phase phase);
+        super.build_phase(phase); expected_cases=2*platform.channel_count;
+    endfunction
     virtual task run_scenario();
+        foreach(env.device.channels[i]) check_validation(i);
+    endtask
+    local task check_validation(int owner);
         for(int fail_read=0;fail_read<2;fail_read++) begin
-            pdma_task_flow flow_=env.device.task_flow();
+            pdma_task_flow flow_=env.device.task_flow(owner);
             pdma_sg_task job=new;
             job.short_destination=!fail_read;
             job.expect_payload_unchanged=1;
@@ -59,5 +65,38 @@ class pdma_sg_recovery_test extends pdma_base_test;
             end
             flow_.expect_fence(); flow_.close(); cases++;
         end
+    endtask
+endclass
+
+class pdma_sg_error_prefix_test extends pdma_base_test;
+    `uvm_component_utils(pdma_sg_error_prefix_test)
+    function new(string name,uvm_component parent); super.new(name,parent); endfunction
+    virtual function void build_phase(uvm_phase phase);
+        super.build_phase(phase); expected_cases=2*platform.channel_count;
+    endfunction
+    virtual task run_scenario();
+        foreach(env.device.channels[ch]) begin
+            check_prefix(ch,0);
+            check_prefix(ch,1);
+        end
+    endtask
+    local task check_prefix(int owner,bit writing);
+        localparam int BEAT=pdma_configuration::MEMORY_BEAT_BYTES;
+        localparam int PAGE_BYTES=pdma_configuration::AXI_BOUNDARY_BYTES;
+        pdma_task_flow flow_=env.device.task_flow(owner);
+        pdma_sg_task job=new;
+        // A read fails as soon as the second span starts. A write fails at
+        // its next 4 KiB boundary, after that span's previous B responses.
+        int offset=writing ? BEAT+PAGE_BYTES : BEAT;
+        job.source_sg=!writing; job.dest_sg=writing;
+        job.source_first=BEAT; job.dest_first=BEAT;
+        job.length=offset+BEAT; job.payload_alignment=PAGE_BYTES;
+        job.expected_error_prefix=offset;
+        flow_.open(job);
+        inject(writing,0,job.address_at(writing,offset));
+        flow_.submit();
+        flow_.expect_error(writing ? EVENT_CODE_WRITEERROR : EVENT_CODE_READERROR);
+        platform.fault_enabled=0;
+        flow_.channel.reset(); flow_.close(); cases++;
     endtask
 endclass

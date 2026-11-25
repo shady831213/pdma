@@ -12,6 +12,12 @@ class pdma_task_checker extends uvm_object;
         }
     endgroup
     function new(string name="task_checker"); super.new(name); irq_service=new; endfunction
+    local function void check_copied_bytes(pdma_task job,pdma_memory memory,int unsigned count);
+        for(int i=0;i<count;i++)
+            if(memory.read_byte(job.destination_byte(i))!==job.expected[i])
+                `uvm_fatal("TASK_DATA",$sformatf("channel=%0d task=%0d destination byte=%0d",channel_id,job.id,i))
+        checked_bytes+=count;
+    endfunction
     virtual function void check(pdma_task job,pdma_result result,pdma_outcome expected_outcome,
         pdma_memory memory,int expected_code=0);
         if(result.channel_id!==channel_id || job.channel_id!==channel_id ||
@@ -24,11 +30,7 @@ class pdma_task_checker extends uvm_object;
         if(result.outcome==TASK_SUCCESS) begin
             if(result.value!==job.fence_value())
                 `uvm_fatal("TASK_COMPLETION","Invalid Fence marker")
-            foreach(job.expected[i]) begin
-                if(memory.read_byte(job.destination_byte(i))!==job.expected[i])
-                    `uvm_fatal("TASK_DATA",$sformatf("channel=%0d task=%0d destination byte=%0d",channel_id,job.id,i))
-                checked_bytes++;
-            end
+            check_copied_bytes(job,memory,job.expected.size());
         end
         if(result.outcome==TASK_ERROR && result.event_producer!==1)
             `uvm_fatal("TASK_ERROR_INFO","Error event producer is incorrect")
@@ -37,9 +39,7 @@ class pdma_task_checker extends uvm_object;
                 `uvm_fatal("TASK_ERROR_INFO","Committed prefix is unknown or exceeds task length")
             if(result.prefix!==job.expected_error_prefix && !(job.allow_zero_error_prefix && result.prefix===0))
                 `uvm_fatal("TASK_ERROR_INFO","Committed prefix differs from the scenario expectation")
-            for(int i=0;i<result.prefix;i++)
-                if(memory.read_byte(job.destination_byte(i))!==job.expected[i])
-                    `uvm_fatal("TASK_DATA","Confirmed committed prefix does not match memory")
+            check_copied_bytes(job,memory,int'(result.prefix));
         end
         if(result.outcome==TASK_FAULT && result.cause!==0)
             `uvm_fatal("TASK_EVENT","Recoverable fault raised a channel interrupt cause")

@@ -46,7 +46,8 @@ module pdma_vip_dut(svt_axi_if host_bus, svt_axi_if memory_bus, pdma_control_if 
         initial phases=new($sformatf("channel_%0d",c),
             `PDMA_EXEC.segments.Phase_SelectSide,`PDMA_EXEC.segments.Phase_Locate,
             `PDMA_EXEC.segments.Phase_Read,`PDMA_EXEC.segments.Phase_Receive,
-            `PDMA_EXEC.segments.Phase_Decode,`PDMA_EXEC.segments.Phase_Offer,`PDMA_EXEC.segments.Phase_Payload);
+            `PDMA_EXEC.segments.Phase_Decode,`PDMA_EXEC.segments.Phase_Apply,
+            `PDMA_EXEC.segments.Phase_Offer,`PDMA_EXEC.segments.Phase_Payload);
         always @(posedge control.core_clk or negedge control.core_rst_n) begin
             if(!control.core_rst_n) begin
                 sample_command=0; sample_segment=0;

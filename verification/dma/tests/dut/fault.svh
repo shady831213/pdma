@@ -1,8 +1,14 @@
 virtual class pdma_fault_test extends pdma_base_test;
     protected bit writing, fence_target;
     function new(string name,uvm_component parent); super.new(name,parent); endfunction
+    virtual function void build_phase(uvm_phase phase);
+        super.build_phase(phase); expected_cases=platform.channel_count;
+    endfunction
     virtual task run_scenario();
-        pdma_task_flow flow_=env.device.task_flow();
+        foreach(env.device.channels[i]) check_fault(i);
+    endtask
+    protected virtual task check_fault(int owner);
+        pdma_task_flow flow_=env.device.task_flow(owner);
         pdma_task job=single_burst_copy();
         flow_.open(job);
         inject(writing,1,fence_target ? job.fence_address : (writing ? job.dest_address : job.source_address));
@@ -35,10 +41,11 @@ class pdma_w_first_fault_test extends pdma_fault_test;
         platform.write_address_delay=fence_beats+2; platform.write_data_ready_delay=0;
         platform.delay_max=0;
     endfunction
-    virtual task run_scenario();
-        super.run_scenario();
-        if($isunknown(platform.w_first_faults) || platform.w_first_faults<1)
-            `uvm_fatal("FAULT_ORDER","Faulting W did not finish before its AW")
+    protected virtual task check_fault(int owner);
+        int before_fault=platform.w_first_faults;
+        super.check_fault(owner);
+        if($isunknown(platform.w_first_faults) || platform.w_first_faults<=before_fault)
+            `uvm_fatal("FAULT_ORDER",$sformatf("Channel %0d faulting W did not finish before its AW",owner))
     endtask
 endclass
 

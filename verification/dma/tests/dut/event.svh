@@ -2,13 +2,18 @@ class pdma_event_boundary_test extends pdma_base_test;
     `uvm_component_utils(pdma_event_boundary_test)
     function new(string name,uvm_component parent); super.new(name,parent); endfunction
     virtual function void build_phase(uvm_phase phase);
-        longint unsigned boundary;
+        longint unsigned page;
         super.build_phase(phase);
-        boundary=(platform.heap_base/pdma_configuration::AXI_BOUNDARY_BYTES+1)*pdma_configuration::AXI_BOUNDARY_BYTES;
-        platform.event_ring_address={1'b0,boundary-EVENT_ALIGNMENT};
+        expected_cases=platform.channel_count;
+        page=platform.heap_base/pdma_configuration::AXI_BOUNDARY_BYTES+1;
+        for(int owner=0;owner<platform.channel_count;owner++)
+            platform.event_ring_address[owner]=(page+owner)*pdma_configuration::AXI_BOUNDARY_BYTES-EVENT_ALIGNMENT;
     endfunction
     virtual task run_scenario();
-        pdma_task_flow flow_=env.device.task_flow();
+        foreach(env.device.channels[i]) check_boundary(i);
+    endtask
+    local task check_boundary(int owner);
+        pdma_task_flow flow_=env.device.task_flow(owner);
         pdma_task job=settings(16);
         pdma_channel channel=flow_.channel;
         longint unsigned address=channel.event_address;

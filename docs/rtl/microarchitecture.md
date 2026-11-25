@@ -1,9 +1,9 @@
 # DMA Copy、Fence 与 Trap 微架构
 
-本文描述 `DmaCopy` 的当前源码组织。2026-11-18 的配置与职责调整已通过功能
-矩阵及 2/8 channel CDC/RDC 检查。检查点 `4de9cb7f` 的默认 2、8 channel
-和窄接口配置满足综合 setup 目标，3 channel 的 128-bit 内存口配置差 43.2ps。各阶段证据见
-[验证记录](../../verification/dma/results.md)，旧源码的结果不作为新版资格证据。
+本文描述 `DmaCopy` 的当前源码组织。2026-11-25，带独立源、目的 SG 的默认
+2、8 通道整颗 DMA 均达到综合 setup 目标。core 和 AXI 为 1 GHz，寄存器为
+500 MHz。此结论对应 64-bit 内存口的标准配置，使用 SRAM 边界负载模型。
+配置、源码标识、CDC/RDC 与回归数据见[验证记录](../../verification/dma/results.md)。
 本文的路径采用整理后的主工作区。体系结构语义以
 [系统规范](../../model/modeling/docs/spec.md)及
 [命令合同](../../model/modeling/docs/copy-engine.md)为准；未来配置与尚未实现的
@@ -311,7 +311,13 @@ Copy 的 page fault **不改变外层 phase=Copy**，而是在 window 冻结，�
 
 任一端选择 SG 时，`CopySegments` 先验证源范围，再验证目的范围。对 SG 从描述符指定的 index 和段内 offset 开始，只检查覆盖 copy length 的条目。空段跳过；计数不足报 LengthMismatch，加法溢出或段内 offset 越界报 InvalidLength。列表读使用 sg_context，按自然对齐的 4 或 8 字节读拼出一条 16 字节记录。未对齐或列表读失败（包括总线返回 PageFault）报 ListReadError。长度为零时直接退休。
 
-每个 channel 保存两个 192-bit 游标、64-bit 命令余量、遍历状态和一个未归还的列表读标志。16B 表项拼装寄存器、读地址和片内偏移在执行资源上共享。旧 channel 的 reset 可以释放 grant；晚到的列表回执按 channel 消除原来的读债务，不能写入新 owner 的拼装寄存器。
+每个 channel 保存两个 192-bit 游标、64-bit 命令余量、遍历状态和一个未归还的列表读标志。16B 表项拼装寄存器、列表读地址、读进度和段内起始偏移由持有 grant 的 walker 共享。旧 channel 的 reset 可以释放 grant；晚到的列表回执按 channel 消除原来的读债务，不能写入新 owner 的拼装寄存器。
+
+`Locate` 锁存本段的起始偏移。对列表端点，它同时锁存表项地址、索引越界和地址计算溢出标志。`Read` 只在索引有效、整个表项的地址范围有效且满足对齐时才允许发出请求。索引已到达条目数时优先报告长度不匹配。合法表项沿用已有的读请求拍。
+
+`Decode` 在同一拍计算首字节地址和扣除偏移后的可用长度，将两者写回 16B 拼装寄存器，同时锁存起点错误。`Apply` 取段余量与命令余量的较小值，只检查实际使用的地址范围，成功后更新该 channel 的游标。长度为零的段不会产生 payload 地址访问。每个被解码的端点条目多一拍，同一区间内各 burst 的发射间隔保持不变。
+
+两个游标都有数据时，`SelectSide` 比较两端余量，在进入 `Offer` 的边沿将选择位存入当前 channel。两端余量在本区间退休前都保持稳定。`Offer` 用选择位取区间长度，退休时用同一个长度推进两端游标。缺页挂起期间，其他 channel 可以独立选择区间；恢复原 channel 时，它仍持有原来的选择。这一个状态位消除了从 64 位比较连续经过长度选择、地址更新的组合路径，沿用已有的流水拍。
 
 验证完成后从原始位置重新遍历，软件须保持表项稳定。两个游标独立保留当前段地址、有效余量和下一条索引。取两端有效余量的最小值交给原有 CopyWindow；只有该区间所有写回执成功退休才推进两个游标。后续区间的 stopping error 前缀等于已完成区间长度加上当前 window 的成功前缀。payload 写缺页时保留 RAM 内数据，peer 可获授权；Resume 重试已有写，既不重读 payload 也不重取描述符。reset 发起后，即使旧 grant 已释放，尚未返回的 metadata 读也必须退债，才能清理 channel。
 

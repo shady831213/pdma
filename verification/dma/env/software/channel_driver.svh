@@ -22,7 +22,8 @@ class pdma_channel extends pdma_register_access;
         allocator.malloc(command_allocation,cfg.command_capacity*COMMAND_SIZE,
             e_alignment'($clog2(COMMAND_ALIGNMENT)),channel_id==0 ? cfg.command_ring_address : `JVS_MEM_NULL);
         allocator.malloc(event_allocation,cfg.event_capacity*EVENT_SIZE,
-            e_alignment'($clog2(EVENT_ALIGNMENT)),channel_id==0 ? cfg.event_ring_address : `JVS_MEM_NULL);
+            e_alignment'($clog2(EVENT_ALIGNMENT)),cfg.event_ring_address.exists(channel_id)
+                ? cfg.event_ring_address[channel_id] : `JVS_MEM_NULL);
         if(command_allocation==null || event_allocation==null) `uvm_fatal("RING_ALLOCATION","Channel ring allocation failed")
         command_address=command_allocation.get_s_addr(); event_address=event_allocation.get_s_addr();
         memory.permit(command_address,command_address,cfg.command_capacity*COMMAND_SIZE,cfg.ring_context,0,channel_id);

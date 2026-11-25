@@ -29,7 +29,7 @@ class pdma_execution_coverage;
     endgroup
     // The walker enum is local to the elaborated module. Accept its actual
     // literals so changing their encoding cannot silently relabel a bin.
-    covergroup segments(int unsigned choose,locate,rd,receive_,decode_,offer_,payload)
+    covergroup segments(int unsigned choose,locate,rd,receive_,decode_,apply_,offer_,payload)
             with function sample(int unsigned prior, int unsigned current);
         option.per_instance=1;
         edge_taken: coverpoint {prior,current} {
@@ -40,14 +40,15 @@ class pdma_execution_coverage;
             bins request = {{rd,receive_}};
             bins more_entry_bytes = {{receive_,rd}};
             bins entry_ready = {{receive_,decode_}};
-            bins decoded = {{decode_,choose}};
+            bins decoded = {{decode_,apply_}};
+            bins applied = {{apply_,choose}};
             bins span_started = {{offer_,payload}};
             bins span_done = {{payload,choose}};
         }
     endgroup
-    function new(string owner,int unsigned choose,locate,rd,receive_,decode_,offer_,payload);
+    function new(string owner,int unsigned choose,locate,rd,receive_,decode_,apply_,offer_,payload);
         commands=new; commands.set_inst_name({owner,".command"});
-        segments=new(choose,locate,rd,receive_,decode_,offer_,payload);
+        segments=new(choose,locate,rd,receive_,decode_,apply_,offer_,payload);
         segments.set_inst_name({owner,".segments"});
     endfunction
 endclass

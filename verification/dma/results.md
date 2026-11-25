@@ -1,5 +1,254 @@
 # Scenario-level verification checkpoints
 
+## SG decoder timing cut
+
+The last restored two-channel DMA with SG had core setup slack of −396.4 ps
+at 1 GHz. The worst path selected an owner's segment, subtracted the starting
+offset, compared the result with the command remainder, then subtracted the
+clipped length. Paths ending at the engine grant lock (−395.6 ps) and payload
+start (−356.3 ps) also traversed the segment-length comparison. These are
+post-optimization results for the earlier SG implementation, before the AXI
+receipt-arbitration fix.
+
+The walker timing experiments instantiated the emitted walker with a registered
+owner and one registered descriptor per channel. Every run used a 1 ns clock,
+50 ps uncertainty and 300 ps input/output delays.
+
+| Channels | Walker | Post-map WNS (ps) | Post-optimization WNS (ps) | Post-optimization TNS (ps) | Violating endpoints after optimization |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 2 | Original single-cycle decode | −300.0 | −207.9 | −121,804.2 | 974 |
+| 2 | Registered decode | −96.2 | −31.5 | −93.0 | 3 |
+| 2 | Registered decode and list address check in Read | −63.1 | 0.0 | 0.0 | 0 |
+| 2 | Above with per-channel span selection | 0.0 | 0.0 | 0.0 | 0 |
+| 8 | Registered decode and list address check in Read | −117.9 | −52.5 | −17,918.0 | 1,390 |
+| 8 | Above with per-channel span selection | −8.8 | 0.0 | 0.0 | 0 |
+
+Capturing the limiting side on entry to Offer leaves register-to-register and
+register-to-output WNS at 0.0 ps on both profiles. Input-to-register WNS is
++40.6 ps for two channels and +5.3 ps for eight. At eight channels the mapped
+cell area after optimization falls 5.5% with this change, including the same
+descriptor registers. Each single-clock wrapper inherited one ineffective reset
+exception. Removing it from a restored final database gave zero timing-coverage
+diagnostics and reproduced the reported WNS.
+
+Full DMA synthesis uses 1 GHz core and bus clocks and a 500 MHz register clock.
+All designs below include the AXI receipt-arbitration fix. The reported slack,
+TNS and endpoint counts in this table are for the core clock.
+
+| Channels | SG change | Design manifest | Mapped WNS (ps) | Mapped TNS (ps) | Final WNS (ps) | Final TNS (ps) | Final violating endpoints |
+| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 2 | Baseline | `61f559b1de2d8b29` | −498.2 | −1,545,745.5 | −385.4 | −1,146,998.1 | 12,655 |
+| 2 | Decode/Apply split | `845a857e48a7a671` | −73.0 | −288,546.3 | 0.0 | 0.0 | 0 |
+| 2 | Split and registered list-address check | `cdb02e9f0f3277b8` | −43.2 | −79,436.7 | 0.0 | 0.0 | 0 |
+| 2 | Above with per-channel span selection | `ecfe6a3a55acf3b0` | −42.7 | −83,809.0 | 0.0 | 0.0 | 0 |
+| 8 | Baseline | `ebdfd68f862fbe12` | −411.5 | −6,494,254.2 | −305.0 | −2,693,853.0 | 20,536 |
+| 8 | Decode/Apply split | `28fdc70060716bdd` | −126.3 | −1,894,887.5 | −29.4 | −144,037.9 | 12,126 |
+| 8 | Split and registered list-address check | `14e71f2e2ae43c51` | −101.0 | −1,133,992.3 | −11.4 | −25,453.2 | 4,593 |
+| 8 | Above with per-channel span selection | `77ae085572584afe` | −113.2 | −1,301,349.2 | 0.0 | 0.0 | 0 |
+
+The two-channel baseline's worst optimized path and the eight-channel baseline's
+worst mapped path both ran from engine owner selection to the SG remaining count.
+After the Decode/Apply split, the slowest two-channel mapped path went through
+the linear destination base, offset and length checks to control-address state.
+At eight channels the worst mapped path crossed the SG walker on its way
+from the selected owner to the engine grant lock. Grouping paths by launch
+register also found a fetch read-pointer path to the same lock at −126.3 ps.
+The worst path launching from command phase was −121.0 ps. This checkpoint
+has critical paths independent of the three owner-select bits.
+Final optimization met timing in all three domains for all three two-channel
+SG changes. The four completed two-channel runs had bus WNS of
+0.0 ps, register WNS of +307.0 ps, and passed the ten constrained crossings.
+Control-budget logic area was 43,703.894 at baseline, 43,675.804 after the
+Decode/Apply split, 42,864.427 after the list-address cut, and 42,057.769
+with per-channel span selection (−3.77% from baseline). Vectorless power was
+82.30, 82.66, 80.44 and 78.09 mW, respectively.
+At eight channels, the split reduced optimized logic area from 102,575.776
+to 100,397.335 and vectorless power from 173.74 to 162.20 mW. Both runs
+met the bus and register targets and passed the ten constrained crossings.
+The worst optimized core path after the split ended at an SG source cursor's
+address register. With the registered list-address check the worst path went
+from engine owner selection through span length to the SG remaining-count
+subtraction on span completion. This run reported 99,776.102 logic area,
+161.80 mW vectorless power, and passed the same ten crossings.
+The final eight-channel design with per-channel span selection meets setup
+in all three domains. Core and bus WNS are 0.0 ps and register WNS is
++307.0 ps. Its logic area is 99,004.834, down 3.48% from the eight-channel
+baseline. Vectorless power is 161.18 mW, down 7.23%. The standard flow used
+one final optimization pass on both the two- and eight-channel designs.
+Restoring each final database reproduced nonnegative setup slack for paths
+ending in fetch, the engine, the SG walker, the payload window and the
+remaining core registers. Each design passed all ten mapped crossing checks.
+The RAM boundary models account for pin loading. Physical SRAM area, power
+and intrinsic timing remain outside these pre-layout estimates.
+
+Splitting Decode and Apply reuses the 16-byte entry register and adds one
+core cycle per decoded endpoint entry in each traversal. Read now qualifies
+the registered list address before issuing a request, using the existing
+request cycle. The following results include per-channel span selection and use
+RTL design manifests `ecfe6a3a55acf3b0` (2 channels) and `77ae085572584afe`
+(8 channels). Each profile passed 50 tests at seeds 19 and 41 and rejected
+all nine checker mutations. Only the 100 positive runs entered each full-suite
+coverage merge.
+
+| Channels | Command edges | SG edges | Extracted FSM transitions | Line | Branch | Condition | RTL toggle | External port toggle |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 | 40/40 | 22/22 | 170/456 | 96.62% | 92.12% | 81.80% | 59.73% | 64.08% |
+| 8 | 160/160 | 88/88 | 667/1,824 | 95.19% | 90.93% | 78.54% | 46.83% | 66.23% |
+
+The eight-channel stress run added 40 positive cases across eight seeds.
+Another 48 seeds exercised window fault/replay. Combining their extracted
+transition hits with the main suite reaches 762/1,824 (41.78%). All 64 physical
+payload rows took both the read retry and write retry transitions. The new SG
+cases checked index exhaustion and error priority, table-address overflow and
+alignment, overflow of the used payload interval, an empty fragment at the
+address limit and a valid clipped tail. Both tests also passed on one 32-bit
+memory channel and three 128-bit memory channels. All 35 native RTL tests
+passed on both simulation backends.
+
+Two isolated DUT mutations on the list-address cut checked that scenario before
+the span-selection change. Allowing
+an invalid metadata request to issue triggered the control-tag double-accept
+assertion. Reporting an exhausted list as InvalidLength triggered the event
+checker, which expected LengthMismatch. Repeating each mutation at seed 41
+reproduced its first failure.
+
+The parked-span scenario faults the first write while the source segment is
+shorter than the destination segment. A peer completes a segmented Copy,
+then the owner resumes. Software checks the saved bytes, remaining spans and
+final Fence on each owner. Changing the selector to one shared bit caused an
+unauthorized read at seeds 7 and 23. An independent simulation compared both
+walkers on every clock edge of the eight-channel DMA for 20 runs. All cursor
+states, metadata accesses and qualified span outputs agreed through peer
+execution, fault and reset.
+
+At both main seeds the linear throughput measurements matched the earlier RTL
+cycle for cycle. An aligned 16 KiB transfer sustained one 64-bit beat per bus
+cycle on both R and W over 2,048 beats, with 2,113 cycles from descriptor to
+Fence. The eight-channel batch at seed 41 took 16,988 cycles from the first
+descriptor to the last Fence for 128 KiB. These measurements exercise the
+linear fast path.
+
+The one-channel native CopyEngine bench also measured a 24-byte transfer
+with a fixed memory responder. From command acceptance to the final write
+receipt, linear/linear took 8 core cycles before and after the change.
+With one SG endpoint the count rose from 55 to 61 cycles, and with two SG
+endpoints it rose from 88 to 96. The corresponding counts of memory
+requests stayed at 2, 12 and 22. The SG cost falls on the entries decoded
+during validation and execution.
+
+At seed 73, configurations with 4, 5, 6 and 7 channels each passed seven
+cases covering SG boundaries and recovery, mixed Copy, reset with reordered
+write responses, and multichannel throughput. The parked-span case also passed
+on the one-channel 32-bit and three-channel 128-bit memory profiles. A separate
+eight-channel run repeated the zero-delay 128 KiB batch and the withheld-B
+reset case at 16 seeds. All 32 runs passed. The batch took 16,988 bus cycles
+at every seed.
+
+The source-bound crossing reviews left zero unresolved findings. The two-channel
+review covered 99 CDC and 1,804 RDC findings, and the eight-channel review
+covered 267 CDC and 3,490 RDC findings. The SG change removed two temporary
+decoded payload fields from the unconnected-sink report. The connectivity
+query verified zero downstream sequential endpoints for every remaining
+reported unconnected sink bit on the corresponding elaborated design.
+
+### Reset of a parked burst window
+
+Testbench manifest `74e63c28bccdbde7` adds a second recovery path to the
+window replay scenario. Software faults a read or write after the first
+window, observes FaultStatus, then resets the channel. It reconfigures the
+same rings and checks a fresh Copy that wraps the window, including its
+entire payload and successor Fence. Seeds 19 and 41 passed all 51 tests
+on both the two- and eight-channel RTL above. Each profile rejected the
+nine checker mutations.
+
+The extracted FSM coverage reached 184/456 on two channels and 739/1,824
+on eight at the two main seeds. Twenty-four extra reset seeds on eight
+channels brought the union to 853/1,824. Every one of the 64 physical rows
+transitioned from Read to Free and from Write to Free. Running the 40-case
+stress set on the same simulation build raised the union to 864/1,824
+(47.37%). All 13 observed row transitions were hit on all 64 rows, and the
+four error-code transitions were hit on every channel. The extraction
+denominator includes the unobserved edges. The one-channel
+32-bit and three-channel 128-bit memory profiles also passed both the
+reset and resume cases. In a two-channel DUT mutation, keeping the fault
+latch through reset and command start let the ordinary resume test pass.
+The reset case detected the missing Fence for the replacement command at
+both seeds 19 and 73.
+
+The remaining 15 unhit transitions were the same on every row. Ten
+conflict with the read-issue and receipt predicates described below. Of the
+other five, three enter Writing from Free, Read or Done. A forwarded write
+requires a successful Reading receipt, and a buffered write requires a
+prepared RAM read for that row. For Reading → Free, channel reset must first
+drain its outstanding read. Done → Read would require retiring a previously
+completed head and reallocating that same row on the same edge. In the
+170-run checkpoint below, the long and mixed Copy cases exercised same-edge
+reuse as Writing → Read. Only nine test classes entered Done, all during
+reset, payload error or window replay. The union of individual simulation
+hits matched the merged report by row and transition. Reachability of
+Done → Read remains open. All 28 transitions per row remain in the
+coverage denominator.
+
+### SG error progress across spans
+
+Testbench manifest `e0c6a834503563f2` adds a read error on the first beat
+of a second SG span and a write error after 4 KiB of that span. The first
+event must report one completed beat. The second must report that beat plus
+4 KiB. On each channel the checker compares every destination byte in those
+prefixes and checks the event identity and code. At seeds 7 and 73 this
+accounted for 4,104 bytes per run on one 32-bit channel, 8,224 on two 64-bit
+channels, 12,384 on three 128-bit channels, and 32,896 on eight 64-bit
+channels. Two independent RTL mutations omitted either the earlier span or
+the current span's committed progress. Each failed the event check at both
+seeds.
+
+The two main seeds passed all 52 tests and rejected nine checker mutations
+on each of the two- and eight-channel profiles. The whole-DMA extracted FSM
+coverage was 185/456 and 745/1,824, respectively, before adding stress seeds.
+The combined eight-channel report retains 168 distinct passing simulations
+from that build, including 104 main, 24 reset and 40 mixed stress runs. It reports
+95.19% line, 90.93% branch, 78.64% condition, 47.15% RTL toggle and 66.23%
+external port toggle. Its 864/1,824 FSM transitions match the independent
+union by row and edge. Rejected mutations were excluded from this merge.
+
+### Command ring admission
+
+Testbench `8ba42bbc064004b1` checks the AXI4-Lite error response and
+enable readback for each invalid command ring geometry in the scenario.
+A valid Copy and Fence on the same channel then verify that the rejected
+enable left the ring configurable. All 53 tests passed at seeds 19 and 41
+on both the two- and eight-channel designs. Each profile rejected nine
+checker mutations. The same admission test passed on three channels using
+64-bit AXI4-Lite at seeds 7 and 73. Removing the command ring's extent
+overflow check caused both seeds to fail on a two-entry ring based at the
+last aligned address.
+
+The eight-channel merge for this build contains 170 distinct passing runs
+(106 main, 24 reset and 40 mixed stress). The command geometry cases exercised
+56 additional condition bins and 8,342 additional RTL toggle bins compared
+with the 168-run checkpoint. Whole-DMA coverage reached 80.44% condition and
+50.16% RTL toggle. Line remained at 95.19%, branch at 90.93%, external port
+toggle at 66.23%, and the extracted FSM at 864/1,824 (47.37%). Each of the
+eight channels exercised all 20 command and 11 SG phase transitions.
+
+To reproduce that merge, use the same eight-channel simulation build for
+all three invocations of `flow/regression.sh`. Merge only passing DUT runs.
+
+| Test selection | Seeds |
+| --- | --- |
+| All 53 cases in `flow/tests.list` | 19, 41 |
+| `pdma_window_reset_test` | 1, 3, 5, 7, 11, 13, 17, 23, 29, 31, 37, 43, 47, 53, 59, 61, 67, 71, 79, 83, 89, 97, 101, 103 |
+| `pdma_mixed_copy_test`, `pdma_sg_range_test`, `pdma_sg_recovery_test`, `pdma_reset_reordered_b_test`, `pdma_window_replay_test` | 1, 7, 11, 23, 53, 97, 211, 503 |
+
+A separate eight-channel build varied synchronizer sampling latency by zero
+or one destination cycle. Seeds 7, 41 and 73 each passed eight scenarios
+covering SG park/replay, cross-span error progress, reset with a withheld B,
+multichannel IRQ and linear throughput. All nine checker mutations were
+rejected. Over 2,048 beats the 16 KiB copy had zero read gaps across all six
+throughput runs. Total write gaps were 0–1 bus cycles with equal clocks and
+1–2 with the core at half the bus frequency. This simulation-only build has
+its own results, separate from the production RTL coverage above.
+
 ## Execution state coverage
 
 At `4dc13e46` the automatic FSM report covers two families in `CopyWindow`.
@@ -34,6 +283,37 @@ fault/resume/reset run on each profile hit 8/20 command edges and 9/10 SG
 edges across the design. That scenario uses two SG endpoints, so it did not
 exercise the walker's linear-endpoint decode edge. These focused runs verify
 the new probes; the table above remains the earlier full-suite baseline.
+
+At `67b980e8` the 47-test suite passed at seeds 19 and 41 on each profile.
+The extracted FSM reached 168/456 transitions on two channels and 663/1,824
+on eight. The permanent read/write error-code edges were covered on every
+channel. The command covergroup reached 20/20 across the design, but only
+channel zero hit all 20. Each peer missed Fence fault, Fence resume, SG list
+error and publication of the second fragment of an event. All channels
+hit the 10 selected SG walker edges.
+
+The per-channel regression places each channel's first event across its own
+4 KiB boundary. It checks the error's identity and code, one consumer advance,
+and the untouched adjacent slot. The SG validation and Fence fault/resume
+scenarios also run on each owner. The W-before-AW test checks the ordering
+observation separately for each faulting Fence.
+
+With testbench manifest `28ffa369e73dc00b` and the same two seeds, both RTL
+profiles passed all 94 runs and rejected all nine checker mutations per profile.
+The command and SG columns sum the bins **per channel**. The remaining columns
+use the whole-DMA metrics defined in the verification README.
+
+| Channels | Command edges | SG edges | Extracted FSM transitions | Line | Branch | Condition | RTL toggle | External port toggle |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 | 40/40 | 20/20 | 170/456 (37.28%) | 96.50% | 91.83% | 81.40% | 56.05% | 64.08% |
+| 8 | 160/160 | 80/80 | 667/1,824 (36.57%) | 95.09% | 90.72% | 78.19% | 42.12% | 66.23% |
+
+Eight additional seeds (1, 7, 11, 23, 53, 97, 211, 503) ran the eight-channel
+window replay scenario. Taking the union of hits by extracted machine and edge
+adds 71 transitions to the two-seed result, reaching 738/1,824 (40.46%).
+Read retry (`Reading → Read`) reached 55/64 rows and write retry
+(`Writing → Write`) reached 50/64. Each run checked payload data after Resume.
+The native transition denominator is unchanged throughout.
 
 ## Mixed Copy traffic and channel configuration lifetime
 
@@ -215,6 +495,28 @@ for existing sinks. In each configuration a flattened connectivity query
 confirmed zero downstream sequential endpoints for every one of the 817 bit
 selections reported as unconnected. The review matches the exact endpoint,
 source reset, destination clock classification and path count for each group.
+
+### SG synthesis at `a26e1f99`
+
+Both control-budget runs on the SG snapshots above reached their five-hour
+limit. The two-channel run saved the post-optimization database. Restoring it
+reproduced the clock-group results below. The eight-channel run was still in
+mapping and produced no mapped checkpoint.
+
+| Two-channel clock | Target period | Worst setup slack | Violating paths |
+| --- | ---: | ---: | ---: |
+| Core | 1 ns | −396.4 ps | 10,361 |
+| Memory bus | 1 ns | 0.0 ps | 0 |
+| Register bus | 2 ns | +307.0 ps | 0 |
+
+The worst paths start at the registered execution owner and end in the
+per-channel SG walk state, including `remaining`. Core total negative slack
+is −1,179,930.6 ps. The mapped-cell library audit passed. Logic cell area was
+43,670.385 in the library's area units. The restored database gave a vectorless power estimate of
+81.79 mW and passed the mapped crossing checks for 10 mailbox/FIFO paths, five
+held-data paths and 10 synchronizer chains. Both estimates exclude the
+8,192-bit payload SRAM; its area, power and intrinsic timing remain open.
+These results precede the AXI receipt arbitration change at `4dc13e46`.
 
 ## Active-high interrupt lines
 

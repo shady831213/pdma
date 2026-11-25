@@ -64,7 +64,7 @@ make their register redesign prerequisites for this phase.
 it does not supersede the system specification under `model/modeling/docs`.
 The DMA register-access slice has native tests: a 32/64-bit AXI4-Lite frontend,
 reg/core CDC and object-owned registers. `DmaCopy` implements configurable 1..8 physical channels with one shared
-linear/scatter-gather Copy, Fence32/64 and Trap engine, statically configurable register/memory data widths,
+linear/scatter-gather Copy, Write, Fill, Timestamp, Fence32/64 and Trap engine, statically configurable register/memory data widths,
 reserved burst rows per channel, independent read/write outstanding capacities,
 core/bus asynchronous queues, a reg/core mailbox and reset drain. Software
 can submit Copy followed by Fence and poll its memory marker for completion.

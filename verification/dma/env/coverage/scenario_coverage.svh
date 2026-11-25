@@ -9,6 +9,10 @@ class pdma_scenario_coverage extends uvm_subscriber#(pdma_observation);
             bins task_results[]={TASK_SUCCESS,TASK_FAULT,TASK_ERROR,TASK_FATAL,TASK_RESET};
             illegal_bins service_only={IRQ_NOTIFICATION};
         }
+        opcode: coverpoint item.opcode {
+            bins copy_cmd={COMMANDHEADER_OPCODE_COPY}; bins write_cmd={COMMANDHEADER_OPCODE_WRITE};
+            bins fill_cmd={COMMANDHEADER_OPCODE_FILL}; bins unsupported={COMMANDHEADER_OPCODE_ATOMIC};
+        }
         length: coverpoint item.length {bins short_length={[0:16]}; bins medium_length={[17:64]}; bins long_length={[65:$]};}
         source_alignment: coverpoint item.source_lane {bins aligned={0}; bins unaligned={[1:pdma_configuration::MEMORY_BEAT_BYTES-1]};}
         dest_alignment: coverpoint item.dest_lane {bins aligned={0}; bins unaligned={[1:pdma_configuration::MEMORY_BEAT_BYTES-1]};}
@@ -30,7 +34,7 @@ class pdma_scenario_coverage extends uvm_subscriber#(pdma_observation);
     virtual function void write(pdma_observation t);
         scenarios.sample(t); observations++;
         if(t.outcome==TASK_SUCCESS) begin
-            completed_copies.sample(t);
+            if(t.opcode==COMMANDHEADER_OPCODE_COPY) completed_copies.sample(t);
             completions++; bytes+=t.length; latency_sum+=t.latency;
             if(t.latency<latency_min) latency_min=t.latency;
             if(t.latency>latency_max) latency_max=t.latency;

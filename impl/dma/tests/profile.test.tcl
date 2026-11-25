@@ -70,7 +70,8 @@ for {set count 1} {$count <= 8} {incr count} {
     set current [profile::read [file join $root impl/dma/profiles/copy.tcl]]
     if {[dict get $current configuration channels] != $count ||
         [dict get $current memories copy_buffer depth] != 8*$count ||
-        [dict size [dict get $current ports core_clk input]] != 0 ||
+        [dict get $current ports core_clk input timer_value] != 64 ||
+        [dict get $current ports core_clk input timer_available] != 1 ||
         [dict get $current ports core_clk output irq] != $count} {error "Incorrect channel profile $count"}
 }
 foreach invalid {0 9 -1 2.0 02 nope} {

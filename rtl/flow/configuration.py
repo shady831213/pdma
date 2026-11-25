@@ -98,6 +98,7 @@ def project(destination, values):
     atop_connection = 'awatop' if axi5 else 'awatop: _'
     ports = f'''reg_clk: input 'registers clock, reg_rst_n: input 'registers reset_async_low,
     core_clk: input 'core clock, core_rst_n: input 'core reset_async_low,
+    timer_available: input 'core logic, timer_value: input 'core logic<64>,
     bus_clk: input 'bus clock, bus_rst_n: input 'bus reset_async_low,
     cfg: modport 'registers $std::axi4_lite_if::<REG>::slave,
     memory: modport 'bus $std::axi4_if::<BUS>::master,
@@ -115,7 +116,7 @@ pub module DmaConfigured (
         {parameters},
     ) (
         reg_clk, reg_rst_n, core_clk, core_rst_n, bus_clk, bus_rst_n,
-        cfg, memory, {atop_connection}, irq, fatal_irq, fatal,
+        timer_available, timer_value, cfg, memory, {atop_connection}, irq, fatal_irq, fatal,
     );
 }}
 '''

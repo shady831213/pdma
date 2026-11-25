@@ -55,6 +55,11 @@ class pdma_performance extends uvm_subscriber#(svt_axi_transaction);
         longint unsigned offset;
         int gap;
         if(!enabled) return;
+        if(!writing && job.opcode==COMMANDHEADER_OPCODE_FILL) begin
+            if(item.id[0] && (item.id>>1)==job.channel_id)
+                `uvm_fatal("FILL_PAYLOAD_READ","Fill issued an execution read")
+            return;
+        end
         start_=writing ? job.dest_address : job.source_address;
         if(item.addr<start_ || item.addr>=start_+job.length) begin
             if(!writing && beats[0]!=0 && item.id[0]==0 && (item.id>>1)!=job.channel_id)
@@ -101,23 +106,24 @@ class pdma_performance extends uvm_subscriber#(svt_axi_transaction);
             fence_at=$realtime;
     endfunction
     function void finish(int unsigned write_latency_budget=0, bit concurrent_channels=0);
+        bit filling=job.opcode==COMMANDHEADER_OPCODE_FILL;
         int competing=concurrent_channels ? competing_read_beats : 0;
         int expected_beats=job.length/pdma_configuration::MEMORY_BEAT_BYTES;
         if(!enabled || descriptor_at==0 || fence_at==0 || expected_beats==0 ||
-            beats[0]!=expected_beats || beats[1]!=expected_beats)
+            beats[0]!=(filling ? 0 : expected_beats) || beats[1]!=expected_beats)
             `uvm_fatal("PERF_EMPTY",$sformatf("Incomplete observation read=%0d write=%0d expected=%0d descriptor=%0.3f fence=%0.3f",
                 beats[0],beats[1],expected_beats,descriptor_at,fence_at))
         enabled=0;
-        foreach(beats[i])
-            `uvm_info("COPY_THROUGHPUT",$sformatf("bytes=%0d direction=%s beats=%0d span_cycles=%0d bubbles=%0d max_gap=%0d bytes_per_cycle=%0.4f",
+        foreach(beats[i]) if(beats[i]!=0)
+            `uvm_info((filling ? "FILL_THROUGHPUT" : "COPY_THROUGHPUT"),$sformatf("bytes=%0d direction=%s beats=%0d span_cycles=%0d bubbles=%0d max_gap=%0d bytes_per_cycle=%0.4f",
                 job.length,i ? "write" : "read",beats[i],cycles(last[i]-first[i])+1,bubbles[i],max_gap[i],
                 real'(job.length)/(cycles(last[i]-first[i])+1)),UVM_NONE)
-        `uvm_info("COPY_END_TO_END",$sformatf("bytes=%0d descriptor_to_fence_cycles=%0d submission_to_fence_ns=%0.3f",
+        `uvm_info((filling ? "FILL_END_TO_END" : "COPY_END_TO_END"),$sformatf("bytes=%0d descriptor_to_fence_cycles=%0d submission_to_fence_ns=%0.3f",
             job.length,cycles(fence_at-descriptor_at),fence_at-job.submitted_at),UVM_NONE)
         if(handoffs!=0)
             `uvm_info("COPY_HANDOFF",$sformatf("bursts=%0d last_R_to_first_W_min=%0d max=%0d bus_cycles",
                 handoffs,cycles(minimum_handoff),cycles(maximum_handoff)),UVM_NONE)
-        `uvm_info("COPY_BUBBLE_BUDGET",$sformatf("peer_descriptor_beats=%0d permitted_idle_R=0 transport_write_allowance=%0d",competing,write_latency_budget),UVM_NONE)
+        `uvm_info((filling ? "FILL_BUBBLE_BUDGET" : "COPY_BUBBLE_BUDGET"),$sformatf("peer_descriptor_beats=%0d permitted_idle_R=0 transport_write_allowance=%0d",competing,write_latency_budget),UVM_NONE)
         if(bubbles[0]!=competing || bubbles[1]>competing+write_latency_budget)
             `uvm_fatal("PERF_PAYLOAD_BUBBLE","Payload gaps exceed the declared transport-latency budget")
     endfunction

@@ -27,7 +27,9 @@ An alternative engine preserves these obligations:
   returns one terminal receipt on `returned && accepted`. Identity survives CDC
   and external transaction completion. Acceptance creates the drain obligation,
   even when the AXI address has not yet left the queue.
-- Slot zero belongs to descriptor reads. The engine uses slots 1..SLOTS for retained Copy rows and SLOTS+1 for Fence/event writes. At its boundary the engine receives one head and a valid indication per channel, plus a per-channel fetch-outstanding indication for reset. A terminal receipt retains its original tag.
+- Slot zero belongs to descriptor reads. The engine uses slots 1..SLOTS for retained Copy/Fill rows and SLOTS+1 for scalar and event writes. At its boundary the engine receives one head and a valid indication per channel, plus a per-channel fetch-outstanding indication for reset. A terminal receipt retains its original tag.
+
+The platform supplies a coherent 64-bit `timer_value` synchronous to `core_clk` and a stable `timer_available` capability. Connect both inputs to zero when the platform has no timebase. DMA reset has no effect on platform time.
 
 Integration selects one implementation statically in the top-level composition.
 It instantiates the shared channel interface and memory interface with the same

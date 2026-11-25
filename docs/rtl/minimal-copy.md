@@ -1,9 +1,9 @@
-# Copy, Fence and Trap RTL slice
+# DMA execution RTL slice
 
 Detailed implemented [microarchitecture](microarchitecture.md) and current
 [performance measurements](performance.md) supplement this scope summary.
 
-This DMA-core slice implements one shared engine for linear/scatter-gather Copy, Fence and Trap with an
+This DMA-core slice implements one shared engine for linear/scatter-gather Copy, Write, Fill, Timestamp, Fence and Trap with an
 instance-configured channel count in 1..8. Its independent bus widths and resource
 capacities are described in [elaboration configuration](configuration.md), including
 the qualification limits. Other command families remain outside this slice.
@@ -53,14 +53,14 @@ channel yields shared execution to an eligible peer.
 | Owner | State and release boundary |
 | --- | --- |
 | `CopySegments` | Two endpoint cursors per accepted SG Copy, one shared 16-byte metadata assembly register, and one pending metadata receipt bit per channel. Reset waits for that receipt before releasing the channel. |
-| `CopyEngine` | One descriptor/lifecycle context per channel, one round-robin selected shared decode/Fence/error-publication datapath |
+| `CopyEngine` | One descriptor/lifecycle context per channel, one round-robin selected shared decode, scalar-write and error-publication datapath |
 | `CopyWindow` | `SLOTS` source/destination/length entries per channel, access states and retained read bytes; reuses a slot only after successful write and in-order retirement |
 | Core RAM/read offer | `channels * slots` rows of `memory_bits * burst_beats` shared 1R1W storage, one synchronous read and one write port; a separate register holds the prepared write under backpressure |
 | Request/receipt FIFOs | Independently configured depths, registered Gray pointers and two-stage synchronization; enqueue transfers custody, not transaction completion |
 | Read endpoint | Configured AR tracking capacity, interleaved R-burst assembly and a held receipt |
 | Write endpoint | Separately advancing AW, W and B queues; admission reserves all three, and B consumes the oldest AW/W responsibility for its BID |
 
-Slot zero identifies the channel prefetch, slots 1..SLOTS identify retained Copy rows and SLOTS+1 identifies Fence/event writes. The bus sees separate fetch and execution IDs per channel. Each ID keeps issue order, with independent cross-ID responses and beat-interleaved reads. A fair registered R/B merger feeds the receipt FIFO.
+Slot zero identifies the channel prefetch, slots 1..SLOTS identify Copy/Fill rows and SLOTS+1 identifies scalar and event writes. The bus sees separate fetch and execution IDs per channel. Each ID keeps issue order, with independent cross-ID responses and beat-interleaved reads. A fair registered R/B merger feeds the receipt FIFO.
 
 The registered request FIFO, independent bus lanes and retained core window allow
 reads and writes of different chunks to overlap. A successful read can forward
@@ -91,12 +91,27 @@ publication waits for this profile's outstanding accesses to drain; software mus
 still use reset for recovery and resource reuse. See the
 [architectural contract](../../model/modeling/docs/copy-engine.md#error-records-reporting-and-discovery).
 
+Write32/64 stores an immediate in its selected address space. Software uses Fence
+for a channel release boundary. Timestamp uses the same
+64-bit aligned write. At command acceptance, after target validation, the engine
+samples the core-domain `timer_value` exactly once. The platform drives
+`timer_available` as a stable capability and owns the coherent timebase, its unit
+and its reset. Tie both inputs low when there is no source. A valid target on such
+a platform reports Unsupported. A zero sample is valid. A write PageFault retains
+the sampled operand across resume.
+
+Fill uses the burst window's write slots directly. The low 1, 4 or 8 bytes of its
+immediate repeat from the first destination byte across burst and page boundaries.
+A zero-length Fill completes without memory traffic. An overflowing range reports
+InvalidLength. A failed burst retains its row through fault recovery; successful
+writes retire in order and contribute to the same error prefix as Copy.
+
 Fence32/64 writes an aligned marker with its own context after prior work retires.
 It preserves adjacent lanes and supports retained write-fault recovery. Successful
 commands produce no event. A Trap following the Fence executes after the Fence write
 response. It sets its channel's sticky cause and requests an interrupt if enabled
 and unmasked. Software can ACK the cause independently of notification delivery.
-Other opcodes report Unsupported in this slice. A stopping error writes the 24-byte event, splitting at 4KiB when needed;
+Wait, Atomic and Semaphore report Unsupported in this slice. A stopping error writes the 24-byte event, splitting at 4KiB when needed;
 producer advances only after the whole record succeeds. Reporting failure is fatal.
 Each channel and the DMA-wide fatal source drive independent active-high IRQ
 lines. Enable/unmask immediately exposes a live cause. The channel masks and

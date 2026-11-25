@@ -17,6 +17,8 @@ pub module DmaCopy::<
     reg_rst_n      : input   'registers reset_async_low                              ,
     core_clk       : input   'core      clock                                        ,
     core_rst_n     : input   'core      reset_async_low                              ,
+    timer_available: input 'core logic = 0,
+    timer_value: input 'core logic<64> = 0,
     bus_clk        : input   'bus       clock                                        ,
     bus_rst_n      : input   'bus       reset_async_low                              ,
     cfg            : modport 'registers $std::axi4_lite_if::<R>::slave               ,
@@ -65,6 +67,7 @@ pub module DmaCopy::<
         clk     : core_clk  ,
         rst_n   : core_rst_n,
         channels            ,
+        timer_available, timer_value,
         memory  : requests  ,
     );
     inst transport: DmaMemoryCrossing::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS> #(

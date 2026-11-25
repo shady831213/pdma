@@ -4,9 +4,9 @@ pub package CommandState {
         Idle,
         WalkSegments,
         Copy,
-        FenceWrite,
-        FenceReturn,
-        ParkFence,
+        WordWrite,
+        WordReturn,
+        ParkWord,
         PrepareEvent,
         Publish,
         PublishReturn,
@@ -39,6 +39,6 @@ pub package CommandState {
     function waiting (
         phase: input Phase,
     ) -> logic {
-        return phase == Phase::FenceReturn || phase == Phase::PublishReturn;
+        return phase == Phase::WordReturn || phase == Phase::PublishReturn;
     }
 }

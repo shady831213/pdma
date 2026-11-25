@@ -1,6 +1,6 @@
 # PDMA Copy Engine RTL 架构设计输入
 
-当前 Copy/Fence/Trap RTL 的逐模块、状态机、流水和时序说明见 [已实现微架构](microarchitecture.md)，
+当前 DMA 执行通路 RTL 的逐模块、状态机、流水和时序说明见 [已实现微架构](microarchitecture.md)，
 最新吞吐/延迟测量见 [性能说明](performance.md)。本文件的目标设计条目不自动代表已实现。
 
 状态：微架构设计草案，2026-11-12 更新。寄存器访问和最小 Linear Copy/Fence32/64 切片已有实现，

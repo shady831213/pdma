@@ -31,26 +31,31 @@ class pdma_task extends uvm_object;
     virtual function longint unsigned destination_byte(int unsigned index);
         return dest_address+index;
     endfunction
-    virtual task allocate(jvs_memory_allocator allocator,pdma_memory memory);
-        source_buffer=new; dest_buffer=new; fence_buffer=new;
-        source_buffer.allocate(allocator,length,payload_alignment,cross_page,source_lane);
+    protected task allocate_destination(jvs_memory_allocator allocator,pdma_memory memory);
+        dest_buffer=new; fence_buffer=new;
         dest_buffer.allocate(allocator,length,payload_alignment,cross_page,dest_lane,1);
         fence_buffer.allocate(allocator,fence_bytes(),fence_bytes());
-        source_address=source_buffer.address; dest_address=dest_buffer.address; fence_address=fence_buffer.address;
-        source_base=source_address-source_offset;
+        dest_address=dest_buffer.address; fence_address=fence_buffer.address;
         expected=new[length]; initial_data=new[length];
-        memory.permit(source_buffer.allocation.get_s_addr(),source_address,length,source_context,0,channel_id);
         memory.permit(dest_buffer.allocation.get_s_addr(),dest_address,length,dest_context,1,channel_id);
         memory.permit(fence_buffer.allocation.get_s_addr(),fence_address,fence_bytes(),fence_context,1,channel_id);
+        memory.write_byte(dest_address-1,8'ha6); memory.write_byte(dest_address+length,8'h59);
+        for(int i=0;i<fence_bytes();i++) memory.write_byte(fence_address+i,0);
+    endtask
+    virtual task allocate(jvs_memory_allocator allocator,pdma_memory memory);
+        source_buffer=new;
+        source_buffer.allocate(allocator,length,payload_alignment,cross_page,source_lane);
+        source_address=source_buffer.address; source_base=source_address-source_offset;
+        memory.permit(source_buffer.allocation.get_s_addr(),source_address,length,source_context,0,channel_id);
+        allocate_destination(allocator,memory);
         foreach(expected[i]) begin
             expected[i]=$urandom; initial_data[i]=~expected[i];
             memory.write_byte(source_address+i,expected[i]); memory.write_byte(dest_address+i,initial_data[i]);
         end
-        memory.write_byte(dest_address-1,8'ha6); memory.write_byte(dest_address+length,8'h59);
-        for(int i=0;i<fence_bytes();i++) memory.write_byte(fence_address+i,0);
     endtask
     virtual task deallocate(jvs_memory_allocator allocator,pdma_memory memory);
-        source_buffer.deallocate(allocator,memory); dest_buffer.deallocate(allocator,memory); fence_buffer.deallocate(allocator,memory);
+        if(source_buffer!=null) source_buffer.deallocate(allocator,memory);
+        dest_buffer.deallocate(allocator,memory); fence_buffer.deallocate(allocator,memory);
     endtask
     virtual function Command_t command_record();
         CopyCommand_t record_value='0;

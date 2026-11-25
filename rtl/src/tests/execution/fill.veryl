@@ -1,0 +1,145 @@
+#[test(fill_command_byte_stream)]
+module FillExecutionTest {
+    inst clk     : $tb::clock_gen #( period: 10 );
+    inst rst     : $tb::reset_gen ( clk );
+    inst mem     : CopyMemoryPort;
+    inst channels: DmaChannels #( CHANNEL_COUNT: 1 );
+    var head    : CommandState::Entry;
+    var valid   : logic              ;
+    var accepted: logic              ;
+    assign channels.global_blocked = 0;
+    assign channels.global_clear   = 0;
+    assign channels.command        = '{'0};
+    assign channels.events         = '{RegisterState::Ring'{base: 64'h800, capacity: 2, producer: 0, consumer: 0}};
+    assign channels.configuration  = '{
+        RegisterState::ChannelConfig'{enable: 1, configured: 1, ring_context: 0, irq_enable: 0, irq_mask: 0}
+    };
+    assign channels.actions        = '{'0};
+    assign channels.reset_all      = 0;
+    assign channels.fatal_in       = 0;
+    assign channels.event_geometry = 1;
+    assign channels.event_ready    = 1;
+    assign accepted                = channels.command_advance;
+    inst dut: CopyEngine (
+        clk                ,
+        rst_n     : rst    ,
+        heads     : '{head},
+        head_valid: valid  ,
+        fetching  : 0      ,
+        channels           ,
+        memory    : mem    ,
+    );
+    initial {
+        const BASE   : u64 = 'hffb;
+        const LENGTH : u32 = 147;
+        const PATTERN: u64 = 64'hfedcba9876543210;
+        for scenario in 0..7 {
+            let width                                         : u32           = if scenario == 0 ?
+                1
+            : if scenario == 1 ?
+                4
+            :
+                8
+            ;
+            let empty                                         : logic         = scenario == 3;
+            let overflow                                      : logic         = scenario == 4;
+            let malformed                                     : logic         = scenario >= 5;
+            var bytes_seen                                    : logic<LENGTH>;
+            var event_seen                                    : logic        ;
+            bytes_seen                                     = 0;
+            event_seen                                     = 0;
+            head                                           = '0;
+            head.descriptor[7:0]                           = 2;
+            head.descriptor[127:64]                        = 99;
+            head.descriptor[191:128]                       = if overflow ? '1 : BASE;
+            head.descriptor[255:192]                       = if empty ? 0 : LENGTH;
+            head.descriptor[319:256]                       = PATTERN;
+            head.descriptor[351:320]                       = 23;
+            head.descriptor[383:352]                       = if scenario == 5 ?
+                3
+            : if width == 8 ?
+                2
+            : if width == 4 ?
+                1
+            :
+                0
+            ;
+            head.descriptor[FillCommandLayout::EXTENT * 8] = scenario == 6;
+            valid                                          = 0;
+            mem.ready                                      = 0;
+            mem.returned                                   = 0;
+            mem.receipt                                    = '0;
+            rst.assert();
+            clk.next(2);
+            valid = 1;
+            for tick in 0..160 {
+                if channels.status[0].fatal != 0 {
+                    $assert(
+                        malformed && channels.status[0].fatal == ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD,
+                        "FILL_FATAL",
+                    );
+                    break;
+                }
+                if accepted {
+                    $assert(!malformed, "FILL_MALFORMED_CONSUMED");
+                    if head.descriptor[7:0] == 7 {
+                        break;
+                    }
+                    clk.next();
+                    head.descriptor = 7;
+                }
+                mem.ready = 1;
+                if mem.valid {
+                    let addr : u64 = mem.request.address;
+                    let bytes: u32 = (1 << mem.request.size) * (1 + (mem.request.length as u32));
+                    $assert(mem.request.write && !empty && !malformed, "FILL_WRITE_ONLY");
+                    if overflow {
+                        $assert(
+                            !event_seen && addr == 'h800 && mem.request.data[63:0] == 99 && mem.request.data[95:64] == 1
+                                && mem.request.data[191:128] == 0,
+                            "FILL_OVERFLOW_EVENT",
+                        );
+                        event_seen = 1;
+                    } else {
+                        $assert(
+                            mem.request.selector == 23 && addr >= BASE && addr + bytes <= BASE + LENGTH && addr[11:0] + bytes <= 4096,
+                            "FILL_WRITE_RANGE",
+                        );
+                        for lane in 0..64 {
+                            if lane <: bytes {
+                                let offset: u32 = (addr - BASE) as 32 + lane;
+                                $assert(
+                                    !bytes_seen[offset] && mem.request.data[lane * 8+:8] == (PATTERN >> (8 * (offset % width))) as 8,
+                                    "FILL_STREAM_BYTE",
+                                );
+                                bytes_seen[offset] = 1;
+                            }
+                        }
+                    }
+                    mem.receipt.tag = mem.request.tag;
+                    clk.next();
+                    mem.ready    = 0;
+                    mem.returned = 1;
+                    clk.next();
+                    mem.returned = 0;
+                    if event_seen {
+                        break;
+                    }
+                } else {
+                    clk.next();
+                }
+            }
+            if malformed {
+                $assert(
+                    channels.status[0].fatal == ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD,
+                    "FILL_ENCODING_CHECKED",
+                );
+            } else if overflow {
+                $assert(event_seen, "FILL_OVERFLOW_REPORTED");
+            } else {
+                $assert(accepted && channels.trap_executed[0] && bytes_seen == (if empty ? 0 : '1), "FILL_RETIRED_ALL");
+            }
+        }
+        $finish();
+    }
+}

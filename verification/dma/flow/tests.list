@@ -51,3 +51,10 @@ pdma_sg_recovery_test
 pdma_sg_parked_span_test
 pdma_sg_error_prefix_test
 pdma_mixed_copy_test
+pdma_word_write_test
+pdma_pattern_fill_test
+pdma_fill_throughput_test
+pdma_fill_replay_test
+pdma_fill_error_test
+pdma_fill_reset_test
+pdma_timestamp_fill_test

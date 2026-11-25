@@ -1,4 +1,4 @@
-# DMA Copy、Fence 与 Trap 微架构
+# DMA 执行通路微架构
 
 本文描述 `DmaCopy` 的当前源码组织。2026-11-25，带独立源、目的 SG 的默认
 2、8 通道整颗 DMA 均达到综合 setup 目标。core 和 AXI 为 1 GHz，寄存器为
@@ -11,7 +11,7 @@
 
 ## 1. 范围、层次和边界
 
-当前实现：1..8 个物理 channel、一套共享 linear/SG Copy、Fence32/64 和 Trap 执行资源，
+当前实现：1..8 个物理 channel、一套共享 linear/SG Copy、Fill、Write32/64、Timestamp、Fence32/64 和 Trap 执行资源，
 三个异步时钟域。配置不可通过软件改变 channel 数。命令记录为 96B，错误事件
 为 24B。正常完成不写 event；软件通过后继 Fence 的内存标记确认完成。
 Fence 保证本 channel 的先前任务已退休再发标记；它不是跨 channel/global barrier，
@@ -22,7 +22,7 @@ Fence 保证本 channel 的先前任务已退休再发标记；它不是跨 chan
 内存口沿用 AXI4 普通事务子集，AWATOP 为零；不是完整 AXI5 atomic 实现。
 数据宽度、burst 上限、每 channel 保留槽、读写 outstanding 和 CDC 深度的依赖
 见 [配置说明](configuration.md)。合法配置与完成物理资格检查是两件事。
-Write/Fill/Wait/Atomic/Semaphore/Timestamp、外围权限检查、CPU 和
+Wait/Atomic/Semaphore、外围权限检查、CPU 和
 firmware RTL 仍未在这个切片实现。
 
 ### 1.1 目录是职责分组，不全是实例包含关系
@@ -152,7 +152,7 @@ core 每拍可发一笔请求。执行请求优先，预取请求在 channel 间
 | prepared/加载中的写数据 | CopyWindow | 全机一个 BURST_BITS cache，带 channel/slot | 已发写或失去当前 owner；权威数据仍在 RAM |
 | 已承诺 payload 请求数 | `copy.debt[c]` | 每 channel 可表示 0..SLOTS 的 counter | 自己的 terminal receipt，R→W 同拍可净变化为零 |
 | 描述符 FIFO、组装偏移和在途读 | `ChannelFetch` | 每 channel 独立；每条已开始取数的描述符预留一行 | 收到最后一段或首个错误后标记该行就绪；执行接受或 reset 后释放行 |
-| 执行控制访问 | `contexts[c].phase` | FenceReturn/PublishReturn | 自己的 slot SLOTS+1 回执 |
+| 执行控制访问 | `contexts[c].phase` | WordReturn/PublishReturn | 自己的 slot SLOTS+1 回执 |
 | global reset 收集集合 | `DmaControl.global_pending` | C bit | 每 channel clear；集合归零才 global clear |
 | IRQ 输出 | channel 寄存器及全局 fatal | C+1 根线 | 由当前 cause、enable 和 mask 组合产生 |
 
@@ -196,7 +196,7 @@ control-budget 综合只给 RAM 保留边界负载模型；不能把 placeholder
 | 位置/代码 | 候选 | 选择规则 | 何时前进/保持 |
 | --- | --- | --- | --- |
 | [AxiLiteRegisterFrontend][frontend]：`choose_write/dispatch/prefer_read` | 配对完成的 AW+W 与 AR | 双方都有时按 prefer_read 交替；单方就绪即可选 | dispatch 更新偏好；一次只推进一个内部 register operation |
-| [CopyEngine][engine]：`eligible/choice/chosen` | 合法 Idle 新任务、可运行 Copy、待重试 FenceWrite | `RoundRobin<8>::select(eligible,cursor)`；超出实例数的 bit 恒零 | grant 时锁存 owner，并按实际 C 回绕 cursor；健康 command 保持授权 |
+| [CopyEngine][engine]：`eligible/choice/chosen` | 合法 Idle 新任务、可运行 Copy、待重试的标量写 | `RoundRobin<8>::select(eligible,cursor)`；超出实例数的 bit 恒零 | grant 时锁存 owner，并按实际 C 回绕 cursor；健康 command 保持授权 |
 | [CopyWindow][window]：`read_choice/write_choice` | 当前 channel 的 Read/Write 行 | 从退休 head 起找第一个对应状态行 | head 只在按序写退休时前进；这是有序优先选择，不是每 cycle 轮换 slot |
 | [CopyWindow][window]：`selected_slot/memory.valid` | prepared write、可直接转发的 R、候选读 | prepared write 优先；可用返回直通其次；然后发读 | 写数据尚在同步 RAM 加载中时，可继续发其它读；stop_issue 关闭所有新发射 |
 | `CopyMemoryEndpoint`：`selected/write_deferred/result` | reader receipt、writer receipt | 首次竞争选 R；若 B 因这次握手等待，下一个可用 grant 给 B | 两路持续有效时交替；合并入口停顿时保留优先权，result 寄存器保持已选回执 |
@@ -213,7 +213,7 @@ control-budget 综合只给 RAM 保留边界负载模型；不能把 placeholder
 正常 Copy 从接受已预取的描述符到全部 payload 退休都保留授权；不会每 burst 重新仲裁。
 普通外部 AXI 背压也不会自动让出授权。已锁定 owner 的 enable 被清零时，
 请求会暂停，但 enable↓ 本身不是 yield/reset；不能据此期待立即调度 peer。PageFault 只有排空旧事务、保留好状态后
-才 park 并让出。FenceWrite 恢复及已停放 Copy 再次参加同一个 RR。
+才 park 并让出。WordWrite 恢复及已停放 Copy 再次参加同一个 RR。
 
 这提供命令边界的轮询机会，不提供按字节分时或有界抢占。长 Copy 可以让 peer
 等待很久；若平台一直不返回某笔请求，没有有限的调度/完成延迟保证。
@@ -267,23 +267,23 @@ sequenceDiagram
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
-    Idle --> Copy: 队头获授权，合法非零 Linear Copy
+    Idle --> Copy: 队头获授权，合法非零 Linear Copy 或 Fill
     Idle --> WalkSegments: 任一端为 SG，长度非零
     WalkSegments --> Copy: 两端已验证，当前连续区间就绪
     Copy --> WalkSegments: 当前区间成功退休，命令仍有剩余字节
     WalkSegments --> PrepareEvent: 列表几何、范围或读取错误
-    Idle --> FenceWrite: 合法 Fence32/64
-    Idle --> Idle: 合法零长度 Copy 或 Trap
+    Idle --> WordWrite: 合法 Write、Fence 或 Timestamp
+    Idle --> Idle: 合法零长度 Copy、Fill 或 Trap
     Idle --> PrepareEvent: 可解码但不支持或参数错误
     Idle --> Stopped: 队头取数失败或非法编码
     Copy --> Idle: 全部按序退休
     Copy --> PrepareEvent: stopping error，前缀固定且债务排空
     Copy --> Stopped: protocol error，债务排空
-    FenceWrite --> FenceReturn: 请求 FIFO 接收
-    FenceReturn --> Idle: 写成功
-    FenceReturn --> ParkFence: PageFault
-    ParkFence --> FenceWrite: 软件 RESUME
-    FenceReturn --> PrepareEvent: permanent write error
+    WordWrite --> WordReturn: 请求 FIFO 接收
+    WordReturn --> Idle: 写成功
+    WordReturn --> ParkWord: PageFault
+    ParkWord --> WordWrite: 软件 RESUME
+    WordReturn --> PrepareEvent: permanent write error
     PrepareEvent --> Publish: event 地址、容量、几何合法
     PrepareEvent --> Stopped: event 配置坏或满
     Publish --> PublishReturn: event 写请求接收
@@ -292,7 +292,7 @@ stateDiagram-v2
     PublishReturn --> Stopped: 完整写回或 event write 失败
 ```
 
-Copy 的 page fault **不改变外层 phase=Copy**，而是在 window 冻结，安全 parked 后
+Copy 或 Fill 的 payload page fault **不改变外层 phase=Copy**，而是在 window 冻结，安全 parked 后
 让出 locked；不能在图中误画成 command completion。Resume 不重新 fetch descriptor。
 
 | 阶段 | 寄存器切点和副作用 |
@@ -303,7 +303,7 @@ Copy 的 page fault **不改变外层 phase=Copy**，而是在 window 冻结，�
 | Idle→Copy | 注册 copy_start，window 下一边沿接收初始化 |
 | Copy | Linear/Linear 对整条命令启动一次 window；SG 对每对连续区间启动一次。同一区间内的 burst 不经过 Fetch/Decode 或列表遍历。 |
 | Idle→Idle（Trap） | 在接受队头的边沿推进 consumer，并向该 channel 发出一次 trap_executed；不占用 payload 端口 |
-| Idle→FenceWrite | 保存目标地址；value/context 留在已接受 descriptor 中 |
+| Idle→WordWrite | 保存目标地址及 context。Write/Fence 使用立即数；Timestamp 在这一拍锁存平台样本，重试复用该值 |
 | PrepareEvent | 固定 event 起始地址；与后续请求 FIFO 输入之间有寄存器切点 |
 | PublishReturn | 全部 24B 写成功后才 event_advance；部分写不能提前暴露 producer |
 
@@ -354,15 +354,18 @@ stateDiagram-v2
     [*] --> Free
     Free --> Read: allocate 元数据
     Read --> Reading: read request 被 FIFO 接收
+    Free --> Write: Fill 保留一行，图案来自已接受命令
     Reading --> Write: R 成功，数据保留到 RAM
     Reading --> Writing: R 成功且同边沿直接发 W 请求
     Reading --> Read: 读失败，保留重试位置
-    Write --> Writing: prepared write 被 FIFO 接收
+    Write --> Writing: 数据写请求被 FIFO 接收
     Writing --> Done: B 成功，尚不能按序退休
     Writing --> Free: B 成功且正好是退休 head
-    Writing --> Write: 写失败，保留已读数据
+    Writing --> Write: 写失败，保留行和写操作数
     Done --> Free: 轮到 head，按序退休
 ```
+
+Fill 在接受时把图案低 1、4 或 8 字节复制成一个 64 位图案字。分配行时直接进入 Write；目的地址相对命令起始地址的低三位给出首字节相位。每次发出该行都能从保留的图案和行地址生成相同数据，包括跨页后的第一行、非整图案尾部和缺页后的重试。Fill 使用与 Copy 相同的 B 回执、按序退休及错误前缀逻辑，且无需读取源数据或访问 payload RAM。
 
 图中的“失败→Read/Write”不会自动继续重试：PageFault 同时设置 frozen，permanent
 error 设置 error_code，二者均关闭新 issue。只有软件 Resume 或 reset 生命周期允许
@@ -482,7 +485,7 @@ stateDiagram-v2
     Closing --> Cleared: 本 channel 责任全部归还
 ```
 
-Copy 的 frozen/parked/recovering 是 window 层状态；Fence 用 ParkFence 保存写目标和值。
+Copy/Fill 的 frozen/parked/recovering 属于 window；标量 Write/Fence/Timestamp 用 ParkWord 保留写目标和值。
 这些不是新的顶层 central controller。停放 A 不占用 B 的保留行，但共享 FIFO/AXI
 顺序仍可能延迟 B，不能承诺任意总线背压下 peer 完全不受影响。
 
@@ -538,7 +541,7 @@ sequenceDiagram
 | F0 | 私有 FIFO 有空间，producer 已发布 | 为一条描述符预留行；各段被跨域队列接受时分别增加在途数 |
 | Fn | 最后一段成功返回，或某段报错 | 标记目标行就绪；仅队头进入仲裁，较年轻的错误等待自己的顺序 |
 | G0 | 引擎空闲，已就绪队头获 grant | owner/locked 注册 |
-| G1 | 队头合法且仍允许接受 | consumer 推进；Copy 注册 copy_start，Fence 保存写地址，Trap 更新 cause 并按 mask 请求通知 |
+| G1 | 队头合法且仍允许接受 | consumer 推进；Copy/Fill 注册 copy_start，标量写保存写地址和操作数，Trap 更新 cause 并按 mask 请求通知 |
 
 F0…Fn 可与另一命令执行重叠。各域时钟相位、反压和同一 channel 的前序任务决定实际启动延迟。
 

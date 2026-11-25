@@ -13,6 +13,8 @@ module CopyWindow::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> #
     cancel             : input   logic              <CHANNEL_COUNT>                ,
     clear              : input   logic              <CHANNEL_COUNT>                ,
     resume             : input   logic              <CHANNEL_COUNT>                ,
+    fill               : input   logic = 0,
+    fill_pattern       : input   u64 = 0,
     source             : input   logic              <64>                           ,
     destination        : input   logic              <64>                           ,
     length             : input   logic              <64>                           ,
@@ -175,7 +177,7 @@ module CopyWindow::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> #
         read_port : buffer_read ,
         write_port: buffer_write,
     );
-    assign buffer_read.enable   = active[selected] && !stop_issue && !prepared && !loading && !stale_cache
+    assign buffer_read.enable   = !fill && active[selected] && !stop_issue && !prepared && !loading && !stale_cache
         && (|write_choice);
     assign buffer_read.address  = base + (write_slot as ROW_BITS);
     assign buffer_write.enable  = receiving && returned_usable && states[return_row] == State::Reading
@@ -183,18 +185,22 @@ module CopyWindow::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> #
     assign buffer_write.address = return_row;
     assign buffer_write.data    = memory.receipt.data;
     assign buffer_write.mask    = '1;
+    // The pattern starts at the command's first byte, independently of bus
+    // lane, page and resume boundaries. Requests carry right-justified data.
+    let fill_phase: logic<3> = chunks[base + (write_slot as ROW_BITS)].destination[2:0] - destination[2:0];
+    let fill_word: u64 = ({fill_pattern, fill_pattern} >> {fill_phase, 3'b0}) as 64;
     always_comb {
-        selected_slot           = if usable_prepared ? prepared_slot : if forward_read ? returned_slot : read_slot;
+        selected_slot           = if fill ? write_slot : if usable_prepared ? prepared_slot : if forward_read ? returned_slot : read_slot;
         memory.request          = '0;
         memory.request.tag      = M::Tag'{channel: selected, slot: (selected_slot as M::SLOT_BITS) + 1};
-        memory.request.write    = usable_prepared || forward_read;
+        memory.request.write    = fill || usable_prepared || forward_read;
         memory.request.address  = if memory.request.write ?
             chunks[base + (selected_slot as ROW_BITS)].destination
         :
             chunks[base + (selected_slot as ROW_BITS)].source
         ;
         memory.request.selector = if memory.request.write ? destination_context : source_context;
-        memory.request.data     = if forward_read ? memory.receipt.data : prepared_data;
+        memory.request.data     = if fill ? {fill_word repeat ((M::BURST_BITS + 63) / 64)} as M::BURST_BITS : if forward_read ? memory.receipt.data : prepared_data;
         memory.request.size     = if chunks[base + (selected_slot as ROW_BITS)].length == 1 ? 0 : M::DATA_SIZE;
         memory.request.length   = if memory.request.size == 0 ?
             0
@@ -202,7 +208,7 @@ module CopyWindow::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> #
             ((chunks[base + (selected_slot as ROW_BITS)].length >> M::DATA_SIZE) - 1) as M::LENGTH_BITS
         ;
         memory.valid            = active[selected] && !stop_issue && !stale_cache
-            && (usable_prepared || forward_read || (|read_choice));
+            && (if fill ? (|write_choice) : usable_prepared || forward_read || (|read_choice));
     }
     // One return writes one reserved row. One selected owner reads one row.
     // Prepared data is an execution cache; the authoritative bytes remain in RAM.
@@ -302,8 +308,8 @@ module CopyWindow::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> #
                     }
                     if selected_valid && selected == channel {
                         if sending {
-                            if usable_prepared {
-                                states[base + (prepared_slot as ROW_BITS)] = State::Writing;
+                            if fill || usable_prepared {
+                                states[base + (selected_slot as ROW_BITS)] = State::Writing;
                             } else if !forward_read {
                                 states[base + (read_slot as ROW_BITS)] = State::Reading;
                             }
@@ -314,7 +320,7 @@ module CopyWindow::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> #
                             head[channel]      = next_slot(head[channel]);
                         }
                         if allocate {
-                            states[tail_row]          = State::Read;
+                            states[tail_row]          = if fill ? State::Write : State::Read;
                             tail[channel]             = next_slot(tail[channel]);
                             next_source[channel]      = allocated_source;
                             next_destination[channel] = allocated_destination;
@@ -361,7 +367,7 @@ module CopyWindow::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> #
                         states[head_row] = State::Free;
                     }
                     if selected_valid && selected == channel && allocate {
-                        states[tail_row] = State::Read;
+                        states[tail_row] = if fill ? State::Write : State::Read;
                     }
                 }
             }

@@ -18,6 +18,9 @@ software never substitutes mirrored values for a real hardware read.
 | --- | --- | --- |
 | Linear copy, independent endpoint selectors | `single_channel/cases/linear.rs` | Random bytes, lengths, alignments, nonzero endpoint offsets and selectors; completed-task data and guards; platform memory permissions enforce access ranges and contexts |
 | Byte tails and page boundaries | `single_channel/cases/linear.rs` | Byte/full-width transfers; no access crosses 4 KiB; no over-read/write |
+| Write32/64 | `dma/tests/command_operations.rs` | Write a random immediate to an aligned target in its selected context. Check the exact bytes and guards after the successor Fence. |
+| Fill | `dma/tests/command_operations.rs` | Compare each byte to the 1/4/8-byte pattern from the command start, including page splits and tails. Exercise a write fault with peer progress, a permanent write error and reset while a B response is outstanding. Measure aligned throughput with no payload reads. |
+| Timestamp | `firmware_managed/harness/runtime/tests/copy_engine/timestamp.rs`, `dma/tests/command_operations/faults/timestamp.rs` | Bracket a faulted Fill with two Timestamp commands. Check marker order, sample bounds and Fence completion. Native execution tests retry a failed Timestamp write after changing the external timer and require the original sample. |
 | Software-visible successful completion | `single_channel/software/mod.rs` | Copy followed by Fence32/64; poll the marker, then check data, guards and identity before task buffer release |
 | Trap after Fence | `single_channel/recovery/mod.rs` | Publish Copy, Fence and Trap together. Check the marker and copied bytes on the channel interrupt, sticky cause and ACK, assertion on unmask/enable, coalescing while sticky, and deassertion on ACK or reset. |
 | Generated register frontdoor | Contract register schemas and MMIO bus contract | Complete reset before changing frozen configuration, round-trip a 64-bit base through AXI4-Lite32, propagate an unmapped read error, restore configuration and complete Copy/Fence |
@@ -75,8 +78,8 @@ PageFault write, in contrast, must have no effects from that failed access befor
 Fault injection is a platform response policy. Payload SLVERR plus USER=1 means
 recoverable PageFault; other errors stop. This does not model page tables or PCIe.
 
-The RTL implements multichannel linear and scatter/gather Copy, Fence32/64 and Trap. Write,
-Fill, Wait, Atomic, Semaphore and Timestamp remain outside the RTL profile. Those Rust scenarios are future
+The RTL implements multichannel linear and scatter/gather Copy, Write, Fill,
+Timestamp, Fence32/64 and Trap. Wait, Atomic and Semaphore remain future RTL
 coverage obligations, not passed/skipped tests in this regression. Protocol VIP
 and randomized clocks do not establish CDC/RDC or metastability signoff. VC
 SpyGlass CDC and RDC are separate required checks on the actual emitted DMA

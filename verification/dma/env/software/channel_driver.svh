@@ -50,21 +50,25 @@ class pdma_channel extends pdma_register_access;
         longint unsigned address=command_address+(cursor%cfg.command_capacity)*COMMAND_SIZE;
         for(int i=0;i<COMMAND_SIZE;i++) memory.write_byte(address+i,record_value[i*8+:8]);
     endfunction
-    task submit(pdma_task job,bit publish_fence=1);
+    task publish(input Command_t records[$],ref realtime submitted_at);
         bit[31:0] consumer;
-        int unsigned count=1+int'(publish_fence)+int'(publish_fence && job.trap_after_fence);
         producer_lock.get();
         if(!configured) `uvm_fatal("CHANNEL_LIFETIME","Submission requires configured channel")
         read_reg(registers.command_block.consumer_reg,consumer);
-        if(producer-consumer+count>cfg.command_capacity)
-            `uvm_fatal("COMMAND_RING_FULL","No command ring capacity for task")
-        publish_record(job.command_record(),producer);
-        if(publish_fence) publish_record(job.fence_record(),producer+1);
-        if(publish_fence && job.trap_after_fence) publish_record(job.trap_record(),producer+2);
-        job.submitted_at=$realtime;
-        producer+=count;
+        if(producer-consumer+records.size()>cfg.command_capacity)
+            `uvm_fatal("COMMAND_RING_FULL","No command ring capacity for submission")
+        foreach(records[i]) publish_record(records[i],producer+i);
+        submitted_at=$realtime;
+        producer+=records.size();
         write_reg(registers.command_block.producer_reg,producer);
         producer_lock.put();
+    endtask
+    task submit(pdma_task job,bit publish_fence=1);
+        Command_t records[$];
+        records.push_back(job.command_record());
+        if(publish_fence) records.push_back(job.fence_record());
+        if(publish_fence && job.trap_after_fence) records.push_back(job.trap_record());
+        publish(records,job.submitted_at);
     endtask
     task await_consumed();
         await_reg(registers.command_block.consumer_reg,'1,producer);

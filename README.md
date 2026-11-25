@@ -11,7 +11,7 @@ outside the data path.
 
 | Layer | Responsibility | Current status |
 | --- | --- | --- |
-| Copy Engine core | Channel arbitration, command execution, completion, fault/resume and independent channel reset | Rust functional model and a DMA RTL slice for Copy, Fence and Trap |
+| Copy Engine core | Channel arbitration, command execution, completion, fault/resume and independent channel reset | Rust functional model and a DMA RTL slice for Copy, Write, Fill, Timestamp, Fence and Trap |
 | Managed resource control | Firmware channel allocation and lifecycle policy; peripheral MMIO permissions, Function/context resolution and notification routing | Executable managed model implemented; corresponding RTL/subsystem integration deferred |
 | Integration platform | Trusted requester identity, memory backing/translation, interconnect and interrupt transport | Injected model capabilities; actual PCIe/IOMMU integration unimplemented |
 
@@ -33,7 +33,7 @@ Hardware behavior is deterministic and step-based. Memory backing, software CPU
 execution and interrupt delivery are supplied outside the hardware model.
 
 The DMA RTL supports 1–8 physical channels sharing one engine for linear and
-scatter/gather Copy, Fence32/64 and Trap. It has a 32/64-bit AXI4-Lite register
+scatter/gather Copy, Write32/64, patterned Fill, Timestamp, Fence32/64 and Trap. It has a 32/64-bit AXI4-Lite register
 port and uses ordinary AXI memory reads and writes. Atomic commands, CPU,
 peripheral hardware and firmware integration remain future RTL work.
 See the [implemented microarchitecture](docs/rtl/microarchitecture.md) and

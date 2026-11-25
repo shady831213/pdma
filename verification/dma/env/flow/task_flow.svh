@@ -20,6 +20,9 @@ class pdma_task_flow extends uvm_object;
     virtual task submit();
         channel.submit(job); published=1;
     endtask
+    task submit_records(input Command_t records[$]);
+        channel.publish(records,job.submitted_at); published=1;
+    endtask
     function void publish_observation(pdma_result result,bit via_irq=0);
         pdma_observation item=new;
         pdma_sg_task sg;
@@ -28,7 +31,7 @@ class pdma_task_flow extends uvm_object;
         end
         item.via_irq=via_irq;
         item.channel_id=job.channel_id; item.task_id=job.id; item.outcome=result.outcome;
-        item.length=job.length;
+        item.opcode=job.opcode; item.length=job.length;
         item.source_lane=job.source_address%pdma_configuration::MEMORY_BEAT_BYTES;
         item.dest_lane=job.dest_address%pdma_configuration::MEMORY_BEAT_BYTES;
         item.cross_page=(job.source_address%pdma_configuration::AXI_BOUNDARY_BYTES+job.length>pdma_configuration::AXI_BOUNDARY_BYTES) ||

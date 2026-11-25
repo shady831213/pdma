@@ -1,9 +1,10 @@
 virtual class pdma_reset_test extends pdma_base_test;
     protected bit global_scope;
     function new(string name,uvm_component parent); super.new(name,parent); endfunction
+    virtual function pdma_task interrupted_job(); return settings(128); endfunction
     virtual task run_scenario();
         pdma_task_flow flow_=env.device.task_flow();
-        pdma_task job=settings(128);
+        pdma_task job=interrupted_job();
         pdma_channel channel=flow_.channel;
         Reset reset_reg=global_scope ? env.device.driver.registers.reset_reg : channel.admin.reset_reg;
         bit[31:0] busy;
@@ -72,4 +73,15 @@ class pdma_global_irq_owner_test extends pdma_base_test;
         if(mask!=0) `uvm_fatal("GLOBAL_IRQ_OWNER","Channel reconfiguration changed the device notification mask")
         flow_.submit(); flow_.expect_fence(); flow_.close(); cases++;
     endtask
+endclass
+
+class pdma_fill_reset_test extends pdma_reset_test;
+    `uvm_component_utils(pdma_fill_reset_test)
+    function new(string name,uvm_component parent); super.new(name,parent); endfunction
+    virtual function pdma_task interrupted_job();
+        pdma_pattern_task job=new;
+        job.length=3*pdma_configuration::COPY_BURST_BYTES;
+        job.payload_alignment=pdma_configuration::AXI_BOUNDARY_BYTES;
+        return job;
+    endfunction
 endclass

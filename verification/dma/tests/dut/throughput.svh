@@ -28,9 +28,10 @@ virtual class pdma_throughput_test extends pdma_base_test;
         return 0;
 `endif
     endfunction
+    virtual function pdma_task transfer(); return settings(transfer_bytes); endfunction
     virtual task run_scenario();
         pdma_task_flow flow_=env.device.task_flow();
-        pdma_task job=settings(transfer_bytes);
+        pdma_task job=transfer();
         job.payload_alignment=pdma_configuration::AXI_BOUNDARY_BYTES;
         flow_.open(job);
         performance.begin_task(job,clocks.period_ns[2]*1ns,flow_.channel.next_command_address());

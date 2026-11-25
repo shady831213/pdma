@@ -26,7 +26,10 @@ executes a new Trap on the same channel.
 
 The minimal execution slice adds `CopyEngineTest`, `CopyErrorTest` and
 `CopyFaultTest`, plus `FenceTest`, `FenceOrderTest` and `FenceMemoryTest`.
-`TrapExecutionTest` holds the preceding Fence response while a Trap is ready,
+`FenceTest` exercises scalar Write, Fence and Timestamp against the same memory
+port, including a zero timer sample held across a PageFault. `FillExecutionTest`
+checks little-endian patterns across page and burst boundaries, malformed entries
+and the zero-length and overflowing cases. `TrapExecutionTest` holds the preceding Fence response while a Trap is ready,
 checks the execution pulse on acceptance, and rejects a Trap with nonzero reserved bytes.
 `MemoryStreamTest` checks continuous writes with delayed B responses;
 `CopyWindowTest` checks multi-burst fault/error/reset lifetime;

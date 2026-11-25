@@ -1,5 +1,47 @@
 # Scenario-level verification checkpoints
 
+## Scalar writes and patterned Fill
+
+The native execution tests drive descriptors for Write32/64, Fence32/64,
+Timestamp and Fill. The scalar tests cover target alignment, end overflow, write
+errors, reset drain and a fault retry with the external timer changed. The Fill
+test compares each destination byte, checks address-space selection and rejects
+a read, duplicate byte, crossing burst or out-of-range write. It also exercises
+zero length, range overflow and malformed records.
+
+The immutable two- and eight-channel RTL snapshots for this change have design
+identities `61fd763274a756a17c496fc4156e8ca6747aff115dedda89f71dea60ff76df1f`
+and `ef75eca29825839d38eacbd5c55159258709027d5a77558889d50a0b13b5cc93`,
+respectively. The implementation profiles constrain the two timer inputs to the
+core clock. Fresh CDC/RDC review matched 99/1,874 findings at two channels and
+267/3,700 at eight channels, with zero unresolved in each run. The updated
+policies drop four former RDC groups for unconnected write-size sinks. Existing
+destinations and reset scopes were rechecked, including flattened endpoint checks
+for every retained no-clock sink.
+
+Both native simulation backends passed all 36 tests. At two and eight channels,
+each full AXI VIP regression passed 60 DUT scenarios at seed 19 and rejected
+all nine checker mutations. Focused regressions at seeds 19 and 41 passed on
+five configurations. The 32-bit configurations included two-beat and three-beat
+bursts. The latter carries 12 bytes per full row, so an eight-byte Fill pattern
+must start at a different phase on the next row. The wide configuration used
+three channels and a 128-bit bus. The [throughput measurements](../../docs/rtl/performance.md)
+include both payload beats and time to the successor Fence.
+
+| Channels | Line | Condition | Branch | Extracted FSM | External port toggle directions |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 | 1,925/1,998 | 1,528/1,846 | 762/829 | 205/456 | 789/1,316 |
+| 8 | 3,239/3,408 | 2,563/3,196 | 1,468/1,615 | 771/1,824 | 835/1,344 |
+
+Logic counts cover the DMA instance hierarchy. External port counts include
+both AXI interfaces and the direct ports. The packed timer input contributes
+128 measured toggle directions. The simulated counter exercises its low bits;
+native Timestamp tests also check an explicit full-width sample and zero.
+
+At the 2026-11-25 checkpoint, control-budget synthesis for these two snapshots
+is in progress. The timing and area numbers below belong to the preceding SG
+implementation.
+
 ## SG decoder timing cut
 
 The last restored two-channel DMA with SG had core setup slack of −396.4 ps

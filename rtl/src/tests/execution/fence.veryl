@@ -27,22 +27,32 @@ module FenceTest {
     assign command_advance         = channels.command_advance;
     assign event_advance           = channels.event_advance;
     assign internal_fatal          = channels.internal_fatal;
+    var timer_available: logic;
+    var timer_value    : u64  ;
     inst dut: DmaCommandPath (
-        clk          ,
-        rst_n   : rst,
-        memory       ,
-        channels     ,
+        clk                 ,
+        rst_n          : rst,
+        memory              ,
+        channels            ,
+        timer_available     ,
+        timer_value         ,
     );
     initial {
         // Widths, faults, reset drain, bad geometry and malformed width encoding.
-        for scenario in 0..10 {
-            let wide   : logic     = scenario != 0;
-            let address: logic<64> = case scenario {
-                0      : 64'h304,
+        for trial in 0..31 {
+            let timestamp  : logic     = trial >= 20;
+            let unavailable: logic     = trial == 30;
+            let scenario   : u32       = trial % 10;
+            let value      : u64       = if timestamp && scenario == 2 ? 0 : 64'h123456789abcdef0;
+            let wide       : logic     = timestamp || scenario != 0;
+            let address    : logic<64> = case scenario {
+                0      : if timestamp ? 64'h308 : 64'h304,
                 5      : 64'h304,
                 6      : 64'hfffffffffffffff8,
                 default: 64'h300,
             };
+            timer_available = !unavailable;
+            timer_value     = value;
             command         = RegisterState::Ring'{base: 0, capacity: 2, producer: 1, consumer: 0};
             configuration   = '0;
             actions         = '0;
@@ -59,17 +69,17 @@ module FenceTest {
                     }
                     clk.next();
                 }
-                $assert(memory.valid && !memory.request.write, "FENCE_FETCH");
+                $assert(memory.valid && !memory.request.write, "WORD_FETCH");
                 clk.next();
                 memory.ready   = 0;
                 memory.receipt = '0;
                 if part == 0 {
-                    memory.receipt.data[7:0]     = 6;
+                    memory.receipt.data[7:0]     = if timestamp ? 8 : if trial <: 10 ? 6 : 1;
                     memory.receipt.data[127:64]  = 9;
                     memory.receipt.data[191:128] = address;
                     memory.receipt.data[223:192] = 11;
-                    memory.receipt.data[255:224] = if scenario == 7 ? 2 : wide as 32;
-                    memory.receipt.data[319:256] = 64'h123456789abcdef0;
+                    memory.receipt.data[255:224] = if scenario == 7 ? 2 : if timestamp ? 0 : wide as 32;
+                    memory.receipt.data[319:256] = if timestamp ? 0 : value;
                     if scenario == 8 {
                         memory.receipt.data[CommandHeaderLayout::EXTENT * 8] = 1;
                     }
@@ -83,7 +93,7 @@ module FenceTest {
                 memory.ready    = 1;
             }
             if scenario >= 7 {
-                $assert(!command_advance, "MALFORMED_FENCE_NOT_CONSUMED");
+                $assert(!command_advance, "MALFORMED_WORD_NOT_CONSUMED");
             } else {
                 for timeout in 0..12 {
                     if command_advance {
@@ -91,8 +101,10 @@ module FenceTest {
                     }
                     clk.next();
                 }
-                $assert(command_advance, "FENCE_ACCEPTED");
+                $assert(command_advance, "WORD_ACCEPTED");
                 command.consumer = 1;
+                clk.next();
+                timer_value = ~value;
             }
             for timeout in 0..10 {
                 if memory.valid {
@@ -100,20 +112,20 @@ module FenceTest {
                 }
                 clk.next();
             }
-            if scenario <: 5 {
-                $assert(memory.valid && memory.request.write && memory.request.address == address, "FENCE_TARGET");
+            if scenario <: 5 && !unavailable {
+                $assert(memory.valid && memory.request.write && memory.request.address == address, "WORD_TARGET");
                 $assert(
                     memory.request.selector == 11 && memory.request.size == (if wide ? 3 : 2) && memory.request.length == 0,
-                    "FENCE_SCALAR_WIDTH_CONTEXT",
+                    "WORD_SCALAR_WIDTH_CONTEXT",
                 );
-                $assert(memory.request.data[63:0] == 64'h123456789abcdef0, "FENCE_VALUE");
+                $assert(memory.request.data[63:0] == value, "WORD_VALUE");
                 clk.next();
                 if scenario == 4 {
                     actions.reset_request = 1;
                     clk.next();
                     actions.reset_request = 0;
                     clk.next(5);
-                    $assert(status[0].resetting && !clear && !memory.valid, "RESET_DRAINS_FENCE");
+                    $assert(status[0].resetting && !clear && !memory.valid, "RESET_DRAINS_WORD");
                 }
                 memory.receipt            = '0;
                 memory.receipt.tag.slot   = CopyMemory::CONTROL_SLOT as CopyMemory::SLOT_BITS;
@@ -124,7 +136,7 @@ module FenceTest {
                 memory.returned = 0;
                 if scenario == 2 {
                     clk.next(3);
-                    $assert(status[0].faulted && !status[0].error && !memory.valid && !event_advance, "FENCE_PARKS");
+                    $assert(status[0].faulted && !status[0].error && !memory.valid && !event_advance, "WORD_PARKS");
                     actions.resume_request = 1;
                     clk.next();
                     actions.resume_request = 0;
@@ -139,8 +151,8 @@ module FenceTest {
                     $assert(
                         memory.valid && memory.request.write && memory.request.address == address
                             && memory.request.selector == 11 && memory.request.size == 3 && memory.request.data[63:0]
-                            == 64'h123456789abcdef0,
-                        "FENCE_RETRY_RETAINS_TARGET_VALUE",
+                            == value,
+                        "WORD_RETRY_RETAINS_TARGET_VALUE",
                     );
                     clk.next();
                     memory.receipt          = '0;
@@ -150,7 +162,7 @@ module FenceTest {
                     memory.returned = 0;
                 }
             }
-            if scenario == 3 || (scenario >= 5 && scenario <: 7) {
+            if unavailable || scenario == 3 || (scenario >= 5 && scenario <: 7) {
                 for timeout in 0..10 {
                     if memory.valid {
                         break;
@@ -159,33 +171,33 @@ module FenceTest {
                 }
                 $assert(
                     status[0].error && memory.valid && memory.request.write && memory.request.address == 64'h800,
-                    "FENCE_ERROR_EVENT",
+                    "WORD_ERROR_EVENT",
                 );
                 $assert(
-                    memory.request.data[63:0] == 9 && memory.request.data[95:64] == (if scenario == 3 ? 3 : 7)
-                        && memory.request.data[191:128] == 0,
-                    "FENCE_ERROR_CODE_ZERO_PROGRESS",
+                    memory.request.data[63:0] == 9 && memory.request.data[95:64]
+                        == (if unavailable ? 6 : if scenario == 3 ? 3 : 7) && memory.request.data[191:128] == 0,
+                    "WORD_ERROR_CODE_ZERO_PROGRESS",
                 );
                 clk.next();
                 memory.receipt          = '0;
                 memory.receipt.tag.slot = CopyMemory::CONTROL_SLOT as CopyMemory::SLOT_BITS;
                 memory.returned         = 1;
-                $assert(event_advance, "FENCE_ERROR_PUBLICATION");
+                $assert(event_advance, "WORD_ERROR_PUBLICATION");
                 clk.next();
                 memory.returned = 0;
             }
             clk.next(5);
-            $assert(!memory.valid && !status[0].faulted && !event_advance && !internal_fatal, "FENCE_TERMINAL");
-            if scenario <: 3 {
-                $assert(!status[0].error && status[0].fatal == 0, "FENCE_SUCCESS_WITHOUT_ERROR");
+            $assert(!memory.valid && !status[0].faulted && !event_advance && !internal_fatal, "WORD_TERMINAL");
+            if scenario <: 3 && !unavailable {
+                $assert(!status[0].error && status[0].fatal == 0, "WORD_SUCCESS_WITHOUT_ERROR");
             }
             if scenario == 4 {
-                $assert(!status[0].resetting, "FENCE_RESET_FINISHES_AFTER_RECEIPT");
+                $assert(!status[0].resetting, "WORD_RESET_FINISHES_AFTER_RECEIPT");
             }
             if scenario >= 7 {
                 $assert(
                     status[0].fatal == ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD && command.consumer == 0,
-                    "MALFORMED_FENCE_COMMAND_READ_FATAL",
+                    "MALFORMED_WORD_COMMAND_READ_FATAL",
                 );
             }
         }

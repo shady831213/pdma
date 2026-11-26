@@ -18,7 +18,6 @@ pub package CommandState {
     }
     struct Context {
         phase          : Phase     ,
-        descriptor     : logic<768>,
         control_address: logic<64> ,
         error_prefix   : logic<64> ,
         error_code     : logic<32> ,
@@ -28,7 +27,6 @@ pub package CommandState {
     }
     const EMPTY          : Context = Context'{
         phase          : Phase::Idle,
-        descriptor     : 0          ,
         control_address: 0          ,
         error_prefix   : 0          ,
         error_code     : 0          ,

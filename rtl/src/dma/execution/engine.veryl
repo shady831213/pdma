@@ -41,12 +41,20 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
     var   next           : CommandState::Context                                 ;
     var   release_owner  : logic                                                 ;
     let   current        : CommandState::Context                                  = contexts[selected];
-    let   descriptor     : logic                <768>                             = if current.phase
-        == CommandState::Phase::Idle ?
-        heads[selected].descriptor
-    :
-        current.descriptor
-    ;
+    // The grant transfers the command to the shared engine. Only a suspended
+    // command needs a channel-local copy while a peer uses the engine.
+    var descriptor: logic<768>;
+    var parked_descriptor: logic<768> [CHANNEL_COUNT];
+    var granted_descriptor: logic<768>;
+    always_comb {
+        granted_descriptor = 0;
+        for c in 0..CHANNEL_COUNT {
+            if choice[c] {
+                granted_descriptor |= if contexts[c].phase == CommandState::Phase::Idle ?
+                    heads[c].descriptor : parked_descriptor[c];
+            }
+        }
+    }
     let   word_data     : logic                <M::BURST_BITS>                   = descriptor[319:256] as M::BURST_BITS;
     let   source_sum     : logic                <65>                              = (descriptor[319:256] as 65)
         + (descriptor[383:320] as 65);
@@ -91,6 +99,11 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
     var copy_error_ready    : logic<CHANNEL_COUNT>                ;
     var copy_protocol_error : logic<CHANNEL_COUNT>                ;
     var resumes             : logic<CHANNEL_COUNT>                ;
+    let word_page_fault: logic = control_return && memory.receipt.failed
+        && memory.receipt.page_fault && !memory.receipt.protocol_error;
+    let suspending: logic = (current.phase == CommandState::Phase::WordReturn
+        && !shutdown[selected] && word_page_fault)
+        || (current.phase == CommandState::Phase::Copy && copy_parked[selected]);
     inst payload: CopyMemoryPort::<DATA_BYTES, BURST_BEATS, SLOTS>;
     let copying: logic = selected_valid && current.phase == CommandState::Phase::Copy;
     let segmented: logic = opcode == OP_COPY && descriptor[9:8] != 0;
@@ -253,7 +266,6 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
             case current.phase {
                 CommandState::Phase::Idle: if selected_valid && !globally_stopped
                     && channels.configuration[selected].enable && head_valid[selected] {
-                    next.descriptor   = descriptor;
                     next.error_prefix = 0;
                     next.event_offset = 0;
                     if heads[selected].failed || !encoding_valid {
@@ -271,11 +283,6 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
                             next.stopped    = 1;
                             next.phase      = CommandState::Phase::PrepareEvent;
                         } else {
-                            // All scalar writes retain one operand until B. Timestamp
-                            // has no immediate, so its execution operand holds the sample.
-                            if opcode == OP_TIMESTAMP {
-                                next.descriptor[319:256] = timer_value;
-                            }
                             next.control_address = descriptor[191:128];
                             next.phase           = CommandState::Phase::WordWrite;
                         }
@@ -285,11 +292,6 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
                             next.stopped = 1;
                             next.phase = CommandState::Phase::PrepareEvent;
                         } else if descriptor[255:192] != 0 {
-                            next.descriptor[319:256] = case descriptor[383:352] {
-                                0: {descriptor[263:256] repeat 8},
-                                1: {descriptor[287:256] repeat 2},
-                                default: descriptor[319:256],
-                            };
                             next.phase = CommandState::Phase::Copy;
                         }
                     } else if opcode != OP_COPY {
@@ -335,7 +337,7 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
                 }
                 CommandState::Phase::WordReturn: if control_return {
                     if memory.receipt.failed {
-                        if memory.receipt.page_fault {
+                        if word_page_fault {
                             next.phase = CommandState::Phase::ParkWord;
                         } else {
                             next.error_code = 3;
@@ -386,8 +388,27 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
             }
         }
         release_owner = shutdown[selected] || globally_stopped || next.phase == CommandState::Phase::Idle || next.phase
-            == CommandState::Phase::Stopped || next.phase == CommandState::Phase::ParkWord
-            || (current.phase == CommandState::Phase::Copy && copy_parked[selected]);
+            == CommandState::Phase::Stopped || suspending;
+    }
+    always_ff (clk) {
+        if !locked && (|choice) {
+            descriptor = granted_descriptor;
+        } else if channels.command_advance[selected] {
+            if opcode == OP_TIMESTAMP {
+                descriptor[319:256] = timer_value;
+            } else if filling {
+                descriptor[319:256] = case descriptor[383:352] {
+                    0: {descriptor[263:256] repeat 8},
+                    1: {descriptor[287:256] repeat 2},
+                    default: descriptor[319:256],
+                };
+            }
+        }
+        for c in 0..CHANNEL_COUNT {
+            if locked && selected == c && suspending {
+                parked_descriptor[c] = descriptor;
+            }
+        }
     }
     always_ff (clk, rst_n) {
         if_reset {

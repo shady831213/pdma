@@ -52,8 +52,17 @@ class pdma_fill_replay_test extends pdma_base_test;
         if(platform.channel_count>1) begin
             pdma_task_flow peer=env.device.task_flow(1);
             pdma_pattern_task other=new;
-            other.width=1; other.pattern=~job.pattern; other.length=3*BURST;
-            peer.open(other); peer.submit(); peer.expect_fence(); peer.close();
+            // The first burst faults. At least one later burst must acquire a
+            // new row after resume and use this channel's restored operand.
+            other.width=1; other.pattern=~job.pattern;
+            other.length=(`PDMA_COPY_SLOTS+1)*BURST;
+            other.payload_alignment=pdma_configuration::AXI_BOUNDARY_BYTES;
+            peer.open(other);
+            inject(1,1,other.dest_address);
+            peer.submit(); peer.expect_fault();
+            // Both channels now own suspended commands with different patterns.
+            platform.fault_enabled=0;
+            peer.channel.resume_task(); peer.expect_fence(); peer.close();
         end
         // Earlier head rows already retired. A replay of one would overwrite this canary.
         if(env.memory.read_byte(job.dest_address)!==job.expected[0])

@@ -53,8 +53,8 @@ channel yields shared execution to an eligible peer.
 | Owner | State and release boundary |
 | --- | --- |
 | `CopySegments` | Two endpoint cursors per accepted SG Copy, one shared 16-byte metadata assembly register, and one pending metadata receipt bit per channel. Reset waits for that receipt before releasing the channel. |
-| `CopyEngine` | One descriptor/lifecycle context per channel, one round-robin selected shared decode, scalar-write and error-publication datapath |
-| `CopyWindow` | `SLOTS` source/destination/length entries per channel, access states and retained read bytes; reuses a slot only after successful write and in-order retirement |
+| `CopyEngine` | The grant loads the shared execution descriptor from a ready head or from that channel's suspended command. Each channel retains its phase and recovery state. Parking saves the execution operand, including any sampled timestamp, before another channel can acquire the engine. |
+| `CopyWindow` | Each channel owns `SLOTS` rows. A row holds the destination, byte count and either a Copy source address or a Fill pattern aligned to the first byte of that row. Successful writes retire in order before their rows can be reused. |
 | Core RAM/read offer | `channels * slots` rows of `memory_bits * burst_beats` shared 1R1W storage, one synchronous read and one write port; a separate register holds the prepared write under backpressure |
 | Request/receipt FIFOs | Independently configured depths, registered Gray pointers and two-stage synchronization; enqueue transfers custody, not transaction completion |
 | Read endpoint | Configured AR tracking capacity, interleaved R-burst assembly and a held receipt |

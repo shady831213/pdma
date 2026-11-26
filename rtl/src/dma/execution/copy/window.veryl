@@ -44,7 +44,7 @@ module CopyWindow::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> #
         Done,
     }
     struct Chunk {
-        source     : logic<64>            ,
+        source_or_pattern: logic<64>      ,
         destination: logic<64>            ,
         length     : logic<M::AMOUNT_BITS>,
     }
@@ -187,25 +187,22 @@ module CopyWindow::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> #
     assign buffer_write.mask    = '1;
     // The pattern starts at the command's first byte, independently of bus
     // lane, page and resume boundaries. Requests carry right-justified data.
-    let fill_phase: logic<3> = chunks[base + (write_slot as ROW_BITS)].destination[2:0] - destination[2:0];
+    let fill_phase: logic<3> = next_destination[selected][2:0] - destination[2:0];
     let fill_word: u64 = ({fill_pattern, fill_pattern} >> {fill_phase, 3'b0}) as 64;
+    let issue_chunk: Chunk = chunks[base + (selected_slot as ROW_BITS)];
     always_comb {
         selected_slot           = if fill ? write_slot : if usable_prepared ? prepared_slot : if forward_read ? returned_slot : read_slot;
         memory.request          = '0;
         memory.request.tag      = M::Tag'{channel: selected, slot: (selected_slot as M::SLOT_BITS) + 1};
         memory.request.write    = fill || usable_prepared || forward_read;
-        memory.request.address  = if memory.request.write ?
-            chunks[base + (selected_slot as ROW_BITS)].destination
-        :
-            chunks[base + (selected_slot as ROW_BITS)].source
-        ;
+        memory.request.address  = if memory.request.write ? issue_chunk.destination : issue_chunk.source_or_pattern;
         memory.request.selector = if memory.request.write ? destination_context : source_context;
-        memory.request.data     = if fill ? {fill_word repeat ((M::BURST_BITS + 63) / 64)} as M::BURST_BITS : if forward_read ? memory.receipt.data : prepared_data;
-        memory.request.size     = if chunks[base + (selected_slot as ROW_BITS)].length == 1 ? 0 : M::DATA_SIZE;
+        memory.request.data     = if fill ? {issue_chunk.source_or_pattern repeat ((M::BURST_BITS + 63) / 64)} as M::BURST_BITS : if forward_read ? memory.receipt.data : prepared_data;
+        memory.request.size     = if issue_chunk.length == 1 ? 0 : M::DATA_SIZE;
         memory.request.length   = if memory.request.size == 0 ?
             0
         :
-            ((chunks[base + (selected_slot as ROW_BITS)].length >> M::DATA_SIZE) - 1) as M::LENGTH_BITS
+            ((issue_chunk.length >> M::DATA_SIZE) - 1) as M::LENGTH_BITS
         ;
         memory.valid            = active[selected] && !stop_issue && !stale_cache
             && (if fill ? (|write_choice) : usable_prepared || forward_read || (|read_choice));
@@ -218,7 +215,7 @@ module CopyWindow::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 8> #
         }
         if allocate {
             chunks[tail_row] = Chunk'{
-                source          : next_source[selected]     ,
+                source_or_pattern: if fill ? fill_word : next_source[selected],
                 destination     : next_destination[selected],
                 length          : amount
             };

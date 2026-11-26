@@ -28,19 +28,124 @@ must start at a different phase on the next row. The wide configuration used
 three channels and a 128-bit bus. The [throughput measurements](../../docs/rtl/performance.md)
 include both payload beats and time to the successor Fence.
 
-| Channels | Line | Condition | Branch | Extracted FSM | External port toggle directions |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 2 | 1,925/1,998 | 1,528/1,846 | 762/829 | 205/456 | 789/1,316 |
-| 8 | 3,239/3,408 | 2,563/3,196 | 1,468/1,615 | 771/1,824 | 835/1,344 |
+| Channels | Design manifest | Line | Condition | Branch | Extracted FSM | External port toggle directions |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 2 | `61fd763274a756a1` | 1,925/1,998 | 1,528/1,846 | 762/829 | 205/456 | 789/1,316 |
+| 2 | `1e1d33e0eca0b644` | 1,933/2,009 | 1,530/1,856 | 763/831 | 205/456 | 789/1,316 |
+| 2 | `a55a0c6ee20fb4ea` | 1,934/2,010 | 1,532/1,858 | 763/831 | 205/456 | 789/1,316 |
+| 8 | `ef75eca29825839d` | 3,239/3,408 | 2,563/3,196 | 1,468/1,615 | 771/1,824 | 835/1,344 |
+| 8 | `fc4089b82606bdcb` | 3,247/3,419 | 2,565/3,206 | 1,469/1,617 | 771/1,824 | 835/1,344 |
+| 8 | `80fa84226d705e22` | 3,248/3,420 | 2,567/3,208 | 1,469/1,617 | 771/1,824 | 835/1,344 |
 
 Logic counts cover the DMA instance hierarchy. External port counts include
 both AXI interfaces and the direct ports. The packed timer input contributes
 128 measured toggle directions. The simulated counter exercises its low bits;
 native Timestamp tests also check an explicit full-width sample and zero.
 
-At the 2026-11-25 checkpoint, control-budget synthesis for these two snapshots
-is in progress. The timing and area numbers below belong to the preceding SG
-implementation.
+### Execution descriptor timing
+
+The control-budget profiles use 1 GHz core and bus clocks and a 500 MHz
+register clock. At each channel count the runs use identical synthesis
+scripts, timing constraints and technology manifests. All runs below
+met the bus and register targets and all ten crossing budgets.
+Core slack and TNS are in ps. Area and vectorless
+power exclude SRAM area, power and intrinsic timing.
+
+| Channels | Descriptor implementation | Design manifest | Core WNS | Core TNS | Violating endpoints | Logic cell area | Power (mW) |
+| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 2 | Per-channel execution context | `61fd763274a756a1` | 0.0 | 0.0 | 0 | 41,861.837 | 78.38 |
+| 2 | Shared descriptor at grant | `fdc3b66db5cba943` | 0.0 | 0.0 | 0 | 43,358.589 | 83.21 |
+| 2 | Shared descriptor, direct suspend enable | `1e1d33e0eca0b644` | 0.0 | 0.0 | 0 | 41,444.278 | 76.72 |
+| 8 | Per-channel execution context | `ef75eca29825839d` | −26.9 | −259,543.3 | 16,714 | 102,903.865 | 170.93 |
+| 8 | Shared descriptor at grant | `fed032ff984d6f2a` | −9.3 | −76,164.3 | 13,678 | 106,730.902 | 190.31 |
+| 8 | Shared descriptor, direct suspend enable | `fc4089b82606bdcb` | −11.3 | −38,964.4 | 6,754 | 98,500.461 | 165.75 |
+
+At eight channels the original design's worst paths to the walker, burst
+window, execution context and request FIFOs launched from the registered
+owner. The original's area and power were already 3.94% and 6.05% above
+the preceding SG checkpoint. Capturing the descriptor with the grant
+improved eight-channel core slack by 17.6 ps. At two channels it cost
+3.58% in area and 6.17% in estimated power. With the direct suspend enable,
+two-channel area and power are 1.00% and 2.12% below the original.
+At eight channels the direct enable reduced area by 4.28% and power by
+3.03% relative to the original. Its worst final path ran from the engine
+owner through the burst window to the request FIFO's write data.
+
+The first shared-descriptor implementation saved the active command by
+decoding the full next phase. The final eight-channel netlist connected one
+channel's event-ring capacity register to another channel's suspend slot.
+The revised enable comes directly from the scalar page-fault receipt or the
+drained Copy/Fill window. In the revised mapped netlists, none of the 64
+event producer registers at two channels or the 256 at eight channels have
+a path to the suspend bank. The active descriptor data path to the same
+bank has +641.6 ps and +742.8 ps slack, respectively. Reset clears
+the grant and the channel phases, which invalidate the active and suspended
+descriptors respectively.
+
+Both shared-descriptor versions passed 60 DUT scenarios at seed 19 and
+rejected nine checker mutations at each channel count. Eight replay, fault
+and reset scenarios also passed at seeds 1, 7, 97, 211, 503 and 997 on both
+profiles for each version. With two Fills parked concurrently, restoring
+slot zero for every owner failed the peer destination-byte check. On the
+revised RTL, flipping one saved scalar operand bit failed
+`WORD_RETRY_RETAINS_TARGET_VALUE`. Both unmodified replay cases passed.
+For every channel count from one through eight, seeds 19 and 41 exercised
+a faulting Fence and a parked SG Copy on each physical channel. All 144
+channel scenarios reached their successor Fence and passed the data checks.
+The SG case also ran a peer command during suspension wherever a peer existed.
+Each version delivered contiguous 2,048-beat payloads for 16 KiB Copy and
+Fill, with 2,113 and 2,094 bus cycles through the successor Fence. The two-
+and eight-channel Copy batches took 4,238 and 16,988 cycles.
+
+The first shared-descriptor version had 101/2,068 and 269/4,208 raw CDC/RDC
+findings at two and eight channels. For the direct suspend enable, the
+corresponding design manifests are `1e1d33e0eca0b644` and
+`fc4089b82606bdcb`, with 101/1,891 and 269/3,722 findings. Both versions
+passed source-bound review with zero unresolved findings.
+
+The next implementation rotates each Fill pattern when it allocates the
+burst row. It stores the result in the 64 bits that hold the source address
+for Copy. The two- and eight-channel design manifests are `a55a0c6ee20fb4ea`
+and `80fa84226d705e22`. Source-bound CDC/RDC review closed all 101/1,946
+and 269/3,892 findings, respectively. Both native backends passed all 36 tests.
+Bypassing the rotation failed the native byte comparison.
+At the November 26 checkpoint, final synthesis results for these two design
+manifests were pending. The timing table above ends with the direct suspend
+enable implementation.
+
+A peer Fill that fit entirely in its window could complete from retained row
+data even if the engine restored the wrong descriptor. The replay test now
+faults the peer's first burst and submits one more burst than the window can
+hold. On the two-channel profile at seed 19, forcing channel 1 to restore
+channel 0's descriptor corrupted byte 512, the first byte beyond the eight
+retained 64-byte rows. The same test passed on the unmodified design.
+On both channel counts the strengthened suite passed all 60 DUT tests at
+seed 19 and rejected the nine checker mutations. Each aligned 16 KiB Copy
+and Fill again sustained 2,048 consecutive payload beats per active AXI data
+channel. The measured descriptor-to-Fence intervals were unchanged at 2,113
+and 2,094 bus cycles, respectively.
+
+At every supported channel count (1 through 8), seeds 19 and 41 also passed
+the patterned Fill, Fill fault/replay and Timestamp ordering cases. These
+48 simulation runs checked 59,341 destination bytes against the software
+oracle. The patterned Fill case distributes its 12 commands across the
+configured channels, and the replay case uses a peer whenever one exists.
+
+The additional patterned Fill, fault, reset and replay seeds bring the merged
+totals to 132 distinct passing simulations at two channels and 147 at eight.
+Every reserved burst row entered Write directly from Free on a Fill (16/16
+and 64/64). All 14 observed row transitions occurred on every row at both
+channel counts. The last missing edge at two channels was Reading → Write
+on row 1, where a successful read is retained for a later write. The
+multichannel reset case at seed 41 exercised it. Combining the individual
+simulation hits by row and transition reproduced both merged FSM reports.
+The following whole-DMA totals use the full extraction denominator and
+exclude rejected checker mutations.
+
+| Channels | Passing simulations | Line | Condition | Branch | Extracted FSM | RTL toggle | External port toggle directions |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 | 132 | 1,934/2,010 | 1,537/1,858 | 764/831 | 232/456 | 81,062/128,004 | 789/1,316 |
+| 8 | 147 | 3,248/3,420 | 2,569/3,208 | 1,469/1,617 | 928/1,824 | 136,628/264,578 | 835/1,344 |
 
 ## SG decoder timing cut
 

@@ -145,7 +145,9 @@ core 每拍可发一笔请求。执行请求优先，预取请求在 channel 间
 | --- | --- | --- | --- |
 | channel enable、configured、ring_context、IRQ 配置 | ChannelRegisters | 每 channel 一份 | channel clear |
 | ring base/capacity/producer/consumer | 两个 RingRegisters | 每 channel 一对 | channel clear；正常按各自软/硬件游标推进 |
-| descriptor、phase、control_address、错误前缀/状态 | `engine.contexts[c]` | 每 channel 一个 `CommandState::Context` | 终态转 Idle 或 clear；park 保留 |
+| phase、control_address、错误前缀/状态 | `engine.contexts[c]` | 每 channel 一个 `CommandState::Context` | 终态转 Idle 或 clear；park 保留 |
+| 执行中的描述符及操作数 | `engine.descriptor` | 共享执行器一份；获 grant 时装入 | 终态释放；park 交给本 channel |
+| 暂停命令的描述符及操作数 | `engine.parked_descriptor[c]` | 每 channel 一份；让出引擎时写入 | Resume 后获 grant 时读回；reset 清除 phase 后旧值失效 |
 | 当前执行授权 | `engine.locked/owner/cursor` | 全机一份 | 命令终态、安全 park、shutdown/fatal |
 | burst 元数据和状态 | CopyWindow | SLOTS 行/channel；扁平 row=`channel*SLOTS+slot` | 写成功按序退休，或完成取消后的 clear |
 | 读回的 payload | `copy.buffers` | `(SLOTS*C) × BURST_BITS`，一读一写端口 | 对应 row 安全复用；不靠清零 RAM 内容释放 |
@@ -340,8 +342,9 @@ amount  = src、dst 都 DATA_BYTES 对齐且 portion>=DATA_BYTES
 row     = channel*SLOTS + tail
 ```
 
-metadata `{source,destination,length}` 写到该行；tail 和 next_source/destination、
-remaining 同时前进。不能分配到尚未安全退休的行。`recovering` 时先清完保留 window，
+每行保存 `{source_or_pattern,destination,length}`。Copy 将源地址写入首字段，Fill
+将本行首字节对齐后的 64 位图案写入同一字段。tail、next_source/destination 和
+remaining 在分配时同时前进。不能分配到尚未安全退休的行。`recovering` 时先清完保留 window，
 然后才继续分配后面的新数据。
 
 若 src/dst 的 bus-word 内 offset 不同，逐字节推进不会使二者同时 DATA_BYTES 对齐：整个任务可能走 byte
@@ -365,7 +368,11 @@ stateDiagram-v2
     Done --> Free: 轮到 head，按序退休
 ```
 
-Fill 在接受时把图案低 1、4 或 8 字节复制成一个 64 位图案字。分配行时直接进入 Write；目的地址相对命令起始地址的低三位给出首字节相位。每次发出该行都能从保留的图案和行地址生成相同数据，包括跨页后的第一行、非整图案尾部和缺页后的重试。Fill 使用与 Copy 相同的 B 回执、按序退休及错误前缀逻辑，且无需读取源数据或访问 payload RAM。
+Fill 在接受命令时把图案低 1、4 或 8 字节复制成一个 64 位图案字。分配行时，
+用本行目的地址与命令起始地址之差的低三位旋转图案，保存结果并进入 Write。首次
+发出和缺页重试都从该行取同一个字，重复到本次请求所需的宽度。跨页和非整图案
+尾部沿用相同的字节顺序。Fill 复用 Copy 的 B 回执、按序退休及错误前缀逻辑，
+无需读取源数据或访问 payload RAM。
 
 图中的“失败→Read/Write”不会自动继续重试：PageFault 同时设置 frozen，permanent
 error 设置 error_code，二者均关闭新 issue。只有软件 Resume 或 reset 生命周期允许
@@ -485,9 +492,11 @@ stateDiagram-v2
     Closing --> Cleared: 本 channel 责任全部归还
 ```
 
-Copy/Fill 的 frozen/parked/recovering 属于 window；标量 Write/Fence/Timestamp 用 ParkWord 保留写目标和值。
-这些不是新的顶层 central controller。停放 A 不占用 B 的保留行，但共享 FIFO/AXI
-顺序仍可能延迟 B，不能承诺任意总线背压下 peer 完全不受影响。
+Copy/Fill 在 window 报告安全停放时让出引擎。标量 Write/Fence/Timestamp 在
+WordReturn 接受本命令的缺页回执时进入 ParkWord。两个条件都驱动 `suspending`，
+在同一边沿把执行描述符写入所属 channel 的暂停槽并释放 grant。Timestamp 的槽中
+保留首次接受命令时采到的值。A 停放后，B 可使用自己的保留行，仍会受到共享 FIFO
+和 AXI 背压的影响。
 
 ### 8.3 软件 reset 状态与时序
 
@@ -496,7 +505,7 @@ Copy/Fill 的 frozen/parked/recovering 属于 window；标量 Write/Fence/Timest
 2. 已被 core 请求 FIFO 接收的所有请求继续走完，包括还在跨域 FIFO、未到 AXI 的请求。
 3. closing owner 可以释放执行 grant；其回执仍按 channel/slot 消费。预取 pending、执行控制 phase
    以及 `copy.debt` 各自保留义务，不能只看当前 AXI 引脚是否空闲。
-4. `clear[c] = closing[c] && !waiting(contexts[c].phase) && copy_drained[c] && !fetching[c]`。
+4. `clear[c] = closing[c] && !waiting(contexts[c].phase) && copy_drained[c] && !fetching[c] && !segment_debt[c]`。
    清除只影响 c 的寄存器/上下文/row valid/cache owner，不 reset 共享 FIFO/endpoint。
 5. global reset 用 global_pending 收集各 channel clear。新 reset 与旧 clear 同拍时
    新请求优先保留 closing，避免全局收集遗漏一次确认。
@@ -540,8 +549,9 @@ sequenceDiagram
 | --- | --- | --- |
 | F0 | 私有 FIFO 有空间，producer 已发布 | 为一条描述符预留行；各段被跨域队列接受时分别增加在途数 |
 | Fn | 最后一段成功返回，或某段报错 | 标记目标行就绪；仅队头进入仲裁，较年轻的错误等待自己的顺序 |
-| G0 | 引擎空闲，已就绪队头获 grant | owner/locked 注册 |
-| G1 | 队头合法且仍允许接受 | consumer 推进；Copy/Fill 注册 copy_start，标量写保存写地址和操作数，Trap 更新 cause 并按 mask 请求通知 |
+| G0 | 引擎空闲，新命令或已恢复的 channel 获 grant | 锁存 owner 和执行描述符。新命令取自预取队头，恢复命令取自该 channel 的暂停槽 |
+| G1（新命令） | 队头合法且仍允许接受 | consumer 推进；Copy/Fill 注册 copy_start，标量写保存写地址和操作数，Trap 更新 cause 并按 mask 请求通知 |
+| G1（恢复命令） | 原命令重新获得引擎 | 标量写从 WordWrite 重试原值，Copy/Fill 从保留的 burst 窗口继续。consumer 保持原值 |
 
 F0…Fn 可与另一命令执行重叠。各域时钟相位、反压和同一 channel 的前序任务决定实际启动延迟。
 

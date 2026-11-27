@@ -3,6 +3,7 @@ class pdma_observation extends uvm_object;
     longint unsigned task_id;
     logic [7:0] opcode;
     pdma_outcome outcome;
+    int unsigned event_code;
     realtime latency;
     bit cross_page, event_cross_page, fence_wide;
     bit source_sg, dest_sg, via_irq;

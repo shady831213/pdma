@@ -1,0 +1,41 @@
+// Common descriptor interpretation at the acceptance and maintenance boundaries.
+pub package CommandEncoding {
+    const COPY: u8 = 0;
+    const WRITE: u8 = 1;
+    const FILL: u8 = 2;
+    const WAIT: u8 = 3;
+    const ATOMIC: u8 = 4;
+    const SEMAPHORE: u8 = 5;
+    const FENCE: u8 = 6;
+    const TRAP: u8 = 7;
+    const TIMESTAMP: u8 = 8;
+
+    function valid(command: input logic<768>) -> logic {
+        let header_ok: logic = command[63:8] == 0;
+        let word_ok: logic = header_ok && command[255:224] <= 1;
+        return case command[7:0] {
+            COPY: command[31:10] == 0 && (command[8] || command[511:384] == 0)
+                && (command[9] || command[767:640] == 0),
+            WRITE, FENCE: word_ok && command[767:320] == 0,
+            WAIT: word_ok && command[351:320] <= 10 && command[767:352] == 0,
+            FILL: header_ok && command[383:352] <= 2 && command[767:FillCommandLayout::EXTENT * 8] == 0,
+            ATOMIC: word_ok && command[287:256] <= 3 && command[319:288] <= 6
+                && (command[319:288] == 6 || command[447:384] == 0)
+                && command[767:AtomicCommandLayout::EXTENT * 8] == 0,
+            SEMAPHORE: word_ok && command[287:256] <= 1 && command[767:288] == 0,
+            TIMESTAMP: header_ok && command[767:224] == 0,
+            TRAP: header_ok && command[767:TrapCommandLayout::EXTENT * 8] == 0,
+            default: 0,
+        };
+    }
+
+    function references(command: input logic<768>, selector: input u32) -> logic {
+        return case command[7:0] {
+            COPY: command[223:192] == selector || command[255:224] == selector
+                || (command[9:8] != 0 && command[63:32] == selector),
+            FILL: command[351:320] == selector,
+            WRITE, WAIT, ATOMIC, SEMAPHORE, FENCE, TIMESTAMP: command[223:192] == selector,
+            default: 0,
+        };
+    }
+}

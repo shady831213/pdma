@@ -10,6 +10,12 @@ main() {
     export PDMA_STATIC_CHECK=${3:?Choose cdc, cdc-formal or rdc}
     case "$PDMA_STATIC_CHECK" in cdc|cdc-formal|rdc) ;; *) exit 2 ;; esac
     pdma_environment static
+    # Preserve the caller's scratch selection through the static-tool launcher.
+    # Its embedded HDL frontend starts from the Tcl process environment.
+    if [[ -n ${TMPDIR:-} ]]; then
+        PDMA_STATIC_TMPDIR=$(realpath -e "$TMPDIR")
+        export PDMA_STATIC_TMPDIR
+    fi
     pdma_impl_prepare "$snapshot" "$run"
     cp "$root/tools/rtl-flow/implementation/vc/"*.tcl "$run/"
     # The complete version report participates in the review identity. Use a

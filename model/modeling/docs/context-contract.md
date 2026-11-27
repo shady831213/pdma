@@ -281,6 +281,14 @@ control requests. Software may repair and resume through owner work MMIO, then
 retry maintenance, or reset to cancel old work before retrying. Abort discards
 matching parked targets; an unrelated parked blocker still requires failure/recovery.
 
+A target Wait that has yielded before software disables its channel cannot
+satisfy Drain: the engine cannot sample the dependency and the maintenance
+interlock prevents re-enabling the channel. Report ChannelStopped. With its
+frontier passed, Abort may discard that retained target while disabled. A
+disabled channel with only unrelated parked work and a passed frontier does
+not prevent success. If Resume precedes Abort but the engine has not regranted
+the retained command, it is still eligible for discard.
+
 HW-09: End or supersede the failed maintenance operation in a defined way, allow
 the necessary channel reset, and preserve bindings/storage until recovery proves
 cleanup. Failure must neither leak a maintenance lock that prevents reset nor make

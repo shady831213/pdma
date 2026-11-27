@@ -17,6 +17,7 @@ package pdma_vip_pkg;
     `include "env/result.svh"
     `include "env/software/task.svh"
     `include "env/software/write_ops.svh"
+    `include "env/software/wait.svh"
     `include "env/software/scatter_gather.svh"
     `include "env/coverage/observation.svh"
     `include "env/coverage/execution_phases.svh"

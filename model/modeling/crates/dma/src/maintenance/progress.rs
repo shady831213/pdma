@@ -32,7 +32,7 @@ impl Maintenance {
                 || channel.resetting()
                 || channel.generation != frontier.generation
                 || blocked
-                || ((!frontier.passed || active) && !channel.enabled());
+                || (!channel.enabled() && (!frontier.passed || active || (target && !self.abort)));
             frontier.passed |= channel
                 .command
                 .pointers()

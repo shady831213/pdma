@@ -11,7 +11,7 @@
 
 ## 1. 范围、层次和边界
 
-当前实现：1..8 个物理 channel、一套共享 linear/SG Copy、Fill、Write32/64、Timestamp、Fence32/64 和 Trap 执行资源，
+当前实现：1..8 个物理 channel、一套共享 linear/SG Copy、Fill、Write32/64、Wait32/64、Timestamp、Fence32/64 和 Trap 执行资源，
 三个异步时钟域。配置不可通过软件改变 channel 数。命令记录为 96B，错误事件
 为 24B。正常完成不写 event；软件通过后继 Fence 的内存标记确认完成。
 Fence 保证本 channel 的先前任务已退休再发标记；它不是跨 channel/global barrier，
@@ -22,7 +22,7 @@ Fence 保证本 channel 的先前任务已退休再发标记；它不是跨 chan
 内存口沿用 AXI4 普通事务子集，AWATOP 为零；不是完整 AXI5 atomic 实现。
 数据宽度、burst 上限、每 channel 保留槽、读写 outstanding 和 CDC 深度的依赖
 见 [配置说明](configuration.md)。合法配置与完成物理资格检查是两件事。
-Wait/Atomic/Semaphore、外围权限检查、CPU 和
+Atomic/Semaphore、外围权限检查、CPU 和
 firmware RTL 仍未在这个切片实现。
 
 ### 1.1 目录是职责分组，不全是实例包含关系
@@ -198,7 +198,7 @@ control-budget 综合只给 RAM 保留边界负载模型；不能把 placeholder
 | 位置/代码 | 候选 | 选择规则 | 何时前进/保持 |
 | --- | --- | --- | --- |
 | [AxiLiteRegisterFrontend][frontend]：`choose_write/dispatch/prefer_read` | 配对完成的 AW+W 与 AR | 双方都有时按 prefer_read 交替；单方就绪即可选 | dispatch 更新偏好；一次只推进一个内部 register operation |
-| [CopyEngine][engine]：`eligible/choice/chosen` | 合法 Idle 新任务、可运行 Copy、待重试的标量写 | `RoundRobin<8>::select(eligible,cursor)`；超出实例数的 bit 恒零 | grant 时锁存 owner，并按实际 C 回绕 cursor；健康 command 保持授权 |
+| [CopyEngine][engine]：`eligible/choice/chosen` | 合法 Idle 新任务、可运行 Copy、待重试的标量访问或条件等待 | `RoundRobin<8>::select(eligible,cursor)`；超出实例数的 bit 恒零 | grant 时锁存 owner，并按实际 C 回绕 cursor；健康 command 保持授权 |
 | [CopyWindow][window]：`read_choice/write_choice` | 当前 channel 的 Read/Write 行 | 从退休 head 起找第一个对应状态行 | head 只在按序写退休时前进；这是有序优先选择，不是每 cycle 轮换 slot |
 | [CopyWindow][window]：`selected_slot/memory.valid` | prepared write、可直接转发的 R、候选读 | prepared write 优先；可用返回直通其次；然后发读 | 写数据尚在同步 RAM 加载中时，可继续发其它读；stop_issue 关闭所有新发射 |
 | `CopyMemoryEndpoint`：`selected/write_deferred/result` | reader receipt、writer receipt | 首次竞争选 R；若 B 因这次握手等待，下一个可用 grant 给 B | 两路持续有效时交替；合并入口停顿时保留优先权，result 寄存器保持已选回执 |
@@ -215,7 +215,7 @@ control-budget 综合只给 RAM 保留边界负载模型；不能把 placeholder
 正常 Copy 从接受已预取的描述符到全部 payload 退休都保留授权；不会每 burst 重新仲裁。
 普通外部 AXI 背压也不会自动让出授权。已锁定 owner 的 enable 被清零时，
 请求会暂停，但 enable↓ 本身不是 yield/reset；不能据此期待立即调度 peer。PageFault 只有排空旧事务、保留好状态后
-才 park 并让出。WordWrite 恢复及已停放 Copy 再次参加同一个 RR。
+才 park 并让出。WordIssue 恢复及已停放 Copy 再次参加同一个 RR。
 
 这提供命令边界的轮询机会，不提供按字节分时或有界抢占。长 Copy 可以让 peer
 等待很久；若平台一直不返回某笔请求，没有有限的调度/完成延迟保证。
@@ -274,18 +274,22 @@ stateDiagram-v2
     WalkSegments --> Copy: 两端已验证，当前连续区间就绪
     Copy --> WalkSegments: 当前区间成功退休，命令仍有剩余字节
     WalkSegments --> PrepareEvent: 列表几何、范围或读取错误
-    Idle --> WordWrite: 合法 Write、Fence 或 Timestamp
+    Idle --> WordIssue: 合法 Wait、Write、Fence 或 Timestamp
     Idle --> Idle: 合法零长度 Copy、Fill 或 Trap
     Idle --> PrepareEvent: 可解码但不支持或参数错误
     Idle --> Stopped: 队头取数失败或非法编码
     Copy --> Idle: 全部按序退休
     Copy --> PrepareEvent: stopping error，前缀固定且债务排空
     Copy --> Stopped: protocol error，债务排空
-    WordWrite --> WordReturn: 请求 FIFO 接收
-    WordReturn --> Idle: 写成功
+    WordIssue --> WordReturn: 请求 FIFO 接收
+    WordReturn --> Idle: 写成功或 Wait 条件成立
+    WordReturn --> RetryWait: Wait 条件不成立，让出引擎
+    RetryWait --> WordReturn: 再次获授权并发起读
+    RetryWait --> Idle: Abort 丢弃匹配任务
     WordReturn --> ParkWord: PageFault
-    ParkWord --> WordWrite: 软件 RESUME
-    WordReturn --> PrepareEvent: permanent write error
+    ParkWord --> WordIssue: 软件 RESUME
+    ParkWord --> Idle: Abort 丢弃匹配任务
+    WordReturn --> PrepareEvent: 永久读写错误
     PrepareEvent --> Publish: event 地址、容量、几何合法
     PrepareEvent --> Stopped: event 配置坏或满
     Publish --> PublishReturn: event 写请求接收
@@ -305,9 +309,27 @@ Copy 或 Fill 的 payload page fault **不改变外层 phase=Copy**，而是在 
 | Idle→Copy | 注册 copy_start，window 下一边沿接收初始化 |
 | Copy | Linear/Linear 对整条命令启动一次 window；SG 对每对连续区间启动一次。同一区间内的 burst 不经过 Fetch/Decode 或列表遍历。 |
 | Idle→Idle（Trap） | 在接受队头的边沿推进 consumer，并向该 channel 发出一次 trap_executed；不占用 payload 端口 |
-| Idle→WordWrite | 保存目标地址及 context。Write/Fence 使用立即数；Timestamp 在这一拍锁存平台样本，重试复用该值 |
+| Idle→WordIssue | 保存目标地址及 context。Wait 读取所选宽度的字并比较；Write/Fence 使用立即数；Timestamp 在这一拍锁存平台样本，重试复用该值 |
 | PrepareEvent | 固定 event 起始地址；与后续请求 FIFO 输入之间有寄存器切点 |
 | PublishReturn | 全部 24B 写成功后才 event_advance；部分写不能提前暴露 producer |
+
+### Wait 与 context 维护
+
+Wait 每次只发起一笔指定宽度的读。读返回时先截断到 32 或 64 位，再执行描述符指定的比较。条件为假时，channel 保存已接受的描述符并让出引擎，下一次获授权时重新读内存。同一 channel 的后继命令只能预取。条件为真且读已完成后，才允许后继命令执行。该顺序提供 channel 的 acquire 边界，系统内存的可见性仍由平台保证。读缺页进入 ParkWord，普通读错误产生 ReadError。
+
+[DmaContextMaintenance](../../rtl/src/dma/execution/maintenance.veryl) 位于 core 时钟域。集成方在 `maint_valid && maint_ready` 边沿传入 `maint_context`、`maint_abort` 和覆盖目标 Function 的物理 channel 位图 `maint_channels`。直连配置可将请求输入置零。Function 所有权与 context 表由外层维护。
+
+| 边界 | 硬件动作 |
+| --- | --- |
+| 接受请求 | 检查范围内所有已配置 ring 的 selector。匹配时返回 RingBound 与匹配位图，保留各个 channel。否则保存各 producer，并记录捕获时已空的 ring。该边沿阻止范围内的队头被执行接受；同边沿提交的 producer 更新属于下一批。 |
+| 追赶快照 | consumer 首次到达所存 producer 后置位，并保持到本次结束。后续发布和计数回绕不会延长目标。配置互锁保持在捕获的 channel 上，reset 仍可受理。 |
+| Drain | 等待全部旧队头消费、匹配的已接受命令退休。普通未满足的 Wait 保持 Busy；缺页阻塞目标退休或快照推进时返回 ChannelStopped。 |
+| Abort | 快照之前的匹配队头消费后丢弃，不访问 payload。已开始执行的命令继续到退休或停放；已停放的匹配目标及让出的 Wait 可直接清理。Copy 的停放要求所有已发事务已返回。错误事件、IRQ 和 Fence 均不用于证明取消。 |
+| 结束及恢复 | `maint_ready` 再次为高，`maint_status` 与 `maint_failed` 稳定到下一次请求。Success 才授权使用者结束原资源的生命周期。范围内 reset、已停止或无法推进的 channel 使请求失败，位图包含该次观察检测出的所有失败 owner；软件必须等实际 reset 完成才能按约定复用资源。 |
+
+`RingBound` 是 DMA core 给集成方的结果。它的位图标识仍在使用该 context 的 ring 所属 channel。现有管理模型向软件返回资源忙（`Busy`）；软件在收到 `Failed` 时读取的 failed-channel 位图用于定位需要恢复的 channel。
+
+外部请求方须在维护期间禁止发布新的目标引用，保留旧绑定直到成功。详细的提交、回绕与恢复义务见 [context 合同](../../model/modeling/docs/context-contract.md)。
 
 ### SG 遍历与退休边界
 
@@ -492,11 +514,11 @@ stateDiagram-v2
     Closing --> Cleared: 本 channel 责任全部归还
 ```
 
-Copy/Fill 在 window 报告安全停放时让出引擎。标量 Write/Fence/Timestamp 在
-WordReturn 接受本命令的缺页回执时进入 ParkWord。两个条件都驱动 `suspending`，
-在同一边沿把执行描述符写入所属 channel 的暂停槽并释放 grant。Timestamp 的槽中
-保留首次接受命令时采到的值。A 停放后，B 可使用自己的保留行，仍会受到共享 FIFO
-和 AXI 背压的影响。
+Copy/Fill 的 window 报告安全停放，或 Wait/Write/Fence/Timestamp 在 WordReturn
+收到缺页回执时，`suspending` 使执行描述符在释放 grant 的同一边沿写入所属
+channel 的槽。Wait 读成功但比较为假时也使用这个槽，进入可再次仲裁的 RetryWait；
+标量读写缺页则进入 ParkWord，等待软件 Resume。Timestamp 保留首次接受命令时的
+采样值。A 让出引擎后，B 可使用自己的保留行，仍受共享 FIFO 和 AXI 的背压影响。
 
 ### 8.3 软件 reset 状态与时序
 
@@ -551,7 +573,7 @@ sequenceDiagram
 | Fn | 最后一段成功返回，或某段报错 | 标记目标行就绪；仅队头进入仲裁，较年轻的错误等待自己的顺序 |
 | G0 | 引擎空闲，新命令或已恢复的 channel 获 grant | 锁存 owner 和执行描述符。新命令取自预取队头，恢复命令取自该 channel 的暂停槽 |
 | G1（新命令） | 队头合法且仍允许接受 | consumer 推进；Copy/Fill 注册 copy_start，标量写保存写地址和操作数，Trap 更新 cause 并按 mask 请求通知 |
-| G1（恢复命令） | 原命令重新获得引擎 | 标量写从 WordWrite 重试原值，Copy/Fill 从保留的 burst 窗口继续。consumer 保持原值 |
+| G1（恢复命令） | 原命令重新获得引擎 | 标量写从 WordIssue 重试原值，Copy/Fill 从保留的 burst 窗口继续。consumer 保持原值 |
 
 F0…Fn 可与另一命令执行重叠。各域时钟相位、反压和同一 channel 的前序任务决定实际启动延迟。
 

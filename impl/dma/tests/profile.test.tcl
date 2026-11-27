@@ -72,6 +72,10 @@ for {set count 1} {$count <= 8} {incr count} {
         [dict get $current memories copy_buffer depth] != 8*$count ||
         [dict get $current ports core_clk input timer_value] != 64 ||
         [dict get $current ports core_clk input timer_available] != 1 ||
+        [dict get $current ports core_clk input maint_context] != 32 ||
+        [dict get $current ports core_clk input maint_channels] != $count ||
+        [dict get $current ports core_clk output maint_status] != 3 ||
+        [dict get $current ports core_clk output maint_failed] != $count ||
         [dict get $current ports core_clk output irq] != $count} {error "Incorrect channel profile $count"}
 }
 foreach invalid {0 9 -1 2.0 02 nope} {

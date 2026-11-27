@@ -7,6 +7,10 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
     rst_n     : input   reset_async_low                                                                        ,
     timer_available: input logic = 0,
     timer_value: input logic<64> = 0,
+    maint_valid: input logic = 0,
+    maint_abort: input logic = 0,
+    maint_context: input u32 = 0,
+    maint_channels: input logic<CHANNEL_COUNT> = 0,
     heads     : input   CommandState::Entry                                                     [CHANNEL_COUNT],
     head_valid: input   logic                                                   <CHANNEL_COUNT>                ,
     fetching  : input   logic                                                   <CHANNEL_COUNT>                ,
@@ -14,12 +18,7 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
     memory    : modport CopyMemoryPort::<DATA_BYTES, BURST_BEATS, SLOTS>::master                               ,
 ) {
     alias package M = CopyMemory::<DATA_BYTES, BURST_BEATS, SLOTS>;
-    const OP_COPY: u8 = 0;
-    const OP_WRITE: u8 = 1;
-    const OP_FILL: u8 = 2;
-    const OP_TIMESTAMP: u8 = 8;
-    const OP_FENCE: u8 = 6;
-    const OP_TRAP: u8 = 7;
+    alias package Op = CommandEncoding;
     const CONTROL_SIZE   : u32                                                    = if M::DATA_SIZE <: 3 ?
         M::DATA_SIZE
     :
@@ -65,18 +64,8 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
     let   destination_end: logic                <65>                              = destination_sum
         + (descriptor[191:128] as 65);
     let opcode: logic<8> = descriptor[7:0];
-    // Decode and acceptance share the same reserved-byte checks.
-    let encoding_valid: logic = case opcode {
-        OP_COPY: descriptor[15:10] == 0 && descriptor[31:16] == 0
-            && (descriptor[8] || descriptor[511:384] == 0) && (descriptor[9] || descriptor[767:640] == 0),
-        OP_WRITE, OP_FENCE: descriptor[63:8] == 0 && descriptor[255:224] <= 1 && descriptor[767:320] == 0,
-        OP_FILL: descriptor[63:8] == 0 && descriptor[383:352] <= 2
-            && descriptor[767:FillCommandLayout::EXTENT * 8] == 0,
-        OP_TIMESTAMP: descriptor[63:8] == 0 && descriptor[767:224] == 0,
-        OP_TRAP: descriptor[63:8] == 0 && descriptor[767:TrapCommandLayout::EXTENT * 8] == 0,
-        default: opcode <= 8 && descriptor[63:8] == 0,
-    };
-    let word_bytes         : logic<7>                             = if opcode != OP_TIMESTAMP && descriptor[255:224] == 0 ? 4 : 8;
+    let encoding_valid: logic = Op::valid(descriptor);
+    let word_bytes         : logic<7>                             = if opcode != Op::TIMESTAMP && descriptor[255:224] == 0 ? 4 : 8;
     let word_end           : logic<65>                            = (descriptor[191:128] as 65) + (word_bytes as 65);
     let event_start         : logic<65>                            = (channels.events[selected].base as 65)
         + ((channels.events[selected].producer & (channels.events[selected].capacity - 1)) as 65) * EventLayout::EXTENT;
@@ -101,13 +90,53 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
     var resumes             : logic<CHANNEL_COUNT>                ;
     let word_page_fault: logic = control_return && memory.receipt.failed
         && memory.receipt.page_fault && !memory.receipt.protocol_error;
+    let waiting_on_value: logic = opcode == Op::WAIT;
+    let retry_wait: logic = current.phase == CommandState::Phase::WordReturn && waiting_on_value
+        && control_return && !memory.receipt.failed && !memory.receipt.protocol_error
+        && !WaitCondition::satisfied(descriptor[323:320], descriptor[224], memory.receipt.data as 64, descriptor[319:256]);
     let suspending: logic = (current.phase == CommandState::Phase::WordReturn
         && !shutdown[selected] && word_page_fault)
-        || (current.phase == CommandState::Phase::Copy && copy_parked[selected]);
+        || retry_wait || (current.phase == CommandState::Phase::Copy && copy_parked[selected]);
+    var selector: u32;
+    var capturing: logic<CHANNEL_COUNT>;
+    var aborting: logic<CHANNEL_COUNT>;
+    var unread: logic<CHANNEL_COUNT>;
+    var referenced: logic<CHANNEL_COUNT>;
+    var executing: logic<CHANNEL_COUNT>;
+    var faulted: logic<CHANNEL_COUNT>;
+    var stopped: logic<CHANNEL_COUNT>;
+    var discard_saved: logic<CHANNEL_COUNT>;
+    let active_matches: logic = Op::references(descriptor, selector);
+    let discard_head: logic = aborting[selected] && unread[selected] && active_matches;
+    for c in 0..CHANNEL_COUNT :maintenance_owner {
+        let resident: logic = contexts[c].phase != CommandState::Phase::Idle;
+        let has_grant: logic = locked && owner == c;
+        assign executing[c] = has_grant && resident && !faulted[c]
+            && contexts[c].phase != CommandState::Phase::RetryWait;
+        assign referenced[c] = resident && (if has_grant ? active_matches :
+            Op::references(parked_descriptor[c], selector));
+        assign faulted[c] = contexts[c].phase == CommandState::Phase::ParkWord
+            || (contexts[c].phase == CommandState::Phase::Copy && copy_parked[c]);
+        assign stopped[c] = globally_stopped || shutdown[c] || contexts[c].fatal != 0
+            || contexts[c].stopped || (contexts[c].phase == CommandState::Phase::Copy && copy_error[c] != 0);
+        // RESUME makes the saved command eligible again. Until regrant it
+        // still owns only retained state and Abort can discard it in place.
+        assign discard_saved[c] = aborting[c] && referenced[c] && !stopped[c]
+            && (faulted[c] || contexts[c].phase == CommandState::Phase::RetryWait
+                || (!has_grant && (contexts[c].phase == CommandState::Phase::Copy
+                    || contexts[c].phase == CommandState::Phase::WordIssue)));
+    }
+    inst maintenance: DmaContextMaintenance #(CHANNEL_COUNT) (
+        clk, rst_n, request: maint_valid, abort_request: maint_abort,
+        requested_context: maint_context, requested_channels: maint_channels,
+        rings: channels.command, configs: channels.configuration, stopped, faulted, executing, discard_saved,
+        referenced, selector, capturing, aborting, unread, locked_scope: channels.maint_lock,
+        status: channels.maint_status, failed: channels.maint_failed,
+    );
     inst payload: CopyMemoryPort::<DATA_BYTES, BURST_BEATS, SLOTS>;
     let copying: logic = selected_valid && current.phase == CommandState::Phase::Copy;
-    let segmented: logic = opcode == OP_COPY && descriptor[9:8] != 0;
-    let filling: logic = opcode == OP_FILL;
+    let segmented: logic = opcode == Op::COPY && descriptor[9:8] != 0;
+    let filling: logic = opcode == Op::FILL;
     let fill_end: logic<65> = (descriptor[191:128] as 65) + (descriptor[255:192] as 65);
     var segment_debt: logic<CHANNEL_COUNT>;
     var span_ready: logic;
@@ -126,8 +155,8 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
         && memory.receipt.tag.slot == M::CONTROL_SLOT;
     inst segments: CopySegments::<DATA_BYTES,BURST_BEATS,SLOTS> #(CHANNEL_COUNT) (
         clk, rst_n, selected, descriptor, walk: walking,
-        start: channels.command_advance[selected] && opcode == OP_COPY && segmented && descriptor[191:128] != 0,
-        cancel: copy_cancel, clear: channels.clear,
+        start: channels.command_advance[selected] && !discard_head && opcode == Op::COPY && segmented && descriptor[191:128] != 0,
+        cancel: copy_cancel, clear: channels.clear | discard_saved,
         span_done: copying && segmented && copy_done[selected] && !copy_cancel[selected],
         waiting: segment_debt, offer: span_ready, last: span_last, prefix: span_prefix,
         source: span_source, destination: span_destination, length: span_length,
@@ -146,7 +175,7 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
         selected_valid     : copying              ,
         start              : copy_start           ,
         cancel             : copy_cancel          ,
-        clear              : channels.clear       ,
+        clear              : channels.clear | discard_saved       ,
         resume             : resumes              ,
         fill               : filling,
         fill_pattern       : descriptor[319:256],
@@ -170,24 +199,24 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
         for channel in 0..CHANNEL_COUNT {
             shutdown[channel]        = closing[channel] || channels.actions[channel].reset_request
                 || channels.reset_all;
-            copy_cancel[channel]     = shutdown[channel] || channels.fatal_in || protocol_failure;
+            copy_cancel[channel]     = shutdown[channel] || discard_saved[channel] || channels.fatal_in || protocol_failure;
             resumes[channel]         = channels.actions[channel].resume_request;
             channels.clear[channel]  = closing[channel] && !CommandState::waiting(contexts[channel].phase)
                 && copy_drained[channel] && !fetching[channel] && !segment_debt[channel];
             channels.status[channel] = RegisterState::ChannelStatus'{
                 resetting               : closing[channel]       ,
                 fatal                   : contexts[channel].fatal,
-                faulted                 : contexts[channel].phase == CommandState::Phase::ParkWord
-                    || (contexts[channel].phase == CommandState::Phase::Copy && copy_parked[channel]),
+                faulted                 : faulted[channel],
                 error: contexts[channel].stopped
                     || (contexts[channel].phase == CommandState::Phase::Copy && copy_error[channel] != 0),
             };
-            eligible[channel] = !globally_stopped && !shutdown[channel] && channels.configuration[channel].enable
+            eligible[channel] = !capturing[channel] && !discard_saved[channel] && !globally_stopped && !shutdown[channel] && channels.configuration[channel].enable
                 && !contexts[channel].stopped && contexts[channel].fatal == 0
                 && ((contexts[channel].phase == CommandState::Phase::Idle && head_valid[channel])
                     || (contexts[channel].phase == CommandState::Phase::Copy && !copy_parked[channel])
                     || contexts[channel].phase == CommandState::Phase::WalkSegments
-                    || contexts[channel].phase == CommandState::Phase::WordWrite);
+                    || contexts[channel].phase == CommandState::Phase::WordIssue
+                    || contexts[channel].phase == CommandState::Phase::RetryWait);
         }
         choice = common_cell::RoundRobin::<CopyMemory::MAX_CHANNELS>::select(eligible, cursor);
         chosen = common_cell::BoundedIndex::<CopyMemory::MAX_CHANNELS>::encode_onehot(choice);
@@ -207,8 +236,8 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
         channels.event_advance   = 0;
         if selected_valid && !shutdown[selected] && !globally_stopped {
             channels.command_advance[selected] = channels.configuration[selected].enable && current.phase
-                == CommandState::Phase::Idle && head_valid[selected] && !heads[selected].failed && encoding_valid;
-            channels.trap_executed[selected] = channels.command_advance[selected] && opcode == OP_TRAP;
+                == CommandState::Phase::Idle && !capturing[selected] && head_valid[selected] && !heads[selected].failed && encoding_valid;
+            channels.trap_executed[selected] = channels.command_advance[selected] && opcode == Op::TRAP;
             channels.event_advance[selected]   = current.phase == CommandState::Phase::PublishReturn && control_return
                 && !memory.receipt.failed && !memory.receipt.protocol_error && current.event_offset + event_amount
                 == EventLayout::EXTENT;
@@ -225,7 +254,7 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
         }
         memory.request = M::Request'{
             tag           : M::Tag'{channel: selected, slot: M::CONTROL_SLOT as M::SLOT_BITS},
-            write         : current.phase == CommandState::Phase::WordWrite || current.phase
+            write         : (current.phase == CommandState::Phase::WordIssue && !waiting_on_value) || current.phase
                 == CommandState::Phase::Publish,
             address : current.control_address                                                                          ,
             selector: descriptor[223:192]                                                                              ,
@@ -240,9 +269,9 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
             memory.request.data     = (((descriptor[127:64] as 192) | ((current.error_code as 192) << 64)
                     | ((current.error_prefix as 192) << 128)) >> (current.event_offset * 8)) as M::BURST_BITS;
         }
-        memory.valid = selected_valid && channels.configuration[selected].enable && !shutdown[selected]
+        memory.valid = selected_valid && !discard_saved[selected] && channels.configuration[selected].enable && !shutdown[selected]
             && !globally_stopped
-            && (current.phase == CommandState::Phase::WordWrite
+            && (current.phase == CommandState::Phase::WordIssue || (current.phase == CommandState::Phase::RetryWait && !capturing[selected])
                 || (current.phase == CommandState::Phase::Publish && channels.event_geometry[selected]
                     && channels.event_ready[selected]));
         if walking {
@@ -265,26 +294,26 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
         } else {
             case current.phase {
                 CommandState::Phase::Idle: if selected_valid && !globally_stopped
-                    && channels.configuration[selected].enable && head_valid[selected] {
+                    && channels.configuration[selected].enable && head_valid[selected] && !capturing[selected] {
                     next.error_prefix = 0;
                     next.event_offset = 0;
                     if heads[selected].failed || !encoding_valid {
                         next.fatal = ChannelRecoveryLayout::FATAL_CODE_COMMANDREAD as 32;
                         next.phase = CommandState::Phase::Stopped;
-                    } else if opcode == OP_TRAP {
+                    } else if discard_head || opcode == Op::TRAP {
                         next.phase = CommandState::Phase::Idle;
-                    } else if opcode == OP_FENCE || opcode == OP_WRITE || opcode == OP_TIMESTAMP {
+                    } else if opcode == Op::FENCE || opcode == Op::WRITE || opcode == Op::TIMESTAMP || waiting_on_value {
                         if descriptor[129:128] != 0 || (word_bytes == 8 && descriptor[130]) || word_end[64] {
                             next.error_code = 7;
                             next.stopped    = 1;
                             next.phase      = CommandState::Phase::PrepareEvent;
-                        } else if opcode == OP_TIMESTAMP && !timer_available {
+                        } else if opcode == Op::TIMESTAMP && !timer_available {
                             next.error_code = 6;
                             next.stopped    = 1;
                             next.phase      = CommandState::Phase::PrepareEvent;
                         } else {
                             next.control_address = descriptor[191:128];
-                            next.phase           = CommandState::Phase::WordWrite;
+                            next.phase           = CommandState::Phase::WordIssue;
                         }
                     } else if filling {
                         if fill_end[64] {
@@ -294,7 +323,7 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
                         } else if descriptor[255:192] != 0 {
                             next.phase = CommandState::Phase::Copy;
                         }
-                    } else if opcode != OP_COPY {
+                    } else if opcode != Op::COPY {
                         next.error_code = 6;
                         next.stopped    = 1;
                         next.phase      = CommandState::Phase::PrepareEvent;
@@ -332,7 +361,7 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
                         next.phase = if segmented && !span_last ? CommandState::Phase::WalkSegments : CommandState::Phase::Idle;
                     }
                 }
-                CommandState::Phase::WordWrite : if memory.valid && memory.ready {
+                CommandState::Phase::WordIssue, CommandState::Phase::RetryWait: if memory.valid && memory.ready {
                     next.phase = CommandState::Phase::WordReturn;
                 }
                 CommandState::Phase::WordReturn: if control_return {
@@ -340,12 +369,12 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
                         if word_page_fault {
                             next.phase = CommandState::Phase::ParkWord;
                         } else {
-                            next.error_code = 3;
+                            next.error_code = if waiting_on_value ? 2 : 3;
                             next.stopped    = 1;
                             next.phase      = CommandState::Phase::PrepareEvent;
                         }
                     } else {
-                        next.phase = CommandState::Phase::Idle;
+                        next.phase = if retry_wait ? CommandState::Phase::RetryWait : CommandState::Phase::Idle;
                     }
                 }
                 CommandState::Phase::ParkWord  : {}
@@ -387,14 +416,14 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
                 CommandState::Phase::Stopped      : {}
             }
         }
-        release_owner = shutdown[selected] || globally_stopped || next.phase == CommandState::Phase::Idle || next.phase
+        release_owner = discard_saved[selected] || shutdown[selected] || globally_stopped || next.phase == CommandState::Phase::Idle || next.phase
             == CommandState::Phase::Stopped || suspending;
     }
     always_ff (clk) {
         if !locked && (|choice) {
             descriptor = granted_descriptor;
         } else if channels.command_advance[selected] {
-            if opcode == OP_TIMESTAMP {
+            if opcode == Op::TIMESTAMP {
                 descriptor[319:256] = timer_value;
             } else if filling {
                 descriptor[319:256] = case descriptor[383:352] {
@@ -443,6 +472,8 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
                     // Global collection starts at this edge and must still see
                     // this owner's acknowledgement on the following cycle.
                     closing[channel] = channels.actions[channel].reset_request || channels.reset_all;
+                } else if discard_saved[channel] {
+                    contexts[channel] = CommandState::EMPTY;
                 } else if selected_valid && selected == channel {
                     contexts[channel] = next;
                     if (current.phase == CommandState::Phase::Idle || current.phase == CommandState::Phase::WalkSegments) && next.phase == CommandState::Phase::Copy
@@ -455,9 +486,9 @@ pub module CopyEngine::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u32 = 
                     // yielding. The terminal receipt discharges that obligation.
                     contexts[channel].phase = CommandState::Phase::Idle;
                 }
-                if contexts[channel].phase == CommandState::Phase::ParkWord && channels.actions[channel].resume_request
+                if !discard_saved[channel] && contexts[channel].phase == CommandState::Phase::ParkWord && channels.actions[channel].resume_request
                     && !shutdown[channel] && !channels.clear[channel] {
-                    contexts[channel].phase = CommandState::Phase::WordWrite;
+                    contexts[channel].phase = CommandState::Phase::WordIssue;
                 }
             }
         }

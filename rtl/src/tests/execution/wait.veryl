@@ -1,0 +1,125 @@
+#[test(wait_yields_to_peer_and_orders_its_successor)]
+module WaitOrderTest {
+    inst clk: $tb::clock_gen #(period: 10);
+    inst rst: $tb::reset_gen (clk);
+    inst channels: DmaChannels #(CHANNEL_COUNT: 2);
+    inst memory: CopyMemoryPort;
+    var heads: CommandState::Entry [2];
+    var valid: logic<2>;
+    let enabled: RegisterState::ChannelConfig = RegisterState::ChannelConfig'{
+        enable: 1, configured: 1, ring_context: 1, irq_enable: 0, irq_mask: 0
+    };
+    assign channels.configuration = '{enabled, enabled};
+    assign channels.command = '{default: '0};
+    assign channels.events = '{default: '0};
+    assign channels.actions = '{default: '0};
+    assign channels.global_blocked = 0;
+    assign channels.global_clear = 0;
+    assign channels.reset_all = 0;
+    assign channels.fatal_in = 0;
+    assign channels.event_geometry = '1;
+    assign channels.event_ready = '1;
+    inst engine: CopyEngine #(CHANNEL_COUNT: 2) (
+        clk, rst_n: rst, heads, head_valid: valid, fetching: 0, channels, memory,
+    );
+    initial {
+        heads = '{default: '0};
+        valid = 0;
+        memory.returned = 0;
+        memory.receipt = '0;
+        memory.ready = 1;
+        rst.assert();
+        heads[0].descriptor[7:0] = 3;
+        heads[0].descriptor[191:128] = 'h1000;
+        heads[0].descriptor[223:192] = 42;
+        heads[0].descriptor[319:256] = 17;
+        valid = 1;
+        for tick in 0..12 { if channels.command_advance[0] { break; } clk.next(); }
+        $assert(channels.command_advance == 1, "WAIT_ACCEPTED");
+        clk.next();
+        heads[0].descriptor = 7; // Trap follows the Wait on channel zero.
+        for tick in 0..12 { if memory.valid { break; } clk.next(); }
+        $assert(memory.valid && !memory.request.write && memory.request.address == 'h1000
+            && memory.request.selector == 42 && memory.request.size == 2, "WAIT_READ_TARGET");
+        memory.receipt.tag = memory.request.tag;
+        clk.next();
+        heads[1].descriptor = 1; // A peer can write the dependency.
+        heads[1].descriptor[191:128] = 'h1000;
+        heads[1].descriptor[223:192] = 42;
+        heads[1].descriptor[319:256] = 17;
+        valid = 3;
+        memory.returned = 1;
+        clk.next();
+        memory.returned = 0;
+        for tick in 0..15 {
+            $assert(!channels.command_advance[0] && !channels.status[0].faulted, "WAIT_RETAINS_ORDER");
+            if channels.command_advance[1] { break; }
+            clk.next();
+        }
+        $assert(channels.command_advance == 2, "PEER_PROGRESS");
+        clk.next();
+        valid = 1;
+        for tick in 0..12 { if memory.valid { break; } clk.next(); }
+        $assert(memory.valid && memory.request.write && memory.request.tag.channel == 1
+            && memory.request.data == 17, "PEER_WRITE");
+        memory.receipt.tag = memory.request.tag;
+        clk.next();
+        memory.returned = 1;
+        clk.next();
+        memory.returned = 0;
+        for tick in 0..15 {
+            $assert(!channels.command_advance[0], "SUCCESSOR_WAITS");
+            if memory.valid { break; }
+            clk.next();
+        }
+        $assert(memory.valid && !memory.request.write && memory.request.tag.channel == 0, "WAIT_RETRIED");
+        memory.receipt.tag = memory.request.tag;
+        clk.next();
+        memory.receipt.data = 64'hffffffff00000011; // High bits ignored by Wait32.
+        memory.returned = 1;
+        clk.next();
+        memory.returned = 0;
+        for tick in 0..12 { if channels.trap_executed[0] { break; } clk.next(); }
+        $assert(channels.trap_executed == 1, "WAIT_RELEASES_SUCCESSOR");
+        $finish();
+    }
+}
+
+#[test(wait_predicates_at_sign_and_wrap_boundaries)]
+module WaitPredicatesTest {
+    initial {
+        for width in 0..2 {
+            // Equal, below, above, and both ways across the unsigned wrap.
+            for pair in 0..5 {
+                var observed: u64;
+                var target: u64;
+                var unsigned_less: logic;
+                var signed_less: logic;
+                var reached: logic;
+                case pair {
+                    0: { observed = 9; target = 9; }
+                    1: { observed = 8; target = 9; }
+                    2: { observed = 10; target = 9; }
+                    3: { observed = 0; target = '1; }
+                    default: { observed = '1; target = 0; }
+                }
+                unsigned_less = pair == 1 || pair == 3;
+                signed_less = pair == 1 || pair == 4;
+                reached = pair == 0 || pair == 2 || pair == 3;
+                if width == 0 { observed[63:32] = 'hdeadbeef; target[63:32] = 'h12345678; }
+                for c in 0..11 {
+                    let expected: logic = case c {
+                        0: pair == 0, 1: pair != 0,
+                        2: unsigned_less, 3: unsigned_less || pair == 0,
+                        4: !unsigned_less && pair != 0, 5: !unsigned_less,
+                        6: signed_less, 7: signed_less || pair == 0,
+                        8: !signed_less && pair != 0, 9: !signed_less,
+                        default: reached,
+                    };
+                    $assert(WaitCondition::satisfied(c as 4,width as 1,observed,target) == expected, "WAIT_COMPARISON");
+                }
+            }
+        }
+        $finish();
+    }
+}

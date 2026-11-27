@@ -35,3 +35,20 @@ class pdma_same_channel_lifetime_test extends pdma_base_test;
         second.channel.reset(); second.close(); cases++;
     endtask
 endclass
+
+// Exercise both split MMIO base writes and 64-bit AXI addresses on the wire.
+// The inherited scenario fetches from the command ring, copies data, writes
+// a Fence, then publishes a stopping error to the independently placed ring.
+class pdma_high_ring_address_test extends pdma_same_channel_lifetime_test;
+    `uvm_component_utils(pdma_high_ring_address_test)
+    function new(string name,uvm_component parent); super.new(name,parent); endfunction
+    virtual function void build_phase(uvm_phase phase);
+        longint unsigned command_base,event_base;
+        super.build_phase(phase);
+        command_base={32'ha5a5_5a5a,platform.heap_base[31:0]};
+        event_base={32'h5a5a_a5a5,platform.heap_base[31:0]};
+        platform.command_ring_address=command_base;
+        platform.event_ring_address[0]=event_base;
+        platform.heap_size=command_base-platform.heap_base+platform.heap_size;
+    endfunction
+endclass

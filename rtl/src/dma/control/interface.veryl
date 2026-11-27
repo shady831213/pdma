@@ -19,7 +19,11 @@ pub interface DmaChannels #(
     var command_advance: logic                        <CHANNEL_COUNT>                ;
     var event_advance  : logic                        <CHANNEL_COUNT>                ;
     var trap_executed  : logic<CHANNEL_COUNT>;
+    var maint_status: MaintenanceState::Status;
+    var maint_failed: logic<CHANNEL_COUNT>;
+    var maint_lock: logic<CHANNEL_COUNT>;
     modport engine {
+        maint_status: output, maint_failed: output, maint_lock: output,
         command        : input ,
         events         : input ,
         configuration  : input ,

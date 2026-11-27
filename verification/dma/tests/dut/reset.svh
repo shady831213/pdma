@@ -2,24 +2,73 @@ virtual class pdma_reset_test extends pdma_base_test;
     protected bit global_scope;
     function new(string name,uvm_component parent); super.new(name,parent); endfunction
     virtual function pdma_task interrupted_job(); return settings(128); endfunction
+    protected virtual task check_pending(pdma_channel channel,Reset reset_reg);
+        uvm_reg_data_t busy;
+        channel.read_reg(reset_reg,busy);
+        if(busy[reset_reg.request_field.get_lsb_pos()]!==1'b1)
+            `uvm_fatal("RESET_DRAIN","Reset acknowledged before outstanding response")
+    endtask
     virtual task run_scenario();
         pdma_task_flow flow_=env.device.task_flow();
         pdma_task job=interrupted_job();
         pdma_channel channel=flow_.channel;
         Reset reset_reg=global_scope ? env.device.driver.registers.reset_reg : channel.admin.reset_reg;
-        bit[31:0] busy;
         flow_.open(job); platform.hold_write=1; platform.held.delete(); flow_.submit();
         wait(platform.held.size()!=0);
         if(global_scope) env.device.driver.request_reset();
         else channel.request_reset();
-        channel.read_reg(reset_reg,busy);
-        if(!busy[reset_reg.request_field.get_lsb_pos()])
-            `uvm_fatal("RESET_DRAIN","Reset acknowledged before outstanding response")
+        check_pending(channel,reset_reg);
         platform.hold_write=0;
         foreach(platform.held[i]) platform.held[i].suspend_response=0;
         platform.held.delete();
         flow_.cancel(global_scope);
         job=settings(16); flow_.open(job); flow_.submit(); flow_.expect_fence(); flow_.close(); cases++;
+    endtask
+endclass
+
+class pdma_global_reset_mmio_test extends pdma_reset_test;
+    `uvm_component_utils(pdma_global_reset_mmio_test)
+    function new(string name,uvm_component parent);
+        super.new(name,parent); global_scope=1;
+    endfunction
+    local task check_discovery();
+        DmaDiscovery discovery=env.device.registers.discovery_block;
+        Capabilities caps=discovery.capabilities_reg;
+        uvm_reg_data_t value;
+        env.device.driver.read_reg(discovery.channel_num_reg,value);
+        if(value!==platform.channel_count)
+            `uvm_fatal("DMA_DISCOVERY",$sformatf("Expected %0d channels, read %0h",platform.channel_count,value))
+        // These RTL profiles implement neither width of Atomic/Semaphore.
+        env.device.driver.read_reg(caps,value);
+        if({value[caps.atomic64_field.get_lsb_pos()],value[caps.atomic32_field.get_lsb_pos()]}!==2'b00)
+            `uvm_fatal("DMA_DISCOVERY","Device advertised unsupported atomic operations")
+    endtask
+    protected virtual task check_pending(pdma_channel channel,Reset reset_reg);
+        Switch irq_enable=env.device.driver.registers.irq_enable_reg;
+        uvm_reg_data_t saved,observed;
+        uvm_status_e status;
+        super.check_pending(channel,reset_reg);
+        check_discovery();
+        env.device.driver.read_reg(irq_enable,saved);
+        irq_enable.write(status,saved^(1<<irq_enable.enabled_field.get_lsb_pos()),UVM_FRONTDOOR);
+        if(status!==UVM_NOT_OK) `uvm_fatal("RESET_MMIO","IRQ configuration write succeeded during device reset")
+        env.device.driver.read_reg(irq_enable,observed);
+        if(observed!==saved) `uvm_fatal("RESET_MMIO","Rejected IRQ configuration write changed the register")
+        env.device.driver.write_reg(reset_reg,0);
+        super.check_pending(channel,reset_reg);
+        env.device.driver.request_reset();
+        super.check_pending(channel,reset_reg);
+    endtask
+    virtual task run_scenario();
+        uvm_reg_data_t observed;
+        check_discovery();
+        super.run_scenario();
+        check_discovery();
+        env.device.driver.read_reg(env.device.driver.registers.irq_enable_reg,observed);
+        if(observed!==0) `uvm_fatal("RESET_MMIO","Device reset did not clear IRQ enable")
+        env.device.driver.enable_notifications();
+        env.device.driver.read_reg(env.device.driver.registers.irq_enable_reg,observed);
+        if(observed!==1) `uvm_fatal("RESET_MMIO","IRQ configuration did not reopen after reset")
     endtask
 endclass
 

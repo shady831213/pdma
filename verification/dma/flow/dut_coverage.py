@@ -95,14 +95,17 @@ def main():
     generate(tool, output, 'group-bins', ['-metric', 'group'])
     groups = (base / 'report/groups.txt').read_text().splitlines()
     header = next(line for line in groups if 'AUTO BIN MAX' in line)
-    pdma = [line for line in groups if re.search(r'\bpdma_vip_pkg::', line)]
+    owners = ('pdma_vip_pkg::', 'pdma_vip_top.control::')
+    pdma = [line for line in groups if line.split() and line.split()[-1].startswith(owners)]
     if not pdma:
         raise ValueError('Missing PDMA functional coverage groups')
     details = (output / 'group-bins/grpinfo.txt').read_text()
     sections = re.split(r'(?=^Group : )', details, flags=re.M)
-    selected = [section for section in sections if section.startswith('Group : pdma_vip_pkg::')]
+    names = {line.split()[-1] for line in pdma}
+    selected = [section for section in sections
+                if section and section.splitlines()[0].removeprefix('Group : ').strip() in names]
     reported = {section.splitlines()[0].removeprefix('Group : ').strip() for section in selected}
-    missing = {line[line.index('pdma_vip_pkg::'):].strip() for line in pdma} - reported
+    missing = names - reported
     if missing:
         raise ValueError(f'Missing PDMA functional bin details for {sorted(missing)}')
     (output / 'functional.txt').write_text('\n'.join([header, *pdma, '', *selected]) + '\n')

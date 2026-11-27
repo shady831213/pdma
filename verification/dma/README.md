@@ -184,7 +184,7 @@ Each configuration has a separate merged database and report.
 | `dma/top-ports/hierarchy.txt` | Direct HDL ports of the top DMA instance, including clocks, reset, interrupts, fatal and ATOP. |
 | `dma/bus-ports/hierarchy.txt` | Toggle directions for each AXI-Lite and memory interface instance. The simulator attributes the modport signals to `dut.cfg` and `dut.memory` in the wrapper. |
 | `dma/external-ports.txt` | External DMA port toggle, summed over the direct top ports and the two bus interfaces. |
-| `dma/functional.txt` | Task outcomes, checked Copy paths and channel IRQ service results from the successful runs. The original `report/groups.txt` also contains VIP groups. |
+| `dma/functional.txt` | Task outcomes, checked Copy paths, command and SG transitions, IRQ service, and checked context maintenance outcomes. The original `report/groups.txt` also contains VIP groups. |
 
 The `dma` row of the RTL hierarchy aggregates the descendant **instances**.
 Use its child rows for diagnosis. Counts for a parent and its children overlap.
@@ -216,6 +216,18 @@ The command-read and event-write fatal tests target every channel in turn.
 On a multichannel DUT the next channel must finish a Copy and Fence before
 software resets the affected channel. Software polls the command-read fatal code
 and obtains the event-write fatal code from the affected channel's handler.
+
+`pdma_wait_drain_test` leaves a dependency unsatisfied while a peer copies data,
+then updates the dependency and checks the successor Fence. The maintenance
+tests also compare Abort with unread, parked and executing work. In the running
+Fill case the VIP withholds a write response after the command ring empties.
+Abort must remain busy, and the complete Fill payload is checked after retirement.
+The checked maintenance coverage pairs each terminal status with the operation
+sampled at its request handshake. `pdma_maintenance_backpressure_test` holds an
+Abort request valid while an earlier Drain is busy and checks both results in
+order. `pdma_drain_publication_test` keeps a later, unrelated Wait pending on the
+same ring as Drain completes. `pdma_contended_wait_test` releases dependencies
+in descending channel order while all lower-numbered owners are still waiting.
 
 `pdma_execution_coverage` samples changes to the stored command and SG phase
 of each channel on adjacent core-clock edges. Its command bins track dispatch,

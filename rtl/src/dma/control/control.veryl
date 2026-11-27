@@ -47,7 +47,7 @@ pub module DmaControl #(
         global_irq_enable                              ,
         channel_irq: irq,
         clear_channels       : channels.clear          ,
-        maintenance          : 0                       ,
+        maintenance          : channels.maint_lock                       ,
         command_advance      : channels.command_advance,
         trap_executed        : channels.trap_executed,
         event_advance        : channels.event_advance  ,

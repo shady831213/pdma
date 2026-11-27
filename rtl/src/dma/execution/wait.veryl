@@ -1,0 +1,30 @@
+// Width truncation precedes equality, signed ordering and modular Reached.
+pub package WaitCondition {
+    function satisfied(
+        comparison: input logic<4>,
+        wide: input logic,
+        observed: input u64,
+        target: input u64,
+    ) -> logic {
+        let left: u64 = if wide ? observed : observed[31:0] as 64;
+        let right: u64 = if wide ? target : target[31:0] as 64;
+        let equal: logic = left == right;
+        let less: logic = left <: right;
+        let different_sign: logic = if wide ? left[63] ^ right[63] : left[31] ^ right[31];
+        let signed_less: logic = less ^ different_sign;
+        let distance: u64 = left - right;
+        return case comparison {
+            0: equal,
+            1: !equal,
+            2: less,
+            3: less || equal,
+            4: !less && !equal,
+            5: !less,
+            6: signed_less,
+            7: signed_less || equal,
+            8: !signed_less && !equal,
+            9: !signed_less,
+            default: !(if wide ? distance[63] : distance[31]),
+        };
+    }
+}

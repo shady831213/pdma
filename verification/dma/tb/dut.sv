@@ -79,6 +79,9 @@ module pdma_vip_dut(svt_axi_if host_bus, svt_axi_if memory_bus, pdma_control_if 
                 (!integration.dma.channels.configuration[c].irq_mask[pdma_rtl_ChannelIrqMaskLayout::VALUE_EVENT_NON_EMPTY_LSB] &&
                     integration.dma.channels.events[c].producer!=integration.dma.channels.events[c].consumer))),
             .parked(integration.dma.channels.status[c].faulted),.resume_request(integration.dma.channels.actions[c].resume_request),
+            .discard(integration.dma.commands.execution.discard_saved[c]),
+            .scoped_abort(control.maint_valid && control.maint_ready && control.maint_abort && control.maint_channels[c]),
+            .maintenance_busy(!control.maint_ready),
             .parked_state({(integration.dma.commands.execution.locked && integration.dma.commands.execution.selected==c ?
                 integration.dma.commands.execution.descriptor : integration.dma.commands.execution.parked_descriptor[c]),
                 integration.dma.commands.execution.copy.next_source[c],integration.dma.commands.execution.copy.next_destination[c],

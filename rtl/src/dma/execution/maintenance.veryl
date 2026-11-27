@@ -1,0 +1,71 @@
+pub package MaintenanceState {
+    enum Status: logic<3> {
+        Idle, Busy, Success, RingBound, ChannelStopped,
+    }
+}
+
+// One operation owned by the DMA core. A scope bit names a physical channel.
+// Each consumer advances by one ring entry, so equality plus a sticky reached
+// bit is sufficient even when the published producer wraps or moves again.
+module DmaContextMaintenance #(
+    param CHANNEL_COUNT: u32 = 1,
+) (
+    clk: input clock, rst_n: input reset_async_low,
+    request: input logic, abort_request: input logic,
+    requested_context: input u32, requested_channels: input logic<CHANNEL_COUNT>,
+    rings: input RegisterState::Ring [CHANNEL_COUNT],
+    configs: input RegisterState::ChannelConfig [CHANNEL_COUNT],
+    stopped: input logic<CHANNEL_COUNT>, faulted: input logic<CHANNEL_COUNT>,
+    executing: input logic<CHANNEL_COUNT>, discard_saved: input logic<CHANNEL_COUNT>,
+    referenced: input logic<CHANNEL_COUNT>,
+    selector: output u32, capturing: output logic<CHANNEL_COUNT>,
+    locked_scope: output logic<CHANNEL_COUNT>, aborting: output logic<CHANNEL_COUNT>,
+    unread: output logic<CHANNEL_COUNT>,
+    status: output MaintenanceState::Status, failed: output logic<CHANNEL_COUNT>,
+) {
+    var scope: logic<CHANNEL_COUNT>;
+    var abort_op: logic;
+    var reached: logic<CHANNEL_COUNT>;
+    var frontier: u32 [CHANNEL_COUNT];
+    var ring_bound: logic<CHANNEL_COUNT>;
+    var failures: logic<CHANNEL_COUNT>;
+    let busy: logic = status == MaintenanceState::Status::Busy;
+    assign capturing = if request && !busy ? requested_channels : 0;
+    assign locked_scope = if busy ? scope : capturing;
+    assign aborting = if busy && abort_op ? scope : 0;
+    always_comb {
+        for c in 0..CHANNEL_COUNT {
+            ring_bound[c] = requested_channels[c] && configs[c].configured
+                && configs[c].ring_context == requested_context;
+            unread[c] = busy && scope[c] && !reached[c] && rings[c].consumer != frontier[c];
+            failures[c] = scope[c] && (stopped[c]
+                || (!configs[c].enable && (unread[c] || executing[c] || (referenced[c] && !discard_saved[c])))
+                || (faulted[c] && (unread[c] || referenced[c]) && !(abort_op && referenced[c])));
+        }
+    }
+    always_ff (clk, rst_n) {
+        if_reset {
+            status = MaintenanceState::Status::Idle;
+            scope = 0; failed = 0; reached = 0; selector = 0; abort_op = 0;
+            frontier = '{default: 0};
+        } else if request && !busy {
+            scope = requested_channels;
+            selector = requested_context;
+            abort_op = abort_request;
+            failed = ring_bound;
+            status = if (|ring_bound) ? MaintenanceState::Status::RingBound : MaintenanceState::Status::Busy;
+            for c in 0..CHANNEL_COUNT {
+                frontier[c] = rings[c].producer;
+                reached[c] = rings[c].consumer == rings[c].producer;
+            }
+        } else if busy {
+            reached |= ~unread;
+            if |failures {
+                failed = failures;
+                status = MaintenanceState::Status::ChannelStopped;
+            } else if unread == 0 && (scope & referenced) == 0 {
+                status = MaintenanceState::Status::Success;
+            }
+        }
+    }
+}

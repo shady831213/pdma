@@ -27,9 +27,22 @@ An alternative engine preserves these obligations:
   returns one terminal receipt on `returned && accepted`. Identity survives CDC
   and external transaction completion. Acceptance creates the drain obligation,
   even when the AXI address has not yet left the queue.
-- Slot zero belongs to descriptor reads. The engine uses slots 1..SLOTS for retained Copy/Fill rows and SLOTS+1 for scalar and event writes. At its boundary the engine receives one head and a valid indication per channel, plus a per-channel fetch-outstanding indication for reset. A terminal receipt retains its original tag.
+- Slot zero belongs to descriptor reads. The engine uses slots 1..SLOTS for retained Copy/Fill rows and SLOTS+1 for scalar accesses, SG metadata reads and event writes. At its boundary the engine receives one head and a valid indication per channel, plus a per-channel fetch-outstanding indication for reset. A terminal receipt retains its original tag.
+- A scoped maintenance request captures producer positions and tracks accepted
+  references through execution, suspension and retirement. The engine drives
+  one configuration interlock per affected channel, its result, and the failed
+  channel bitmap. The control plane enforces the interlock at MMIO commit.
 
 The platform supplies a coherent 64-bit `timer_value` synchronous to `core_clk` and a stable `timer_available` capability. Connect both inputs to zero when the platform has no timebase. DMA reset has no effect on platform time.
+
+The maintenance request and result are synchronous to `core_clk`. Transfer one
+32-bit selector, an Abort bit (zero selects Drain) and a `CHANNEL_COUNT`-bit
+scope on a `maint_valid && maint_ready` edge. The requester keeps the payload
+stable until acceptance. The three-bit status encodes Idle=0, Busy=1, Success=2,
+RingBound=3 and ChannelStopped=4. Ready is low while Busy. A terminal result and
+its bitmap remain visible until the next accepted request. Direct integrations
+can tie the request inputs low. The management MMIO and Function-to-channel
+mapping belong to the surrounding hardware.
 
 Integration selects one implementation statically in the top-level composition.
 It instantiates the shared channel interface and memory interface with the same
@@ -160,6 +173,12 @@ At `34f5e795`, the RTL with Write, Fill and Timestamp met the control-budget
 setup targets at the default two- and eight-channel profiles. Both passed
 all ten clock-crossing timing budgets. The [timing comparison](../../verification/dma/results.md#execution-descriptor-timing)
 reports the configuration-specific area, power and slack.
+
+With Wait and scoped context maintenance, the two-channel profile meets the
+same setup targets. At eight channels the final core WNS is −2.4 ps with 1,109
+violating paths. The bus and register clocks meet their targets and all ten
+mapped crossing budgets pass in both profiles. See the [Wait and maintenance
+timing results](../../verification/dma/results.md#wait-and-maintenance-timing).
 
 Additional focused functional regressions exercise 256-, 512- and 1024-bit
 memory ports and a 256-beat burst configuration.

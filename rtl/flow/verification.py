@@ -22,7 +22,8 @@ def binding(snapshot):
         text += "assign control.awatop = '0;\n"
     text += 'pdma_rtl_DmaConfigured integration(\n'
     ports = {name: f'control.{name}' for name in ('reg_clk', 'reg_rst_n', 'core_clk', 'core_rst_n',
-             'timer_available', 'timer_value', 'bus_clk', 'bus_rst_n', 'irq', 'fatal', 'fatal_irq')}
+             'timer_available', 'timer_value', 'maint_valid', 'maint_abort', 'maint_context',
+             'maint_channels', 'maint_ready', 'maint_status', 'maint_failed', 'bus_clk', 'bus_rst_n', 'irq', 'fatal', 'fatal_irq')}
     if axi5:
         ports['awatop'] = 'control.awatop'
     ports.update(cfg='cfg', memory='memory')

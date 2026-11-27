@@ -117,7 +117,7 @@ impl Channel {
             ChannelIrqCauseValues::new(self.registers.values.irq.cause.raw() | 4);
     }
 
-    pub(crate) fn trap(&mut self) {
+    pub(crate) const fn trap(&mut self) {
         self.registers.values.irq.cause =
             ChannelIrqCauseValues::new(self.registers.values.irq.cause.raw() | 2);
     }

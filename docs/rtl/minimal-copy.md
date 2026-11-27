@@ -3,7 +3,7 @@
 Detailed implemented [microarchitecture](microarchitecture.md) and current
 [performance measurements](performance.md) supplement this scope summary.
 
-This DMA-core slice implements one shared engine for linear/scatter-gather Copy, Write, Fill, Timestamp, Fence and Trap with an
+This DMA-core slice implements one shared engine for linear/scatter-gather Copy, Write, Fill, Wait, Timestamp, Fence and Trap with an
 instance-configured channel count in 1..8. Its independent bus widths and resource
 capacities are described in [elaboration configuration](configuration.md), including
 the qualification limits. Other command families remain outside this slice.
@@ -106,12 +106,19 @@ A zero-length Fill completes without memory traffic. An overflowing range report
 InvalidLength. A failed burst retains its row through fault recovery; successful
 writes retire in order and contribute to the same error prefix as Copy.
 
+Wait reads one aligned 32- or 64-bit word. An unsatisfied comparison retains the
+channel head's execution state and yields the engine to peers. A read PageFault
+parks the command for Resume, while a permanent read failure reports ReadError.
+The DMA core accepts a scoped Drain or Abort on its core-clock maintenance port.
+For the request edge, retained frontier, result and failed-channel bitmap, see
+[the maintenance interface](microarchitecture.md#wait-与-context-维护).
+
 Fence32/64 writes an aligned marker with its own context after prior work retires.
 It preserves adjacent lanes and supports retained write-fault recovery. Successful
 commands produce no event. A Trap following the Fence executes after the Fence write
 response. It sets its channel's sticky cause and requests an interrupt if enabled
 and unmasked. Software can ACK the cause independently of notification delivery.
-Wait, Atomic and Semaphore report Unsupported in this slice. A stopping error writes the 24-byte event, splitting at 4KiB when needed;
+Atomic and Semaphore report Unsupported in this slice. A stopping error writes the 24-byte event, splitting at 4KiB when needed;
 producer advances only after the whole record succeeds. Reporting failure is fatal.
 Each channel and the DMA-wide fatal source drive independent active-high IRQ
 lines. Enable/unmask immediately exposes a live cause. The channel masks and

@@ -85,17 +85,18 @@ class pdma_fill_error_test extends pdma_base_test;
     endtask
 endclass
 
+function automatic Command_t timestamp_record(longint unsigned id,addr,bit [31:0] selector);
+    CommandHeader_t header='0;
+    TimestampCommand_t cmd='0;
+    CommandHeader_set_opcode(header,COMMANDHEADER_OPCODE_TIMESTAMP);
+    TimestampCommand_set_header(cmd,header); TimestampCommand_set_id(cmd,id);
+    TimestampCommand_set_address(cmd,addr); TimestampCommand_set_context(cmd,selector);
+    return Command_t'(cmd);
+endfunction
+
 class pdma_timestamp_fill_test extends pdma_base_test;
     `uvm_component_utils(pdma_timestamp_fill_test)
     function new(string name,uvm_component parent); super.new(name,parent); endfunction
-    local function Command_t stamp(longint unsigned id,addr,bit [31:0] selector);
-        CommandHeader_t header='0;
-        TimestampCommand_t cmd='0;
-        CommandHeader_set_opcode(header,COMMANDHEADER_OPCODE_TIMESTAMP);
-        TimestampCommand_set_header(cmd,header); TimestampCommand_set_id(cmd,id);
-        TimestampCommand_set_address(cmd,addr); TimestampCommand_set_context(cmd,selector);
-        return Command_t'(cmd);
-    endfunction
     virtual task run_scenario();
         pdma_task_flow flow_=env.device.task_flow();
         pdma_pattern_task job=new;
@@ -109,9 +110,9 @@ class pdma_timestamp_fill_test extends pdma_base_test;
             env.memory.permit(markers[i].allocation.get_s_addr(),markers[i].address,8,job.dest_context,1,job.channel_id);
             for(int b=0;b<8;b++) env.memory.write_byte(markers[i].address+b,'1);
         end
-        commands.push_back(stamp(flow_.channel.next_id++,markers[0].address,job.dest_context));
+        commands.push_back(timestamp_record(flow_.channel.next_id++,markers[0].address,job.dest_context));
         commands.push_back(job.command_record());
-        commands.push_back(stamp(flow_.channel.next_id++,markers[1].address,job.dest_context));
+        commands.push_back(timestamp_record(flow_.channel.next_id++,markers[1].address,job.dest_context));
         commands.push_back(job.fence_record());
         lower=env.control.timer_value;
         inject(1,1,job.dest_address);

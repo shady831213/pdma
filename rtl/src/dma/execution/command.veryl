@@ -4,13 +4,14 @@ pub package CommandState {
         Idle,
         WalkSegments,
         Copy,
-        WordWrite,
+        WordIssue,
         WordReturn,
         ParkWord,
         PrepareEvent,
         Publish,
         PublishReturn,
         Stopped,
+        RetryWait,
     }
     struct Entry {
         descriptor: logic<768>,

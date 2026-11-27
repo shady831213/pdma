@@ -73,6 +73,7 @@ endclass
 // The failing Fence writes a separate allocation. Its successor's marker
 // must remain untouched, and the diagnostic must identify the first Fence.
 class pdma_error_fence extends pdma_task;
+    function new(string name="error_fence"); super.new(name); opcode=COMMANDHEADER_OPCODE_FENCE; endfunction
     virtual function Command_t command_record();
         FenceCommand_t cmd=FenceCommand_t'(fence_record());
         WordWrite_t word_value=FenceCommand_get_word(cmd);

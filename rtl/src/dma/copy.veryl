@@ -19,6 +19,13 @@ pub module DmaCopy::<
     core_rst_n     : input   'core      reset_async_low                              ,
     timer_available: input 'core logic = 0,
     timer_value: input 'core logic<64> = 0,
+    maint_valid: input 'core logic = 0,
+    maint_abort: input 'core logic = 0,
+    maint_context: input 'core u32 = 0,
+    maint_channels: input 'core logic<CHANNEL_COUNT> = 0,
+    maint_ready: output 'core logic,
+    maint_status: output 'core MaintenanceState::Status,
+    maint_failed: output 'core logic<CHANNEL_COUNT>,
     bus_clk        : input   'bus       clock                                        ,
     bus_rst_n      : input   'bus       reset_async_low                              ,
     cfg            : modport 'registers $std::axi4_lite_if::<R>::slave               ,
@@ -41,6 +48,9 @@ pub module DmaCopy::<
     var fetch_ready: 'bus       logic                                                              ;
     var fetch      : 'bus       CopyMemory::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS>::FetchAddress;
     assign awatop = 0;
+    assign maint_ready = channels.maint_status != MaintenanceState::Status::Busy;
+    assign maint_status = channels.maint_status;
+    assign maint_failed = channels.maint_failed;
     inst frontend: common_cell::AxiLiteRegisterFrontend::<R> (
         clk  : reg_clk      ,
         rst_n: reg_rst_n    ,
@@ -67,7 +77,7 @@ pub module DmaCopy::<
         clk     : core_clk  ,
         rst_n   : core_rst_n,
         channels            ,
-        timer_available, timer_value,
+        timer_available, timer_value, maint_valid, maint_abort, maint_context, maint_channels,
         memory  : requests  ,
     );
     inst transport: DmaMemoryCrossing::<B::DATA_WIDTH_BYTES, BURST_BEATS, SLOTS> #(

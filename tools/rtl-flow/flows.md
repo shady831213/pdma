@@ -34,6 +34,7 @@ directory; no particular machine path is required.
 | `SVT_COMMON_HOME`, `SVT_AMBA_HOME`, `DESIGNWARE_HOME` | Installed AXI VIP |
 | `JVSUK_HOME` | jarvisuk source checkout |
 | `PDMA_COMPILE_TIMEOUT`, `PDMA_RUN_TIMEOUT`, `PDMA_SYNTH_TIMEOUT`, `PDMA_STATIC_TIMEOUT`, `PDMA_COVERAGE_TIMEOUT` | Wall-clock limits in seconds |
+| `TMPDIR` | Existing writable scratch directory for a run. The static adapter preserves it for the HDL frontend when the launcher resets the environment. |
 
 Generate SystemVerilog on a machine that supports the pinned Veryl binary:
 

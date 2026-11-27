@@ -1,5 +1,215 @@
 # Scenario-level verification checkpoints
 
+## Whole-DMA regression for register accesses during reset and byte strobes
+
+The two new AXI VIP scenarios close all five previously uncovered lines in
+`DmaRegisterBank`. The global-reset scenario holds an accepted payload write
+response while software reads discovery, attempts to change IRQ enable and
+checks the rejected write's readback. It checks that writing zero and repeating
+the reset request both leave reset busy. After releasing the response, software
+completes a fresh Copy/Fence and re-enables interrupts.
+
+The byte-strobe scenario uses the generated register address and drives individual
+AXI4-Lite beats. An empty write succeeds, each single-byte write returns SLVERR,
+and a subsequent full register read confirms the original command base. A
+misaligned read returns SLVERR and zero data. A valid write to either 32-bit
+half changes exactly that half. RAL readback and a fresh Copy/Fence check the
+software-visible result on both bus widths.
+
+Each comparison uses one simulation build and the same seeds. The baseline
+includes 76 scenarios at seeds 19 and 41. The 32-bit register profiles also
+retain their previous burst-row stress seeds. Each second measurement adds
+the two scenarios at both seeds. All profiles use a 64-bit memory bus and
+testbench manifest `87c9bc0f0879c09bc53ef0591cf55c39c77b4fa73b6bdd32ae700e62e4478fa5`.
+
+| Channels / register bits | Positive simulations | Line | Condition | Branch | Extracted FSM | Internal toggle | External port toggle |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 / 32 | 200 → 204 | 1,999 → 2,004 / 2,065 | 1,670 → 1,673 / 1,959 | 776 → 779 / 839 | 241 / 470 | 85,596 → 85,919 / 128,968 | 915 → 929 / 1,336 |
+| 8 / 32 | 232 → 236 | 3,354 → 3,359 / 3,517 | 3,069 → 3,072 / 3,699 | 1,481 → 1,484 / 1,625 | 937 / 1,838 | 147,894 → 148,253 / 268,278 | 1,022 → 1,036 / 1,388 |
+| 2 / 64 | 152 → 156 | 1,999 → 2,004 / 2,065 | 1,671 → 1,674 / 1,959 | 776 → 779 / 839 | 222 / 470 | 87,101 → 88,122 / 128,968 | 1,027 → 1,073 / 1,472 |
+
+The register bank reached 43/43 lines and 19/19 branches in each profile.
+All three regressions rejected all nine checker mutations. Two isolated
+two-channel RTL mutations also exercised the new checks. Accepting IRQ-enable
+writes while reset was busy passed the existing DMA reset test. Accepting
+partial word strobes passed the existing register model test. Each new test
+rejected its corresponding mutation at both seeds. Only successful simulations
+of the unmodified DUT contributed to the coverage tables.
+
+## Whole-DMA regression for address handling and diagnostic events
+
+The regression uses the two- and eight-channel Wait/maintenance RTL snapshots
+identified below. Each profile uses one verification build for both measurements.
+The baseline includes the previous 72 scenarios at seeds 19 and 41 and the same
+additional burst-row stress seeds. The second measurement adds four scenarios at
+both seeds. Coverage databases from checker mutations, RTL mutations and other
+elaborations stay outside these merges.
+
+Three scenarios exercise descriptor rejection on every channel. Write32 and
+Write64 use misaligned addresses, an aligned Write64 and a Fill overflow the
+address range, and a Timestamp with a valid target runs with its timer absent.
+The checker reads the event through the ring and verifies the command ID,
+reason, zero committed bytes, untouched destination and untouched successor
+Fence. The seven stopping-error codes exercised by this RTL profile now have a
+cross with the physical channel. The eight-channel baseline covered 48/56
+pairs and the added cases covered the remaining eight. The corresponding
+two-channel cross went from 12/14 to 14/14. The Fence error scenario now
+reports its actual opcode to functional coverage.
+
+The fourth scenario gives the command and event rings identical low address
+words and distinct upper words. It checks a Copy, its Fence and the error event
+from the following rejected command. Truncating AXI read addresses to 32 bits
+in an isolated two-channel RTL build let the low-address version pass at both
+seeds. The high-address version detected an unauthorized fetch at the low
+alias at both seeds. All four scenarios also passed at both seeds on a
+one-channel 32-bit memory profile and a three-channel 128-bit memory profile.
+
+Both builds use testbench manifest `715955bcd556e3abdd4c8bea094508e3df49c3bc58d15862f0bc42ba4e9af1fa`. Each arrow shows covered bins before and after adding the four scenarios. Each row retains the same measured denominators.
+
+| Channels | Successful simulations | Line | Condition | Branch | Extracted FSM | Internal toggle | External port toggle |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 | 192 → 200 | 1,990 → 1,999 / 2,065 | 1,664 → 1,670 / 1,959 | 773 → 776 / 839 | 241 / 470 | 81,712 → 85,596 / 128,968 | 809 → 915 / 1,336 |
+| 8 | 224 → 232 | 3,345 → 3,354 / 3,517 | 3,063 → 3,069 / 3,699 | 1,478 → 1,481 / 1,625 | 937 / 1,838 | 139,529 → 147,894 / 268,278 | 879 → 1,022 / 1,388 |
+
+On eight channels the memory interface gained 141 toggle directions and the timer-available input gained both directions. The native hierarchy, port summaries, logic and FSM reports and functional XML were generated from the merged databases. The separate text export failed while rendering individual port toggles. The reporting host also failed a temporary-file allocation probe.
+
+The eight-channel extracted FSM still has 901 unhit transitions. Of those, 896 are the same 14 unhit arcs repeated across 64 burst rows. The maintenance controller accounts for the other five. All arcs remain in the denominator. The remaining logic holes also include discovery capability reads and global IRQ-enable writes during reset. These MMIO behaviors can be checked independently of burst-row transition reachability.
+
+## Wait and context Drain/Abort
+
+The two- and eight-channel RTL design manifests are
+`92e072e7110fd3c926df016a8726c186ce1b9ae6b9b65b410b3ab9b991722737` and
+`81060ff060bdd03e91b46ce9e3102a2ec50b5473ce55ced3ebe9589f66c71968`.
+Both native backends passed 40 tests. The Wait comparator tests cover all 11
+conditions at each width, including the signed boundary and modular counter
+wrap. The maintenance tests cover wrapped frontiers, later publications,
+retained failure bits, and Abort after Resume but before regrant.
+
+The issued-command Abort scenario holds an accepted Fill write response with
+an empty command ring. It checks that maintenance stays busy, releases the
+response, and verifies the complete destination and successor Fence. The
+parked SG scenario checks discard, absence of a completion write, and reuse of
+the same channel by a second SG Copy. Nine directed scenarios passed at seeds
+19 and 41 on each of five profiles, including 32-bit memory with two- and
+three-beat bursts and 128-bit memory with three channels.
+
+The full AXI VIP suite passed 69 scenarios at each of seeds 19 and 41 on
+both the two- and eight-channel profiles. Both regressions rejected all nine
+checker mutations. The per-channel Wait/Drain scenario also passed at every
+channel count from one through eight. It alternates operand width and exercises
+equality, signed comparison and counter wrap as the stalled owner changes.
+The first eight-channel run hit the Wait yield and resample transitions only
+on channel zero. Rotating the stalled owner hit both on all eight, bringing each
+channel to 22/22 checked command transitions. The maintenance operation/result
+cross reached 6/6.
+
+The final matched testbench added simultaneous faults on the first and last
+channel. Drain reported just the first fault seen, then both after the second
+channel parked. A request targeting the bound rings replaced that result with
+RingBound. Matching Abort returned Success with a clear bitmap and both owners
+completed new work. Two independent two-channel RTL mutations verified these
+checks at seeds 19 and 41. Completing maintenance as soon as the command ring
+was empty triggered the outstanding-Fill check. Retaining only the lowest
+failed bit passed the single-fault check, then returned `0x1` when both
+channels required `0x3`. Neither mutant contributed coverage.
+
+The extracted maintenance FSM hit nine transitions. Four
+remaining arcs return to Idle through hardware reset; the suite applies that
+reset only at power-on. The fifth, Busy to RingBound, would require accepting
+a new request while ready is low.
+
+| Channels | Positive simulation databases | Line | Condition | Branch | Extracted FSM | Internal toggle | External port toggle |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 | 186 | 1,990/2,065 | 1,663/1,959 | 773/839 | 241/470 | 81,712/128,968 | 809/1,336 |
+| 8 | 218 | 3,345/3,517 | 3,062/3,699 | 1,478/1,625 | 937/1,838 | 139,517/268,278 | 879/1,388 |
+
+Adding reset, replay, write-first fault and Fill seeds hit all 14 observed
+burst-row transitions on each of the 16 and 64 physical rows. For example, the
+first eight-channel sweep hit Read to Free on 25 rows; the final merge hit it
+on 64. The table uses the native whole-DMA hierarchy and external port reports.
+The native functional XML and merged per-instance bin data agree on all 22
+command transitions for each channel. The separate detailed text export
+failed during rendering and awaits a successful rerun.
+
+On the two- and eight-channel default bus profiles, a 16 KiB aligned Copy
+transferred 2,048 consecutive read beats and 2,048 consecutive write beats.
+The patterned Fill transferred 2,048 consecutive write beats. At seed 19 the
+descriptor-to-Fence measurements were 2,113 cycles for Copy and 2,094 for
+Fill, identical to the corresponding Write/Fill checkpoint. These are
+zero-delay simulation measurements on the 64-bit bus.
+
+Fresh static reviews resolved all 101 CDC and 2,018 RDC findings at two
+channels and all 269 CDC and 3,958 RDC findings at eight. Each profile has
+689 sink bits checked for absence of downstream fanout in its elaborated
+netlist. Six negative controls rejected stale identity, a changed or omitted
+endpoint, and invalid grouped-sink evidence. These checks cover the RTL and
+the specified asynchronous boundaries. Physical timing is qualified separately.
+
+### Maintenance under contention
+
+Two scenario checks were challenged on a two-channel DUT at seeds 97 and 211.
+Using the live producer in place of the captured frontier made Drain hang behind
+a later, unrelated Wait on the same ring. Checking just the last channel for
+retirement made Drain report success while a lower-numbered channel still held
+an unsatisfied Wait. Each mutation changed one RTL predicate. The unmodified DUT
+passed the same scenario at both seeds with the same testbench.
+
+The maintenance controller previously hit 25 of 26 extracted conditions. The
+missing condition was a valid request presented while Busy. The original test
+driver rejected this legal input before it reached the DUT. The driver now
+holds the next request until handshake. In the backpressure scenario a blocked
+Drain completes successfully, followed by an Abort rejected on a bound ring.
+The checker observes the Drain result during the ready cycle before the core
+accepts the waiting Abort on the next rising edge.
+
+The 72-case AXI VIP suite passed at seeds 19 and 41 on both main profiles.
+Each profile rejected all nine checker mutations. The three new scenarios also
+passed for every channel count from one through eight at seeds 19, 41, 97 and
+211 (96 runs, including the cases in the full suites). Each of the 32
+backpressure runs recorded exactly one Drain/Success and one Abort/RingBound.
+With the extra row-reset and replay seeds, the final whole-DMA merges contain
+only the successful runs below, all from the updated driver.
+
+| Channels | Runs | Line | Condition | Branch | Extracted FSM | Internal toggle | External port toggle |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 | 192 | 1,990/2,065 | 1,664/1,959 | 773/839 | 241/470 | 81,712/128,968 | 809/1,336 |
+| 8 | 224 | 3,345/3,517 | 3,063/3,699 | 1,478/1,625 | 937/1,838 | 139,529/268,278 | 879/1,388 |
+
+Maintenance reached 26/26 conditions on both profiles. Its extracted FSM
+remained at 9/14, and the operation/result cross held at 6/6. Each channel
+retained all 22 checked command transitions and every physical burst row hit
+all 14 observed row transitions. These counts come from the native summaries,
+functional coverage data and FSM reports. The separate detailed text export
+remains pending.
+
+### Wait and maintenance timing
+
+The same two design manifests above were synthesized with the Write/Fill
+checkpoint's library selection, clock targets and control-budget RAM model.
+Both passed all ten mapped crossing budgets. The bus and register setup slack
+was 0.0 ps and +307.0 ps respectively in both profiles.
+
+| Channels | Core WNS (ps) | Core TNS (ps) | Violating paths | Logic cell area | Vectorless power (mW) |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 | 0.0 | 0.0 | 0 | 42,055.999 | 78.2983 |
+| 8 | −2.4 | −783.6 | 1,109 | 99,482.407 | 162.816 |
+
+The two-channel profile meets the setup target. The eight-channel profile
+misses core setup at 1 GHz. A second query against the saved final database
+selected one negative-slack core path per endpoint. Its 1,109 distinct endpoints
+reproduce both WNS and TNS. Of these, 639 are request/fetch FIFO storage pins,
+237 are channel register pins, 124 are command-engine pins, 106 are Copy window
+pins and three are channel IRQ outputs. The rising core reset input launches
+620 of the FIFO paths, including 439 request FIFO enables and 181 fetch FIFO
+data pins. Synchronous reset release is timed by the integration contract.
+
+The worst register request and Copy paths both have −2.4 ps slack. They run
+from the core-side register request address to a ring base and from the engine
+owner to the next destination address, respectively. Paths ending at the
+context maintenance unit's own registers have at least +25.0 ps slack.
+Relative to Write/Fill, logic area increased by 1.51% and 3.16%, respectively.
+The estimates exclude physical SRAM area, power and intrinsic timing.
+
 ## Scalar writes and patterned Fill
 
 The native execution tests drive descriptors for Write32/64, Fence32/64,

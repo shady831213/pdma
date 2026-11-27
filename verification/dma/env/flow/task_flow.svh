@@ -37,6 +37,7 @@ class pdma_task_flow extends uvm_object;
         item.cross_page=(job.source_address%pdma_configuration::AXI_BOUNDARY_BYTES+job.length>pdma_configuration::AXI_BOUNDARY_BYTES) ||
             (job.dest_address%pdma_configuration::AXI_BOUNDARY_BYTES+job.length>pdma_configuration::AXI_BOUNDARY_BYTES);
         if(result.outcome==TASK_ERROR) begin
+            item.event_code=result.code;
             item.event_cross_page=result.event_address%pdma_configuration::AXI_BOUNDARY_BYTES+EVENT_SIZE>pdma_configuration::AXI_BOUNDARY_BYTES;
         end
         item.fence_wide=job.fence_wide;
@@ -82,6 +83,18 @@ class pdma_task_flow extends uvm_object;
         end
         `uvm_fatal("TASK_TIMEOUT",$sformatf("channel=%0d task=%0d error event did not arrive",channel.channel_id,job.id))
     endtask
+    // Caller observed a successful scoped Abort of this parked command.
+    // Its own Fence was omitted or discarded; no per-command event is due.
+    task confirm_discard();
+        pdma_result result=new;
+        uvm_reg_data_t faulted;
+        channel.read_reg(channel.registers.control_block.recovery_block.fault_status_reg,faulted);
+        if(faulted!==0) `uvm_fatal("TASK_ABORT","Abort returned with the target still parked")
+        result.channel_id=channel.channel_id; result.outcome=TASK_ABORTED;
+        channel.read_reg(channel.registers.event_block.producer_reg,result.event_producer);
+        channel.read_reg(channel.registers.control_block.irq_block.cause_reg,result.cause);
+        check_result(result,TASK_ABORTED);
+    endtask
     task expect_fatal(int code);
         pdma_result result=new;
         result.channel_id=channel.channel_id; result.outcome=TASK_FATAL;
@@ -120,7 +133,7 @@ class pdma_task_flow extends uvm_object;
     task close();
         if(published && !job.terminal_checked)
             `uvm_fatal("TASK_LIFETIME","Flow attempted cleanup before checking its terminal result")
-        if(published && terminal_outcome!=TASK_SUCCESS && channel.configured)
+        if(published && !(terminal_outcome inside {TASK_SUCCESS,TASK_ABORTED}) && channel.configured)
             `uvm_fatal("TASK_LIFETIME","Stopped work requires a completed reset before buffer release")
         job.deallocate(allocator,memory); published=0;
     endtask

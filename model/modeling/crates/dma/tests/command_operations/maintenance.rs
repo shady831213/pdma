@@ -61,3 +61,42 @@ fn reset_cancels_ordinary_wait_without_resume() -> TestResult {
     assert_eq!(rig.register(0, EVENT_PRODUCER)?, 0);
     Ok(())
 }
+
+#[test]
+fn drain_of_a_disabled_yielded_wait_reports_the_owner() -> TestResult {
+    use pdma_model_contract::dma::{ChannelBlock, ChannelConfiguration, ChannelRegisters};
+    use pdma_model_dma::{CommandRequest, MaintenanceError};
+
+    let mut rig = Rig::new(1, 0)?;
+    let id = ChannelId::new(0);
+    let context = ContextId::new(1);
+    rig.submit(0, &[wait()])?;
+    for _ in 0..512 {
+        rig.step()?;
+        if matches!(
+            rig.dma.command_request(id)?,
+            Some(CommandRequest::Resume(_))
+        ) {
+            break;
+        }
+    }
+    assert!(matches!(
+        rig.dma.command_request(id)?,
+        Some(CommandRequest::Resume(_))
+    ));
+    let enable = id.register_offset(1).ok_or("channel")?
+        + ChannelBlock::CONTROL.offset()
+        + ChannelRegisters::CONFIG.offset()
+        + ChannelConfiguration::ENABLE.offset();
+    rig.dma.write(enable, &0_u32.to_le_bytes())?;
+    rig.dma.drain_context(context, &[id])?;
+    rig.drive()?;
+    assert_eq!(
+        rig.dma.context_status(context),
+        Err(MaintenanceError::ChannelStopped(id))
+    );
+    rig.dma.abort_context(context, &[id])?;
+    rig.drive()?;
+    assert!(rig.dma.context_status(context)?);
+    Ok(())
+}

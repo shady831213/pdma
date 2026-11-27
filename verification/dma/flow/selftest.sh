@@ -142,6 +142,7 @@ if '-metric' in args and args[args.index('-metric')+1]=='group':
     detail='Group : pdma_vip_pkg::partial\n'
     if 'brief' not in args:
         detail+='Group : pdma_vip_pkg::complete\n'
+        detail+='Group : pdma_vip_top.control::maintenance_results\n'
     (result/'grpinfo.txt').write_text(detail)
     sys.exit(0)
 if '-hier' in args:
@@ -170,7 +171,8 @@ if '-report' in args:
     report=Path(args[args.index('-report')+1])
     report.mkdir()
     (report/'dashboard.txt').write_text('fixture coverage report\n')
-    (report/'groups.txt').write_text('COVERED EXPECTED AUTO BIN MAX\n1 2 pdma_vip_pkg::partial\n1 1 pdma_vip_pkg::complete\n')
+    (report/'groups.txt').write_text('COVERED EXPECTED AUTO BIN MAX\n1 2 pdma_vip_pkg::partial\n'
+                                     '1 1 pdma_vip_pkg::complete\n1 1 pdma_vip_top.control::maintenance_results\n')
 URG
 chmod +x "$fixture/urg"
 if PDMA_COVERAGE_TOOL="$fixture/urg" bash "$flow/coverage.sh" "$fixture/build" "$evidence/tb" "$evidence/tb-coverage" > "$evidence/tb-coverage.log" 2>&1; then exit 1; fi
@@ -180,6 +182,7 @@ PDMA_COVERAGE_TOOL="$fixture/urg" bash "$flow/coverage.sh" "$fixture/build" "$ev
 cmp "$evidence/failure/results.txt" "$evidence/coverage/regression-results.txt"
 grep -Fxq 'total  3/3  100.00%' "$evidence/coverage/dma/external-ports.txt"
 grep -Fxq 'Group : pdma_vip_pkg::complete' "$evidence/coverage/dma/functional.txt"
+grep -Fxq 'Group : pdma_vip_top.control::maintenance_results' "$evidence/coverage/dma/functional.txt"
 mkdir "$evidence/missing-control"
 if FIXTURE_MISSING_CONTROL=1 python3 "$flow/dut_coverage.py" "$evidence/missing-control" \
     --tool "$fixture/urg" --metrics line+cond+tgl+branch > "$evidence/missing-control.log" 2>&1; then exit 1; fi

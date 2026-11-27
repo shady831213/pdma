@@ -99,6 +99,10 @@ def project(destination, values):
     ports = f'''reg_clk: input 'registers clock, reg_rst_n: input 'registers reset_async_low,
     core_clk: input 'core clock, core_rst_n: input 'core reset_async_low,
     timer_available: input 'core logic, timer_value: input 'core logic<64>,
+    maint_valid: input 'core logic, maint_abort: input 'core logic,
+    maint_context: input 'core logic<32>, maint_channels: input 'core logic<CHANNELS>,
+    maint_ready: output 'core logic, maint_status: output 'core MaintenanceState::Status,
+    maint_failed: output 'core logic<CHANNELS>,
     bus_clk: input 'bus clock, bus_rst_n: input 'bus reset_async_low,
     cfg: modport 'registers $std::axi4_lite_if::<REG>::slave,
     memory: modport 'bus $std::axi4_if::<BUS>::master,
@@ -116,7 +120,8 @@ pub module DmaConfigured (
         {parameters},
     ) (
         reg_clk, reg_rst_n, core_clk, core_rst_n, bus_clk, bus_rst_n,
-        timer_available, timer_value, cfg, memory, {atop_connection}, irq, fatal_irq, fatal,
+        timer_available, timer_value, maint_valid, maint_abort, maint_context, maint_channels,
+        maint_ready, maint_status, maint_failed, cfg, memory, {atop_connection}, irq, fatal_irq, fatal,
     );
 }}
 '''

@@ -2,6 +2,9 @@
 # No design waiver or reset assumption is inherited from that probe.
 proc run {} {
     global env
+    if {[info exists env(PDMA_STATIC_TMPDIR)]} {
+        set env(TMPDIR) $env(PDMA_STATIC_TMPDIR)
+    }
     set mode $env(PDMA_STATIC_CHECK)
     if {$mode ni {cdc cdc-formal rdc}} {error "Invalid static check"}
     set check [expr {$mode eq "cdc-formal" ? "cdc" : $mode}]

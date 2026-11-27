@@ -12,6 +12,7 @@ pdma_read_error_irq_test
 pdma_write_error_irq_test
 pdma_channel_reset_test
 pdma_dma_reset_test
+pdma_global_reset_mmio_test
 pdma_unsupported_command_test
 pdma_malformed_command_test
 pdma_zero_length_copy_test
@@ -27,8 +28,10 @@ pdma_trap_mask_test
 pdma_trap_pending_test
 pdma_ring_wrap_test
 pdma_same_channel_lifetime_test
+pdma_high_ring_address_test
 pdma_event_boundary_test
 pdma_register_model_test
+pdma_register_strobes_test
 pdma_command_geometry_test
 pdma_ring_context_lock_test
 pdma_zero_delay_long_test
@@ -58,3 +61,18 @@ pdma_fill_replay_test
 pdma_fill_error_test
 pdma_fill_reset_test
 pdma_timestamp_fill_test
+pdma_word_geometry_test
+pdma_fill_range_test
+pdma_timestamp_unavailable_test
+pdma_wait_drain_test
+pdma_wait_abort_test
+pdma_wait_reset_test
+pdma_wait_fault_test
+pdma_wait_read_error_test
+pdma_wait_resume_test
+pdma_context_linear_selector_test
+pdma_context_copy_abort_test
+pdma_context_running_abort_test
+pdma_drain_publication_test
+pdma_contended_wait_test
+pdma_maintenance_backpressure_test

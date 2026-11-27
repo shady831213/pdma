@@ -1,0 +1,177 @@
+#[test(context_frontier_and_wait_recovery)]
+module ContextMaintenanceTest {
+    inst clk: $tb::clock_gen #(period: 10);
+    inst rst: $tb::reset_gen (clk);
+    inst channels: DmaChannels #(CHANNEL_COUNT: 2);
+    inst memory: CopyMemoryPort;
+    var rings: RegisterState::Ring [2];
+    var configs: RegisterState::ChannelConfig [2];
+    var actions: RegisterState::ChannelActions [2];
+    var heads: CommandState::Entry [2];
+    var valid: logic<2>;
+    var request: logic;
+    var abort_op: logic;
+    var selector: u32;
+    var scope: logic<2>;
+    assign channels.configuration = configs;
+    assign channels.command = rings;
+    assign channels.events = '{default: '0};
+    assign channels.actions = actions;
+    assign channels.global_blocked = 0;
+    assign channels.global_clear = 0;
+    assign channels.reset_all = 0;
+    assign channels.fatal_in = 0;
+    assign channels.event_geometry = '1;
+    assign channels.event_ready = '1;
+    inst engine: CopyEngine #(CHANNEL_COUNT: 2) (
+        clk, rst_n: rst, heads, head_valid: valid, fetching: 0, channels, memory,
+        maint_valid: request, maint_abort: abort_op, maint_context: selector, maint_channels: scope,
+    );
+    initial {
+        for trial in 0..9 {
+            rings = '{default: '0};
+            configs = '{default: '0};
+            actions = '{default: '0};
+            heads = '{default: '0};
+            valid = 0;
+            request = 0;
+            scope = 3;
+            abort_op = trial == 1 || trial == 4 || trial >= 7;
+            selector = 9;
+            memory.returned = 0;
+            memory.ready = 1;
+            memory.receipt = '0;
+            rst.assert();
+            for c in 0..2 {
+                configs[c].configured = 1;
+                configs[c].enable = 1;
+                configs[c].ring_context = if trial == 5 ? selector : 1;
+            }
+            if trial == 5 {
+                request = 1; clk.next(); request = 0;
+                $assert(channels.maint_status == MaintenanceState::Status::RingBound
+                    && channels.maint_failed == 3, "ALL_BOUND_RINGS_REPORTED");
+            } else {
+                rings[0].consumer = '1;
+                rings[0].producer = 0; // One unread command across counter wrap.
+                heads[0].descriptor[7:0] = 3;
+                heads[0].descriptor[191:128] = 'h2000;
+                heads[0].descriptor[223:192] = selector;
+                heads[0].descriptor[319:256] = 17;
+                valid = 1;
+                if trial == 4 {
+                    // Abort at the acceptance edge consumes the old descriptor without a read.
+                    for tick in 0..10 { if channels.command_advance[0] { break; } clk.next(); }
+                    $assert(channels.command_advance[0], "GRANTED_BEFORE_ABORT");
+                    request = 1; clk.next(); request = 0;
+                }
+                for tick in 0..12 { if channels.command_advance[0] { break; } clk.next(); }
+                $assert(channels.command_advance[0], "WAIT_CONSUMED");
+                clk.next();
+                valid = 0; rings[0].consumer = 0;
+                if trial == 4 {
+                    for tick in 0..8 { $assert(!memory.valid, "DISCARDED_HEAD_NO_ACCESS"); clk.next(); }
+                    $assert(channels.maint_status == MaintenanceState::Status::Success, "WRAPPED_FRONTIER");
+                } else {
+                    for tick in 0..12 { if memory.valid { break; } clk.next(); }
+                    $assert(memory.valid && !memory.request.write, "WAIT_READ");
+                    memory.receipt.tag = memory.request.tag;
+                    clk.next();
+                    if trial >= 6 {
+                        // The descriptor is accepted, the ring is empty, and the
+                        // read fault has released the engine before disabling.
+                        memory.receipt.failed = 1;
+                        memory.receipt.page_fault = 1;
+                        memory.returned = 1; clk.next(); memory.returned = 0;
+                        clk.next();
+                        $assert(channels.status[0].faulted, "FAULT_RETAINED_BEFORE_DISABLE");
+                        if trial == 8 {
+                            // Resume precedes the maintenance request; the stored
+                            // command has not yet been regranted to the engine.
+                            actions[0].resume_request = 1; clk.next(); actions[0].resume_request = 0;
+                        } else {
+                            configs[0].enable = 0;
+                        }
+                        if trial == 6 { selector += 1; }
+                        request = 1; clk.next(); request = 0;
+                        for tick in 0..6 {
+                            $assert(!memory.valid, "ABORT_BEFORE_REGRANT_MUST_NOT_REISSUE");
+                            clk.next();
+                        }
+                        $assert(channels.maint_status == MaintenanceState::Status::Success
+                            && channels.maint_failed == 0, "DISABLED_OWNER_WITH_EMPTY_FRONTIER");
+                        $assert(channels.status[0].faulted == (trial == 6), "ONLY_ABORT_TARGET_RELEASED");
+                    } else {
+                        request = 1; clk.next(); request = 0;
+                        for tick in 0..4 {
+                            $assert(channels.maint_status == MaintenanceState::Status::Busy, "RECEIPT_STILL_OWED");
+                            clk.next();
+                        }
+                        if trial == 3 { actions[0].reset_request = 1; clk.next(); actions[0].reset_request = 0; }
+                        memory.receipt.failed = trial == 2;
+                        memory.receipt.page_fault = trial == 2;
+                        memory.returned = 1; clk.next(); memory.returned = 0;
+                        if trial == 0 {
+                            for tick in 0..14 {
+                                $assert(channels.maint_status == MaintenanceState::Status::Busy
+                                    && !channels.status[0].faulted, "ORDINARY_WAIT_KEEPS_DRAIN_PENDING");
+                                if memory.valid { break; } clk.next();
+                            }
+                            $assert(memory.valid && !memory.request.write, "WAIT_RESAMPLES_DURING_DRAIN");
+                            clk.next();
+                            memory.receipt.data = 17; memory.returned = 1; clk.next(); memory.returned = 0;
+                        }
+                        clk.next(8);
+                        if trial == 2 || trial == 3 {
+                            $assert(channels.maint_status == MaintenanceState::Status::ChannelStopped
+                                && channels.maint_failed == 1, "BLOCKED_SCOPE_RETAINED");
+                        } else {
+                            $assert(channels.maint_status == MaintenanceState::Status::Success
+                                && !memory.valid && channels.maint_failed == 0, "QUIESCENT_TARGET");
+                        }
+                    }
+                }
+            }
+        }
+        $finish();
+    }
+}
+
+#[test(frontiers_ignore_later_publications_and_collect_scoped_failures)]
+module MaintenanceFrontiersTest {
+    inst clk: $tb::clock_gen #(period: 10);
+    inst rst: $tb::reset_gen (clk);
+    var rings: RegisterState::Ring [3];
+    var configs: RegisterState::ChannelConfig [3];
+    var request: logic;
+    var scope: logic<3>;
+    var referenced: logic<3>;
+    var stopped: logic<3>;
+    var status: MaintenanceState::Status;
+    var failed: logic<3>;
+    var unread: logic<3>;
+    inst maintenance: DmaContextMaintenance #(CHANNEL_COUNT: 3) (
+        clk, rst_n: rst, request, abort_request: 0, requested_context: 1, requested_channels: scope,
+        rings, configs, stopped, faulted: 0, executing: 0, discard_saved: 0, referenced,
+        selector: _, capturing: _, locked_scope: _, aborting: _, unread, status, failed,
+    );
+    initial {
+        rings = '{default: '0}; configs = '{default: '0};
+        for c in 0..3 { configs[c].enable = 1; }
+        rings[0].consumer = '1; rings[0].producer = 0;
+        scope = 3; referenced = 2; stopped = 4; request = 0; rst.assert();
+        request = 1; clk.next(); request = 0;
+        rings[0].producer = 5;
+        $assert(unread == 1, "OLD_FRONTIER_STILL_UNREAD");
+        rings[0].consumer = 0; clk.next();
+        rings[0].consumer = 1; clk.next();
+        $assert(unread == 0 && status == MaintenanceState::Status::Busy, "STICKY_PASSED_WITH_OTHER_TARGET");
+        referenced = 0; clk.next();
+        $assert(status == MaintenanceState::Status::Success && failed == 0, "LATER_PUBLICATION_EXCLUDED");
+        stopped = 7; scope = 5; request = 1; clk.next(); request = 0; clk.next();
+        $assert(status == MaintenanceState::Status::ChannelStopped && failed == 5, "ALL_AND_ONLY_SCOPED_FAILURES");
+        stopped = 0; clk.next(2);
+        $assert(failed == 5, "FAILURE_BITMAP_RETAINED");
+        $finish();
+    }
+}

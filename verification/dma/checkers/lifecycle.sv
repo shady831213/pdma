@@ -1,12 +1,17 @@
 module pdma_lifecycle_assertions #(parameter int SLOTS=8, localparam int SLOT_BITS=$clog2(SLOTS+2))(
     input logic clk, rst_n, request, ready, returned, accepted, closing, clear, enabled, has_commands,
-    input logic irq, irq_source, parked, resume_request,
+    input logic irq, irq_source, parked, resume_request, discard, scoped_abort, maintenance_busy,
     input logic [SLOT_BITS-1:0] request_slot, receipt_slot,
     input logic [1023:0] parked_state
 );
     int unsigned outstanding=0, fetch_debt=0;
     logic [SLOTS+1:0] owned='0;
     logic reset_quiet=0;
+    logic abort_owner;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if(!rst_n) abort_owner<=0;
+        else if(!maintenance_busy) abort_owner<=scoped_abort;
+    end
     always @(posedge clk or negedge rst_n) begin
         if(!rst_n) begin outstanding<=0; fetch_debt<=0; owned<='0; reset_quiet<=0; end
         else begin
@@ -48,6 +53,9 @@ module pdma_lifecycle_assertions #(parameter int SLOTS=8, localparam int SLOT_BI
     assert property(@(posedge clk) disable iff(!rst_n) parked && !resume_request && !closing |-> !request)
         else $fatal(1,"DMA_RETRY_WITHOUT_RESUME");
     assert property(@(posedge clk) disable iff(!rst_n)
-        parked && !resume_request && !closing |=> $stable(parked_state) || closing || resume_request)
+        discard |-> maintenance_busy && abort_owner && owned=='0)
+        else $fatal(1,"DMA_ABORT_WITHOUT_SCOPE_OR_DRAIN");
+    assert property(@(posedge clk) disable iff(!rst_n)
+        parked && !resume_request && !closing && !discard |=> ($stable(parked_state) && parked) || closing || resume_request)
         else $fatal(1,"DMA_PARKED_STATE_CHANGED");
 endmodule

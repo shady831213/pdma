@@ -1,4 +1,4 @@
-#[test(malformed_copy_is_not_accepted)]
+#[test(malformed_descriptors_are_not_accepted)]
 module DescriptorTest {
     inst clk   : $tb::clock_gen #( period: 10 );
     inst rst   : $tb::reset_gen ( clk );
@@ -29,7 +29,7 @@ module DescriptorTest {
     );
     initial {
         // Reserved option, direct gap, source inactive tail, destination inactive tail.
-        for corruption in 0..4 {
+        for corruption in 0..10 {
             configuration   = '0;
             memory.ready    = 1;
             memory.returned = 0;
@@ -61,8 +61,20 @@ module DescriptorTest {
                     if corruption == 2 {
                         memory.receipt.data[384] = 1;
                     }
+                    if corruption >= 4 {
+                        memory.receipt.data = 0;
+                        memory.receipt.data[7:0] = if corruption <: 6 ? 3 : if corruption <: 9 ? 4 : 5;
+                        case corruption {
+                            4: { memory.receipt.data[351:320] = 11; } // Unknown Wait comparison.
+                            5: { memory.receipt.data[352] = 1; } // Wait record padding.
+                            6: { memory.receipt.data[287:256] = 4; } // Unknown atomic order.
+                            7: { memory.receipt.data[319:288] = 7; } // Unknown atomic operation.
+                            8: { memory.receipt.data[384] = 1; } // Add has only one operand.
+                            default: { memory.receipt.data[287:256] = 2; } // Unknown semaphore operation.
+                        }
+                    }
                 } else {
-                    memory.receipt.data[63:0] = 64'h300;
+                    if corruption <: 4 { memory.receipt.data[63:0] = 64'h300; }
                     if corruption == 3 {
                         memory.receipt.data[128] = 1;
                     }

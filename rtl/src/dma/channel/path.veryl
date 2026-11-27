@@ -8,6 +8,10 @@ pub module DmaCommandPath::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u3
     rst_n   : input   reset_async_low                                         ,
     timer_available: input logic = 0,
     timer_value: input logic<64> = 0,
+    maint_valid: input logic = 0,
+    maint_abort: input logic = 0,
+    maint_context: input u32 = 0,
+    maint_channels: input logic<CHANNEL_COUNT> = 0,
     channels: modport DmaChannels::engine                                     ,
     memory  : modport CopyMemoryPort::<DATA_BYTES, BURST_BEATS, SLOTS>::master,
 ) {
@@ -31,7 +35,7 @@ pub module DmaCommandPath::<DATA_BYTES: u32 = 8, BURST_BEATS: u32 = 8, SLOTS: u3
     ) (
         clk                       ,
         rst_n                     ,
-        timer_available, timer_value,
+        timer_available, timer_value, maint_valid, maint_abort, maint_context, maint_channels,
         heads                     ,
         head_valid                ,
         fetching                  ,

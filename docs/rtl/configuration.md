@@ -155,6 +155,12 @@ narrow one-channel profile met synthesized setup. Both default profiles passed
 the restored-database audits. The three-channel profile with 128-bit memory
 missed core setup by 43.2ps. At `9500c28c`, all four profiles met setup
 and passed the restored-database audits.
+
+At `34f5e795`, the RTL with Write, Fill and Timestamp met the control-budget
+setup targets at the default two- and eight-channel profiles. Both passed
+all ten clock-crossing timing budgets. The [timing comparison](../../verification/dma/results.md#execution-descriptor-timing)
+reports the configuration-specific area, power and slack.
+
 Additional focused functional regressions exercise 256-, 512- and 1024-bit
 memory ports and a 256-beat burst configuration.
 The [verification record](../../verification/dma/results.md) lists the tested

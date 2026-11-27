@@ -9,7 +9,7 @@ test compares each destination byte, checks address-space selection and rejects
 a read, duplicate byte, crossing burst or out-of-range write. It also exercises
 zero length, range overflow and malformed records.
 
-The immutable two- and eight-channel RTL snapshots for this change have design
+The initial two- and eight-channel Write/Fill/Timestamp snapshots have design
 identities `61fd763274a756a17c496fc4156e8ca6747aff115dedda89f71dea60ff76df1f`
 and `ef75eca29825839d38eacbd5c55159258709027d5a77558889d50a0b13b5cc93`,
 respectively. The implementation profiles constrain the two timer inputs to the
@@ -56,9 +56,12 @@ power exclude SRAM area, power and intrinsic timing.
 | 2 | Per-channel execution context | `61fd763274a756a1` | 0.0 | 0.0 | 0 | 41,861.837 | 78.38 |
 | 2 | Shared descriptor at grant | `fdc3b66db5cba943` | 0.0 | 0.0 | 0 | 43,358.589 | 83.21 |
 | 2 | Shared descriptor, direct suspend enable | `1e1d33e0eca0b644` | 0.0 | 0.0 | 0 | 41,444.278 | 76.72 |
+| 2 | Fill pattern aligned at burst allocation | `a55a0c6ee20fb4ea` | 0.0 | 0.0 | 0 | 41,432.261 | 77.99 |
 | 8 | Per-channel execution context | `ef75eca29825839d` | −26.9 | −259,543.3 | 16,714 | 102,903.865 | 170.93 |
 | 8 | Shared descriptor at grant | `fed032ff984d6f2a` | −9.3 | −76,164.3 | 13,678 | 106,730.902 | 190.31 |
 | 8 | Shared descriptor, direct suspend enable | `fc4089b82606bdcb` | −11.3 | −38,964.4 | 6,754 | 98,500.461 | 165.75 |
+| 8 | Fill pattern aligned at burst allocation | `80fa84226d705e22` | 0.0 | 0.0 | 0 | 96,437.846 | 159.46 |
+| 8 | Trial with execution data on the fetch request bus | `c28f105dd603d3af` | 0.0 | 0.0 | 0 | 96,971.674 | 164.99 |
 
 At eight channels the original design's worst paths to the walker, burst
 window, execution context and request FIFOs launched from the registered
@@ -82,7 +85,8 @@ bank has +641.6 ps and +742.8 ps slack, respectively. Reset clears
 the grant and the channel phases, which invalidate the active and suspended
 descriptors respectively.
 
-Both shared-descriptor versions passed 60 DUT scenarios at seed 19 and
+The first shared-descriptor version and the direct suspend enable version
+each passed 60 DUT scenarios at seed 19 and
 rejected nine checker mutations at each channel count. Eight replay, fault
 and reset scenarios also passed at seeds 1, 7, 97, 211, 503 and 997 on both
 profiles for each version. With two Fills parked concurrently, restoring
@@ -109,9 +113,26 @@ for Copy. The two- and eight-channel design manifests are `a55a0c6ee20fb4ea`
 and `80fa84226d705e22`. Source-bound CDC/RDC review closed all 101/1,946
 and 269/3,892 findings, respectively. Both native backends passed all 36 tests.
 Bypassing the rotation failed the native byte comparison.
-At the November 26 checkpoint, final synthesis results for these two design
-manifests were pending. The timing table above ends with the direct suspend
-enable implementation.
+
+Final synthesis for commit `34f5e795` met setup at both channel counts.
+Core and bus each reported 0.0 ps WNS and zero violating endpoints. The
+register clock had +307.0 ps slack. Relative to the initial Write/Fill/Timestamp
+implementation, eight-channel logic area fell 6.28% and vectorless power
+fell 6.71%. At two channels the reductions were 1.03% and 0.50%.
+
+The eight-channel netlist shows where the rotation moved. Before the change,
+the three low destination bits in each of the 64 burst rows reached the upper
+320 payload bits in each of the eight execution FIFO entries. After the
+change, the destination bits reached the FIFO address pins and had no path to
+the sampled payload pins. The stored source-or-pattern field reached the
+same payload pins with +521.4 ps slack. The overall core WNS still rounds
+to 0.0 ps, including paths to the FIFO, segment walker and window state.
+
+An eight-channel trial also drove the unused data field of fetch requests
+directly from the execution port, removing a payload selection at the shared
+request interface. It met the same timing targets, with 0.55% more logic area
+and 3.47% more estimated power than the committed design. The committed design
+retains the existing request interface logic.
 
 A peer Fill that fit entirely in its window could complete from retained row
 data even if the engine restored the wrong descriptor. The replay test now
